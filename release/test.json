@@ -1,0 +1,124 @@
+[
+	{
+		"enabled": true,
+		"class": "http",
+		"name": "xywhsoft http server",
+		"desc": "服务器描述",
+		"param": "启动参数",
+		"addr": "http://0.0.0.0:80",
+		"tls": true,
+		"addr_tls": "https://0.0.0.0:443",
+		"host_default": {
+			"enabled": true,
+			"name": "默认主机",
+			"desc": "主机描述",
+			"param": "启动参数",
+			"path": "wwwroot",
+			"tls_ca": null,
+			"tls_cert": "tls/cert.pem",
+			"tls_key": "tls/key.pem",
+			"devlang": "c",
+			"devfile": "test/main.c",
+			"session": "www$"
+		},
+		"hosts": [
+			{
+				"enabled": true,
+				"name": "主机1",
+				"desc": "主机描述",
+				"param": "启动参数",
+				"host": "test.com",
+				"path": "test",
+				"tls_ca": "tls/test/ca.pem",
+				"tls_cert": "tls/test/cert.pem",
+				"tls_key": "tls/test/key.pem",
+				"devlang": "c",
+				"devfile": "test/main.c",
+				"session": "test$"
+			},
+			{
+				"enabled": true,
+				"name": "主机2",
+				"desc": "主机描述",
+				"param": "启动参数",
+				"host": "test.cn",
+				"path": "test_cn",
+				"tls_ca": "tls/test_cn/ca.pem",
+				"tls_cert": "tls/test_cn/cert.pem",
+				"tls_key": "tls/test_cn/key.pem",
+				"devlang": "static",
+				"session": "test$"
+			}
+		]
+	},
+	{
+		"enabled": true,
+		"class": "mqtt",
+		"name": "xywhsoft mqtt server",
+		"desc": "服务器描述",
+		"param": "启动参数",
+		"addr": "mqtt://0.0.0.0:1883",
+		"tls": true,
+		"addr_tls": "https://0.0.0.0:8883",
+		"host_default": {
+			"enabled": true,
+			"name": "默认主机",
+			"desc": "主机描述",
+			"param": "启动参数",
+			"path": "wwwroot",
+			"tls_ca": null,
+			"tls_cert": "tls/cert.pem",
+			"tls_key": "tls/key.pem",
+			"devlang": "static",
+			"session": "www$"
+		},
+		"hosts": [
+			{
+				"enabled": true,
+				"name": "主机1",
+				"desc": "主机描述",
+				"param": "启动参数",
+				"host": "test.com",
+				"path": "test",
+				"tls_ca": "tls/test/ca.pem",
+				"tls_cert": "tls/test/cert.pem",
+				"tls_key": "tls/test/key.pem",
+				"devlang": "static",
+				"session": "test$"
+			},
+			{
+				"enabled": true,
+				"name": "主机2",
+				"desc": "主机描述",
+				"param": "启动参数",
+				"host": "test.cn",
+				"path": "test_cn",
+				"tls_ca": "tls/test_cn/ca.pem",
+				"tls_cert": "tls/test_cn/cert.pem",
+				"tls_key": "tls/test_cn/key.pem",
+				"devlang": "static",
+				"session": "test$"
+			}
+		]
+	},
+	{
+		"enabled": true,
+		"class": "custom",
+		"name": "自定义服务",
+		"desc": "用于启动 MQTT 客户端监听主题消息处理",
+		"param": "启动参数",
+		"addr": "",
+		"tls": false,
+		"host_default": {
+			"enabled": true,
+			"name": "默认主机",
+			"desc": "主机描述",
+			"param": "启动参数",
+			"path": "wwwroot",
+			"devlang": "c",
+			"devfile": "test/main.c",
+			"session": "www$",
+		},
+		"hosts": []
+	}
+]

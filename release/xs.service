@@ -1,0 +1,13 @@
+[Unit]
+Description=xLeaves Server
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/home/www/xs
+WorkingDirectory=/home/www
+Restart=always
+User=root
+
+[Install]
+WantedBy=multi-user.target
