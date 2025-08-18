@@ -28,6 +28,9 @@ void DynLoad_C(XS_ServerObject objServer, XS_HostObject objHost)
 	tcc_add_include_path(s, "tcc/include");
 	tcc_add_include_path(s, "tcc/inc_xs");
 	tcc_add_library_path(s, "tcc/lib");
+	tcc_add_include_path(s, "/usr/include");
+	tcc_add_library_path(s, "/usr/lib");
+	tcc_add_library_path(s, "/usr/lib/x86_64-linux-gnu");
 	tcc_add_include_path(s, objHost->Path);
 	tcc_add_library_path(s, objHost->Path);
 	char* sPath = xrtPathGetDir(objHost->DevFile, 0);

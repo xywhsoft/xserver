@@ -170,6 +170,10 @@ void ImportCore(TCCState* s)
 	tcc_add_symbol(s, "xrtFileGetAttrW", xrtFileGetAttrW);
 	tcc_add_symbol(s, "xrtFileSetAttr", xrtFileSetAttr);
 	tcc_add_symbol(s, "xrtFileSetAttrW", xrtFileSetAttrW);
+	tcc_add_symbol(s, "xrtFileGetAccessTime", xrtFileGetAccessTime);
+	tcc_add_symbol(s, "xrtFileGetAccessTimeW", xrtFileGetAccessTimeW);
+	tcc_add_symbol(s, "xrtFileGetChangeTime", xrtFileGetChangeTime);
+	tcc_add_symbol(s, "xrtFileGetChangeTimeW", xrtFileGetChangeTimeW);
 	tcc_add_symbol(s, "xrtFileCopy", xrtFileCopy);
 	tcc_add_symbol(s, "xrtFileCopyW", xrtFileCopyW);
 	tcc_add_symbol(s, "xrtFileMove", xrtFileMove);

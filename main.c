@@ -524,7 +524,7 @@ int RunServer()
 
 int main(int argc, char** argv)
 {
-	#ifdef _WIN32
+	#if defined(_WIN32) || defined(_WIN64)
 		SetConsoleOutputCP(65001);
 	#endif
 	// 初始化 xrt 库

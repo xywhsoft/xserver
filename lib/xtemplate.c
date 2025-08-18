@@ -1113,6 +1113,9 @@ XTE_Value xteTableGetValue(XTE_Value tblVal, char* sKey, unsigned int iSize)
 	if ( tblVal->MainType != XTE_DT_TABLE ) {
 		return &XTE_VALUE_NULL;
 	}
+	if ( sKey == NULL ) {
+		return &XTE_VALUE_NULL;
+	}
 	if ( iSize == 0 ) {
 		iSize = strlen(sKey);
 	}
@@ -1165,6 +1168,9 @@ int xteTableSetValue(XTE_Value tblVal, char* sKey, unsigned int iSize, XTE_Value
 		return FALSE;
 	}
 	if ( tblVal->MainType != XTE_DT_TABLE ) {
+		return FALSE;
+	}
+	if ( sKey == NULL ) {
 		return FALSE;
 	}
 	if ( iSize == 0 ) {
@@ -1228,6 +1234,9 @@ int xteTableExists(XTE_Value tblVal, char* sKey, unsigned int iSize)
 		return FALSE;
 	}
 	if ( tblVal->MainType != XTE_DT_TABLE ) {
+		return FALSE;
+	}
+	if ( sKey == NULL ) {
 		return FALSE;
 	}
 	if ( iSize == 0 ) {

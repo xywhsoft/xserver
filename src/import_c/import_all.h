@@ -28,9 +28,6 @@ void ImportAll(TCCState* s)
 	// 添加函数 - libtcc
 	ImportLibTCC(s);
 	
-	// 添加函数 - parson
-	//ImportParson(s);
-	
 	// 添加函数 - xTemplate
 	ImportTemplate(s);
 	
