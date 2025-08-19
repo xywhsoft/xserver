@@ -8,9 +8,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <ctype.h>
-#include <wctype.h>
 #include <math.h>
-#include <time.h>
 #include <dirent.h>
 
 
@@ -91,6 +89,11 @@
 		// 错误信息
 		str LastError;
 		int __pri_FreeError;
+		
+		// 高精度时钟频率单位
+		#if defined(_WIN32) || defined(_WIN64)
+			uint64 Frequency;
+		#endif
 		
 		// 调试模式
 		int DebugMode;
@@ -329,6 +332,12 @@
 	#define XRT_TIME_FORMAT_DATETIME		0
 	#define XRT_TIME_FORMAT_DATE			1
 	#define XRT_TIME_FORMAT_TIME			2
+	
+	// 获取高精度时钟 Tick ( 返回秒数，便于计算时间间隔 )
+	XXAPI double xrtTimer();
+	
+	// 毫秒级延时
+	XXAPI void xrtSleep(uint32 ms);
 	
 	// 判断是否为闰年
 	XXAPI int xrtIsLeapYear(int iYear);
@@ -638,6 +647,31 @@
 	XXAPI uint64 xrtHash64_Micro(void* key, size_t len);
 	XXAPI uint64 xrtHash64_Nano_WithSeed(void* key, size_t len, unsigned long long seed);
 	XXAPI uint64 xrtHash64_Nano(void* key, size_t len);
+	
+	
+	
+	/* ------------------------------------ XID 函数库 ------------------------------------ */
+	
+	// XID 数据结构 ( 192 bit )
+	typedef struct {
+		int32 Data;				// 自定义数据
+		int32 Tick;				// CPU 时钟 ( 低 32 位 )
+		xtime Time;				// 当前时间戳
+		int32 Addr;				// 本机 IP 地址
+		int32 Rand;				// 随机数
+	} xid_struct, *xid;
+	
+	// XID 转 字符串 ( 需要使用 xrtFree 释放内存 )
+	XXAPI str xrtXIDtoStr(xid pXID);
+	
+	// 获取 XID ( 需要使用 xrtFree 释放内存 )
+	XXAPI xid xrtMakeXID(int32 iData, int32 iAddr);
+	
+	// 获取 XID 字符串 ( 需要使用 xrtFree 释放内存 )
+	XXAPI str xrtMakeXIDS(int32 iData, int32 iAddr);
+	
+	// 比较两个 XID 是否相同
+	XXAPI int xrtCompXID(xid pXID1, xid pXID2);
 	
 	
 	

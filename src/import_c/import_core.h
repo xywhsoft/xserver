@@ -88,6 +88,8 @@ void ImportCore(TCCState* s)
 	tcc_add_symbol(s, "xrtBase64DecodeW", xrtBase64DecodeW);
 	
 	// 添加函数 - Time
+	tcc_add_symbol(s, "xrtTimer", xrtTimer);
+	tcc_add_symbol(s, "xrtSleep", xrtSleep);
 	tcc_add_symbol(s, "xrtIsLeapYear", xrtIsLeapYear);
 	tcc_add_symbol(s, "xrtDaysInMonth", xrtDaysInMonth);
 	tcc_add_symbol(s, "xrtDaysInYear", xrtDaysInYear);
@@ -204,5 +206,11 @@ void ImportCore(TCCState* s)
 	tcc_add_symbol(s, "xrtHash64_Micro", xrtHash64_Micro);
 	tcc_add_symbol(s, "xrtHash64_Nano_WithSeed", xrtHash64_Nano_WithSeed);
 	tcc_add_symbol(s, "xrtHash64_Nano", xrtHash64_Nano);
+	
+	// 添加函数 - XID
+	tcc_add_symbol(s, "xrtXIDtoStr", xrtXIDtoStr);
+	tcc_add_symbol(s, "xrtMakeXID", xrtMakeXID);
+	tcc_add_symbol(s, "xrtMakeXIDS", xrtMakeXIDS);
+	tcc_add_symbol(s, "xrtCompXID", xrtCompXID);
 	
 }
