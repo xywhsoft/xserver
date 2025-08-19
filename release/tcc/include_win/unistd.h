@@ -19,11 +19,7 @@ extern "C" {
 #endif
 
 #ifndef __NO_ISOCEXT
-
-// 叶飞修改 : 不支持 linux 系统的文件
-#if defined(_WIN32) || defined(_WIN64)
 #include <sys/types.h> /* For useconds_t. */
-#endif
 
 // 叶飞修改 : 会报错，没找原因，暂时屏蔽
 //int __cdecl __MINGW_NOTHROW usleep(useconds_t useconds);

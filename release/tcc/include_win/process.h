@@ -9,10 +9,7 @@
 #include <_mingw.h>
 
 /* Includes a definition of _pid_t and pid_t */
-// 叶飞修改 : 不支持 linux 系统的文件
-#if defined(_WIN32) || defined(_WIN64)
 #include <sys/types.h>
-#endif
 
 #ifndef _POSIX_
 #ifdef __cplusplus

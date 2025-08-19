@@ -24,13 +24,20 @@ void DynLoad_C(XS_ServerObject objServer, XS_HostObject objHost)
 	// 设置错误输出回调函数
 	tcc_set_error_func(s, stderr, handle_error);
 	// 添加 引用文件、库文件 目录
-	tcc_add_include_path(s, "tcc/include/winapi");
-	tcc_add_include_path(s, "tcc/include");
+	#if defined(_WIN32) || defined(_WIN64)
+		tcc_add_include_path(s, "tcc/include_win/winapi");
+		tcc_add_include_path(s, "tcc/include_win");
+	#else
+		tcc_add_include_path(s, "tcc/include_linux");
+		tcc_add_include_path(s, "/usr/include");
+		tcc_add_library_path(s, "/usr/lib");
+		tcc_add_include_path(s, "/usr/include/x86_64-linux-gnu");
+		tcc_add_include_path(s, "/usr/include/x86_64-linux-gnu/sys");
+		tcc_add_library_path(s, "/usr/lib/x86_64-linux-gnu");
+	#endif
 	tcc_add_include_path(s, "tcc/inc_xs");
+	tcc_add_include_path(s, "tcc/include");
 	tcc_add_library_path(s, "tcc/lib");
-	tcc_add_include_path(s, "/usr/include");
-	tcc_add_library_path(s, "/usr/lib");
-	tcc_add_library_path(s, "/usr/lib/x86_64-linux-gnu");
 	tcc_add_include_path(s, objHost->Path);
 	tcc_add_library_path(s, objHost->Path);
 	char* sPath = xrtPathGetDir(objHost->DevFile, 0);
