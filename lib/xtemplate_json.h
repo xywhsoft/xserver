@@ -179,7 +179,9 @@ XTE_Value xteParseJSON_File(char* sFile)
 	varStack = PSSTK_Create(256);
 	varRoot = NULL;
 	varCur = NULL;
-	int iRet = json_sax_parse_file(sFile, xte_private_ParseJSON_Proc);
+	//int iRet = json_sax_parse_file(sFile, xte_private_ParseJSON_Proc);
+	char* sText = xrtFileGetAll(sFile);
+	int iRet = json_sax_parse_str(sText, xCore.iRet, xte_private_ParseJSON_Proc);
 	if ( iRet < 0 ) {
 		return xteValueCreateNull();
 	}

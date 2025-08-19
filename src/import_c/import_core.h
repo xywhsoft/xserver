@@ -29,7 +29,9 @@ void ImportCore(TCCState* s)
 	tcc_add_symbol(s, "xrtChainW", xrtChainW);
 	
 	// 添加函数 - Math
-	tcc_add_symbol(s, "xrtRand", xrtRand);
+	tcc_add_symbol(s, "xrtRand32", xrtRand32);
+	tcc_add_symbol(s, "xrtSetRandSeed32", xrtSetRandSeed32);
+	tcc_add_symbol(s, "xrtRandRange", xrtRandRange);
 	
 	// 添加函数 - Charset
 	tcc_add_symbol(s, "xrtUTF8to16", xrtUTF8to16);
