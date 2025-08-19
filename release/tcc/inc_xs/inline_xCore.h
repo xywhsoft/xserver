@@ -5,9 +5,7 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
-#include <ctype.h>
 #include <math.h>
 #include <dirent.h>
 
