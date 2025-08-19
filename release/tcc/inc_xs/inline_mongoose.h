@@ -410,17 +410,6 @@ struct mg_ws_message {
   uint8_t flags;       // Websocket message flags
 };
 
-XXAPI struct mg_connection *mg_ws_connect(struct mg_mgr *, const char *url, mg_event_handler_t fn, void *fn_data, const char *fmt, ...);
-XXAPI void mg_ws_upgrade(struct mg_connection *, struct mg_http_message *, const char *fmt, ...);
-XXAPI size_t mg_ws_send(struct mg_connection *, const void *buf, size_t len, int op);
-XXAPI size_t mg_ws_wrap(struct mg_connection *, size_t len, int op);
-XXAPI size_t mg_ws_printf(struct mg_connection *c, int op, const char *fmt, ...);
-XXAPI size_t mg_ws_vprintf(struct mg_connection *c, int op, const char *fmt, va_list *);
-
-
-
-
-
 struct mg_http_header {
   struct mg_str name;   // Header name
   struct mg_str value;  // Header value
@@ -450,6 +439,17 @@ struct mg_http_part {
   struct mg_str filename;  // Filename for file uploads
   struct mg_str body;      // Part contents
 };
+
+XXAPI struct mg_connection *mg_ws_connect(struct mg_mgr *, const char *url, mg_event_handler_t fn, void *fn_data, const char *fmt, ...);
+XXAPI void mg_ws_upgrade(struct mg_connection *, struct mg_http_message *, const char *fmt, ...);
+XXAPI size_t mg_ws_send(struct mg_connection *, const void *buf, size_t len, int op);
+XXAPI size_t mg_ws_wrap(struct mg_connection *, size_t len, int op);
+XXAPI size_t mg_ws_printf(struct mg_connection *c, int op, const char *fmt, ...);
+XXAPI size_t mg_ws_vprintf(struct mg_connection *c, int op, const char *fmt, va_list *);
+
+
+
+
 
 XXAPI int mg_http_parse(const char *s, size_t len, struct mg_http_message *);
 XXAPI int mg_http_get_request_len(const unsigned char *buf, size_t buf_len);
