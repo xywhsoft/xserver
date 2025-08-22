@@ -25,20 +25,36 @@
 	typedef unsigned char* u8str;
 	typedef unsigned short* u16str;
 	typedef unsigned int* u32str;
+	typedef unsigned char* binary;
 	typedef u8str str;
 	typedef wchar_t* wstr;			// windows 系统为 u16str，linux 系统为 u32str
 	
+	typedef char i8;
 	typedef char int8;
+	typedef unsigned char u8;
 	typedef unsigned char uint8;
+	typedef short i16;
 	typedef short int16;
+	typedef unsigned short u16;
 	typedef unsigned short uint16;
 	typedef unsigned int uint;
+	typedef int i32;
 	typedef int int32;
+	typedef unsigned int u32;
 	typedef unsigned int uint32;
+	typedef long long i64;
 	typedef long long int64;
+	typedef unsigned long long u64;
 	typedef unsigned long long uint64;
 	// long = auto 32 / 64 bit integer
 	typedef unsigned long ulong;
+	
+	typedef float f32;
+	typedef float float32;
+	typedef double f64;
+	typedef double float64;
+	
+	typedef long long curr;
 	
 	typedef void* ptr;
 	typedef intptr_t intptr;
@@ -290,23 +306,18 @@
 	
 	// 生成随机字符串（ 需使用 xrtFree 释放 ）
 	XXAPI str xrtRandStr(str sTemplate, size_t iSize, size_t iLen);
-	XXAPI wstr xrtRandStrW(wstr sTemplate, size_t iSize, size_t iLen);
 	
 	// HEX 编码（ 需使用 xrtFree 释放 ）
 	XXAPI str xrtHexEncode(ptr pMem, size_t iSize);
-	XXAPI wstr xrtHexEncodeW(ptr pMem, size_t iSize);
 	
 	// HEX 解码（ 需使用 xrtFree 释放 ）
 	XXAPI ptr xrtHexDecode(str pText, size_t iSize);
-	XXAPI ptr xrtHexDecodeW(wstr pText, size_t iSize);
 	
 	// Base64 编码（ 需使用 xrtFree 释放 ）
-	str xrtBase64Encode(ptr pMem, size_t iSize);
-	wstr xrtBase64EncodeW(ptr pMem, size_t iSize);
+	str xrtBase64Encode(ptr pMem, size_t iSize, str sTable);
 	
 	// Base64 解码（ 需使用 xrtFree 释放 ）
-	ptr xrtBase64Decode(str sText, size_t iSize);
-	ptr xrtBase64DecodeW(wstr sText, size_t iSize);
+	ptr xrtBase64Decode(str sText, size_t iSize, str sTable);
 	
 	
 	
@@ -665,7 +676,10 @@
 	} xid_struct, *xid;
 	
 	// XID 转 字符串 ( 需要使用 xrtFree 释放内存 )
-	XXAPI str xrtXIDtoStr(xid pXID);
+	XXAPI str xrtEncodeXID(xid pXID);
+	
+	// 字符串 转 XID ( 需要使用 xrtFree 释放内存 )
+	XXAPI xid xrtDecodeXID(str sXID);
 	
 	// 获取 XID ( 需要使用 xrtFree 释放内存 )
 	XXAPI xid xrtMakeXID(int32 iData, int32 iAddr);
@@ -675,6 +689,22 @@
 	
 	// 比较两个 XID 是否相同
 	XXAPI int xrtCompXID(xid pXID1, xid pXID2);
+	
+	
+	
+	/* ------------------------------------ Array 函数库 ------------------------------------ */
+	
+	
+	
+	/* ------------------------------------ List 函数库 ------------------------------------ */
+	
+	
+	
+	/* ------------------------------------ Table 函数库 ------------------------------------ */
+	
+	
+	
+	/* ------------------------------------ Value 函数库 ------------------------------------ */
 	
 	
 	

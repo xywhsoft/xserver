@@ -77,15 +77,10 @@ void ImportCore(TCCState* s)
 	tcc_add_symbol(s, "xrtSplit", xrtSplit);
 	tcc_add_symbol(s, "xrtSplitW", xrtSplitW);
 	tcc_add_symbol(s, "xrtRandStr", xrtRandStr);
-	tcc_add_symbol(s, "xrtRandStrW", xrtRandStrW);
 	tcc_add_symbol(s, "xrtHexEncode", xrtHexEncode);
-	tcc_add_symbol(s, "xrtHexEncodeW", xrtHexEncodeW);
 	tcc_add_symbol(s, "xrtHexDecode", xrtHexDecode);
-	tcc_add_symbol(s, "xrtHexDecodeW", xrtHexDecodeW);
 	tcc_add_symbol(s, "xrtBase64Encode", xrtBase64Encode);
-	tcc_add_symbol(s, "xrtBase64EncodeW", xrtBase64EncodeW);
 	tcc_add_symbol(s, "xrtBase64Decode", xrtBase64Decode);
-	tcc_add_symbol(s, "xrtBase64DecodeW", xrtBase64DecodeW);
 	
 	// 添加函数 - Time
 	tcc_add_symbol(s, "xrtTimer", xrtTimer);
@@ -208,7 +203,8 @@ void ImportCore(TCCState* s)
 	tcc_add_symbol(s, "xrtHash64_Nano", xrtHash64_Nano);
 	
 	// 添加函数 - XID
-	tcc_add_symbol(s, "xrtXIDtoStr", xrtXIDtoStr);
+	tcc_add_symbol(s, "xrtEncodeXID", xrtEncodeXID);
+	tcc_add_symbol(s, "xrtDecodeXID", xrtDecodeXID);
 	tcc_add_symbol(s, "xrtMakeXID", xrtMakeXID);
 	tcc_add_symbol(s, "xrtMakeXIDS", xrtMakeXIDS);
 	tcc_add_symbol(s, "xrtCompXID", xrtCompXID);
