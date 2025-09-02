@@ -865,7 +865,7 @@ void xteValueUnref(XTE_Value objVal)
 		// 引用计数用完了就销毁对象
 		if ( objVal->RefCount == 0 ) {
 			if ( objVal->MainType == XTE_DT_TEXT ) {
-				xrtFree(objVal->vText);
+				//xrtFree(objVal->vText);
 			} else if ( objVal->MainType == XTE_DT_ARRAY ) {
 				// 数组需要释放子元素
 				for ( int i = 1; i <= objVal->vArray->Count; i++ ) {
