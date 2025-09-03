@@ -879,7 +879,9 @@ void xteValueUnref(XTE_Value objVal)
 				// !!! ★★★ ------ 暂未实现本机制 ------ ★★★ !!!
 				
 			}
-			free(objVal);
+			if ( objVal->MainType != XTE_DT_NULL ) {
+				free(objVal);
+			}
 		}
 	}
 }
