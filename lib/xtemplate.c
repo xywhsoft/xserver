@@ -1182,7 +1182,7 @@ int xteTableSetValue(XTE_Value tblVal, char* sKey, unsigned int iSize, XTE_Value
 		if ( bColloc == FALSE ) {
 			xteValueRef(objNewVal);
 		}
-		xteValueUnref(objOldVal);
+		//xteValueUnref(objOldVal);
 		return TRUE;
 	} else {
 		return FALSE;
