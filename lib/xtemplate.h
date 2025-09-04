@@ -257,6 +257,7 @@ XXAPI int xteTableSetCustom(XTE_Value tblVal, char* sKey, unsigned int iSize, vo
 
 // 表操作
 XXAPI int xteTableExists(XTE_Value tblVal, char* sKey, unsigned int iSize);
+XXAPI int xteTableRemove(XTE_Value tblVal, char* sKey, unsigned int iSize);
 XXAPI int xteTableItemCount(XTE_Value tblVal);
 XXAPI int xteTableClear(XTE_Value tblVal);
 

@@ -1246,6 +1246,16 @@ int xteTableExists(XTE_Value tblVal, char* sKey, unsigned int iSize)
 	}
 	return AVLHT32_Exists(tblVal->vTable, sKey, iSize);
 }
+XXAPI int xteTableRemove(XTE_Value tblVal, char* sKey, unsigned int iSize)
+{
+	if ( tblVal == NULL ) {
+		return 0;
+	}
+	if ( tblVal->MainType != XTE_DT_TABLE ) {
+		return 0;
+	}
+	AVLHT32_Remove(tblVal->vTable, sKey, iSize);
+}
 int xteTableItemCount(XTE_Value tblVal)
 {
 	if ( tblVal == NULL ) {

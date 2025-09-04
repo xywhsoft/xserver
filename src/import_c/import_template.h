@@ -48,6 +48,7 @@ void ImportTemplate(TCCState* s)
 	tcc_add_symbol(s, "xteTableSetFunc", xteTableSetFunc);
 	tcc_add_symbol(s, "xteTableSetCustom", xteTableSetCustom);
 	tcc_add_symbol(s, "xteTableExists", xteTableExists);
+	tcc_add_symbol(s, "xteTableRemove", xteTableRemove);
 	tcc_add_symbol(s, "xteTableItemCount", xteTableItemCount);
 	tcc_add_symbol(s, "xteTableClear", xteTableClear);
 	tcc_add_symbol(s, "xteArrayGetValue", xteArrayGetValue);
