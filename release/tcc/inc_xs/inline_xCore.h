@@ -228,6 +228,12 @@
 	// 设置 32 位随机数种子
 	XXAPI void xrtSetRandSeed32(uint64 seed, uint64 seq);
 	
+	// 获取 64 位随机数
+	XXAPI uint64 xrtRand64();
+	
+	// 设置 64 位随机数种子
+	XXAPI void xrtSetRandSeed64(uint64 lowseed, uint64 lowseq, uint64 highseed, uint64 highseq);
+	
 	// 获取范围随机数
 	XXAPI int xrtRandRange(int min, int max);
 	
@@ -590,15 +596,30 @@
 	
 	
 	
+	/* ------------------------------------ Network 函数库 ------------------------------------ */
+	
+	// 获取本机 IP ( 需使用 xrtFree 释放 )
+	str xrtGetLocalIP();
+	
+	// 获取本机 IP ( 返回 uint32 )
+	uint32 xrtGetLocalRawIP();
+	
+	// 获取本机 MAC 地址 ( 需使用 xrtFree 释放 )
+	str xrtGetLocalMAC();
+	
+	// 获取本机名称 ( 需使用 xrtFree 释放 )
+	str xrtGetLocalName();
+	
+	
+	
 	/* ------------------------------------ XID 函数库 ------------------------------------ */
 	
 	// XID 数据结构 ( 192 bit )
 	typedef struct {
-		int32 Data;				// 自定义数据
-		int32 Tick;				// CPU 时钟 ( 低 32 位 )
 		xtime Time;				// 当前时间戳
 		int32 Addr;				// 本机 IP 地址
-		int32 Rand;				// 随机数
+		int32 Tick;				// CPU 时钟 ( 低 32 位 )
+		int64 Rand;				// 随机数
 	} xid_struct, *xid;
 	
 	// XID 转 字符串 ( 需要使用 xrtFree 释放内存 )
@@ -608,10 +629,10 @@
 	XXAPI xid xrtDecodeXID(str sXID);
 	
 	// 获取 XID ( 需要使用 xrtFree 释放内存 )
-	XXAPI xid xrtMakeXID(int32 iData, int32 iAddr);
+	XXAPI xid xrtMakeXID();
 	
 	// 获取 XID 字符串 ( 需要使用 xrtFree 释放内存 )
-	XXAPI str xrtMakeXIDS(int32 iData, int32 iAddr);
+	XXAPI str xrtMakeXIDS();
 	
 	// 比较两个 XID 是否相同
 	XXAPI int xrtCompXID(xid pXID1, xid pXID2);

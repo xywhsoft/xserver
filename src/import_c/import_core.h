@@ -28,6 +28,8 @@ void ImportCore(TCCState* s)
 	// 添加函数 - Math
 	tcc_add_symbol(s, "xrtRand32", xrtRand32);
 	tcc_add_symbol(s, "xrtSetRandSeed32", xrtSetRandSeed32);
+	tcc_add_symbol(s, "xrtRand64", xrtRand64);
+	tcc_add_symbol(s, "xrtSetRandSeed64", xrtSetRandSeed64);
 	tcc_add_symbol(s, "xrtRandRange", xrtRandRange);
 	
 	// 添加函数 - Charset
@@ -148,6 +150,12 @@ void ImportCore(TCCState* s)
 	tcc_add_symbol(s, "xrtHash64_Micro", xrtHash64_Micro);
 	tcc_add_symbol(s, "xrtHash64_Nano_WithSeed", xrtHash64_Nano_WithSeed);
 	tcc_add_symbol(s, "xrtHash64_Nano", xrtHash64_Nano);
+	
+	// 添加函数 - Network
+	tcc_add_symbol(s, "xrtGetLocalIP", xrtGetLocalIP);
+	tcc_add_symbol(s, "xrtGetLocalRawIP", xrtGetLocalRawIP);
+	tcc_add_symbol(s, "xrtGetLocalMAC", xrtGetLocalMAC);
+	tcc_add_symbol(s, "xrtGetLocalName", xrtGetLocalName);
 	
 	// 添加函数 - XID
 	tcc_add_symbol(s, "xrtEncodeXID", xrtEncodeXID);

@@ -116,6 +116,9 @@
 		// 调试模式
 		int DebugMode;
 		
+		// 本机 IP 地址 ( 用于生成 XID )
+		uint LocalAddr;
+		
 		// 应用信息
 		str AppFile;
 		str AppPath;
@@ -248,7 +251,13 @@
 	// 设置 32 位随机数种子
 	XXAPI void xrtSetRandSeed32(uint64 seed, uint64 seq);
 	
-	// 获取范围随机数
+	// 获取 64 位随机数
+	XXAPI uint64 xrtRand64();
+	
+	// 设置 64 位随机数种子
+	XXAPI void xrtSetRandSeed64(uint64 lowseed, uint64 lowseq, uint64 highseed, uint64 highseq);
+	
+	// 获取 32 位范围随机数
 	XXAPI int xrtRandRange(int min, int max);
 	
 	
@@ -610,15 +619,30 @@
 	
 	
 	
+	/* ------------------------------------ Network 函数库 ------------------------------------ */
+	
+	// 获取本机 IP ( 需使用 xrtFree 释放 )
+	str xrtGetLocalIP();
+	
+	// 获取本机 IP ( 返回 uint32 )
+	uint32 xrtGetLocalRawIP();
+	
+	// 获取本机 MAC 地址 ( 需使用 xrtFree 释放 )
+	str xrtGetLocalMAC();
+	
+	// 获取本机名称 ( 需使用 xrtFree 释放 )
+	str xrtGetLocalName();
+	
+	
+	
 	/* ------------------------------------ XID 函数库 ------------------------------------ */
 	
 	// XID 数据结构 ( 192 bit )
 	typedef struct {
-		int32 Data;				// 自定义数据
-		int32 Tick;				// CPU 时钟 ( 低 32 位 )
 		xtime Time;				// 当前时间戳
 		int32 Addr;				// 本机 IP 地址
-		int32 Rand;				// 随机数
+		int32 Tick;				// CPU 时钟 ( 低 32 位 )
+		int64 Rand;				// 随机数
 	} xid_struct, *xid;
 	
 	// XID 转 字符串 ( 需要使用 xrtFree 释放内存 )
@@ -628,10 +652,10 @@
 	XXAPI xid xrtDecodeXID(str sXID);
 	
 	// 获取 XID ( 需要使用 xrtFree 释放内存 )
-	XXAPI xid xrtMakeXID(int32 iData, int32 iAddr);
+	XXAPI xid xrtMakeXID();
 	
 	// 获取 XID 字符串 ( 需要使用 xrtFree 释放内存 )
-	XXAPI str xrtMakeXIDS(int32 iData, int32 iAddr);
+	XXAPI str xrtMakeXIDS();
 	
 	// 比较两个 XID 是否相同
 	XXAPI int xrtCompXID(xid pXID1, xid pXID2);
@@ -651,7 +675,103 @@
 	
 	
 	/* ------------------------------------ Value 函数库 ------------------------------------ */
+	/*
+	// 数据类型 - 主类型
+	#define XRT_DT_EMPTY			0				// 不存在的数据
+	#define XRT_DT_NULL				1				// null
+	#define XRT_DT_BOOL				2				// bool : true | false
+	#define XRT_DT_NUM				3				// 数字
+	#define XRT_DT_TEXT				4				// 字符串
+	#define XRT_DT_TEMPLATE			5				// 模板
+	#define XRT_DT_TIME				6				// 时间
+	#define XRT_DT_POINT			7				// 指针
+	#define XRT_DT_STRUCT			8				// 结构体
+	#define XRT_DT_COLLECT			9				// 集合
+	#define XRT_DT_ARRAY			10				// 数组
+	#define XRT_DT_TABLE			11				// 表
+	#define XRT_DT_OBJECT			12				// 对象
+	#define XRT_DT_SHEET			13				// 数据表
+	#define XRT_DT_FUNCTION			14				// 函数
+	#define XRT_DT_CUSTOM			15				// 自定义
 	
+	// 数据类型 - 子类型 [ 逻辑 ]
+	#define XRT_SDT_BOOL_FALSE		0				// false
+	#define XRT_SDT_BOOL_TRUE		1				// true
+	
+	// 数据类型 - 子类型 [ 数字 ]
+	#define XRT_SDT_NUM_INT			0				// 整数 ( int64 )
+	#define XRT_SDT_NUM_FLOAT		1				// 浮点数 ( double )
+	
+	// 数据类型 - 子类型 [ 字符串 ]
+	#define XRT_SDT_STR_U8			0				// utf-8 字符串
+	#define XRT_SDT_STR_U16			1				// utf-16 字符串
+	#define XRT_SDT_STR_U32			2				// utf-32 字符串
+	#define XRT_SDT_STR_BIN			3				// 二进制数据
+	
+	// 数据类型 - 子类型 [ 函数 ]
+	#define XRT_SDT_FUNC_XL			0				// xlang 函数
+	#define XRT_SDT_FUNC_CL			1				// clang 函数
+	
+	// 函数类型回调
+	typedef struct xvalue_struct xvalue_struct, *xvalue;
+	typedef struct xcustom_struct xcustom_struct, *xcustom;
+	typedef xvalue (*xfunction)(xvalue varENV, xvalue varParam);
+	
+	// Value 基类 [ 8 byte ]
+	struct xvalue_struct {
+		uint8 Type;					// 值的主类型
+		uint8 SubType;				// 值的子类型
+		uint16 Flag;				// 位标记
+		union {
+			uint32 Size;			// 字符串长度、结构体长度
+			uint32 RetCount;		// 引用计数 [ 集合、数组、表、对象、数据表 ]
+		};
+	};
+	
+	// Value 16 字节类 [ XRT_DT_NUM、XRT_DT_TEXT、XRT_DT_TIME、XRT_DT_POINT ]
+	struct {
+		uint8 Type;
+		uint8 SubType;
+		uint16 Flag;
+		union {
+			uint32 Size;
+			uint32 RetCount;
+		};
+		union {
+			int64 vInt;
+			double vFloat;
+			str vText;
+			ptr vTemplate;
+			xtime vTime;
+			ptr vPoint;
+			ptr vStruct;
+			ptr vCollect;
+			ptr vArray;
+			ptr vTable;
+			ptr vObject;
+			ptr vSheet;
+			xfunction vFunc;
+			ptr vFuncC;
+		};
+	} xvalue12_struct, *xvalue12;
+	
+	// Custom 类 [ 16 bytes ]
+	struct xcustom_struct {
+		uint8 Type;
+		uint8 SubType;
+		uint16 Flag;
+		union {
+			uint32 Size;
+			uint32 RetCount;
+		};
+		void (*construct)(xcustom var);
+		void (*destruct)(xcustom var);
+		int (*set)(xcustom var, str key, xcustom val);
+		xvalue (*get)(xcustom var, str key);
+		xvalue (*call)(xcustom var, str key, xvalue param);
+		ptr value;
+	};
+	*/
 	
 	
 #endif
