@@ -96,6 +96,9 @@
 		// 调试模式
 		int DebugMode;
 		
+		// 本机 IP 地址 ( 用于生成 XID )
+		uint LocalAddr;
+		
 		// 应用信息
 		str AppFile;
 		str AppPath;
