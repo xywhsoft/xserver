@@ -53,7 +53,7 @@
 			// 创建渲染实例
 			table.render({
 				elem: '#DeviceList',
-				url: '/device/getlist',
+				url: '/app/list',
 				toolbar: '#DeviceToolbar',
 				defaultToolbar: ['filter', 'exports', 'print', { // 右上角工具图标
 					title: '提示',
@@ -63,25 +63,16 @@
 						layer.alert('自定义工具栏图标按钮');
 					}
 				}],
-				height: 'full-100', // 最大高度减去其他容器已占有的高度差
+				height: 'full-56', // 最大高度减去其他容器已占有的高度差
 				cellMinWidth: 60,
 				totalRow: false,
 				page: true,
 				cols: [[
-					{type: 'checkbox', fixed: 'left'},
 					{field:'id', fixed: 'left', width:60, title: 'ID', sort: true, unresize: true},
-					{field:'enabled', width:60, title: '启用', sort: true, unresize: true, templet: '#DeviceListField_Enabled'},
-					{field:'type', width:90, title: '类型', sort: true, templet: '#DeviceListField_Type'},
-					{field:'name', minWidth:120, title: '设备名称', sort: true, edit: 'text'},
-					{field:'model', width:160, title: '设备型号', sort: true, edit: 'text'},
-					{field:'connect', width:160, title: '设备SN', sort: true, edit: 'text'},
-					{field:'staff', width:120, title: '管理员', sort: true, edit: 'text'},
-					{field:'project', width:240, title: '所属项目', sort: true, edit: 'text'},
-					{field:'runstate', width:80, title: '运行状态', sort: true, unresize: true, templet: '#DeviceListField_RunState'},
-					{field:'online', width:60, title: '在线', sort: true, unresize: true, templet: '#DeviceListField_Online'},
-					{field:'lock', width:60, title: '锁定', sort: true, unresize: true, templet: '#DeviceListField_Lock'},
-					{field:'taskid', width: 100, title:'关联任务', sort: true, unresize: true, templet: '#DeviceListField_Task'},
-					// {title:'操作', width: 80, templet: '#DeviceListField_Tool', unresize: true}
+					{field:'name', width:120, title: '姓名', sort: true, templet: '#DeviceListField_Type'},
+					{field:'age', width:80, title: '年龄', sort: true, edit: 'text'},
+					{field:'mail', width:240, title: '邮箱', sort: true, edit: 'text'},
+					{field:'desc', minWidth:160, title: '备注', sort: true, edit: 'text'}
 				]],
 				done: function(){
 					var id = this.id;
@@ -98,14 +89,14 @@
 				var othis = lay(this);
 				switch(obj.event){
 					case 'AddRow':
-						// 添加设备
+						// 添加数据
 						layer.open({
-							title: '添加设备',
+							title: '添加数据',
 							type: 2,
 							shadeClose: true,
 							maxmin: true,
 							area: ['640px', '495px'],
-							content: '/view/device/create.html',
+							content: '/add.html',
 							end: function(){
 								table.reloadData('DeviceList', {
 									scrollPos: 'fixed'  // 保持滚动条位置不变 - v2.7.3 新增
@@ -114,7 +105,28 @@
 						});
 					break;
 					case 'DelRow':
-						// 删除设备
+						// 删除数据
+						// 发送请求
+						fetch("/app/del", {
+							method: 'POST',
+							headers: {
+								'Content-Type': 'application/json'
+							},
+							body: "[1, 4]"
+						})
+						.then(response => response.json())
+						.then(data => {
+							if ( data.result ) {
+								layer.msg(data.message, {icon: 1});
+							} else {
+								layer.msg('请求服务报错：' + data.message, {icon: 2}, function(){});
+							}
+						})
+						.catch(error => {
+							layer.msg('请求出错，请查看开发者工具检查原因', {icon: 2}, function(){});
+							console.error('Error:', error)
+						});
+						/*
 						var data = checkStatus.data;
 						if ( data.length == 0 ) {
 							layer.msg("请先选择要删除的设备！", {icon: 2});
@@ -147,6 +159,7 @@
 								console.error('Error:', error)
 							});
 						}
+						*/
 					break;
 					case 'RefreshList':
 						// 刷新列表

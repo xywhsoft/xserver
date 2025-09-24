@@ -99,6 +99,7 @@ XDO_Recordset_SQLite SQLite_Select(XDO_Connect objConn, char* sSQL)
 	objRS->objConn = objConn;
 	objRS->objDriver = objConn->objDriver;
 	objRS->Line = 0;
+	objRS->RecordCount = 0;
 	
 	// 执行 SQL 语句
 	int bFieldInfo = TRUE;

@@ -39,6 +39,7 @@ XDO_Connect G_DB;
 
 
 // 路由调用 - HTTP
+#include "route_http/curd.h"
 #include "route_http/test.h"
 
 
