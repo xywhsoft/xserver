@@ -30,6 +30,9 @@ void InitRouteHTTP()
 	AddStaticRouteHTTP("/app/del",							Request_Del);
 	AddStaticRouteHTTP("/app/edit",							Request_Edit);
 	
+	// 添加 HTTP 静态路由 - 图表
+	AddStaticRouteHTTP("/chart/get",						Request_Chart_Get);
+	
 	// 添加 HTTP 静态路由 - Test
 	AddStaticRouteHTTP("/test",								Request_Test);
 }

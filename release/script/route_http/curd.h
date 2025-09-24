@@ -84,8 +84,8 @@ void Request_Del(XS_ServerObject objServer, XS_HostObject objHost, struct mg_con
 	// 遍历数组删除数据
 	int iCount = xteArrayItemCount(objBody);
 	for ( int i = 0; i < iCount; i++ ) {
-		int id = xteArrayGetInt(objBody, i);
-		str sSQL = xrtFormat("DELETE FROM test WHERE id = %d", id);
+		str id = xteArrayGetText(objBody, i);
+		str sSQL = xrtFormat("DELETE FROM test WHERE id = %s", id);
 		xdoExecute(G_DB, sSQL);
 		xrtFree(sSQL);
 	}
@@ -98,31 +98,35 @@ void Request_Del(XS_ServerObject objServer, XS_HostObject objHost, struct mg_con
 // 编辑数据
 void Request_Edit(XS_ServerObject objServer, XS_HostObject objHost, struct mg_connection* c, struct mg_http_message* hm)
 {
-	XTE_Value option = xteValueCreateTable();
-	XTE_Value xAxis = xteValueCreateTable();
-	xteTableSetValue(option, "xAxis", 5, xAxis, TRUE);
-	xteTableSetText(xAxis, "type", 4, "category", FALSE);
-	XTE_Value data = xteValueCreateArray();
-	xteTableSetValue(xAxis, "data", 4, data, TRUE);
-	xteArrayAppendText(data, "Mon", FALSE);
-	xteArrayAppendText(data, "Tue", FALSE);
-	xteArrayAppendText(data, "Wed", FALSE);
-	xteArrayAppendText(data, "Thu", FALSE);
-	xteArrayAppendText(data, "Fri", FALSE);
-	xteArrayAppendText(data, "Sat", FALSE);
-	xteArrayAppendText(data, "Sun", FALSE);
-	XTE_Value yAxis = xteValueCreateTable();
-	xteTableSetValue(option, "yAxis", 5, yAxis, TRUE);
-	xteTableSetText(yAxis, "type", 4, "value", FALSE);
-	XTE_Value series = xteValueCreateArray();
-	xteTableSetValue(option, "series", 6, series, TRUE);
-	XTE_Value arr0 = xteValueCreateTable();
-	xteArrayAppendValue(series, arr0, TRUE);
-	
-	// 生成 JSON
-	size_t iRetSize = 0;
-	char* sRet = xteStringifyJSON(option, FALSE, &iRetSize);
-	http_reply(c, 200, "Content-Type: application/json\r\n", sRet, iRetSize);
+	// 解析 body 域
+	if ( hm->body.len == 0 ) {
+		http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"Body 域不能为空！\"}", 0);
+		return;
+	}
+	XTE_Value objBody = xteParseJSON(hm->body.buf, hm->body.len);
+	if ( objBody->MainType != XTE_DT_TABLE ) {
+		http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"Body 域必须传递为 JSON 对象！\"}", 0);
+		return;
+	}
+	// 检查 id 属性是否正确
+	str sID = xteTableGetText(objBody, "id", 2);
+	if ( (sID == NULL) || (sID[0] == 0) ) {
+		http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"参数 id 不能为空！\"}", 0);
+		return;
+	}
+	// 检查 field 属性是否正确
+	str sField = xteTableGetText(objBody, "field", 5);
+	if ( (sField == NULL) || (sField[0] == 0) ) {
+		http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"参数 field 不能为空！\"}", 0);
+		return;
+	}
+	// 修改属性
+	str sValue = xteTableGetText(objBody, "value", 5);
+	str sSQL = xrtFormat("UPDATE test SET %s = '%s' WHERE id = %s", sField, sValue, sID);
+	xdoExecute(G_DB, sSQL);
+	xrtFree(sSQL);
+	// 返回消息
+	http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": true, \"msg\": \"数据编辑成功！\"}", 0);
 }
 
 

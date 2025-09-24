@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+	<title>图表范例页面</title>
+	<style>
+		html, body {
+			height: 100%;
+			margin: 0;
+		}
+	</style>
+</head>
+<body>
+	<div id="container" style="height: 100%"></div>
+	
+	<!-- body 末尾处引入 echarts 库 -->
+	<script type="text/javascript" src="/res/js/echarts.min.js"></script>
+	<script type="text/javascript">
+		var dom = document.getElementById('container');
+		var myChart = echarts.init(dom, null, {
+			renderer: 'canvas',
+			useDirtyRect: false
+		});
+		
+		// 请求数据
+		fetch("/chart/get", { method: 'GET' })
+		.then(response => response.json())
+		.then(data => {
+			myChart.setOption(data);
+		})
+		.catch(error => {
+			layer.msg('请求出错，请查看开发者工具检查原因', {icon: 2}, function(){});
+			console.error('Error:', error)
+		});
+		
+		window.addEventListener('resize', myChart.resize);
+	</script>
+</body>
+</html>
