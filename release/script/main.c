@@ -27,13 +27,8 @@ char* TemplatePath;
 
 
 
-// 全局文件路径
-char* FileDB;
-
-
-
 // 全局数据库对象
-sqlite3* objDB;
+XDO_Connect G_DB;
 
 
 
@@ -85,10 +80,10 @@ void ServiceInit(XS_ServerObject objServer)
 	
 	
 	// 连接到主数据库
-	FileDB = xrtPathJoin(2, DBPath, "main.db");
-	int iRet = sqlite3_open(FileDB, &objDB);
-	if ( iRet != SQLITE_OK ) {
-		printf("!!! ERROR !!! ServiceInit - sqlite3_open error code : %d\n", iRet);
+	str FileDB = xrtPathJoin(2, DBPath, "main.db");
+	G_DB = xdoConnectSQLite(FileDB);
+	if ( G_DB == NULL ) {
+		printf("!!! ERROR !!! ServiceInit - xdoConnectSQLite error.\n");
 	}
 	
 	
@@ -115,7 +110,7 @@ void ServiceUnit(XS_ServerObject objServer)
 	AVLHT32_Destroy(StaticRouteTableHTTP);
 	
 	// 释放数据库
-	sqlite3_close(objDB);
+	xdoDisconnect(G_DB);
 	sqlite3_shutdown();
 	
 }
