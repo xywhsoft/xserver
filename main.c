@@ -385,7 +385,7 @@ int LoadConfig(char* sOptFile)
 		exit(EXIT_FAILURE);
 	}
 	// 加载配置文件
-	xvalue varJSON = xvoParseJSON_File(sOptFile);
+	xvalue varJSON = xrtParseJSON_File(sOptFile);
 	//xvoPrintValue(varJSON, 0, 0, 0, NULL);
 	if ( varJSON->Type == XVO_DT_TABLE ) {
 		// 单服务端口配置
