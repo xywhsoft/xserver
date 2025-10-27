@@ -50,15 +50,35 @@ xrtGlobalData xCore = { FALSE };
 // 引入子库
 #include "lib/base.h"
 #include "lib/charset.h"
+#include "lib/os.h"
 #include "lib/math.h"
 #include "lib/string.h"
-#include "lib/time.h"
 #include "lib/path.h"
-#include "lib/os.h"
+#include "lib/time.h"
 #include "lib/file.h"
+#include "lib/thread.h"
 #include "lib/hash.h"
 #include "lib/network.h"
 #include "lib/xid.h"
+#include "lib/buffer.h"
+#include "lib/array_point.h"
+#include "lib/array.h"
+#include "lib/bsmm.h"
+#include "lib/memunit.h"
+#include "lib/mempool_fs.h"
+#include "lib/stack.h"
+#include "lib/stack_dyn.h"
+#include "lib/llist_base.h"
+#include "lib/llist.h"
+#include "lib/avltree_base.h"
+#include "lib/avltree.h"
+#include "lib/mempool.h"
+#include "lib/dict.h"
+#include "lib/list.h"
+#include "lib/value.h"
+#include "lib/jnum.h"
+#include "lib/json.h"
+#include "lib/template.h"
 
 
 
@@ -134,9 +154,6 @@ XXAPI xrtGlobalData* xrtInit()
 	uint64 highseed = ((uint64)highseed_high << 32) | (uint64)highseed_low;
 	uint64 highseq = ((uint64)highseq_high << 32) | (uint64)highseq_low;
 	xrtSetRandSeed64(lowseed, lowseq, highseed, highseq);
-	
-	// 设置内置的错误描述（便于复用）
-	xCore.ERROR_DESC.MALLOC = "Memory allocate error !";
 	
 	// 获取程序文件名和路径
 	#if defined(_WIN32) || defined(_WIN64)

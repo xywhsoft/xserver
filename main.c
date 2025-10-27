@@ -7,36 +7,8 @@
 
 
 
-#define MMU_USE_PAMM								// 动态指针数组
-#define MMU_USE_SAMM								// 动态结构体数组
-#define MMU_USE_MBMU								// 自增长缓冲区
-#define MMU_USE_BSMM								// 基础内存管理器
-#define MMU_USE_MMU256								// 256 容量结构体管理单元
-#define MMU_USE_MM256								// 256 增量内存管理器
-#define MMU_USE_MP256								// 256 增量内存池
-#define MMU_USE_SSSTK								// 静态结构体栈
-#define MMU_USE_PSSTK								// 静态指针栈
-#define MMU_USE_SDSTK								// 动态扩容结构体栈
-#define MMU_USE_PDSTK								// 动态扩容指针栈
-#define MMU_USE_LLIST_BASE							// 链表基础算法
-#define MMU_USE_LLIST								// 链表
-#define MMU_USE_AVLTREE_BASE						// AVLTree 基础算法
-#define MMU_USE_AVLTREE								// AVLTree
-#define MMU_USE_HASH32								// 32位哈希算法
-#define MMU_USE_HASH64								// 64位哈希算法
-#define MMU_USE_AVLHT32								// 基于 AVLTree + 32位哈希算法的哈希表实现
-#define MMU_USE_AVLHT64								// 基于 AVLTree + 64位哈希算法的哈希表实现
-
-#define XTE_USE_LITE								// 使用 xTemplate Lite Parser
-#define XTE_USE_MAKE								// 支持模板生成
-
-
-
-#include "lib/mmu.h"
 #include "lib/xrt/xrt.h"
 #include "lib/mongoose.h"
-#include "lib/jnum.h"
-#include "lib/json.h"
 #include "lib/libtcc.h"
 #include "lib/sqlite3.h"
 //#include "lib/sqlite3ext.h"
@@ -102,8 +74,8 @@ typedef struct {
 	int EnableDefaultHost;								// 是否启用默认 Host
 	XS_HostStruct DefaultHost;							// 默认 Host
 	unsigned int HostCount;								// Host 数量
-	SAMM_Object Hosts;									// Host 列表（SAMM结构）
-	AVLHT32_Object HostMap;								// Host 哈希表（用于快速定位 Host 数据结构）
+	xarray Hosts;										// Host 列表
+	xdict HostMap;										// Host 字典（用于快速定位 Host 数据结构）
 	void* JsonNode;										// 配置文件的 JSON 对象
 	struct mg_connection* Conn;							// mongoose 连接对象
 	struct mg_connection* ConnTLS;						// mongoose 连接对象 TLS
@@ -124,10 +96,10 @@ typedef struct {
 struct mg_mgr mgr;
 
 // 	全局数据 - 服务器列表
-SAMM_Object ServerList;
+xarray ServerList;
 
 // 全局数据 - 轮询事件列表
-SAMM_Object LoopEventList;
+xarray LoopEventList;
 
 
 
@@ -135,8 +107,6 @@ SAMM_Object LoopEventList;
 
 // 功能补全函数库
 #include "lib/other.h"
-#include "lib/xtemplate.h"
-#include "lib/xtemplate_json.h"
 
 
 
@@ -160,12 +130,12 @@ SAMM_Object LoopEventList;
 
 
 // 载入主机配置
-void LoadHostConfig(XTE_Value objRoot, XS_HostObject objHost, XS_ServerObject objServer)
+void LoadHostConfig(xvalue objRoot, XS_HostObject objHost, XS_ServerObject objServer)
 {
 	const char* sPath;
 	// 读取开发语言类型
 	int iLanguage = SLT_STATIC;
-	char* sLanguage = xteTableGetText(objRoot, "devlang", 7);
+	char* sLanguage = xvoTableGetText(objRoot, "devlang", 7);
 	if ( strcmp(sLanguage, "c") == 0 ) {
 		iLanguage = SLT_C;
 	} else if ( strcmp(sLanguage, "lua") == 0 ) {
@@ -175,11 +145,11 @@ void LoadHostConfig(XTE_Value objRoot, XS_HostObject objHost, XS_ServerObject ob
 	}
 	// 读取基本信息
 	objHost->DevLang = iLanguage;
-	objHost->Name = xteTableGetText(objRoot, "name", 4);
-	objHost->Desc = xteTableGetText(objRoot, "desc", 4);
-	objHost->Param = xteTableGetText(objRoot, "param", 5);
-	objHost->Host = xteTableGetText(objRoot, "host", 4);
-	objHost->Session = xteTableGetText(objRoot, "session", 7);
+	objHost->Name = xvoTableGetText(objRoot, "name", 4);
+	objHost->Desc = xvoTableGetText(objRoot, "desc", 4);
+	objHost->Param = xvoTableGetText(objRoot, "param", 5);
+	objHost->Host = xvoTableGetText(objRoot, "host", 4);
+	objHost->Session = xvoTableGetText(objRoot, "session", 7);
 	objHost->JsonNode = objRoot;
 	// 创建 Host 映射
 	if ( objHost->Host ) {
@@ -187,9 +157,9 @@ void LoadHostConfig(XTE_Value objRoot, XS_HostObject objHost, XS_ServerObject ob
 		int iCount = xCore.iRet;
 		for ( int i = 0; i < iCount; i++ ) {
 			char* sHost = xrtReplace(arrHost[i], 0, " ", 1, "", 0);
-			XS_HostObject* ppHost = AVLHT32_Set(objServer->HostMap, sHost, strlen(sHost), NULL);
+			XS_HostObject* ppHost = xrtDictSet(objServer->HostMap, sHost, strlen(sHost), NULL);
 			if ( ppHost == NULL ) {
-				printf("!!! ERROR !!! AVLHT32_Set Failed [HostMap] !\n");
+				printf("!!! ERROR !!! xrtDictSet Failed [HostMap] !\n");
 				exit(EXIT_FAILURE);
 			}
 			ppHost[0] = objHost;
@@ -198,7 +168,7 @@ void LoadHostConfig(XTE_Value objRoot, XS_HostObject objHost, XS_ServerObject ob
 		xrtFree(arrHost);
 	}
 	// 处理目录（相对路径转换为绝对路径）
-	sPath = xteTableGetText(objRoot, "path", 4);
+	sPath = xvoTableGetText(objRoot, "path", 4);
 	if ( (sPath == NULL) || (strlen(sPath) == 0) ) {
 		printf("!!! ERROR !!! host (%s - %s) must specify a directory !\n", objServer->Name, objHost->Name);
 		exit(EXIT_FAILURE);
@@ -208,7 +178,7 @@ void LoadHostConfig(XTE_Value objRoot, XS_HostObject objHost, XS_ServerObject ob
 		objHost->Path = malloc(4096);
 		realpath(sPath, objHost->Path);
 	}
-	sPath = xteTableGetText(objRoot, "devfile", 7);
+	sPath = xvoTableGetText(objRoot, "devfile", 7);
 	if ( (sPath == NULL) || (strlen(sPath) == 0) ) {
 		if ( objHost->DevLang == SLT_C ) {
 			objHost->DevFile = xrtPathJoin(2, objHost->Path, 0, "main.c", 6);
@@ -225,7 +195,7 @@ void LoadHostConfig(XTE_Value objRoot, XS_HostObject objHost, XS_ServerObject ob
 	}
 	// 读取证书
 	if ( objServer->EnableTLS ) {
-		sPath = xteTableGetText(objRoot, "tls_ca", 6);
+		sPath = xvoTableGetText(objRoot, "tls_ca", 6);
 		char sTempPath[4096];
 		if ( sPath ) {
 			realpath(sPath, sTempPath);
@@ -234,10 +204,10 @@ void LoadHostConfig(XTE_Value objRoot, XS_HostObject objHost, XS_ServerObject ob
 			objHost->TLS_CA.len = 0;
 			objHost->TLS_CA.buf = NULL;
 		}
-		sPath = xteTableGetText(objRoot, "tls_cert", 8);
+		sPath = xvoTableGetText(objRoot, "tls_cert", 8);
 		realpath(sPath, sTempPath);
 		objHost->TLS_Cert = mg_file_read(&mg_fs_posix, sTempPath);
-		sPath = xteTableGetText(objRoot, "tls_key", 7);
+		sPath = xvoTableGetText(objRoot, "tls_key", 7);
 		realpath(sPath, sTempPath);
 		objHost->TLS_Key = mg_file_read(&mg_fs_posix, sTempPath);
 	}
@@ -274,12 +244,12 @@ void LoadHostConfig(XTE_Value objRoot, XS_HostObject objHost, XS_ServerObject ob
 	}
 	// 如果存在轮询事件，存入单独的表（加快访问速度）
 	if ( objHost->LoopProc ) {
-		unsigned int idx = SAMM_Append(LoopEventList, 1);
+		unsigned int idx = xrtArrayAppend(LoopEventList, 1);
 		if ( idx == 0 ) {
-			printf("!!! ERROR !!! SAMM_Append Failed [LoopEventList] !\n");
+			printf("!!! ERROR !!! xrtArrayAppend Failed [LoopEventList] !\n");
 			exit(EXIT_FAILURE);
 		}
-		XS_LoopEventStruct* objEvent = SAMM_GetPtr_Unsafe(LoopEventList, idx);
+		XS_LoopEventStruct* objEvent = xrtArrayGet_Inline(LoopEventList, idx);
 		objEvent->pProc = objHost->LoopProc;
 		objEvent->objServer = objServer;
 		objEvent->objHost = objHost;
@@ -289,16 +259,16 @@ void LoadHostConfig(XTE_Value objRoot, XS_HostObject objHost, XS_ServerObject ob
 
 
 // 载入服务器配置
-int LoadServerConfig(XTE_Value objRoot)
+int LoadServerConfig(xvalue objRoot)
 {
 	// 检查服务器配置是否已启用
-	if ( xteTableGetBool(objRoot, "enabled", 7) == 0 ) {
+	if ( xvoTableGetBool(objRoot, "enabled", 7) == 0 ) {
 		printf("server enabled = false\n");
 		return 0;
 	}
 	// 读取网络协议类型
 	int iClass = SPT_NONE;
-	char* sClass = xteTableGetText(objRoot, "class", 5);
+	char* sClass = xvoTableGetText(objRoot, "class", 5);
 	if ( strcasecmp(sClass, "http") == 0 ) {
 		iClass = SPT_HTTP;
 	} else if ( strcasecmp(sClass, "mqtt") == 0 ) {
@@ -321,71 +291,71 @@ int LoadServerConfig(XTE_Value objRoot)
 		return 0;
 	}
 	// 创建服务器数据对象
-	unsigned int idx = SAMM_Append(ServerList, 1);
+	unsigned int idx = xrtArrayAppend(ServerList, 1);
 	if ( idx == 0 ) {
-		printf("!!! ERROR !!! SAMM_Append Failed [ServerList] !\n");
+		printf("!!! ERROR !!! xrtArrayAppend Failed [ServerList] !\n");
 		exit(EXIT_FAILURE);
 	}
-	XS_ServerObject objServer = SAMM_GetPtr_Unsafe(ServerList, idx);
+	XS_ServerObject objServer = xrtArrayGet_Inline(ServerList, idx);
 	// 读取常规配置
 	objServer->Class = iClass;
-	objServer->Name = xteTableGetText(objRoot, "name", 4);
-	objServer->Desc = xteTableGetText(objRoot, "desc", 4);
-	objServer->Param = xteTableGetText(objRoot, "param", 5);
-	objServer->Addr = xteTableGetText(objRoot, "addr", 4);
-	objServer->EnableTLS = xteTableGetBool(objRoot, "tls", 3);
+	objServer->Name = xvoTableGetText(objRoot, "name", 4);
+	objServer->Desc = xvoTableGetText(objRoot, "desc", 4);
+	objServer->Param = xvoTableGetText(objRoot, "param", 5);
+	objServer->Addr = xvoTableGetText(objRoot, "addr", 4);
+	objServer->EnableTLS = xvoTableGetBool(objRoot, "tls", 3);
 	if ( objServer->EnableTLS ) {
-		objServer->AddrTLS = xteTableGetText(objRoot, "addr_tls", 8);
+		objServer->AddrTLS = xvoTableGetText(objRoot, "addr_tls", 8);
 	} else {
 		objServer->AddrTLS = NULL;
 	}
 	objServer->JsonNode = objRoot;
 	// 读取默认主机配置
-	XTE_Value objDefHost = xteTableGetValue(objRoot, "host_default", 12);
-	if ( objDefHost->MainType != XTE_DT_TABLE ) {
+	xvalue objDefHost = xvoTableGetValue(objRoot, "host_default", 12);
+	if ( objDefHost->Type != XVO_DT_TABLE ) {
 		printf("host_default must be of type object !\n");
 		exit(EXIT_FAILURE);
 	}
-	objServer->EnableDefaultHost = xteTableGetBool(objDefHost, "enabled", 7);
+	objServer->EnableDefaultHost = xvoTableGetBool(objDefHost, "enabled", 7);
 	if ( objServer->EnableDefaultHost ) {
 		LoadHostConfig(objDefHost, &objServer->DefaultHost, objServer);
 	}
 	// 创建 Host 映射表
-	objServer->HostMap = AVLHT32_Create(sizeof(XS_HostObject*));
+	objServer->HostMap = xrtDictCreate(sizeof(XS_HostObject*));
 	if ( objServer->HostMap == NULL ) {
 		printf("!!! ERROR !!! HostMap init failed !\n");
 		exit(EXIT_FAILURE);
 	}
 	// 读取主机列表
-	XTE_Value arrHost = xteTableGetValue(objRoot, "hosts", 5);
-	if ( arrHost->MainType != XTE_DT_ARRAY ) {
+	xvalue arrHost = xvoTableGetValue(objRoot, "hosts", 5);
+	if ( arrHost->Type != XVO_DT_ARRAY ) {
 		printf("hosts must be of type array !\n");
 		exit(EXIT_FAILURE);
 	}
-	objServer->HostCount = xteArrayItemCount(arrHost);
-	objServer->Hosts = SAMM_Create(sizeof(XS_HostStruct));
+	objServer->HostCount = xvoArraySize(arrHost);
+	objServer->Hosts = xrtArrayCreate(sizeof(XS_HostStruct));
 	if ( objServer->Hosts == NULL ) {
 		printf("!!! ERROR !!! HostList init failed !\n");
 		exit(EXIT_FAILURE);
 	}
-	SAMM_Malloc(objServer->Hosts, objServer->HostCount);
+	xrtArrayAlloc(objServer->Hosts, objServer->HostCount);
 	// 遍历读取每一个主机的信息
 	for ( int i = 0; i < objServer->HostCount; i++ ) {
-		XTE_Value objHostInfo = xteArrayGetValue(arrHost, i);
-		if ( objHostInfo->MainType != XTE_DT_TABLE ) {
+		xvalue objHostInfo = xvoArrayGetValue(arrHost, i);
+		if ( objHostInfo->Type != XVO_DT_TABLE ) {
 			printf("!!! ERROR !!! JSON Type no object [Host] (idx : %d) !\n", i);
 			exit(EXIT_FAILURE);
 		}
-		if ( xteTableGetBool(objHostInfo, "enabled", 7) == 0 ) {
+		if ( xvoTableGetBool(objHostInfo, "enabled", 7) == 0 ) {
 			printf("host enabled = false\n");
 			continue;
 		}
-		unsigned int idx = SAMM_Append(objServer->Hosts, 1);
+		unsigned int idx = xrtArrayAppend(objServer->Hosts, 1);
 		if ( idx == 0 ) {
-			printf("!!! ERROR !!! SAMM_Append Failed [HostList] !\n");
+			printf("!!! ERROR !!! xrtArrayAppend Failed [HostList] !\n");
 			exit(EXIT_FAILURE);
 		}
-		XS_HostObject objHost = SAMM_GetPtr_Unsafe(objServer->Hosts, idx);
+		XS_HostObject objHost = xrtArrayGet_Inline(objServer->Hosts, idx);
 		LoadHostConfig(objHostInfo, objHost, objServer);
 	}
 	// 输出控制台日志
@@ -403,34 +373,34 @@ int LoadConfig(char* sOptFile)
 {
 	printf("load option file : %s\n", sOptFile);
 	// 初始化 ServerList 数据结构
-	ServerList = SAMM_Create(sizeof(XS_ServerStruct));
+	ServerList = xrtArrayCreate(sizeof(XS_ServerStruct));
 	if ( ServerList == NULL ) {
 		printf("!!! ERROR !!! ServerList init failed !\n");
 		exit(EXIT_FAILURE);
 	}
 	// 初始化 LoopEventList 数据结构
-	LoopEventList = SAMM_Create(sizeof(XS_LoopEventStruct));
+	LoopEventList = xrtArrayCreate(sizeof(XS_LoopEventStruct));
 	if ( LoopEventList == NULL ) {
 		printf("!!! ERROR !!! LoopEventList init failed !\n");
 		exit(EXIT_FAILURE);
 	}
 	// 加载配置文件
-	XTE_Value varJSON = xteParseJSON_File(sOptFile);
-	//xtePrintValue(varJSON, 0, 0, 0, NULL);
-	if ( varJSON->MainType == XTE_DT_TABLE ) {
+	xvalue varJSON = xvoParseJSON_File(sOptFile);
+	//xvoPrintValue(varJSON, 0, 0, 0, NULL);
+	if ( varJSON->Type == XVO_DT_TABLE ) {
 		// 单服务端口配置
-		SAMM_Malloc(ServerList, 1);
+		xrtArrayAlloc(ServerList, 1);
 		if ( LoadServerConfig(varJSON) == 0 ) {
 			printf("!!! ERROR !!! LoadServerConfig Failed !\n");
 			exit(EXIT_FAILURE);
 		}
-	} else if ( varJSON->MainType == XTE_DT_ARRAY ) {
+	} else if ( varJSON->Type == XVO_DT_ARRAY ) {
 		// 多服务端口配置
-		size_t iCount = xteArrayItemCount(varJSON);
-		SAMM_Malloc(ServerList, iCount);
+		size_t iCount = xvoArraySize(varJSON);
+		xrtArrayAlloc(ServerList, iCount);
 		for ( int i = 0; i < iCount; i++ ) {
-			XTE_Value varItem = xteArrayGetValue(varJSON, i);
-			if ( varItem->MainType == XTE_DT_TABLE ) {
+			xvalue varItem = xvoArrayGetValue(varJSON, i);
+			if ( varItem->Type == XVO_DT_TABLE ) {
 				LoadServerConfig(varItem);
 			} else {
 				printf("!!! ERROR !!! JSON Type no object [Server] (idx : %d) !\n", i);
@@ -467,7 +437,7 @@ int RunServer()
 	mg_log_set(MG_LL_INFO);
 	mg_mgr_init(&mgr);
 	for ( int i = 1; i <= ServerList->Count; i++ ) {
-		XS_ServerObject objServer = SAMM_GetPtr_Unsafe(ServerList, i);
+		XS_ServerObject objServer = xrtArrayGet_Inline(ServerList, i);
 		if ( objServer->Class == SPT_HTTP ) {
 			RunServerHTTP(objServer);
 		} else if ( objServer->Class == SPT_MQTT ) {
@@ -491,13 +461,13 @@ int RunServer()
 		mg_mgr_poll(&mgr, 1000);
 		// 调用轮询事件
 		for ( int i = 1; i <= LoopEventList->Count; i++ ) {
-			XS_LoopEventStruct* objEvent = SAMM_GetPtr_Unsafe(LoopEventList, i);
+			XS_LoopEventStruct* objEvent = xrtArrayGet_Inline(LoopEventList, i);
 			objEvent->pProc(objEvent->objServer, objEvent->objHost);
 		}
 	}
 	// 停止服务
 	for ( int i = 1; i <= ServerList->Count; i++ ) {
-		XS_ServerObject objServer = SAMM_GetPtr_Unsafe(ServerList, i);
+		XS_ServerObject objServer = xrtArrayGet_Inline(ServerList, i);
 		if ( objServer->Class == SPT_HTTP ) {
 			StopServerHTTP(objServer);
 		} else if ( objServer->Class == SPT_MQTT ) {

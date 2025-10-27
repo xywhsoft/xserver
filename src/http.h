@@ -61,7 +61,7 @@ static void ProcHTTP(struct mg_connection* c, int ev, void *ev_data) {
 		struct mg_http_message* hm = ev_data;
 		// 定位 Host
 		struct mg_str* Host = mg_http_get_header(hm, "host");
-		XS_HostObject* ppHost = AVLHT32_Get(objServer->HostMap, Host->buf, Host->len);
+		XS_HostObject* ppHost = xrtDictGet(objServer->HostMap, Host->buf, Host->len);
 		XS_HostObject objHost;
 		if ( ppHost ) {
 			objHost = ppHost[0];
@@ -109,7 +109,7 @@ static void ProcHTTP(struct mg_connection* c, int ev, void *ev_data) {
 			struct mg_http_message* hm = ev_data;
 			// 定位 Host
 			struct mg_str* Host = mg_http_get_header(hm, "host");
-			XS_HostObject* ppHost = AVLHT32_Get(objServer->HostMap, Host->buf, Host->len);
+			XS_HostObject* ppHost = xrtDictGet(objServer->HostMap, Host->buf, Host->len);
 			XS_HostObject objHost;
 			if ( ppHost ) {
 				objHost = ppHost[0];
@@ -141,7 +141,7 @@ static void ProcHTTP(struct mg_connection* c, int ev, void *ev_data) {
 				}
 			} else {
 				// 读取 Host 映射
-				XS_HostObject* ppHost = AVLHT32_Get(objServer->HostMap, (char*)ev_data, strlen(ev_data));
+				XS_HostObject* ppHost = xrtDictGet(objServer->HostMap, (char*)ev_data, strlen(ev_data));
 				if ( ppHost ) {
 					XS_HostObject objHost = ppHost[0];
 					InitTLS(c, objHost, objServer);
@@ -171,7 +171,7 @@ static void ProcHTTP(struct mg_connection* c, int ev, void *ev_data) {
 			struct mg_http_message* hm = ev_data;
 			// 定位 Host
 			struct mg_str* Host = mg_http_get_header(hm, "host");
-			XS_HostObject* ppHost = AVLHT32_Get(objServer->HostMap, Host->buf, Host->len);
+			XS_HostObject* ppHost = xrtDictGet(objServer->HostMap, Host->buf, Host->len);
 			XS_HostObject objHost;
 			if ( ppHost ) {
 				objHost = ppHost[0];
