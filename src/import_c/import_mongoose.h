@@ -182,6 +182,14 @@ void ImportMongoose(TCCState* s)
 	tcc_add_symbol(s, "mg_io_send", mg_io_send);
 	tcc_add_symbol(s, "mg_io_recv", mg_io_recv);
 	
+	// 添加函数 - mongoose - AES
+	tcc_add_symbol(s, "mg_gcm_initialize", mg_gcm_initialize);
+	tcc_add_symbol(s, "mg_aes_gcm_encrypt", mg_aes_gcm_encrypt);
+	tcc_add_symbol(s, "mg_aes_gcm_decrypt", mg_aes_gcm_decrypt);
+	
+	// 添加函数 - mongoose - RSA
+	tcc_add_symbol(s, "mg_rsa_mod_pow", mg_rsa_mod_pow);
+	
 	// 添加函数 - mongoose - WebSocket
 	tcc_add_symbol(s, "mg_ws_connect", mg_ws_connect);
 	tcc_add_symbol(s, "mg_ws_upgrade", mg_ws_upgrade);
