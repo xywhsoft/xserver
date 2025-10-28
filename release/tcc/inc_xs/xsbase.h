@@ -53,12 +53,11 @@ typedef struct {
 	str DevFile;										// 开发文件，动态开发工程的总入口点
 	ptr JsonNode;										// 配置文件的 JSON 对象
 	ptr DevObj;											// 开发语言上下文对象
-	ptr ServiceInit;									// 服务启动前调用（仅默认主机支持这个字段；函数不存在则不会调用）
-	ptr ServiceStart;									// 服务启动（仅默认主机支持这个字段；HTTP、MQTT等内置逻辑的服务不会调用此函数，自定义服务函数不存在则不会调用）
-	ptr ServiceUnit;									// 服务启动后调用（仅默认主机支持这个字段；函数不存在则不会调用）
+	ptr ServiceInit;									// 服务启动前调用（函数不存在则不会调用）
+	ptr ServiceStart;									// 服务启动（HTTP、MQTT等内置逻辑的服务不会调用此函数，自定义服务函数不存在则不会调用）
+	ptr ServiceUnit;									// 服务启动后调用（函数不存在则不会调用）
 	ptr EventProc;										// 服务器网络事件回调（函数不存在则不会调用）
 	ptr RequestProc;									// HTTP 请求回调（函数不存在则不会调用）
-	ptr LoopProc;										// 轮询事件回调函数
 	void (*XS_SetGlobalDate)(int idx, void* ptr);		// XS 传递全局数据回调函数
 } XS_HostStruct, *XS_HostObject;
 typedef struct {
