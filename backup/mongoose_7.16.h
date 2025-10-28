@@ -2133,6 +2133,7 @@ enum {
   MG_EV_MQTT_OPEN,  // MQTT CONNACK received        int *connack_status_code
   MG_EV_SNTP_TIME,  // SNTP time received           uint64_t *epoch_millis
   MG_EV_WAKEUP,     // mg_wakeup() data received    struct mg_str *data
+  MG_EV_TLS_HSCH,	// TLS handshake clienthello	host or NULL(server_name = null)
   MG_EV_USER        // Starting ID for user events
 };
 
@@ -2337,6 +2338,7 @@ struct mg_tls_opts {
   int skip_verification;  // Skip certificate and host name verification
 };
 
+void mg_tls_init_accept(struct mg_connection *);
 void mg_tls_init(struct mg_connection *, const struct mg_tls_opts *opts);
 void mg_tls_free(struct mg_connection *);
 long mg_tls_send(struct mg_connection *, const void *buf, size_t len);
