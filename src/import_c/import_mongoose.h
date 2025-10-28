@@ -32,12 +32,12 @@ void ImportMongoose(TCCState* s)
 	tcc_add_symbol(s, "mg_sha256_init", mg_sha256_init);
 	tcc_add_symbol(s, "mg_sha256_update", mg_sha256_update);
 	tcc_add_symbol(s, "mg_sha256_final", mg_sha256_final);
-	tcc_add_symbol(s, "mg_sha256", mg_sha256);
+	//tcc_add_symbol(s, "mg_sha256", mg_sha256);
 	tcc_add_symbol(s, "mg_hmac_sha256", mg_hmac_sha256);
-	tcc_add_symbol(s, "mg_sha384_init", mg_sha384_init);
-	tcc_add_symbol(s, "mg_sha384_update", mg_sha384_update);
-	tcc_add_symbol(s, "mg_sha384_final", mg_sha384_final);
-	tcc_add_symbol(s, "mg_sha384", mg_sha384);
+	//tcc_add_symbol(s, "mg_sha384_init", mg_sha384_init);
+	//tcc_add_symbol(s, "mg_sha384_update", mg_sha384_update);
+	//tcc_add_symbol(s, "mg_sha384_final", mg_sha384_final);
+	//tcc_add_symbol(s, "mg_sha384", mg_sha384);
 	tcc_add_symbol(s, "mg_random", mg_random);
 	tcc_add_symbol(s, "mg_random_str", mg_random_str);
 	tcc_add_symbol(s, "mg_crc32", mg_crc32);
