@@ -54,12 +54,6 @@ static void ProcWSS(struct mg_connection *c, int ev, void *ev_data) {
 // 启动 MQTT 服务
 int RunServerWS(XS_ServerObject objServer)
 {
-	// 初始化 WebSocket 服务
-	DynLoad_C_GlobalData(objServer);
-	if ( objServer->DefaultHost.ServiceInit ) {
-		void (*ServiceInit)(XS_ServerObject objServer) = objServer->DefaultHost.ServiceInit;
-		ServiceInit(objServer);
-	}
 	// 启动 WebSocket 服务
 	printf("Run Server [WebSocket] : %s (%s)\n", objServer->Name, objServer->Addr);
 	struct mg_connection* objConn = mg_http_listen(&mgr, objServer->Addr, ProcWS, objServer);
@@ -86,10 +80,7 @@ int RunServerWS(XS_ServerObject objServer)
 // 停止 HTTP 服务
 int StopServerWS(XS_ServerObject objServer)
 {
-	if ( objServer->DefaultHost.ServiceUnit ) {
-		void (*ServiceUnit)(XS_ServerObject objServer) = objServer->DefaultHost.ServiceUnit;
-		ServiceUnit(objServer);
-	}
+	return TRUE;
 }
 
 

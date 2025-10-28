@@ -196,12 +196,6 @@ static void ProcHTTP(struct mg_connection* c, int ev, void *ev_data) {
 // 启动 HTTP 服务
 int RunServerHTTP(XS_ServerObject objServer)
 {
-	// 初始化 HTTP 服务
-	DynLoad_C_GlobalData(objServer);
-	if ( objServer->DefaultHost.ServiceInit ) {
-		void (*ServiceInit)(XS_ServerObject objServer) = objServer->DefaultHost.ServiceInit;
-		ServiceInit(objServer);
-	}
 	// 启动 HTTP 服务
 	printf("Run Server [HTTP] : %s (%s)\n", objServer->Name, objServer->Addr);
 	struct mg_connection* objConn = mg_http_listen(&mgr, objServer->Addr, ProcHTTP, objServer);
@@ -229,10 +223,6 @@ int RunServerHTTP(XS_ServerObject objServer)
 // 停止 HTTP 服务
 int StopServerHTTP(XS_ServerObject objServer)
 {
-	if ( objServer->DefaultHost.ServiceUnit ) {
-		void (*ServiceUnit)(XS_ServerObject objServer) = objServer->DefaultHost.ServiceUnit;
-		ServiceUnit(objServer);
-	}
 	return TRUE;
 }
 

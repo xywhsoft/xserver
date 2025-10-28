@@ -71,19 +71,18 @@ void DynLoad_C(XS_ServerObject objServer, XS_HostObject objHost)
 	objHost->ServiceUnit = tcc_get_symbol(s, "ServiceUnit");
 	objHost->EventProc = tcc_get_symbol(s, "EventProc");
 	objHost->RequestProc = tcc_get_symbol(s, "RequestProc");
-	objHost->LoopProc = tcc_get_symbol(s, "ServiceLoop");
 	objHost->XS_SetGlobalDate = tcc_get_symbol(s, "XS_SetGlobalDate");
 }
 
 
 
 // 动态导入全局数据
-void DynLoad_C_GlobalData(XS_ServerObject objServer)
+void DynLoad_C_GlobalData(XS_ServerObject objServer, XS_HostObject objHost)
 {
-	if ( objServer->DefaultHost.XS_SetGlobalDate ) {
-		objServer->DefaultHost.XS_SetGlobalDate(1, &mgr);
-		objServer->DefaultHost.XS_SetGlobalDate(2, ServerList);
-		objServer->DefaultHost.XS_SetGlobalDate(3, &xCore);
+	if ( objHost->XS_SetGlobalDate ) {
+		objHost->XS_SetGlobalDate(1, &mgr);
+		objHost->XS_SetGlobalDate(2, ServerList);
+		objHost->XS_SetGlobalDate(3, &xCore);
 	}
 }
 

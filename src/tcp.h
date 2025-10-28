@@ -28,12 +28,6 @@ static void ProcTCP(struct mg_connection* c, int ev, void *ev_data) {
 // 启动 TCP 服务
 int RunServerTCP(XS_ServerObject objServer)
 {
-	// 初始化 TCP 服务
-	DynLoad_C_GlobalData(objServer);
-	if ( objServer->DefaultHost.ServiceInit ) {
-		void (*ServiceInit)(XS_ServerObject objServer) = objServer->DefaultHost.ServiceInit;
-		ServiceInit(objServer);
-	}
 	// 启动 TCP 服务
 	printf("Run Server [TCP] : %s (%s)\n", objServer->Name, objServer->Addr);
 	struct mg_connection* objConn = mg_listen(&mgr, objServer->Addr, ProcTCP, objServer);
@@ -51,10 +45,6 @@ int RunServerTCP(XS_ServerObject objServer)
 // 停止 TCP 服务
 int StopServerTCP(XS_ServerObject objServer)
 {
-	if ( objServer->DefaultHost.ServiceUnit ) {
-		void (*ServiceUnit)(XS_ServerObject objServer) = objServer->DefaultHost.ServiceUnit;
-		ServiceUnit(objServer);
-	}
 	return TRUE;
 }
 

@@ -6,15 +6,14 @@
 // 启动 自定义 服务
 int RunServerCustom(XS_ServerObject objServer)
 {
-	DynLoad_C_GlobalData(objServer);
-	if ( objServer->DefaultHost.ServiceInit ) {
-		void (*ServiceInit)(XS_ServerObject objServer) = objServer->DefaultHost.ServiceInit;
-		ServiceInit(objServer);
+	for ( int i = 0; i < objServer->HostCount; i++ ) {
+		XS_HostObject objHost = xrtArrayGet_Inline(objServer->Hosts, i);
+		if ( objHost->ServiceStart ) {
+			void (*ServiceStart)(XS_ServerObject objServer, XS_HostObject objHost) = objHost->ServiceStart;
+			ServiceStart(objServer, objHost);
+		}
 	}
-	if ( objServer->DefaultHost.ServiceStart ) {
-		void (*ServiceStart)(XS_ServerObject objServer) = objServer->DefaultHost.ServiceStart;
-		ServiceStart(objServer);
-	}
+	return TRUE;
 }
 
 
@@ -22,10 +21,7 @@ int RunServerCustom(XS_ServerObject objServer)
 // 停止 自定义 服务
 int StopServerCustom(XS_ServerObject objServer)
 {
-	if ( objServer->DefaultHost.ServiceUnit ) {
-		void (*ServiceUnit)(XS_ServerObject objServer) = objServer->DefaultHost.ServiceUnit;
-		ServiceUnit(objServer);
-	}
+	return TRUE;
 }
 
 

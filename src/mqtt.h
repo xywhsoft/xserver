@@ -127,11 +127,7 @@ static void ProcMQTTS(struct mg_connection *c, int ev, void *ev_data) {
 // 启动 MQTT 服务
 int RunServerMQTT(XS_ServerObject objServer)
 {
-	DynLoad_C_GlobalData(objServer);
-	if ( objServer->DefaultHost.ServiceInit ) {
-		void (*ServiceInit)(XS_ServerObject objServer) = objServer->DefaultHost.ServiceInit;
-		ServiceInit(objServer);
-	}
+	// 启动 MQTT 服务
 	printf("Run Server [MQTT] : %s (%s)\n", objServer->Name, objServer->Addr);
 	struct mg_connection* objConn = mg_mqtt_listen(&mgr, objServer->Addr, ProcMQTT, objServer);
 	if ( objConn == NULL ) {
@@ -158,10 +154,6 @@ int RunServerMQTT(XS_ServerObject objServer)
 // 停止 HTTP 服务
 int StopServerMQTT(XS_ServerObject objServer)
 {
-	if ( objServer->DefaultHost.ServiceUnit ) {
-		void (*ServiceUnit)(XS_ServerObject objServer) = objServer->DefaultHost.ServiceUnit;
-		ServiceUnit(objServer);
-	}
 	return TRUE;
 }
 

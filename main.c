@@ -59,12 +59,11 @@ typedef struct {
 	str DevFile;										// 开发文件，动态开发工程的总入口点
 	ptr JsonNode;										// 配置文件的 JSON 对象
 	ptr DevObj;											// 开发语言上下文对象
-	ptr ServiceInit;									// 服务启动前调用（仅默认主机支持这个字段；函数不存在则不会调用）
-	ptr ServiceStart;									// 服务启动（仅默认主机支持这个字段；HTTP、MQTT等内置逻辑的服务不会调用此函数，自定义服务函数不存在则不会调用）
-	ptr ServiceUnit;									// 服务启动后调用（仅默认主机支持这个字段；函数不存在则不会调用）
+	ptr ServiceInit;									// 服务启动前调用（函数不存在则不会调用）
+	ptr ServiceStart;									// 服务启动（HTTP、MQTT等内置逻辑的服务不会调用此函数，自定义服务函数不存在则不会调用）
+	ptr ServiceUnit;									// 服务启动后调用（函数不存在则不会调用）
 	ptr EventProc;										// 服务器网络事件回调（函数不存在则不会调用）
 	ptr RequestProc;									// HTTP 请求回调（函数不存在则不会调用）
-	ptr LoopProc;										// 轮询事件回调函数
 	void (*XS_SetGlobalDate)(int idx, void* ptr);		// XS 传递全局数据回调函数
 } XS_HostStruct, *XS_HostObject;
 typedef struct {
@@ -85,13 +84,6 @@ typedef struct {
 	struct mg_connection* ConnTLS;						// mongoose 连接对象 TLS
 } XS_ServerStruct, *XS_ServerObject;
 
-// 轮询事件结构体
-typedef struct {
-	void (*pProc)(XS_ServerObject objServer, XS_HostObject objHost);
-	XS_ServerObject objServer;
-	XS_HostObject objHost;
-} XS_LoopEventStruct;
-
 
 
 
@@ -101,9 +93,6 @@ struct mg_mgr mgr;
 
 // 	全局数据 - 服务器列表
 xarray ServerList;
-
-// 全局数据 - 轮询事件列表
-xarray LoopEventList;
 
 
 
@@ -230,7 +219,6 @@ void LoadHostConfig(xvalue objRoot, XS_HostObject objHost, XS_ServerObject objSe
 		objHost->ServiceUnit = NULL;
 		objHost->EventProc = NULL;
 		objHost->RequestProc = NULL;
-		objHost->LoopProc = NULL;
 		objHost->XS_SetGlobalDate = NULL;
 	} else if ( objHost->DevLang == SLT_JS ) {
 		objHost->DevObj = NULL;
@@ -239,7 +227,6 @@ void LoadHostConfig(xvalue objRoot, XS_HostObject objHost, XS_ServerObject objSe
 		objHost->ServiceUnit = NULL;
 		objHost->EventProc = NULL;
 		objHost->RequestProc = NULL;
-		objHost->LoopProc = NULL;
 		objHost->XS_SetGlobalDate = NULL;
 	} else {
 		objHost->DevObj = NULL;
@@ -248,21 +235,7 @@ void LoadHostConfig(xvalue objRoot, XS_HostObject objHost, XS_ServerObject objSe
 		objHost->ServiceUnit = NULL;
 		objHost->EventProc = NULL;
 		objHost->RequestProc = NULL;
-		objHost->LoopProc = NULL;
 		objHost->XS_SetGlobalDate = NULL;
-	}
-	
-	// 如果存在轮询事件，存入单独的表（加快访问速度）
-	if ( objHost->LoopProc ) {
-		unsigned int idx = xrtArrayAppend(LoopEventList, 1);
-		if ( idx == 0 ) {
-			printf("!!! ERROR !!! xrtArrayAppend Failed [LoopEventList] !\n");
-			exit(EXIT_FAILURE);
-		}
-		XS_LoopEventStruct* objEvent = xrtArrayGet_Inline(LoopEventList, idx);
-		objEvent->pProc = objHost->LoopProc;
-		objEvent->objServer = objServer;
-		objEvent->objHost = objHost;
 	}
 }
 
@@ -333,6 +306,8 @@ bool LoadServerConfig(xvalue objRoot)
 	objServer->EnableDefaultHost = xvoTableGetBool(objDefHost, "enabled", 7);
 	if ( objServer->EnableDefaultHost ) {
 		LoadHostConfig(objDefHost, &objServer->DefaultHost, objServer);
+	} else {
+		memset(&objServer->DefaultHost, 0, sizeof(XS_HostStruct));
 	}
 	
 	// 创建 Host 映射表
@@ -396,12 +371,6 @@ int LoadConfig(str sOptFile)
 		printf("!!! ERROR !!! ServerList init failed !\n");
 		exit(EXIT_FAILURE);
 	}
-	// 初始化 LoopEventList 数据结构
-	LoopEventList = xrtArrayCreate(sizeof(XS_LoopEventStruct));
-	if ( LoopEventList == NULL ) {
-		printf("!!! ERROR !!! LoopEventList init failed !\n");
-		exit(EXIT_FAILURE);
-	}
 	// 加载配置文件
 	xvalue varJSON = xrtParseJSON_File(sOptFile);
 	// xvoPrintValue(varJSON, 0, 0, 0, NULL);
@@ -456,6 +425,21 @@ int RunServer()
 	mg_mgr_init(&mgr);
 	for ( int i = 1; i <= ServerList->Count; i++ ) {
 		XS_ServerObject objServer = xrtArrayGet_Inline(ServerList, i);
+		// 服务初始化脚本回调函数
+		DynLoad_C_GlobalData(objServer, &objServer->DefaultHost);
+		if ( objServer->DefaultHost.ServiceInit ) {
+			void (*ServiceInit)(XS_ServerObject objServer, XS_HostObject objHost) = objServer->DefaultHost.ServiceInit;
+			ServiceInit(objServer, &objServer->DefaultHost);
+		}
+		for ( int j = 1; j <= objServer->HostCount; j++ ) {
+			XS_HostObject objHost = xrtArrayGet_Inline(objServer->Hosts, j);
+			DynLoad_C_GlobalData(objServer, objHost);
+			if ( objHost->ServiceInit ) {
+				void (*ServiceInit)(XS_ServerObject objServer, XS_HostObject objHost) = objHost->ServiceInit;
+				ServiceInit(objServer, objHost);
+			}
+		}
+		// 启动服务
 		if ( objServer->Class == SPT_HTTP ) {
 			RunServerHTTP(objServer);
 		} else if ( objServer->Class == SPT_MQTT ) {
@@ -477,15 +461,23 @@ int RunServer()
 	// 等待服务停止
 	while ( s_signo == 0 ) {
 		mg_mgr_poll(&mgr, 1000);
-		// 调用轮询事件
-		for ( int i = 1; i <= LoopEventList->Count; i++ ) {
-			XS_LoopEventStruct* objEvent = xrtArrayGet_Inline(LoopEventList, i);
-			objEvent->pProc(objEvent->objServer, objEvent->objHost);
-		}
 	}
 	// 停止服务
 	for ( int i = 1; i <= ServerList->Count; i++ ) {
 		XS_ServerObject objServer = xrtArrayGet_Inline(ServerList, i);
+		// 服务卸载脚本回调函数
+		if ( objServer->DefaultHost.ServiceUnit ) {
+			void (*ServiceUnit)(XS_ServerObject objServer, XS_HostObject objHost) = objServer->DefaultHost.ServiceUnit;
+			ServiceUnit(objServer, &objServer->DefaultHost);
+		}
+		for ( int j = 1; j <= objServer->HostCount; j++ ) {
+			XS_HostObject objHost = xrtArrayGet_Inline(objServer->Hosts, j);
+			if ( objHost->ServiceUnit ) {
+				void (*ServiceUnit)(XS_ServerObject objServer, XS_HostObject objHost) = objHost->ServiceUnit;
+				ServiceUnit(objServer, objHost);
+			}
+		}
+		// 卸载服务
 		if ( objServer->Class == SPT_HTTP ) {
 			StopServerHTTP(objServer);
 		} else if ( objServer->Class == SPT_MQTT ) {
@@ -510,6 +502,13 @@ int RunServer()
 
 
 
+void OnError(str sError)
+{
+	printf("X Runtime Error : %s\n", sError);
+}
+
+
+
 int main(int argc, char** argv)
 {
 	#if defined(_WIN32) || defined(_WIN64)
@@ -518,6 +517,7 @@ int main(int argc, char** argv)
 	
 	// 初始化 xrt 库
 	xrtInit();
+	xCore.OnError = OnError;
 	
 	// 从命令行中读取配置文件路径
 	str sOptFile;
