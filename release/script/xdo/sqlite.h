@@ -29,8 +29,8 @@ typedef struct {
 	int Line;							// 游标位置（默认为第 1 行）
 	int RecordCount;					// 记录数量
 	int FieldCount;						// 列数量
-	SAMM_Object RowData;				// 行数据管理器
-	SAMM_Object ColInfo;				// 列信息管理器
+	xarray RowData;						// 行数据管理器
+	xarray ColInfo;						// 列信息管理器
 } XDO_RecordsetStruct_SQLite, *XDO_Recordset_SQLite;
 
 
@@ -109,26 +109,26 @@ XDO_Recordset_SQLite SQLite_Select(XDO_Connect objConn, char* sSQL)
 			objRS->FieldCount = sqlite3_column_count(stmt);
 			
 			// 创建内存管理器
-			objRS->RowData = SAMM_Create(sizeof(ptr) * objRS->FieldCount);
+			objRS->RowData = xrtArrayCreate(sizeof(ptr) * objRS->FieldCount);
 			if ( objRS->RowData == NULL ) {
-				xdoSetError(objConn, "SAMM_Create 创建行数据管理器失败", FALSE);
+				xdoSetError(objConn, "xrtArrayCreate 创建行数据管理器失败", FALSE);
 				return NULL;
 			}
-			objRS->ColInfo = SAMM_Create(sizeof(XDO_FieldInfo_SQLite));
+			objRS->ColInfo = xrtArrayCreate(sizeof(XDO_FieldInfo_SQLite));
 			if ( objRS->ColInfo == NULL ) {
-				xdoSetError(objConn, "SAMM_Create 创建列信息管理器失败", FALSE);
+				xdoSetError(objConn, "xrtArrayCreate 创建列信息管理器失败", FALSE);
 				return NULL;
 			}
-			SAMM_Malloc(objRS->ColInfo, objRS->FieldCount);
-			int iRet = SAMM_Append(objRS->ColInfo, objRS->FieldCount);
+			xrtArrayAlloc(objRS->ColInfo, objRS->FieldCount);
+			int iRet = xrtArrayAppend(objRS->ColInfo, objRS->FieldCount);
 			if ( iRet == 0 ) {
-				xdoSetError(objConn, "SAMM_Append 申请内存失败", FALSE);
+				xdoSetError(objConn, "xrtArrayAppend 申请内存失败", FALSE);
 				return NULL;
 			}
 			
 			// 获取列信息
 			for ( int iCol = 0; iCol < objRS->FieldCount; iCol++ ) {
-				XDO_FieldObject_SQLite objField = SAMM_GetPtr_Inline(objRS->ColInfo, iCol + 1);
+				XDO_FieldObject_SQLite objField = xrtArrayGet_Inline(objRS->ColInfo, iCol + 1);
 				objField->Name = xrtCopyStr((char*)sqlite3_column_name(stmt, iCol), 0);
 				int iType = sqlite3_column_type(stmt, iCol);
 				if ( iType == SQLITE_INTEGER ) {
@@ -155,8 +155,8 @@ XDO_Recordset_SQLite SQLite_Select(XDO_Connect objConn, char* sSQL)
 		
 		// 读取所有行
 		objRS->RecordCount++;
-		iRet = SAMM_Append(objRS->RowData, 1);
-		str* arrVal = SAMM_GetPtr(objRS->RowData, iRet);
+		iRet = xrtArrayAppend(objRS->RowData, 1);
+		str* arrVal = xrtArrayGet(objRS->RowData, iRet);
 		for ( int iCol = 0; iCol < objRS->FieldCount; iCol++ ) {
 			const char* sVal = sqlite3_column_text(stmt, iCol);
 			if ( sVal ) {
@@ -180,16 +180,16 @@ int SQLite_RS_Free(XDO_Recordset_SQLite objRS)
 	// 释放行数据内存
 	if ( objRS->RowData ) {
 		for ( int i = 1; i <= objRS->RowData->Count; i++ ) {
-			str* arrVal = SAMM_GetPtr_Inline(objRS->RowData, i);
+			str* arrVal = xrtArrayGet_Inline(objRS->RowData, i);
 			for ( int iCol = 0; iCol < objRS->FieldCount; iCol++ ) {
 				xrtFree(arrVal[iCol]);
 			}
 		}
-		SAMM_Destroy(objRS->RowData);
+		xrtArrayDestroy(objRS->RowData);
 	}
 	// 释放字段信息内存
 	if ( objRS->ColInfo ) {
-		SAMM_Destroy(objRS->ColInfo);
+		xrtArrayDestroy(objRS->ColInfo);
 	}
 	// 释放对象本身
 	xrtFree(objRS);
@@ -218,7 +218,7 @@ int SQLite_RS_GetRecordCount(XDO_Recordset_SQLite objRS)
 char* SQLite_RS_GetFieldName(XDO_Recordset_SQLite objRS, int idx)
 {
 	if ( idx >= objRS->FieldCount ) { return xCore->sNull;}
-	XDO_FieldObject_SQLite objField = SAMM_GetPtr(objRS->ColInfo, idx + 1);
+	XDO_FieldObject_SQLite objField = xrtArrayGet(objRS->ColInfo, idx + 1);
 	return objField->Name;
 }
 
@@ -228,7 +228,7 @@ char* SQLite_RS_GetFieldName(XDO_Recordset_SQLite objRS, int idx)
 int SQLite_RS_GetFieldType(XDO_Recordset_SQLite objRS, int idx)
 {
 	if ( idx >= objRS->FieldCount ) { return XDO_DT_UNKNOWN;}
-	XDO_FieldObject_SQLite objField = SAMM_GetPtr(objRS->ColInfo, idx + 1);
+	XDO_FieldObject_SQLite objField = xrtArrayGet(objRS->ColInfo, idx + 1);
 	return objField->Type;
 }
 
@@ -238,7 +238,7 @@ int SQLite_RS_GetFieldType(XDO_Recordset_SQLite objRS, int idx)
 int SQLite_RS_FieldIsPrimaryKey(XDO_Recordset_SQLite objRS, int idx)
 {
 	if ( idx >= objRS->FieldCount ) { return FALSE;}
-	XDO_FieldObject_SQLite objField = SAMM_GetPtr(objRS->ColInfo, idx + 1);
+	XDO_FieldObject_SQLite objField = xrtArrayGet(objRS->ColInfo, idx + 1);
 	return objField->PriKey;
 }
 
@@ -248,7 +248,7 @@ int SQLite_RS_FieldIsPrimaryKey(XDO_Recordset_SQLite objRS, int idx)
 int SQLite_RS_FieldIsNotNull(XDO_Recordset_SQLite objRS, int idx)
 {
 	if ( idx >= objRS->FieldCount ) { return FALSE;}
-	XDO_FieldObject_SQLite objField = SAMM_GetPtr(objRS->ColInfo, idx + 1);
+	XDO_FieldObject_SQLite objField = xrtArrayGet(objRS->ColInfo, idx + 1);
 	return objField->NotNull;
 }
 
@@ -272,7 +272,7 @@ int SQLite_RS_Next(XDO_Recordset_SQLite objRS)
 char* SQLite_RS_GetValue(XDO_Recordset_SQLite objRS, int idx)
 {
 	if ( idx >= objRS->FieldCount ) { return xCore->sNull;}
-	str* arrVal = SAMM_GetPtr(objRS->RowData, objRS->Line);
+	str* arrVal = xrtArrayGet(objRS->RowData, objRS->Line);
 	return arrVal[idx];
 }
 

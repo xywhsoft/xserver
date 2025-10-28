@@ -195,7 +195,7 @@ void ServiceInit(XS_ServerObject objServer)
 	OptionPath = xrtPathJoin(3, ExePath, "data", "options");
 	TemplatePath = xrtPathJoin(3, ExePath, "data", "template");
 	
-	printf("1\n");
+	
 	
 	// 自动创建目录
 	xrtDirCreate(TempPath);
@@ -239,7 +239,7 @@ void ServiceUnit(XS_ServerObject objServer)
 {
 	
 	// 释放全局路由表
-	AVLHT32_Destroy(StaticRouteTableHTTP);
+	xrtDictDestroy(StaticRouteTableHTTP);
 	
 	// 释放数据库
 	xdoDisconnect(G_DB);

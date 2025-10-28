@@ -42,41 +42,41 @@
 
 // 服务器结构体
 typedef struct {
-	char* Name;											// 主机名称
-	char* Desc;											// 主机描述
-	char* Param;										// 启动参数
-	char* Host;											// 主机地址（域名）
-	char* Session;										// 主机 Session 前缀
+	str Name;											// 主机名称
+	str Desc;											// 主机描述
+	str Param;											// 启动参数
+	str Host;											// 主机地址（域名）
+	str Session;										// 主机 Session 前缀
 	struct mg_str TLS_CA;								// 主机 TLS CA 证书路径
 	struct mg_str TLS_Cert;								// 主机 TLS 证书路径
 	struct mg_str TLS_Key;								// 主机 TLS 秘钥路径
-	char* Path;											// 主机根目录
+	str Path;											// 主机根目录
 	int DevLang;										// 开发语言
-	char* DevFile;										// 开发文件，动态开发工程的总入口点
-	void* JsonNode;										// 配置文件的 JSON 对象
-	void* DevObj;										// 开发语言上下文对象
-	void* ServiceInit;									// 服务启动前调用（仅默认主机支持这个字段；函数不存在则不会调用）
-	void* ServiceStart;									// 服务启动（仅默认主机支持这个字段；HTTP、MQTT等内置逻辑的服务不会调用此函数，自定义服务函数不存在则不会调用）
-	void* ServiceUnit;									// 服务启动后调用（仅默认主机支持这个字段；函数不存在则不会调用）
-	void* EventProc;									// 服务器网络事件回调（函数不存在则不会调用）
-	void* RequestProc;									// HTTP 请求回调（函数不存在则不会调用）
-	void* LoopProc;										// 轮询事件回调函数
+	str DevFile;										// 开发文件，动态开发工程的总入口点
+	ptr JsonNode;										// 配置文件的 JSON 对象
+	ptr DevObj;											// 开发语言上下文对象
+	ptr ServiceInit;									// 服务启动前调用（仅默认主机支持这个字段；函数不存在则不会调用）
+	ptr ServiceStart;									// 服务启动（仅默认主机支持这个字段；HTTP、MQTT等内置逻辑的服务不会调用此函数，自定义服务函数不存在则不会调用）
+	ptr ServiceUnit;									// 服务启动后调用（仅默认主机支持这个字段；函数不存在则不会调用）
+	ptr EventProc;										// 服务器网络事件回调（函数不存在则不会调用）
+	ptr RequestProc;									// HTTP 请求回调（函数不存在则不会调用）
+	ptr LoopProc;										// 轮询事件回调函数
 	void (*XS_SetGlobalDate)(int idx, void* ptr);		// XS 传递全局数据回调函数
 } XS_HostStruct, *XS_HostObject;
 typedef struct {
 	int Class;											// 服务器类型（HTTP、MQTT、Custom、Thread、等）
-	char* Name;											// 服务器名称
-	char* Desc;											// 服务器描述
-	char* Param;										// 启动参数
-	char* Addr;											// 绑定地址端口
+	str Name;											// 服务器名称
+	str Desc;											// 服务器描述
+	str Param;											// 启动参数
+	str Addr;											// 绑定地址端口
 	int EnableTLS;										// 是否启用 TLS
-	char* AddrTLS;										// TLS 绑定地址端口
+	str AddrTLS;										// TLS 绑定地址端口
 	int EnableDefaultHost;								// 是否启用默认 Host
 	XS_HostStruct DefaultHost;							// 默认 Host
-	unsigned int HostCount;								// Host 数量
+	uint32 HostCount;									// Host 数量
 	xarray Hosts;										// Host 列表
 	xdict HostMap;										// Host 字典（用于快速定位 Host 数据结构）
-	void* JsonNode;										// 配置文件的 JSON 对象
+	ptr JsonNode;										// 配置文件的 JSON 对象
 	struct mg_connection* Conn;							// mongoose 连接对象
 	struct mg_connection* ConnTLS;						// mongoose 连接对象 TLS
 } XS_ServerStruct, *XS_ServerObject;
@@ -133,6 +133,7 @@ xarray LoopEventList;
 void LoadHostConfig(xvalue objRoot, XS_HostObject objHost, XS_ServerObject objServer)
 {
 	const char* sPath;
+	
 	// 读取开发语言类型
 	int iLanguage = SLT_STATIC;
 	char* sLanguage = xvoTableGetText(objRoot, "devlang", 7);
@@ -143,6 +144,7 @@ void LoadHostConfig(xvalue objRoot, XS_HostObject objHost, XS_ServerObject objSe
 	} else if ( strcmp(sLanguage, "js") == 0 ) {
 		iLanguage = SLT_JS;
 	}
+	
 	// 读取基本信息
 	objHost->DevLang = iLanguage;
 	objHost->Name = xvoTableGetText(objRoot, "name", 4);
@@ -151,22 +153,23 @@ void LoadHostConfig(xvalue objRoot, XS_HostObject objHost, XS_ServerObject objSe
 	objHost->Host = xvoTableGetText(objRoot, "host", 4);
 	objHost->Session = xvoTableGetText(objRoot, "session", 7);
 	objHost->JsonNode = objRoot;
+	
 	// 创建 Host 映射
-	if ( objHost->Host ) {
+	if ( objHost->Host && (objHost->Host[0] != 0) ) {
 		str* arrHost = xrtSplit(objHost->Host, 0, ";", 1, FALSE);
 		int iCount = xCore.iRet;
 		for ( int i = 0; i < iCount; i++ ) {
-			char* sHost = xrtReplace(arrHost[i], 0, " ", 1, "", 0);
-			XS_HostObject* ppHost = xrtDictSet(objServer->HostMap, sHost, strlen(sHost), NULL);
-			if ( ppHost == NULL ) {
+			char* sHost = xrtTrim(arrHost[i], 0, " \t\r\n", 4, FALSE);
+			bool bRet = xrtDictSetPtr(objServer->HostMap, sHost, strlen(sHost), objHost, NULL);
+			if ( bRet == FALSE ) {
 				printf("!!! ERROR !!! xrtDictSet Failed [HostMap] !\n");
 				exit(EXIT_FAILURE);
 			}
-			ppHost[0] = objHost;
 			xrtFree(sHost);
 		}
 		xrtFree(arrHost);
 	}
+	
 	// 处理目录（相对路径转换为绝对路径）
 	sPath = xvoTableGetText(objRoot, "path", 4);
 	if ( (sPath == NULL) || (strlen(sPath) == 0) ) {
@@ -193,6 +196,7 @@ void LoadHostConfig(xvalue objRoot, XS_HostObject objHost, XS_ServerObject objSe
 		objHost->DevFile = malloc(4096);
 		realpath(sPath, objHost->DevFile);
 	}
+	
 	// 读取证书
 	if ( objServer->EnableTLS ) {
 		sPath = xvoTableGetText(objRoot, "tls_ca", 6);
@@ -211,6 +215,7 @@ void LoadHostConfig(xvalue objRoot, XS_HostObject objHost, XS_ServerObject objSe
 		realpath(sPath, sTempPath);
 		objHost->TLS_Key = mg_file_read(&mg_fs_posix, sTempPath);
 	}
+	
 	// 加载动态开发入口文件
 	if ( objHost->DevLang == SLT_C ) {
 		DynLoad_C(objServer, objHost);
@@ -242,6 +247,7 @@ void LoadHostConfig(xvalue objRoot, XS_HostObject objHost, XS_ServerObject objSe
 		objHost->LoopProc = NULL;
 		objHost->XS_SetGlobalDate = NULL;
 	}
+	
 	// 如果存在轮询事件，存入单独的表（加快访问速度）
 	if ( objHost->LoopProc ) {
 		unsigned int idx = xrtArrayAppend(LoopEventList, 1);
@@ -259,13 +265,14 @@ void LoadHostConfig(xvalue objRoot, XS_HostObject objHost, XS_ServerObject objSe
 
 
 // 载入服务器配置
-int LoadServerConfig(xvalue objRoot)
+bool LoadServerConfig(xvalue objRoot)
 {
 	// 检查服务器配置是否已启用
-	if ( xvoTableGetBool(objRoot, "enabled", 7) == 0 ) {
+	if ( xvoTableGetBool(objRoot, "enabled", 7) == FALSE ) {
 		printf("server enabled = false\n");
-		return 0;
+		return FALSE;
 	}
+	
 	// 读取网络协议类型
 	int iClass = SPT_NONE;
 	char* sClass = xvoTableGetText(objRoot, "class", 5);
@@ -288,8 +295,9 @@ int LoadServerConfig(xvalue objRoot)
 	}
 	if ( iClass == SPT_NONE ) {
 		printf("Unsupported class : %s\n", sClass);
-		return 0;
+		return FALSE;
 	}
+	
 	// 创建服务器数据对象
 	unsigned int idx = xrtArrayAppend(ServerList, 1);
 	if ( idx == 0 ) {
@@ -297,6 +305,7 @@ int LoadServerConfig(xvalue objRoot)
 		exit(EXIT_FAILURE);
 	}
 	XS_ServerObject objServer = xrtArrayGet_Inline(ServerList, idx);
+	
 	// 读取常规配置
 	objServer->Class = iClass;
 	objServer->Name = xvoTableGetText(objRoot, "name", 4);
@@ -310,6 +319,7 @@ int LoadServerConfig(xvalue objRoot)
 		objServer->AddrTLS = NULL;
 	}
 	objServer->JsonNode = objRoot;
+	
 	// 读取默认主机配置
 	xvalue objDefHost = xvoTableGetValue(objRoot, "host_default", 12);
 	if ( objDefHost->Type != XVO_DT_TABLE ) {
@@ -320,12 +330,14 @@ int LoadServerConfig(xvalue objRoot)
 	if ( objServer->EnableDefaultHost ) {
 		LoadHostConfig(objDefHost, &objServer->DefaultHost, objServer);
 	}
+	
 	// 创建 Host 映射表
 	objServer->HostMap = xrtDictCreate(sizeof(XS_HostObject*));
 	if ( objServer->HostMap == NULL ) {
 		printf("!!! ERROR !!! HostMap init failed !\n");
 		exit(EXIT_FAILURE);
 	}
+	
 	// 读取主机列表
 	xvalue arrHost = xvoTableGetValue(objRoot, "hosts", 5);
 	if ( arrHost->Type != XVO_DT_ARRAY ) {
@@ -339,6 +351,7 @@ int LoadServerConfig(xvalue objRoot)
 		exit(EXIT_FAILURE);
 	}
 	xrtArrayAlloc(objServer->Hosts, objServer->HostCount);
+	
 	// 遍历读取每一个主机的信息
 	for ( int i = 0; i < objServer->HostCount; i++ ) {
 		xvalue objHostInfo = xvoArrayGetValue(arrHost, i);
@@ -358,18 +371,19 @@ int LoadServerConfig(xvalue objRoot)
 		XS_HostObject objHost = xrtArrayGet_Inline(objServer->Hosts, idx);
 		LoadHostConfig(objHostInfo, objHost, objServer);
 	}
+	
 	// 输出控制台日志
 	printf("addr : %s\n", objServer->Addr);
 	printf("EnableTLS : %d\n", objServer->EnableTLS);
 	printf("addr(tls) : %s\n", objServer->AddrTLS);
 	printf("path : %s\n", objServer->DefaultHost.Path);
-	return -1;
+	return TRUE;
 }
 
 
 
 // 加载配置文件
-int LoadConfig(char* sOptFile)
+int LoadConfig(str sOptFile)
 {
 	printf("load option file : %s\n", sOptFile);
 	// 初始化 ServerList 数据结构
@@ -386,7 +400,7 @@ int LoadConfig(char* sOptFile)
 	}
 	// 加载配置文件
 	xvalue varJSON = xrtParseJSON_File(sOptFile);
-	//xvoPrintValue(varJSON, 0, 0, 0, NULL);
+	// xvoPrintValue(varJSON, 0, 0, 0, NULL);
 	if ( varJSON->Type == XVO_DT_TABLE ) {
 		// 单服务端口配置
 		xrtArrayAlloc(ServerList, 1);
@@ -497,19 +511,21 @@ int main(int argc, char** argv)
 	#if defined(_WIN32) || defined(_WIN64)
 		SetConsoleOutputCP(65001);
 	#endif
+	
 	// 初始化 xrt 库
 	xrtInit();
-	// 初始化 JSON 库内存池
 	
 	// 从命令行中读取配置文件路径
-	char* sOptFile = "xs.json";
+	str sOptFile;
 	if ( argc > 1 ) {
 		sOptFile = argv[1];
+	} else {
+		sOptFile = xrtPathJoin(2, xCore.AppPath, "xs.json");
 	}
 	LoadConfig(sOptFile);
+	
 	// 启动服务器
 	RunServer();
-	// 销毁 JSON 库内存池
 	
 	// 卸载 xrt 库
 	xrtUnit();

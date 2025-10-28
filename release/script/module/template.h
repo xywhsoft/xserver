@@ -2,7 +2,7 @@
 
 
 // 全局模板环境变量表
-XTE_Value tblENV = NULL;
+xvalue tblENV = NULL;
 
 
 
@@ -10,7 +10,7 @@ XTE_Value tblENV = NULL;
 typedef struct {
 	XTE_LiteObject TemplateObject;
 } TemplateItem;
-AVLHT32_Object TemplateTable;
+xdict TemplateTable;
 
 
 
@@ -28,10 +28,10 @@ int ScanTemplateFileProc(str sPath, size_t iSize, int bDir, ptr pData, size_t iP
 	}
 	// 添加到全局模板表
 	char* sText = xrtFileReadAll(sPath, XRT_CP_BINARY);
-	XTE_LiteObject objTemplate = xteLiteParse(sText, xCore->iRet, NULL);
+	XTE_LiteObject objTemplate = xteParse(sText, xCore->iRet, NULL);
 	if ( objTemplate->Success ) {
 		//printf("load template name : %s\n", sKey);
-		AVLHT32_SetPtr(TemplateTable, sKey, strlen(sKey), objTemplate, NULL);
+		xrtDictSetPtr(TemplateTable, sKey, strlen(sKey), objTemplate, NULL);
 	} else {
 		printf("load template file error : %s\n", sPath);
 		printf("Error : %s\n", objTemplate->ErrorDesc);
@@ -50,15 +50,15 @@ int ScanTemplateFileProc(str sPath, size_t iSize, int bDir, ptr pData, size_t iP
 
 
 // 根据模板生成内容
-char* MakePageWithTemplate(char* sTemplate, XTE_Value tblData, size_t* pRetSize)
+char* MakePageWithTemplate(char* sTemplate, xvalue tblData, size_t* pRetSize)
 {
 	// 获取模板
-	XTE_LiteObject objTemplate = AVLHT32_GetPtr(TemplateTable, sTemplate, strlen(sTemplate));
+	XTE_LiteObject objTemplate = xrtDictGetPtr(TemplateTable, sTemplate, strlen(sTemplate));
 	if ( objTemplate == NULL ) {
 		return xrtFormat("<!DOCTYPE html><html><head><meta charset='utf-8'><title>服务器错误</title></head><body> <p>找不到模板文件：%s</p> </body></html>", sTemplate);
 	}
 	// 根据模板生成页面
-	char* sPage = xteLiteMake(objTemplate, tblData, tblENV, TemplateTable, pRetSize);
+	str sPage = xteMake(objTemplate, tblData, tblENV, TemplateTable, pRetSize);
 	if ( sPage == NULL ) {
 		return xrtFormat("<!DOCTYPE html><html><head><meta charset='utf-8'><title>服务器错误</title></head><body> <p>生成页面失败：%s</p> </body></html>", sTemplate);
 	}
@@ -70,9 +70,9 @@ char* MakePageWithTemplate(char* sTemplate, XTE_Value tblData, size_t* pRetSize)
 
 
 // 模板公共函数 - 生成 XID
-XTE_Value TemplateProc_Project_MakeXID(XTE_Value varENV, XTE_Value varParam)
+xvalue TemplateProc_Project_MakeXID(xvalue varENV, xvalue varParam)
 {
-	return xteValueCreateText(xrtMakeXIDS(), TRUE);
+	return xvoCreateText(xrtMakeXIDS(), 0, XVO_SDT_STR_U8, TRUE);
 }
 
 
@@ -80,18 +80,18 @@ XTE_Value TemplateProc_Project_MakeXID(XTE_Value varENV, XTE_Value varParam)
 
 
 // 初始化模板渲染功能
-XTE_Value TemplateProc_Device_All(XTE_Value varENV, XTE_Value varParam);
-XTE_Value TemplateProc_Device_Idel(XTE_Value varENV, XTE_Value varParam);
-XTE_Value TemplateProc_Log_Ext(XTE_Value varENV, XTE_Value varParam);
+xvalue TemplateProc_Device_All(xvalue varENV, xvalue varParam);
+xvalue TemplateProc_Device_Idel(xvalue varENV, xvalue varParam);
+xvalue TemplateProc_Log_Ext(xvalue varENV, xvalue varParam);
 void InitTemplate()
 {
 	// 加载模板到全局模板表
-	TemplateTable = AVLHT32_Create(sizeof(TemplateItem));
+	TemplateTable = xrtDictCreate(sizeof(TemplateItem));
 	xrtDirScan(TemplatePath, TRUE, ScanTemplateFileProc, (void*)(strlen(TemplatePath) + 1));
 	
 	// 初始化 全局模板环境变量表
-	tblENV = xteValueCreateTable();
-	xteTableSetFunc(tblENV, "MakeXID", 7, TemplateProc_Project_MakeXID);
+	tblENV = xvoCreateTable();
+	xvoTableSetFunc(tblENV, "MakeXID", 7, TemplateProc_Project_MakeXID, XVO_SDT_FUNC_XCALL);
 }
 
 

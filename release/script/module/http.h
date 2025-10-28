@@ -4,7 +4,7 @@
 // HTTP 请求处理
 void RequestProc(XS_ServerObject objServer, XS_HostObject objHost, struct mg_connection* c, struct mg_http_message* hm)
 {
-	RouteItemHTTP* objItem = AVLHT32_Get(StaticRouteTableHTTP, hm->uri.buf, hm->uri.len);
+	RouteItemHTTP* objItem = xrtDictGet(StaticRouteTableHTTP, hm->uri.buf, hm->uri.len);
 	if ( objItem ) {
 		// C 语言静态路由
 		objItem->Proc(objServer, objHost, c, hm);
