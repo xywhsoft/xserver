@@ -175,10 +175,14 @@ static void ws_handler(struct mg_connection *c, int ev, void *ev_data, void *fn_
 
 
 // 服务初始化
+void OnError(str sError)
+{
+	printf("X Runtime Error : %s\n", sError);
+}
 void ServiceInit(XS_ServerObject objServer)
 {
-	// 开启 xrt 库的调试模式（会将错误输出到控制台）
-	xCore->DebugMode = TRUE;
+	// 将错误输出到控制台
+	xCore->OnError = OnError;
 	
 	
 	
@@ -191,7 +195,7 @@ void ServiceInit(XS_ServerObject objServer)
 	OptionPath = xrtPathJoin(3, ExePath, "data", "options");
 	TemplatePath = xrtPathJoin(3, ExePath, "data", "template");
 	
-	
+	printf("1\n");
 	
 	// 自动创建目录
 	xrtDirCreate(TempPath);
@@ -215,7 +219,7 @@ void ServiceInit(XS_ServerObject objServer)
 	// 初始化 HTTP 路由表
 	InitRouteHTTP();
 	
-    
+    /*
     // 绑定监听地址，处理 HTTP 和 WebSocket
     if (!mg_http_listen(mgr, "http://0.0.0.0:8000", ws_handler, NULL)) {
         printf("Failed to bind to http://0.0.0.0:8000\n");
@@ -224,7 +228,7 @@ void ServiceInit(XS_ServerObject objServer)
 
     printf("WebSocket proxy listening on http://0.0.0.0:8000\n");
     printf("Forwarding to backend: %s\n", BACKEND_ADDR);
-	
+	*/
 	
 }
 

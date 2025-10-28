@@ -7,24 +7,9 @@
 
 
 
-#define MMU_USE_SAMM								// 动态结构体数组
-#define MMU_USE_MBMU								// 自增长缓冲区
-#define MMU_USE_MM256								// 256 增量内存管理器
-#define MMU_USE_MP256								// 256 增量内存池
-#define MMU_USE_AVLTREE								// AVLTree
-#define MMU_USE_HASH32								// 32位哈希算法
-#define MMU_USE_AVLHT32								// 基于 AVLTree + 32位哈希算法的哈希表实现
-
-#define XTE_USE_LITE								// 使用 xTemplate Lite Parser
-
-
-
-#include "inline_xCore.h"
-#include "inline_mmu.h"
-#include "inline_mongoose.h"
+#include "inline_xrt.h"
 #include "inline_libtcc.h"
-#include "inline_xtemplate.h"
-#include "inline_json.h"
+#include "inline_mongoose.h"
 #include "inline_sqlite3.h"
 #include "inline_md4c.h"
 #include "inline_other.h"
