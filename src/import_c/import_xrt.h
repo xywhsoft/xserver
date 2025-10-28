@@ -8,7 +8,6 @@ void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xrtUnit", xrtUnit);
 	
 	// 添加函数 - Sup
-	tcc_add_symbol(s, "memmem", memmem);
 	tcc_add_symbol(s, "u16len", u16len);
 	tcc_add_symbol(s, "u32len", u32len);
 	
