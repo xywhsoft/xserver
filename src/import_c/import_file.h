@@ -1,4 +1,0 @@
-void ImportFile(TCCState* s)
-{
-	
-}
