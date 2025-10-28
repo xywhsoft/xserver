@@ -14,6 +14,10 @@
 //#include "lib/sqlite3ext.h"
 //#include "lib/md4c.h"
 //#include "lib/md4c-html.h"
+#include "lib/xdo/xdo.h"
+#include "lib/xdo/sqlite.h"
+//#include "lib/xdo/odbc.h"
+//#include "lib/xdo/mysql.h"
 
 
 

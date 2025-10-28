@@ -11,6 +11,7 @@
 #include "inline_libtcc.h"
 #include "inline_mongoose.h"
 #include "inline_sqlite3.h"
+#include "inline_xdo.h"
 #include "inline_md4c.h"
 #include "inline_other.h"
 

@@ -14,10 +14,35 @@
 
 
 
+// 数据库连接对象
+typedef struct XDO_Driver_Struct XDO_Driver_Struct, *XDO_Driver;
+typedef struct XDO_Connect_Struct {
+	const char* Host;							// 数据库服务器地址 或 数据库连接串
+	int Port;									// 数据库连接端口
+	const char* User;							// 数据库认证账号
+	const char* Pwd;							// 数据库认证密码
+	const char* DataBase;						// 默认数据库
+	const char* Charset;						// 默认编码
+	const char* LastError;						// 最后一次出错的描述
+	int __pri_FreeError;						// 报错文本是否需要 free
+	XDO_Driver objDriver;						// 数据库驱动对象指针
+	void* objDB;								// 数据库连接对象
+} XDO_Connect_Struct, *XDO_Connect;
+
+
+
+// 记录集对象
+typedef struct XDO_RecordsetStruct {
+	char* LastError;							// 最后一次出错的描述
+	int __pri_FreeError;						// 报错文本是否需要 free
+	XDO_Connect objConn;						// 数据库连接对象指针
+	XDO_Driver objDriver;						// 数据库驱动对象指针
+} XDO_RecordsetStruct, *XDO_Recordset;
+
+
+
 // 数据库驱动
-typedef struct XDO_RecordsetStruct XDO_RecordsetStruct, *XDO_Recordset;
-typedef struct XDO_Connect_Struct XDO_Connect_Struct, *XDO_Connect;
-typedef struct {
+typedef struct XDO_Driver_Struct {
 	
 	// 连接数据库
 	int (*Connect)(XDO_Connect objConn);
@@ -66,33 +91,7 @@ typedef struct {
     int (*Commit)(XDO_Connect objConn);
     int (*Rollback)(XDO_Connect objConn);
 	
-} XDO_Driver_Struct, *XDO_Driver;
-
-
-
-// 记录集对象
-typedef struct XDO_RecordsetStruct {
-	char* LastError;							// 最后一次出错的描述
-	int __pri_FreeError;						// 报错文本是否需要 free
-	XDO_Connect objConn;						// 数据库连接对象指针
-	XDO_Driver objDriver;						// 数据库驱动对象指针
-};
-
-
-
-// 数据库连接对象
-typedef struct XDO_Connect_Struct {
-	const char* Host;							// 数据库服务器地址 或 数据库连接串
-	int Port;									// 数据库连接端口
-	const char* User;							// 数据库认证账号
-	const char* Pwd;							// 数据库认证密码
-	const char* DataBase;						// 默认数据库
-	const char* Charset;						// 默认编码
-	const char* LastError;						// 最后一次出错的描述
-	int __pri_FreeError;						// 报错文本是否需要 free
-	XDO_Driver objDriver;						// 数据库驱动对象指针
-	void* objDB;								// 数据库连接对象
-};
+} XDO_Driver_Struct;
 
 
 
@@ -137,7 +136,7 @@ XDO_Connect xdoCreate(XDO_Driver objDriver)
 	objConn->Pwd = NULL;
 	objConn->DataBase = NULL;
 	objConn->Charset = NULL;
-	objConn->LastError = xCore->sNull;
+	objConn->LastError = xCore.sNull;
 	objConn->__pri_FreeError = FALSE;
 	objConn->objDriver = objDriver;
 	objConn->objDB = NULL;
@@ -238,43 +237,65 @@ XDO_Recordset xdoSelect(XDO_Connect objConn, char* sSQL)
 }
 
 
-long xdoInsert(XDO_Connect objConn, const char* table, const char* columns, const char* values) {
+
+// 插入记录
+long xdoInsert(XDO_Connect objConn, const char* table, const char* columns, const char* values)
+{
     if (objConn && objConn->objDriver && objConn->objDriver->Insert) {
         return objConn->objDriver->Insert(objConn, table, columns, values);
     }
     return 0;
 }
 
-int xdoUpdate(XDO_Connect objConn, const char* table, const char* set_clause, const char* where) {
+
+
+// 更新记录
+int xdoUpdate(XDO_Connect objConn, const char* table, const char* set_clause, const char* where)
+{
     if (objConn && objConn->objDriver && objConn->objDriver->Update) {
         return objConn->objDriver->Update(objConn, table, set_clause, where);
     }
     return 0;
 }
 
-int xdoDelete(XDO_Connect objConn, const char* table, const char* where) {
+
+
+// 删除记录
+int xdoDelete(XDO_Connect objConn, const char* table, const char* where)
+{
     if (objConn && objConn->objDriver && objConn->objDriver->Delete) {
         return objConn->objDriver->Delete(objConn, table, where);
     }
     return 0;
 }
 
-// 事务接口
-int xdoBeginTransaction(XDO_Connect objConn) {
+
+
+// 准备事务
+int xdoBeginTransaction(XDO_Connect objConn)
+{
     if (objConn && objConn->objDriver && objConn->objDriver->BeginTransaction) {
         return objConn->objDriver->BeginTransaction(objConn);
     }
     return 0;
 }
 
-int xdoCommit(XDO_Connect objConn) {
+
+
+// 提交事务
+int xdoCommit(XDO_Connect objConn)
+{
     if (objConn && objConn->objDriver && objConn->objDriver->Commit) {
         return objConn->objDriver->Commit(objConn);
     }
     return 0;
 }
 
-int xdoRollback(XDO_Connect objConn) {
+
+
+// 回滚事务
+int xdoRollback(XDO_Connect objConn)
+{
     if (objConn && objConn->objDriver && objConn->objDriver->Rollback) {
         return objConn->objDriver->Rollback(objConn);
     }
@@ -328,12 +349,12 @@ int xrsGetRecordCount(XDO_Recordset objRS)
 // 从记录集中获取字段名，字段序号从 0 开始
 char* xrsGetFieldName(XDO_Recordset objRS, int idx)
 {
-	if ( objRS == NULL ) { return xCore->sNull; }
+	if ( objRS == NULL ) { return xCore.sNull; }
 	if ( objRS->objDriver && objRS->objDriver->RS_GetFieldName ) {
 		return objRS->objDriver->RS_GetFieldName(objRS, idx);
 	} else {
 		xrsSetError(objRS, "RS_GetFieldName : Database driver unfulfilled !", FALSE);
-		return xCore->sNull;
+		return xCore.sNull;
 	}
 }
 
@@ -398,12 +419,12 @@ int xrsNext(XDO_Recordset objRS)
 // 记录集获取当前记录某一列的值，列号从 0 开始
 char* xrsGetValue(XDO_Recordset objRS, int idx)
 {
-	if ( objRS == NULL ) { return xCore->sNull; }
+	if ( objRS == NULL ) { return xCore.sNull; }
 	if ( objRS->objDriver && objRS->objDriver->RS_GetValue ) {
 		return objRS->objDriver->RS_GetValue(objRS, idx);
 	} else {
 		xrsSetError(objRS, "RS_GetValue : Database driver unfulfilled !", FALSE);
-		return xCore->sNull;
+		return xCore.sNull;
 	}
 }
 

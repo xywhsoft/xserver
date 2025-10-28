@@ -6,14 +6,6 @@
 
 
 
-// 导入库
-#include "xdo/xdo.h"
-#include "xdo/sqlite.h"
-//#include "xdo/mysql.h"
-//#include "xdo/odbc.h"				/* 可以根据实际使用情况决定是否引用 ODBC 数据库驱动程序 */
-
-
-
 
 
 // 全局路径

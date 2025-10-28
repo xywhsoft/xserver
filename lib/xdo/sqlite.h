@@ -94,7 +94,7 @@ XDO_Recordset_SQLite SQLite_Select(XDO_Connect objConn, char* sSQL)
 		xdoSetError(objConn, "Memory allocate failed !", FALSE);
 		return NULL;
 	}
-	objRS->LastError = xCore->sNull;
+	objRS->LastError = xCore.sNull;
 	objRS->__pri_FreeError = FALSE;
 	objRS->objConn = objConn;
 	objRS->objDriver = objConn->objDriver;
@@ -162,7 +162,7 @@ XDO_Recordset_SQLite SQLite_Select(XDO_Connect objConn, char* sSQL)
 			if ( sVal ) {
 				arrVal[iCol] = xrtCopyStr((char*)sVal, 0);
 			} else {
-				arrVal[iCol] = xCore->sNull;
+				arrVal[iCol] = xCore.sNull;
 			}
 		}
 		
@@ -217,7 +217,7 @@ int SQLite_RS_GetRecordCount(XDO_Recordset_SQLite objRS)
 // 从结果集中获取字段名，字段序号从 0 开始
 char* SQLite_RS_GetFieldName(XDO_Recordset_SQLite objRS, int idx)
 {
-	if ( idx >= objRS->FieldCount ) { return xCore->sNull;}
+	if ( idx >= objRS->FieldCount ) { return xCore.sNull;}
 	XDO_FieldObject_SQLite objField = xrtArrayGet(objRS->ColInfo, idx + 1);
 	return objField->Name;
 }
@@ -271,7 +271,7 @@ int SQLite_RS_Next(XDO_Recordset_SQLite objRS)
 // 结果集获取当前记录某一列的值，列号从 0 开始
 char* SQLite_RS_GetValue(XDO_Recordset_SQLite objRS, int idx)
 {
-	if ( idx >= objRS->FieldCount ) { return xCore->sNull;}
+	if ( idx >= objRS->FieldCount ) { return xCore.sNull;}
 	str* arrVal = xrtArrayGet(objRS->RowData, objRS->Line);
 	return arrVal[idx];
 }
