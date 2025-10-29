@@ -72,7 +72,7 @@ char* MakePageWithTemplate(char* sTemplate, xvalue tblData, size_t* pRetSize)
 // 模板公共函数 - 生成 XID
 xvalue TemplateProc_Project_MakeXID(xvalue varENV, xvalue varParam)
 {
-	return xvoCreateText(xrtMakeXIDS(), 0, XVO_SDT_STR_U8, TRUE);
+	return xvoCreateText(xrtMakeXIDS(), 32, TRUE);
 }
 
 
@@ -91,7 +91,7 @@ void InitTemplate()
 	
 	// 初始化 全局模板环境变量表
 	tblENV = xvoCreateTable();
-	xvoTableSetFunc(tblENV, "MakeXID", 7, TemplateProc_Project_MakeXID, XVO_SDT_FUNC_XCALL);
+	xvoTableSetFunc(tblENV, "MakeXID", 7, TemplateProc_Project_MakeXID);
 }
 
 

@@ -323,7 +323,7 @@ bool LoadServerConfig(xvalue objRoot)
 		printf("hosts must be of type array !\n");
 		exit(EXIT_FAILURE);
 	}
-	objServer->HostCount = xvoArraySize(arrHost);
+	objServer->HostCount = xvoArrayItemCount(arrHost);
 	objServer->Hosts = xrtArrayCreate(sizeof(XS_HostStruct));
 	if ( objServer->Hosts == NULL ) {
 		printf("!!! ERROR !!! HostList init failed !\n");
@@ -383,7 +383,7 @@ int LoadConfig(str sOptFile)
 		}
 	} else if ( varJSON->Type == XVO_DT_ARRAY ) {
 		// 多服务端口配置
-		size_t iCount = xvoArraySize(varJSON);
+		size_t iCount = xvoArrayItemCount(varJSON);
 		xrtArrayAlloc(ServerList, iCount);
 		for ( int i = 0; i < iCount; i++ ) {
 			xvalue varItem = xvoArrayGetValue(varJSON, i);

@@ -346,6 +346,7 @@ void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xvoCreateText", xvoCreateText);
 	tcc_add_symbol(s, "xvoCreateTime", xvoCreateTime);
 	tcc_add_symbol(s, "xvoCreateTimeSerial", xvoCreateTimeSerial);
+	tcc_add_symbol(s, "xvoCreatePoint", xvoCreatePoint);
 	tcc_add_symbol(s, "xvoCreateFunc", xvoCreateFunc);
 	tcc_add_symbol(s, "xvoCreateArray", xvoCreateArray);
 	tcc_add_symbol(s, "xvoCreateList", xvoCreateList);
@@ -359,6 +360,7 @@ void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xvoGetFloat", xvoGetFloat);
 	tcc_add_symbol(s, "xvoGetText", xvoGetText);
 	tcc_add_symbol(s, "xvoGetTime", xvoGetTime);
+	tcc_add_symbol(s, "xvoGetPoint", xvoGetPoint);
 	tcc_add_symbol(s, "xvoGetFunc", xvoGetFunc);
 	tcc_add_symbol(s, "xvoGetArray", xvoGetArray);
 	tcc_add_symbol(s, "xvoGetList", xvoGetList);
@@ -373,7 +375,7 @@ void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xvoArraySetValue", xvoArraySetValue);
 	tcc_add_symbol(s, "xvoArraySwap", xvoArraySwap);
 	tcc_add_symbol(s, "xvoArrayRemove", xvoArrayRemove);
-	tcc_add_symbol(s, "xvoArraySize", xvoArraySize);
+	tcc_add_symbol(s, "xvoArrayItemCount", xvoArrayItemCount);
 	tcc_add_symbol(s, "xvoArrayClear", xvoArrayClear);
 	tcc_add_symbol(s, "xvoArrayAlloc", xvoArrayAlloc);
 	tcc_add_symbol(s, "xvoArraySort", xvoArraySort);
@@ -381,21 +383,24 @@ void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xvoListSetValue", xvoListSetValue);
 	tcc_add_symbol(s, "xvoListExists", xvoListExists);
 	tcc_add_symbol(s, "xvoListRemove", xvoListRemove);
-	tcc_add_symbol(s, "xvoListSize", xvoListSize);
+	tcc_add_symbol(s, "xvoListItemCount", xvoListItemCount);
 	tcc_add_symbol(s, "xvoListClear", xvoListClear);
+	tcc_add_symbol(s, "xvoListSetParent", xvoListSetParent);
 	tcc_add_symbol(s, "xvoCollSetValue", xvoCollSetValue);
 	tcc_add_symbol(s, "xvoCollExists", xvoCollExists);
 	tcc_add_symbol(s, "xvoCollRemove", xvoCollRemove);
-	tcc_add_symbol(s, "xvoCollSize", xvoCollSize);
+	tcc_add_symbol(s, "xvoCollItemCount", xvoCollItemCount);
 	tcc_add_symbol(s, "xvoCollClear", xvoCollClear);
+	tcc_add_symbol(s, "xvoCollSetParent", xvoCollSetParent);
 	tcc_add_symbol(s, "xvoTableGetValue", xvoTableGetValue);
 	tcc_add_symbol(s, "xvoTableSetValue", xvoTableSetValue);
 	tcc_add_symbol(s, "xvoTableExists", xvoTableExists);
 	tcc_add_symbol(s, "xvoTableRemove", xvoTableRemove);
-	tcc_add_symbol(s, "xvoTableSize", xvoTableSize);
+	tcc_add_symbol(s, "xvoTableItemCount", xvoTableItemCount);
 	tcc_add_symbol(s, "xvoTableClear", xvoTableClear);
+	tcc_add_symbol(s, "xvoTableSetParent", xvoTableSetParent);
+	tcc_add_symbol(s, "xvoIsNull", xvoIsNull);
 	tcc_add_symbol(s, "xvoType", xvoType);
-	tcc_add_symbol(s, "xvoSubType", xvoSubType);
 	tcc_add_symbol(s, "xvoGetSize", xvoGetSize);
 	tcc_add_symbol(s, "xvoPrintValue", xvoPrintValue);
 	

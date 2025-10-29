@@ -15,16 +15,16 @@ void Request_List(XS_ServerObject objServer, XS_HostObject objHost, struct mg_co
 	xvalue arrList = xvoCreateArray();
 	while ( xrsNext(rs) ) {
 		xvalue tblRow = xvoCreateTable();
-		xvoTableSetText(tblRow, "id", 2, xrsGetValue(rs, 0), 0, XVO_SDT_STR_U8, FALSE);
-		xvoTableSetText(tblRow, "name", 4, xrsGetValue(rs, 1), 0, XVO_SDT_STR_U8, FALSE);
-		xvoTableSetText(tblRow, "age", 3, xrsGetValue(rs, 2), 0, XVO_SDT_STR_U8, FALSE);
-		xvoTableSetText(tblRow, "mail", 4, xrsGetValue(rs, 3), 0, XVO_SDT_STR_U8, FALSE);
-		xvoTableSetText(tblRow, "desc", 4, xrsGetValue(rs, 4), 0, XVO_SDT_STR_U8, FALSE);
+		xvoTableSetText(tblRow, "id", 2, xrsGetValue(rs, 0), 0, FALSE);
+		xvoTableSetText(tblRow, "name", 4, xrsGetValue(rs, 1), 0, FALSE);
+		xvoTableSetText(tblRow, "age", 3, xrsGetValue(rs, 2), 0, FALSE);
+		xvoTableSetText(tblRow, "mail", 4, xrsGetValue(rs, 3), 0, FALSE);
+		xvoTableSetText(tblRow, "desc", 4, xrsGetValue(rs, 4), 0, FALSE);
 		xvoArrayAppendValue(arrList, tblRow, TRUE);
 	}
 	xvoTableSetInt(tblRet, "count", 5, xrsGetRecordCount(rs));
 	xvoTableSetInt(tblRet, "code", 4, 0);
-	xvoTableSetText(tblRet, "msg", 3, "平台列表查询成功！", 0, XVO_SDT_STR_U8, FALSE);
+	xvoTableSetText(tblRet, "msg", 3, "平台列表查询成功！", 0, FALSE);
 	xvoTableSetValue(tblRet, "data", 4, arrList, TRUE);
 	// 释放记录集
 	xrsFree(rs);
@@ -82,7 +82,7 @@ void Request_Del(XS_ServerObject objServer, XS_HostObject objHost, struct mg_con
 		return;
 	}
 	// 遍历数组删除数据
-	int iCount = xvoArraySize(objBody);
+	int iCount = xvoArrayItemCount(objBody);
 	for ( int i = 0; i < iCount; i++ ) {
 		str id = xvoArrayGetText(objBody, i);
 		str sSQL = xrtFormat("DELETE FROM test WHERE id = %s", id);
