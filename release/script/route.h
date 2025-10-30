@@ -35,6 +35,7 @@ void InitRouteHTTP()
 	
 	// 添加 HTTP 静态路由 - Test
 	AddStaticRouteHTTP("/test",								Request_Test);
+	AddStaticRouteHTTP("/template",							Request_Template);
 }
 
 
