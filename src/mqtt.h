@@ -128,19 +128,19 @@ static void ProcMQTTS(struct mg_connection *c, int ev, void *ev_data) {
 int RunServerMQTT(XS_ServerObject objServer)
 {
 	// 启动 MQTT 服务
-	printf("Run Server [MQTT] : %s (%s)\n", objServer->Name, objServer->Addr);
+	printf("\n    Run Server [MQTT] : %s (%s)\n", objServer->Name, objServer->Addr);
 	struct mg_connection* objConn = mg_mqtt_listen(&mgr, objServer->Addr, ProcMQTT, objServer);
 	if ( objConn == NULL ) {
-		printf("!!! ERROR !!! Cannot listen on %s. Use mqtt://ADDR:PORT or :PORT\n", objServer->Addr);
+		printf("    !!! ERROR !!! Cannot listen on %s. Use mqtt://ADDR:PORT or :PORT\n", objServer->Addr);
 		exit(EXIT_FAILURE);
 	} else {
 		objServer->Conn = objConn;
 	}
 	if ( objServer->EnableTLS ) {
-		printf("Run Server [MQTTS] : %s (%s)\n", objServer->Name, objServer->Addr);
+		printf("    Run Server [MQTTS] : %s (%s)\n", objServer->Name, objServer->Addr);
 		objConn = mg_mqtt_listen(&mgr, objServer->AddrTLS, ProcMQTTS, objServer);
 		if ( objConn == NULL ) {
-			printf("!!! ERROR !!! Cannot listen on %s. Use mqtts://ADDR:PORT or :PORT\n", objServer->AddrTLS);
+			printf("    !!! ERROR !!! Cannot listen on %s. Use mqtts://ADDR:PORT or :PORT\n", objServer->AddrTLS);
 			exit(EXIT_FAILURE);
 		} else {
 			objServer->ConnTLS = objConn;

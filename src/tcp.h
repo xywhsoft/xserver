@@ -29,10 +29,10 @@ static void ProcTCP(struct mg_connection* c, int ev, void *ev_data) {
 int RunServerTCP(XS_ServerObject objServer)
 {
 	// 启动 TCP 服务
-	printf("Run Server [TCP] : %s (%s)\n", objServer->Name, objServer->Addr);
+	printf("\n    Run Server [TCP] : %s (%s)\n", objServer->Name, objServer->Addr);
 	struct mg_connection* objConn = mg_listen(&mgr, objServer->Addr, ProcTCP, objServer);
 	if ( objConn == NULL ) {
-		printf("!!! ERROR !!! Cannot listen on %s. Use tcp://ADDR:PORT or :PORT\n", objServer->Addr);
+		printf("    !!! ERROR !!! Cannot listen on %s. Use tcp://ADDR:PORT or :PORT\n", objServer->Addr);
 		exit(EXIT_FAILURE);
 	} else {
 		objServer->Conn = objConn;

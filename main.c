@@ -127,6 +127,11 @@ void LoadHostConfig(xvalue objRoot, XS_HostObject objHost, XS_ServerObject objSe
 {
 	const char* sPath;
 	
+	// 读取 Host 和 主机名
+	str sHost = xvoTableGetText(objRoot, "host", 4);
+	str sName = xvoTableGetText(objRoot, "name", 4);
+	printf("    load host : %s (%s)\n", sHost, sName);
+	
 	// 读取开发语言类型
 	int iLanguage = SLT_STATIC;
 	char* sLanguage = xvoTableGetText(objRoot, "devlang", 7);
@@ -140,10 +145,10 @@ void LoadHostConfig(xvalue objRoot, XS_HostObject objHost, XS_ServerObject objSe
 	
 	// 读取基本信息
 	objHost->DevLang = iLanguage;
-	objHost->Name = xvoTableGetText(objRoot, "name", 4);
+	objHost->Name = sName;
 	objHost->Desc = xvoTableGetText(objRoot, "desc", 4);
 	objHost->Param = xvoTableGetText(objRoot, "param", 5);
-	objHost->Host = xvoTableGetText(objRoot, "host", 4);
+	objHost->Host = sHost;
 	objHost->Session = xvoTableGetText(objRoot, "session", 7);
 	objHost->JsonNode = objRoot;
 	
@@ -152,13 +157,13 @@ void LoadHostConfig(xvalue objRoot, XS_HostObject objHost, XS_ServerObject objSe
 		str* arrHost = xrtSplit(objHost->Host, 0, ";", 1, FALSE);
 		int iCount = xCore.iRet;
 		for ( int i = 0; i < iCount; i++ ) {
-			char* sHost = xrtTrim(arrHost[i], 0, " \t\r\n", 4, FALSE);
-			bool bRet = xrtDictSetPtr(objServer->HostMap, sHost, strlen(sHost), objHost, NULL);
+			char* sHostItem = xrtTrim(arrHost[i], 0, " \t\r\n", 4, FALSE);
+			bool bRet = xrtDictSetPtr(objServer->HostMap, sHostItem, strlen(sHostItem), objHost, NULL);
 			if ( bRet == FALSE ) {
 				printf("!!! ERROR !!! xrtDictSet Failed [HostMap] !\n");
 				exit(EXIT_FAILURE);
 			}
-			xrtFree(sHost);
+			xrtFree(sHostItem);
 		}
 		xrtFree(arrHost);
 	}
@@ -250,6 +255,11 @@ bool LoadServerConfig(xvalue objRoot)
 		return FALSE;
 	}
 	
+	// 读取 服务名 和 服务描述
+	str sName = xvoTableGetText(objRoot, "name", 4);
+	str sDesc = xvoTableGetText(objRoot, "desc", 4);
+	printf("\nload server : %s (%s)\n", sName, sDesc);
+	
 	// 读取网络协议类型
 	int iClass = SPT_NONE;
 	char* sClass = xvoTableGetText(objRoot, "class", 5);
@@ -285,8 +295,8 @@ bool LoadServerConfig(xvalue objRoot)
 	
 	// 读取常规配置
 	objServer->Class = iClass;
-	objServer->Name = xvoTableGetText(objRoot, "name", 4);
-	objServer->Desc = xvoTableGetText(objRoot, "desc", 4);
+	objServer->Name = sName;
+	objServer->Desc = sDesc;
 	objServer->Param = xvoTableGetText(objRoot, "param", 5);
 	objServer->Addr = xvoTableGetText(objRoot, "addr", 4);
 	objServer->EnableTLS = xvoTableGetBool(objRoot, "tls", 3);
@@ -350,12 +360,6 @@ bool LoadServerConfig(xvalue objRoot)
 		XS_HostObject objHost = xrtArrayGet_Inline(objServer->Hosts, idx);
 		LoadHostConfig(objHostInfo, objHost, objServer);
 	}
-	
-	// 输出控制台日志
-	printf("addr : %s\n", objServer->Addr);
-	printf("EnableTLS : %d\n", objServer->EnableTLS);
-	printf("addr(tls) : %s\n", objServer->AddrTLS);
-	printf("path : %s\n", objServer->DefaultHost.Path);
 	return TRUE;
 }
 
@@ -420,11 +424,19 @@ int RunServer()
 	signal(SIGINT, signal_handler);				// 控制台按 Ctrl + C 触发
 	signal(SIGTERM, signal_handler);			// 程序结束触发
 	// 启动服务
-	printf("run server [%d] ...\n", ServerList->Count);
 	mg_log_set(MG_LL_INFO);
 	mg_mgr_init(&mgr);
 	for ( int i = 1; i <= ServerList->Count; i++ ) {
 		XS_ServerObject objServer = xrtArrayGet_Inline(ServerList, i);
+		
+		// 输出控制台日志
+		printf("\nrun server : %s (%s) ...\n", objServer->Name, objServer->Desc);
+		printf("    addr : %s\n", objServer->Addr);
+		if ( objServer->EnableTLS ) {
+			printf("    addr(tls) : %s\n", objServer->AddrTLS);
+		}
+		printf("    path : %s\n", objServer->DefaultHost.Path);
+		
 		// 服务初始化脚本回调函数
 		DynLoad_C_GlobalData(objServer, &objServer->DefaultHost);
 		if ( objServer->DefaultHost.ServiceInit ) {
@@ -433,6 +445,7 @@ int RunServer()
 		}
 		for ( int j = 1; j <= objServer->HostCount; j++ ) {
 			XS_HostObject objHost = xrtArrayGet_Inline(objServer->Hosts, j);
+			printf("    init host : %s (%s)\n", objHost->Host, objHost->Name);
 			DynLoad_C_GlobalData(objServer, objHost);
 			if ( objHost->ServiceInit ) {
 				void (*ServiceInit)(XS_ServerObject objServer, XS_HostObject objHost) = objHost->ServiceInit;
@@ -458,6 +471,7 @@ int RunServer()
 			RunServerThread(objServer);
 		}
 	}
+	printf("\n");
 	// 等待服务停止
 	while ( s_signo == 0 ) {
 		mg_mgr_poll(&mgr, 1000);

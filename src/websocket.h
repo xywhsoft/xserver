@@ -55,19 +55,19 @@ static void ProcWSS(struct mg_connection *c, int ev, void *ev_data) {
 int RunServerWS(XS_ServerObject objServer)
 {
 	// 启动 WebSocket 服务
-	printf("Run Server [WebSocket] : %s (%s)\n", objServer->Name, objServer->Addr);
+	printf("\n    Run Server [WebSocket] : %s (%s)\n", objServer->Name, objServer->Addr);
 	struct mg_connection* objConn = mg_http_listen(&mgr, objServer->Addr, ProcWS, objServer);
 	if ( objConn == NULL ) {
-		printf("!!! ERROR !!! Cannot listen on %s. Use ws://ADDR:PORT or :PORT\n", objServer->Addr);
+		printf("    !!! ERROR !!! Cannot listen on %s. Use ws://ADDR:PORT or :PORT\n", objServer->Addr);
 		exit(EXIT_FAILURE);
 	} else {
 		objServer->Conn = objConn;
 	}
 	if ( objServer->EnableTLS ) {
-		printf("Run Server [WebSocketS] : %s (%s)\n", objServer->Name, objServer->Addr);
+		printf("    Run Server [WebSocketS] : %s (%s)\n", objServer->Name, objServer->Addr);
 		objConn = mg_http_listen(&mgr, objServer->AddrTLS, ProcWSS, objServer);
 		if ( objConn == NULL ) {
-			printf("!!! ERROR !!! Cannot listen on %s. Use wss://ADDR:PORT or :PORT\n", objServer->AddrTLS);
+			printf("    !!! ERROR !!! Cannot listen on %s. Use wss://ADDR:PORT or :PORT\n", objServer->AddrTLS);
 			exit(EXIT_FAILURE);
 		} else {
 			objServer->ConnTLS = objConn;
