@@ -602,6 +602,7 @@ struct mg_http_message {
   struct mg_str body;                                  // Body
   struct mg_str head;                                  // Request + headers
   struct mg_str message;  // Request + headers + body
+  int methodCode;
 };
 
 // Parameter for mg_http_serve_dir()

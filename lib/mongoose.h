@@ -882,7 +882,7 @@ struct timeval {
 
 
 #ifndef MG_ENABLE_LOG
-#define MG_ENABLE_LOG 1
+#define MG_ENABLE_LOG 0
 #endif
 
 #ifndef MG_ENABLE_CUSTOM_CALLOC
@@ -1145,6 +1145,22 @@ struct mg_profitem {
 #define MG_PROF_ADD(c, name)
 #define MG_PROF_DUMP(c)
 #endif
+
+
+
+
+
+// 请求类型
+#define HTTP_UNKNOWN	0
+#define HTTP_GET		1
+#define HTTP_POST		2
+#define HTTP_HEAD		3
+#define HTTP_OPTIONS	4
+#define HTTP_PUT		5
+#define HTTP_DELETE		6
+#define HTTP_TRACE		7
+#define HTTP_CONNECT	8
+
 
 
 
@@ -1718,6 +1734,7 @@ struct mg_http_message {
   struct mg_str body;                                  // Body
   struct mg_str head;                                  // Request + headers
   struct mg_str message;  // Request + headers + body
+  int methodCode;
 };
 
 // Parameter for mg_http_serve_dir()

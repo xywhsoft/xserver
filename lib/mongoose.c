@@ -1759,6 +1759,72 @@ int mg_http_parse(const char *s, size_t len, struct mg_http_message *hm) {
     if (mg_to_size_t(*cl, &hm->body.len) == false) return -1;
     hm->message.len = (size_t) req_len + hm->body.len;
   }
+  
+  // 将 method 转换为 methodCode [ 便于快速处理 RESTFul API ]
+  if ( (hm->method.len == 3) &&
+     ( (hm->method.buf[0] == 'G') || (hm->method.buf[0] == 'g') ) &&
+     ( (hm->method.buf[1] == 'E') || (hm->method.buf[1] == 'e') ) &&
+     ( (hm->method.buf[2] == 'T') || (hm->method.buf[2] == 't') )
+  ) {
+    hm->methodCode = HTTP_GET;
+  } else if ( (hm->method.len == 4) &&
+     ( (hm->method.buf[0] == 'P') || (hm->method.buf[0] == 'p') ) &&
+     ( (hm->method.buf[1] == 'O') || (hm->method.buf[1] == 'o') ) &&
+     ( (hm->method.buf[2] == 'S') || (hm->method.buf[2] == 's') ) &&
+     ( (hm->method.buf[3] == 'T') || (hm->method.buf[3] == 't') )
+  ) {
+    hm->methodCode = HTTP_POST;
+  } else if ( (hm->method.len == 6) &&
+     ( (hm->method.buf[0] == 'D') || (hm->method.buf[0] == 'd') ) &&
+     ( (hm->method.buf[1] == 'E') || (hm->method.buf[1] == 'e') ) &&
+     ( (hm->method.buf[2] == 'L') || (hm->method.buf[2] == 'l') ) &&
+     ( (hm->method.buf[3] == 'E') || (hm->method.buf[3] == 'e') ) &&
+     ( (hm->method.buf[4] == 'T') || (hm->method.buf[4] == 't') ) &&
+     ( (hm->method.buf[5] == 'E') || (hm->method.buf[5] == 'e') )
+  ) {
+    hm->methodCode = HTTP_DELETE;
+  } else if ( (hm->method.len == 3) &&
+     ( (hm->method.buf[0] == 'P') || (hm->method.buf[0] == 'p') ) &&
+     ( (hm->method.buf[1] == 'U') || (hm->method.buf[1] == 'u') ) &&
+     ( (hm->method.buf[2] == 'T') || (hm->method.buf[2] == 't') )
+  ) {
+    hm->methodCode = HTTP_PUT;
+  } else if ( (hm->method.len == 5) &&
+     ( (hm->method.buf[0] == 'T') || (hm->method.buf[0] == 't') ) &&
+     ( (hm->method.buf[1] == 'R') || (hm->method.buf[1] == 'r') ) &&
+     ( (hm->method.buf[2] == 'A') || (hm->method.buf[2] == 'a') ) &&
+     ( (hm->method.buf[3] == 'C') || (hm->method.buf[3] == 'c') ) &&
+     ( (hm->method.buf[4] == 'E') || (hm->method.buf[4] == 'e') )
+  ) {
+    hm->methodCode = HTTP_TRACE;
+  } else if ( (hm->method.len == 4) &&
+     ( (hm->method.buf[0] == 'H') || (hm->method.buf[0] == 'h') ) &&
+     ( (hm->method.buf[1] == 'E') || (hm->method.buf[1] == 'e') ) &&
+     ( (hm->method.buf[2] == 'A') || (hm->method.buf[2] == 'a') ) &&
+     ( (hm->method.buf[3] == 'D') || (hm->method.buf[3] == 'd') )
+  ) {
+    hm->methodCode = HTTP_HEAD;
+  } else if ( (hm->method.len == 7) &&
+     ( (hm->method.buf[0] == 'C') || (hm->method.buf[0] == 'c') ) &&
+     ( (hm->method.buf[1] == 'O') || (hm->method.buf[1] == 'o') ) &&
+     ( (hm->method.buf[2] == 'N') || (hm->method.buf[2] == 'n') ) &&
+     ( (hm->method.buf[3] == 'N') || (hm->method.buf[3] == 'n') ) &&
+     ( (hm->method.buf[4] == 'E') || (hm->method.buf[4] == 'e') ) &&
+     ( (hm->method.buf[5] == 'C') || (hm->method.buf[5] == 'c') ) &&
+     ( (hm->method.buf[6] == 'T') || (hm->method.buf[6] == 't') )
+  ) {
+    hm->methodCode = HTTP_CONNECT;
+  } else if ( (hm->method.len == 7) &&
+     ( (hm->method.buf[0] == 'O') || (hm->method.buf[0] == 'o') ) &&
+     ( (hm->method.buf[1] == 'P') || (hm->method.buf[1] == 'p') ) &&
+     ( (hm->method.buf[2] == 'T') || (hm->method.buf[2] == 't') ) &&
+     ( (hm->method.buf[3] == 'I') || (hm->method.buf[3] == 'i') ) &&
+     ( (hm->method.buf[4] == 'O') || (hm->method.buf[4] == 'o') ) &&
+     ( (hm->method.buf[5] == 'N') || (hm->method.buf[5] == 'n') ) &&
+     ( (hm->method.buf[6] == 'S') || (hm->method.buf[6] == 's') )
+  ) {
+    hm->methodCode = HTTP_OPTIONS;
+  }
 
   // mg_http_parse() is used to parse both HTTP requests and HTTP
   // responses. If HTTP response does not have Content-Length set, then
@@ -1772,9 +1838,7 @@ int mg_http_parse(const char *s, size_t len, struct mg_http_message *hm) {
   //
   // So, if it is HTTP request, and Content-Length is not set,
   // and method is not (PUT or POST) then reset body length to zero.
-  if (hm->body.len == (size_t) ~0 && !is_response &&
-      mg_strcasecmp(hm->method, mg_str("PUT")) != 0 &&
-      mg_strcasecmp(hm->method, mg_str("POST")) != 0) {
+  if ( hm->body.len == (size_t) ~0 && !is_response && (hm->methodCode != HTTP_PUT) && (hm->methodCode != HTTP_POST) ) {
     hm->body.len = 0;
     hm->message.len = (size_t) req_len;
   }

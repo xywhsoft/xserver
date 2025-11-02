@@ -16,6 +16,14 @@ mongoose.c [ 7.16 基准 ]
 	
 		添加 mg_tls_init_accept 函数
 		tls 赋值前增加判断（如果不为空使用旧值，避免覆盖后无法访问 TLS ）
+	
+	1763 行：
+	
+		添加将 method 转换为 methodCode 代码
+	
+	1842 行：
+	
+		mg_strcasecmp 判断 method 的代码改为直接使用 methodCode 判断
 
 
 
@@ -28,5 +36,13 @@ mongoose.h [ 7.16 基准 ]
 	2340 行：
 	
 		添加 mg_tls_init_accept 定义
+	
+	1153 行：
+	
+		添加 methodCode 枚举值定义
+	
+	1731 行：
+	
+		mg_http_message 结构体添加 methodCode 字段
 
 
