@@ -43,6 +43,21 @@ extern "C" {
 
 
 
+// 请求类型
+#define HTTP_UNKNOWN	0
+#define HTTP_GET		1
+#define HTTP_POST		2
+#define HTTP_HEAD		3
+#define HTTP_OPTIONS	4
+#define HTTP_PUT		5
+#define HTTP_DELETE		6
+#define HTTP_TRACE		7
+#define HTTP_CONNECT	8
+
+
+
+
+
 // Describes an arbitrary chunk of memory
 struct mg_str {
   char *buf;   // String data
