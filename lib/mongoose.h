@@ -1735,6 +1735,8 @@ struct mg_http_message {
   struct mg_str head;                                  // Request + headers
   struct mg_str message;  // Request + headers + body
   int methodCode;
+  void* cookies;
+  void* session;
 };
 
 // Parameter for mg_http_serve_dir()

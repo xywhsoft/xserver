@@ -88,6 +88,22 @@ xdict ParseCookies(struct mg_http_message* hm)
 			}
 		}
 	}
+	hm->cookies = tblCookies;
+}
+
+
+
+// 释放 Cookies 表
+bool FreeCookies_FreeProc(Dict_Key* pKey, ptr* ppVal, ptr pArg)
+{
+	xrtFree(*ppVal);
+	return FALSE;
+}
+void FreeCookies(xdict tblCookies)
+{
+	if ( tblCookies ) {
+		xrtDictWalk(tblCookies, (ptr)FreeCookies_FreeProc, NULL);
+	}
 }
 
 

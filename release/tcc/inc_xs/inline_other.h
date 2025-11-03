@@ -7,4 +7,7 @@ void http_reply(struct mg_connection* c, int code, const char* headers, const ch
 // 解析 cookies
 xdict ParseCookies(struct mg_http_message* hm);
 
+// 释放 Cookies 表
+void FreeCookies(xdict tblCookies);
+
 
