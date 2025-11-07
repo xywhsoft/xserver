@@ -7,8 +7,6 @@ void ImportXDO(TCCState* s)
 	
 	
 	// 添加函数 - XDO
-	tcc_add_symbol(s, "xdoSetError", xdoSetError);
-	tcc_add_symbol(s, "xrsSetError", xrsSetError);
 	tcc_add_symbol(s, "xdoCreate", xdoCreate);
 	tcc_add_symbol(s, "xdoConnect", xdoConnect);
 	tcc_add_symbol(s, "xdoDisconnect", xdoDisconnect);

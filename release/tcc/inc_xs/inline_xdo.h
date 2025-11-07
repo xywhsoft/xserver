@@ -23,8 +23,6 @@ typedef struct XDO_Connect_Struct {
 	const char* Pwd;							// 数据库认证密码
 	const char* DataBase;						// 默认数据库
 	const char* Charset;						// 默认编码
-	const char* LastError;						// 最后一次出错的描述
-	int __pri_FreeError;						// 报错文本是否需要 free
 	XDO_Driver objDriver;						// 数据库驱动对象指针
 	void* objDB;								// 数据库连接对象
 } XDO_Connect_Struct, *XDO_Connect;
@@ -33,8 +31,6 @@ typedef struct XDO_Connect_Struct {
 
 // 记录集对象
 typedef struct XDO_RecordsetStruct {
-	char* LastError;							// 最后一次出错的描述
-	int __pri_FreeError;						// 报错文本是否需要 free
 	XDO_Connect objConn;						// 数据库连接对象指针
 	XDO_Driver objDriver;						// 数据库驱动对象指针
 } XDO_RecordsetStruct, *XDO_Recordset;
@@ -94,10 +90,6 @@ typedef struct XDO_Driver_Struct {
 } XDO_Driver_Struct;
 
 
-
-// 设置数据库报错信息
-void xdoSetError(XDO_Connect objConn, const char* sError, int bFree);
-void xrsSetError(XDO_Recordset objRS, char* sError, int bFree);
 
 // 创建连接对象
 XDO_Connect xdoCreate(XDO_Driver objDriver);

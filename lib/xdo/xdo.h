@@ -105,8 +105,6 @@ XDO_Connect xdoCreate(XDO_Driver objDriver)
 	objConn->Pwd = NULL;
 	objConn->DataBase = NULL;
 	objConn->Charset = NULL;
-	objConn->LastError = xCore.sNull;
-	objConn->__pri_FreeError = FALSE;
 	objConn->objDriver = objDriver;
 	objConn->objDB = NULL;
 	return objConn;
@@ -158,10 +156,6 @@ int xdoDestroy(XDO_Connect objConn)
 	if ( objConn == NULL ) { return FALSE; }
 	if ( objConn->objDB ) {
 		xdoDisconnect(objConn);
-	}
-	if ( objConn->LastError && objConn->__pri_FreeError ) {
-		xrtFree((char*)objConn->LastError);
-		objConn->LastError = NULL;
 	}
 	xrtFree(objConn);
 	return TRUE;
@@ -280,7 +274,7 @@ int xrsFree(XDO_Recordset objRS)
 	if ( objRS->objDriver && objRS->objDriver->RS_Free ) {
 		return objRS->objDriver->RS_Free(objRS);
 	} else {
-		xrsSetError(objRS, "RS_Free : Database driver unfulfilled !", FALSE);
+		xrtSetError("[XDO] RS_Free : Database driver unfulfilled !", FALSE);
 		return FALSE;
 	}
 }
@@ -294,7 +288,7 @@ int xrsGetFieldCount(XDO_Recordset objRS)
 	if ( objRS->objDriver && objRS->objDriver->RS_GetFieldCount ) {
 		return objRS->objDriver->RS_GetFieldCount(objRS);
 	} else {
-		xrsSetError(objRS, "RS_GetFieldCount : Database driver unfulfilled !", FALSE);
+		xrtSetError("[XDO] RS_GetFieldCount : Database driver unfulfilled !", FALSE);
 		return 0;
 	}
 }
@@ -308,7 +302,7 @@ int xrsGetRecordCount(XDO_Recordset objRS)
 	if ( objRS->objDriver && objRS->objDriver->RS_GetRecordCount ) {
 		return objRS->objDriver->RS_GetRecordCount(objRS);
 	} else {
-		xrsSetError(objRS, "RS_GetRecordCount : Database driver unfulfilled !", FALSE);
+		xrtSetError("[XDO] RS_GetRecordCount : Database driver unfulfilled !", FALSE);
 		return 0;
 	}
 }
@@ -322,7 +316,7 @@ char* xrsGetFieldName(XDO_Recordset objRS, int idx)
 	if ( objRS->objDriver && objRS->objDriver->RS_GetFieldName ) {
 		return objRS->objDriver->RS_GetFieldName(objRS, idx);
 	} else {
-		xrsSetError(objRS, "RS_GetFieldName : Database driver unfulfilled !", FALSE);
+		xrtSetError("[XDO] RS_GetFieldName : Database driver unfulfilled !", FALSE);
 		return xCore.sNull;
 	}
 }
@@ -336,7 +330,7 @@ int xrsGetFieldType(XDO_Recordset objRS, int idx)
 	if ( objRS->objDriver && objRS->objDriver->RS_GetFieldType ) {
 		return objRS->objDriver->RS_GetFieldType(objRS, idx);
 	} else {
-		xrsSetError(objRS, "RS_GetFieldType : Database driver unfulfilled !", FALSE);
+		xrtSetError("[XDO] RS_GetFieldType : Database driver unfulfilled !", FALSE);
 		return XDO_DT_UNKNOWN;
 	}
 }
@@ -350,7 +344,7 @@ int xrsFieldIsPrimaryKey(XDO_Recordset objRS, int idx)
 	if ( objRS->objDriver && objRS->objDriver->RS_FieldIsPrimaryKey ) {
 		return objRS->objDriver->RS_FieldIsPrimaryKey(objRS, idx);
 	} else {
-		xrsSetError(objRS, "RS_FieldIsPrimaryKey : Database driver unfulfilled !", FALSE);
+		xrtSetError("[XDO] RS_FieldIsPrimaryKey : Database driver unfulfilled !", FALSE);
 		return FALSE;
 	}
 }
@@ -364,7 +358,7 @@ int xrsFieldIsNotNull(XDO_Recordset objRS, int idx)
 	if ( objRS->objDriver && objRS->objDriver->RS_FieldIsNotNull ) {
 		return objRS->objDriver->RS_FieldIsNotNull(objRS, idx);
 	} else {
-		xrsSetError(objRS, "RS_FieldIsNotNull : Database driver unfulfilled !", FALSE);
+		xrtSetError("[XDO] RS_FieldIsNotNull : Database driver unfulfilled !", FALSE);
 		return FALSE;
 	}
 }
@@ -378,7 +372,7 @@ int xrsNext(XDO_Recordset objRS)
 	if ( objRS->objDriver && objRS->objDriver->RS_Next ) {
 		return objRS->objDriver->RS_Next(objRS);
 	} else {
-		xrsSetError(objRS, "RS_Next : Database driver unfulfilled !", FALSE);
+		xrtSetError("[XDO] RS_Next : Database driver unfulfilled !", FALSE);
 		return 0;
 	}
 }
@@ -392,7 +386,7 @@ char* xrsGetValue(XDO_Recordset objRS, int idx)
 	if ( objRS->objDriver && objRS->objDriver->RS_GetValue ) {
 		return objRS->objDriver->RS_GetValue(objRS, idx);
 	} else {
-		xrsSetError(objRS, "RS_GetValue : Database driver unfulfilled !", FALSE);
+		xrtSetError("[XDO] RS_GetValue : Database driver unfulfilled !", FALSE);
 		return xCore.sNull;
 	}
 }
