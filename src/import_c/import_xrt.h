@@ -389,6 +389,11 @@ void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xvoListClear", xvoListClear);
 	tcc_add_symbol(s, "xvoListSetParent", xvoListSetParent);
 	tcc_add_symbol(s, "xvoCollSetValue", xvoCollSetValue);
+	tcc_add_symbol(s, "xvoCollDifference", xvoCollDifference);
+	tcc_add_symbol(s, "xvoCollSymmetricDifference", xvoCollSymmetricDifference);
+	tcc_add_symbol(s, "xvoCollIntersection", xvoCollIntersection);
+	tcc_add_symbol(s, "xvoCollUnion", xvoCollUnion);
+	tcc_add_symbol(s, "xvoCollMerge", xvoCollMerge);
 	tcc_add_symbol(s, "xvoCollExists", xvoCollExists);
 	tcc_add_symbol(s, "xvoCollRemove", xvoCollRemove);
 	tcc_add_symbol(s, "xvoCollItemCount", xvoCollItemCount);
