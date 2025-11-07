@@ -153,13 +153,13 @@ int MySQL_Connect(XDO_Connect objConn)
 	MYSQL* objSQL = mysql_init(NULL);
 	if ( objSQL == NULL ) {
 		// 对象创建失败
-		xdoSetError(objConn, "mysql_init failed !", FALSE);
+		xrtSetError("[XDO] mysql_init failed !", FALSE);
 		return FALSE;
 	}
 
 	if ( mysql_real_connect(objSQL, objConn->Host, objConn->User, objConn->Pwd, objConn->DataBase, objConn->Port, NULL, 0) == NULL ) {
 		// 数据库连接失败
-		xdoSetError(objConn, mysql_error(objSQL), FALSE);
+		xrtSetError(mysql_error(objSQL), FALSE);
 		mysql_close(objSQL);
 		return FALSE;
 	}
@@ -183,7 +183,7 @@ int MySQL_Execute(XDO_Connect objConn, char* sSQL)
 {
 	int iRet = mysql_query(objConn->objDB, sSQL);
 	if ( iRet != 0 ) {
-		xdoSetError(objConn, (char*)mysql_error(objConn->objDB), FALSE);
+		xrtSetError((char*)mysql_error(objConn->objDB), FALSE);
 		return FALSE;
 	}
 	return TRUE;
@@ -195,16 +195,14 @@ XDO_Recordset_MySQL MySQL_Select(XDO_Connect objConn, char* sSQL)
 {
 	int iRet = mysql_query(objConn->objDB, sSQL);
 	if ( iRet != 0 ) {
-		xdoSetError(objConn, (char*)mysql_error(objConn->objDB), FALSE);
+		xrtSetError((char*)mysql_error(objConn->objDB), FALSE);
 		return NULL;
 	}
 	XDO_Recordset_MySQL objRS = xrtMalloc(sizeof(XDO_RecordsetStruct_MySQL));
 	if ( objRS == NULL ) {
-		xdoSetError(objConn, "Memory allocate failed !", FALSE);
+		xrtSetError("[XDO] Memory allocate failed !", FALSE);
 		return NULL;
 	}
-	objRS->LastError = xCore->sNull;
-	objRS->__pri_FreeError = FALSE;
 	objRS->objConn = objConn;
 	objRS->objDriver = objConn->objDriver;
 	objRS->Line = 0;
@@ -266,7 +264,7 @@ int MySQL_RS_Free(XDO_Recordset_MySQL objRS)
 // 插入数据，返回插入ID
 static long MySQL_Insert(XDO_Connect objConn, const char* table, const char* columns, const char* values) {
     if (!objConn || !objConn->objDB || !table || !values) {
-        xdoSetError(objConn, "Invalid parameters", FALSE);
+        xrtSetError("[XDO] Invalid parameters", FALSE);
         return 0;
     }
 
@@ -281,7 +279,7 @@ static long MySQL_Insert(XDO_Connect objConn, const char* table, const char* col
               xrtFormat("INSERT INTO %s VALUES (%s)", table, values);
 
         if (!sql) {
-            xdoSetError(objConn, "SQL allocation failed", FALSE);
+            xrtSetError("[XDO] SQL allocation failed", FALSE);
             break;
         }
 
@@ -289,7 +287,7 @@ static long MySQL_Insert(XDO_Connect objConn, const char* table, const char* col
         if (!MySQL_Execute(objConn, sql)) {
             const char* error = mysql_error(objConn->objDB);
             printf("SQL Error: %s\n", error);
-            xdoSetError(objConn, mysql_error(objConn->objDB), FALSE);
+            xrtSetError(mysql_error(objConn->objDB), FALSE);
             break;
         }
 
@@ -319,7 +317,7 @@ static long MySQL_Insert(XDO_Connect objConn, const char* table, const char* col
 // 更新数据，返回影响行数
 static int MySQL_Update(XDO_Connect objConn, const char* table, const char* set_clause, const char* where) {
     if (!objConn || !objConn->objDB || !table || !set_clause) {
-        xdoSetError(objConn, "Invalid parameters", FALSE);
+        xrtSetError("[XDO] Invalid parameters", FALSE);
         return 0;
     }
 
@@ -331,13 +329,13 @@ static int MySQL_Update(XDO_Connect objConn, const char* table, const char* set_
           xrtFormat("UPDATE %s SET %s", table, set_clause);
 
     if (!sql) {
-        xdoSetError(objConn, "Failed to allocate SQL string", FALSE);
+        xrtSetError("[XDO] Failed to allocate SQL string", FALSE);
         return 0;
     }
 
     // 执行更新
     if (!MySQL_Execute(objConn, sql)) {
-        xdoSetError(objConn, mysql_error(objConn->objDB), FALSE);
+        xrtSetError(mysql_error(objConn->objDB), FALSE);
         xrtFree(sql);
         return 0;
     }
@@ -354,7 +352,7 @@ static int MySQL_Update(XDO_Connect objConn, const char* table, const char* set_
 static int MySQL_Delete(XDO_Connect objConn, const char* table, const char* where) {
     // 参数严格校验
     if (!objConn || !objConn->objDB || !table) {
-        xdoSetError(objConn, "Invalid parameters", FALSE);
+        xrtSetError("[XDO] Invalid parameters", FALSE);
         return 0;
     }
 
@@ -367,13 +365,13 @@ static int MySQL_Delete(XDO_Connect objConn, const char* table, const char* wher
                   xrtFormat("DELETE FROM %s", table);
 
     if (!sql) {
-        xdoSetError(objConn, "SQL allocation failed", FALSE);
+        xrtSetError("[XDO] SQL allocation failed", FALSE);
         goto cleanup;
     }
 
     // 执行删除
     if (!MySQL_Execute(objConn, sql)) {
-        xdoSetError(objConn, mysql_error(objConn->objDB), FALSE);
+        xrtSetError(mysql_error(objConn->objDB), FALSE);
         goto cleanup;
     }
 

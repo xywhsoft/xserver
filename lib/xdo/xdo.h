@@ -23,8 +23,6 @@ typedef struct XDO_Connect_Struct {
 	const char* Pwd;							// 数据库认证密码
 	const char* DataBase;						// 默认数据库
 	const char* Charset;						// 默认编码
-	const char* LastError;						// 最后一次出错的描述
-	int __pri_FreeError;						// 报错文本是否需要 free
 	XDO_Driver objDriver;						// 数据库驱动对象指针
 	void* objDB;								// 数据库连接对象
 } XDO_Connect_Struct, *XDO_Connect;
@@ -33,8 +31,6 @@ typedef struct XDO_Connect_Struct {
 
 // 记录集对象
 typedef struct XDO_RecordsetStruct {
-	char* LastError;							// 最后一次出错的描述
-	int __pri_FreeError;						// 报错文本是否需要 free
 	XDO_Connect objConn;						// 数据库连接对象指针
 	XDO_Driver objDriver;						// 数据库驱动对象指针
 } XDO_RecordsetStruct, *XDO_Recordset;
@@ -99,33 +95,6 @@ typedef struct XDO_Driver_Struct {
 
 
 
-// 设置数据库报错信息
-void xdoSetError(XDO_Connect objConn, const char* sError, int bFree)
-{
-	#ifdef DebugMode
-		printf("SetError : %s\n", sError);
-	#endif
-	if ( objConn->__pri_FreeError && objConn->LastError ) {
-		xrtFree((char*)objConn->LastError);
-	}
-	objConn->LastError = sError;
-	objConn->__pri_FreeError = bFree;
-}
-
-void xrsSetError(XDO_Recordset objRS, char* sError, int bFree)
-{
-	#ifdef DebugMode
-		printf("SetError : %s\n", sError);
-	#endif
-	if ( objRS->__pri_FreeError && objRS->LastError ) {
-		xrtFree((char*)objRS->LastError);
-	}
-	objRS->LastError = sError;
-	objRS->__pri_FreeError = bFree;
-}
-
-
-
 // 创建连接对象
 XDO_Connect xdoCreate(XDO_Driver objDriver)
 {
@@ -151,13 +120,13 @@ int xdoConnect(XDO_Connect objConn)
 	if ( objConn == NULL ) { return FALSE; }
 	if ( objConn->objDriver && objConn->objDriver->Connect ) {
 		if ( objConn->objDB ) {
-			xdoSetError(objConn, "You must close the connection before you can connect to the database again !", FALSE);
+			xrtSetError("[XDO] You must close the connection before you can connect to the database again !", FALSE);
 			return FALSE;
 		} else {
 			return objConn->objDriver->Connect(objConn);
 		}
 	} else {
-		xdoSetError(objConn, "Connect : Database driver unfulfilled !", FALSE);
+		xrtSetError("[XDO] Connect : Database driver unfulfilled !", FALSE);
 		return FALSE;
 	}
 }
@@ -172,11 +141,11 @@ int xdoDisconnect(XDO_Connect objConn)
 		if ( objConn->objDB ) {
 			return objConn->objDriver->Disconnect(objConn);
 		} else {
-			xdoSetError(objConn, "You must connect to the database first !", FALSE);
+			xrtSetError("[XDO] You must connect to the database first !", FALSE);
 			return FALSE;
 		}
 	} else {
-		xdoSetError(objConn, "Disconnect : Database driver unfulfilled !", FALSE);
+		xrtSetError("[XDO] Disconnect : Database driver unfulfilled !", FALSE);
 		return FALSE;
 	}
 }
@@ -208,11 +177,11 @@ int xdoExecute(XDO_Connect objConn, char* sSQL)
 		if ( objConn->objDB ) {
 			return objConn->objDriver->Execute(objConn, sSQL);
 		} else {
-			xdoSetError(objConn, "You must connect to the database first !", FALSE);
+			xrtSetError("[XDO] You must connect to the database first !", FALSE);
 			return FALSE;
 		}
 	} else {
-		xdoSetError(objConn, "Execute : Database driver unfulfilled !", FALSE);
+		xrtSetError("[XDO] Execute : Database driver unfulfilled !", FALSE);
 		return FALSE;
 	}
 }
@@ -227,11 +196,11 @@ XDO_Recordset xdoSelect(XDO_Connect objConn, char* sSQL)
 		if ( objConn->objDB ) {
 			return objConn->objDriver->Select(objConn, sSQL);
 		} else {
-			xdoSetError(objConn, "You must connect to the database first !", FALSE);
+			xrtSetError("[XDO] You must connect to the database first !", FALSE);
 			return FALSE;
 		}
 	} else {
-		xdoSetError(objConn, "Select : Database driver unfulfilled !", FALSE);
+		xrtSetError("[XDO] Select : Database driver unfulfilled !", FALSE);
 		return NULL;
 	}
 }

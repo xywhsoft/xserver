@@ -42,7 +42,7 @@ int SQLite_Connect(XDO_Connect objConn)
 	int iRet = sqlite3_open(objConn->Host, &objDB);
 	if ( iRet != SQLITE_OK ) {
 		// 对象创建失败
-		xdoSetError(objConn, xrtFormat("sqlite3_open error code : %d\n", iRet), TRUE);
+		xrtSetError(xrtFormat("[XDO] sqlite3_open error code : %d\n", iRet), TRUE);
 		return FALSE;
 	}
 	objConn->objDB = objDB;
@@ -67,7 +67,7 @@ int SQLite_Execute(XDO_Connect objConn, char* sSQL)
 	char* sError = NULL;
 	int iRet = sqlite3_exec(objConn->objDB, sSQL, 0, 0, &sError);
 	if ( iRet != SQLITE_OK ) {
-		xdoSetError(objConn, xrtFormat("SQL错误 : %s", sError), TRUE);
+		xrtSetError(xrtFormat("[XDO] SQL错误 : %s", sError), TRUE);
 		sqlite3_free(sError);
 		return FALSE;
 	}
@@ -84,14 +84,14 @@ XDO_Recordset_SQLite SQLite_Select(XDO_Connect objConn, char* sSQL)
 	int iRet = sqlite3_prepare_v3(objConn->objDB, sSQL, -1, SQL_PREPARE_DEFAULT, &stmt, NULL);
 	if ( iRet != SQLITE_OK ) {
 		const char* sError = sqlite3_errmsg(objConn->objDB);
-		xdoSetError(objConn, xrtFormat("SQL错误 (%d) : %s", iRet, sError), TRUE);
+		xrtSetError(xrtFormat("[XDO] SQL错误 (%d) : %s", iRet, sError), TRUE);
 		return FALSE;
 	}
 	
 	// 创建记录集对象
 	XDO_Recordset_SQLite objRS = xrtMalloc(sizeof(XDO_RecordsetStruct_SQLite));
 	if ( objRS == NULL ) {
-		xdoSetError(objConn, "Memory allocate failed !", FALSE);
+		xrtSetError("[XDO] Memory allocate failed !", FALSE);
 		return NULL;
 	}
 	objRS->LastError = xCore.sNull;
@@ -114,18 +114,18 @@ XDO_Recordset_SQLite SQLite_Select(XDO_Connect objConn, char* sSQL)
 			// 创建内存管理器
 			objRS->RowData = xrtArrayCreate(sizeof(ptr) * objRS->FieldCount);
 			if ( objRS->RowData == NULL ) {
-				xdoSetError(objConn, "xrtArrayCreate 创建行数据管理器失败", FALSE);
+				xrtSetError("[XDO] xrtArrayCreate 创建行数据管理器失败", FALSE);
 				return NULL;
 			}
 			objRS->ColInfo = xrtArrayCreate(sizeof(XDO_FieldInfo_SQLite));
 			if ( objRS->ColInfo == NULL ) {
-				xdoSetError(objConn, "xrtArrayCreate 创建列信息管理器失败", FALSE);
+				xrtSetError("[XDO] xrtArrayCreate 创建列信息管理器失败", FALSE);
 				return NULL;
 			}
 			xrtArrayAlloc(objRS->ColInfo, objRS->FieldCount);
 			int iRet = xrtArrayAppend(objRS->ColInfo, objRS->FieldCount);
 			if ( iRet == 0 ) {
-				xdoSetError(objConn, "xrtArrayAppend 申请内存失败", FALSE);
+				xrtSetError("[XDO] xrtArrayAppend 申请内存失败", FALSE);
 				return NULL;
 			}
 			

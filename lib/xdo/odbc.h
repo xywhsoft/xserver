@@ -113,7 +113,7 @@ int ODBC_Connect(XDO_Connect_ODBC objConn)
 	// 创建 ODBC 数据库对象
 	if ( SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &objConn->hEnv) == SQL_ERROR ) {
 		// 对象创建失败
-		xdoSetError((XDO_Connect)objConn, "SQLAllocHandle 创建 ODBC 数据库对象失败", FALSE);
+		xrtSetError("[XDO] SQLAllocHandle 创建 ODBC 数据库对象失败", FALSE);
 		ODBC_Disconnect(objConn);
 		return FALSE;
 	}
@@ -121,7 +121,7 @@ int ODBC_Connect(XDO_Connect_ODBC objConn)
 	// 设置 ODBC 版本
 	RETCODE rc = SQLSetEnvAttr(objConn->hEnv, SQL_ATTR_ODBC_VERSION, (SQLPOINTER)SQL_OV_ODBC3, 0);
 	if ( rc == SQL_ERROR ) {
-		xdoSetError((XDO_Connect)objConn, "SQLSetEnvAttr 设置版本失败", FALSE);
+		xrtSetError("[XDO] SQLSetEnvAttr 设置版本失败", FALSE);
 		ODBC_Disconnect(objConn);
 		return FALSE;
 	}
@@ -129,7 +129,7 @@ int ODBC_Connect(XDO_Connect_ODBC objConn)
 	// 创建 ODBC 连接对象
 	rc = SQLAllocHandle(SQL_HANDLE_DBC, objConn->hEnv, &objConn->hDBC);
 	if ( rc == SQL_ERROR ) {
-		xdoSetError((XDO_Connect)objConn, "SQLAllocHandle 创建 ODBC 连接对象失败", FALSE);
+		xrtSetError("[XDO] SQLAllocHandle 创建 ODBC 连接对象失败", FALSE);
 		ODBC_Disconnect(objConn);
 		return FALSE;
 	}
@@ -138,7 +138,7 @@ int ODBC_Connect(XDO_Connect_ODBC objConn)
 	rc = SQLDriverConnect(objConn->hDBC, NULL, objConn->Host, SQL_NTS, NULL, 0, NULL, SQL_DRIVER_COMPLETE);
 	if ( rc == SQL_ERROR ) {
 		str sError = ODBC_GetLastError(objConn->hDBC, SQL_HANDLE_DBC);
-		xdoSetError((XDO_Connect)objConn, xrtFormat("SQLDriverConnect 连接到数据库失败：%s", sError), TRUE);
+		xrtSetError(xrtFormat("[XDO] SQLDriverConnect 连接到数据库失败：%s", sError), TRUE);
 		xrtFree(sError);
 		ODBC_Disconnect(objConn);
 		return FALSE;
@@ -148,7 +148,7 @@ int ODBC_Connect(XDO_Connect_ODBC objConn)
 	// 创建 SQL 语句对象
 	SQLAllocHandle(SQL_HANDLE_STMT, objConn->hDBC, &objConn->hStmt);
 	if ( rc == SQL_ERROR ) {
-		xdoSetError((XDO_Connect)objConn, "SQLAllocHandle 创建 SQL 语句对象失败", FALSE);
+		xrtSetError("[XDO] SQLAllocHandle 创建 SQL 语句对象失败", FALSE);
 		ODBC_Disconnect(objConn);
 		return FALSE;
 	}
@@ -166,16 +166,16 @@ int ODBC_Execute(XDO_Connect_ODBC objConn, str sSQL)
 		return TRUE;
 	} else if ( RetCode == SQL_SUCCESS_WITH_INFO ) {
 		str sError = ODBC_GetLastError(objConn->hStmt, SQL_HANDLE_STMT);
-		xdoSetError((XDO_Connect)objConn, xrtFormat("SQLExecDirect 警告 : %s", sError), TRUE);
+		xrtSetError(xrtFormat("[XDO] SQLExecDirect 警告 : %s", sError), TRUE);
 		xrtFree(sError);
 		return FALSE;
 	} else if ( RetCode == SQL_ERROR ) {
 		str sError = ODBC_GetLastError(objConn->hStmt, SQL_HANDLE_STMT);
-		xdoSetError((XDO_Connect)objConn, xrtFormat("SQLExecDirect 报错 : %s", sError), TRUE);
+		xrtSetError(xrtFormat("[XDO] SQLExecDirect 报错 : %s", sError), TRUE);
 		xrtFree(sError);
 		return FALSE;
 	} else {
-		xdoSetError((XDO_Connect)objConn, xrtFormat("SQLExecDirect 返回未知代码 : %d", RetCode), TRUE);
+		xrtSetError(xrtFormat("[XDO] SQLExecDirect 返回未知代码 : %d", RetCode), TRUE);
 		return FALSE;
 	}
 }
@@ -193,7 +193,7 @@ XDO_Recordset_ODBC ODBC_Select(XDO_Connect_ODBC objConn, str sSQL)
 		RETCODE rc = SQLNumResultCols(objConn->hStmt, (ptr)&iColCount);
 		if ( rc == SQL_ERROR ) {
 			str sError = ODBC_GetLastError(objConn->hStmt, SQL_HANDLE_STMT);
-			xdoSetError((XDO_Connect)objConn, xrtFormat("SQLNumResultCols 报错 : %s", sError), TRUE);
+			xrtSetError(xrtFormat("[XDO] SQLNumResultCols 报错 : %s", sError), TRUE);
 			xrtFree(sError);
 			return NULL;
 		}
@@ -201,7 +201,7 @@ XDO_Recordset_ODBC ODBC_Select(XDO_Connect_ODBC objConn, str sSQL)
 		// 创建记录集对象
 		XDO_Recordset_ODBC objRS = xrtMalloc(sizeof(XDO_RecordsetStruct_ODBC));
 		if ( objRS == NULL ) {
-			xdoSetError((XDO_Connect)objConn, "Memory allocate failed !", FALSE);
+			xrtSetError("[XDO] Memory allocate failed !", FALSE);
 			return NULL;
 		}
 		objRS->LastError = xCore->sNull;
@@ -213,18 +213,18 @@ XDO_Recordset_ODBC ODBC_Select(XDO_Connect_ODBC objConn, str sSQL)
 		// 创建内存管理器
 		objRS->RowData = SAMM_Create(sizeof(ptr) * iColCount);
 		if ( objRS->RowData == NULL ) {
-			xdoSetError((XDO_Connect)objConn, "SAMM_Create 创建行数据管理器失败", FALSE);
+			xrtSetError("[XDO] SAMM_Create 创建行数据管理器失败", FALSE);
 			return NULL;
 		}
 		objRS->ColInfo = SAMM_Create(sizeof(XDO_FieldInfo_ODBC));
 		if ( objRS->ColInfo == NULL ) {
-			xdoSetError((XDO_Connect)objConn, "SAMM_Create 创建列信息管理器失败", FALSE);
+			xrtSetError("[XDO] SAMM_Create 创建列信息管理器失败", FALSE);
 			return NULL;
 		}
 		SAMM_Malloc(objRS->ColInfo, iColCount);
 		int iRet = SAMM_Append(objRS->ColInfo, iColCount);
 		if ( iRet == 0 ) {
-			xdoSetError((XDO_Connect)objConn, "SAMM_Append 申请内存失败", FALSE);
+			xrtSetError("[XDO] SAMM_Append 申请内存失败", FALSE);
 			return NULL;
 		}
 		
@@ -342,16 +342,16 @@ XDO_Recordset_ODBC ODBC_Select(XDO_Connect_ODBC objConn, str sSQL)
 		return objRS;
 	} else if ( RetCode == SQL_SUCCESS_WITH_INFO ) {
 		str sError = ODBC_GetLastError(objConn->hStmt, SQL_HANDLE_STMT);
-		xdoSetError((XDO_Connect)objConn, xrtFormat("SQLExecDirect 警告 : %s", sError), TRUE);
+		xrtSetError(xrtFormat("[XDO] SQLExecDirect 警告 : %s", sError), TRUE);
 		xrtFree(sError);
 		return NULL;
 	} else if ( RetCode == SQL_ERROR ) {
 		str sError = ODBC_GetLastError(objConn->hStmt, SQL_HANDLE_STMT);
-		xdoSetError((XDO_Connect)objConn, xrtFormat("SQLExecDirect 报错 : %s", sError), TRUE);
+		xrtSetError(xrtFormat("[XDO] SQLExecDirect 报错 : %s", sError), TRUE);
 		xrtFree(sError);
 		return NULL;
 	} else {
-		xdoSetError((XDO_Connect)objConn, xrtFormat("SQLExecDirect 返回未知代码 : %d", RetCode), TRUE);
+		xrtSetError(xrtFormat("[XDO] SQLExecDirect 返回未知代码 : %d", RetCode), TRUE);
 		return NULL;
 	}
 }
