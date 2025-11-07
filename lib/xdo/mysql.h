@@ -13,8 +13,6 @@ typedef struct {
 
 // MySQL 记录集对象
 typedef struct {
-	char* LastError;							// 最后一次出错的描述
-	int __pri_FreeError;						// 报错文本是否需要 free
 	XDO_Connect objConn;						// 数据库连接对象指针
 	XDO_Driver objDriver;						// 数据库驱动对象指针
 	

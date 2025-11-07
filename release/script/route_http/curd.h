@@ -7,7 +7,7 @@ void Request_List(XS_ServerObject objServer, XS_HostObject objHost, struct mg_co
 	// 查询数据库
 	XDO_Recordset rs = xdoSelect(G_DB, "SELECT * FROM test;");
 	if ( rs == NULL ) {
-		mg_http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"%s\"}", G_DB->LastError);
+		mg_http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"%s\"}", xCore->LastError);
 		return;
 	}
 	// 构建返回值
