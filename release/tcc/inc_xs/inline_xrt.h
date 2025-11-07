@@ -1455,6 +1455,30 @@
 	XXAPI void xrtDictUnit(xdict objHT);
 	
 	// 设置值
+	static inline ptr xrtDictSetWithKey(xdict objHT, Dict_Key* objKey, bool* bNewRet)
+	{
+		bool bNew;
+		Dict_Key* pNode = xrtAVLTreeInsert(&objHT->AVLT, objKey, &bNew);
+		if ( pNode ) {
+			if ( bNewRet ) {
+				*bNewRet = bNew;
+			}
+			if ( bNew ) {
+				uint32 iKeyLen = objKey->KeyLen;
+				if ( objHT->MP ) {
+					pNode->Key = xrtMemPoolAlloc(objHT->MP, iKeyLen + 1);
+				} else {
+					pNode->Key = xrtMalloc(iKeyLen + 1);
+				}
+				pNode->KeyLen = iKeyLen;
+				pNode->Hash = objKey->Hash;
+				memcpy(pNode->Key, objKey->Key, iKeyLen);
+				((char*)pNode->Key)[iKeyLen] = 0;
+			}
+			return &pNode[1];
+		}
+		return NULL;
+	}
 	XXAPI ptr xrtDictSet(xdict objHT, ptr sKey, uint32 iKeyLen, bool* bNewRet);
 	
 	// 设置值 - 当值为 ptr 时直接修改指针内容
@@ -1615,6 +1639,15 @@
 	// 引用计数操作
 	XXAPI void xvoAddRef(xvalue pVal);
 	XXAPI void xvoUnref(xvalue pVal);
+	static inline void xvoAddRef_Inline(xvalue pVal)
+	{
+		if ( pVal->RefCount >= 0x3FFFFFF ) {
+			// 引用计数太多，就转为静态值
+			pVal->IsStatic = 1;
+		} else {
+			pVal->RefCount++;
+		}
+	}
 	
 	// 创建值
 	XXAPI xvalue xvoCreateNull();
@@ -1724,6 +1757,9 @@
 	#define xvoArraySetObject(pArr, idx, size)													xvoArraySetValue(pArr, idx, xvoCreateObject(size), TRUE)
 	#define xvoArraySetCustom(pArr, idx, point)													xvoArraySetValue(pArr, idx, xvoCreateCustom(point), TRUE)
 	
+	// 数组合并
+	XXAPI bool xvoArrayMerge(xvalue pArr1, xvalue pArr2);
+	
 	// Array 操作
 	XXAPI bool xvoArraySwap(xvalue pArr, uint32 index1, uint32 index2);
 	XXAPI bool xvoArrayRemove(xvalue pArr, uint32 index, uint32 count);
@@ -1767,6 +1803,9 @@
 	#define xvoListSetStruct(pList, idx, size)													xvoListSetValue(pList, idx, xvoCreateStruct(size), TRUE)
 	#define xvoListSetObject(pList, idx, size)													xvoListSetValue(pList, idx, xvoCreateObject(size), TRUE)
 	#define xvoListSetCustom(pList, idx, point)													xvoListSetValue(pList, idx, xvoCreateCustom(point), TRUE)
+	
+	// List 合并
+	XXAPI bool xvoListMerge(xvalue pList1, xvalue pList2, bool bReWrite);
 	
 	// List 操作
 	XXAPI bool xvoListExists(xvalue pList, int64 index);
@@ -1837,6 +1876,9 @@
 	#define xvoTableSetObject(pTbl, key, kl, size)												xvoTableSetValue(pTbl, key, kl, xvoCreateObject(size), TRUE)
 	#define xvoTableSetCustom(pTbl, key, kl, point)												xvoTableSetValue(pTbl, key, kl, xvoCreateCustom(point), TRUE)
 	
+	// Table 合并
+	XXAPI bool xvoTableMerge(xvalue pTbl1, xvalue pTbl2, bool bReWrite);
+	
 	// Table 操作
 	XXAPI bool xvoTableExists(xvalue pTbl, str key, uint32 kl);
 	XXAPI bool xvoTableRemove(xvalue pTbl, str key, uint32 kl);
@@ -1856,6 +1898,12 @@
 	#define xvoArrayItemSize(pArr, index)														xvoGetSize(xvoArrayGetValue(pArr, index))
 	#define xvoListItemSize(pList, index)														xvoGetSize(xvoListGetValue(pList, index))
 	#define xvoTableItemSize(pTbl, key, kl)														xvoGetSize(xvoTableGetValue(pTbl, key, kl))
+	
+	// 浅拷贝
+	XXAPI xvalue xvoCopy(xvalue pVal);
+	
+	// 深拷贝
+	XXAPI xvalue xvoDeepCopy(xvalue pVal);
 	
 	// 输出 xte Value 的结构和值
 	XXAPI void xvoPrintValue(xvalue objVal, int iLevel, int iMode, int64 iKey, str sKey);

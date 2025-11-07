@@ -373,6 +373,7 @@ void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xvoArrayAppendValue", xvoArrayAppendValue);
 	tcc_add_symbol(s, "xvoArrayInsertValue", xvoArrayInsertValue);
 	tcc_add_symbol(s, "xvoArraySetValue", xvoArraySetValue);
+	tcc_add_symbol(s, "xvoArrayMerge", xvoArrayMerge);
 	tcc_add_symbol(s, "xvoArraySwap", xvoArraySwap);
 	tcc_add_symbol(s, "xvoArrayRemove", xvoArrayRemove);
 	tcc_add_symbol(s, "xvoArrayItemCount", xvoArrayItemCount);
@@ -381,6 +382,7 @@ void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xvoArraySort", xvoArraySort);
 	tcc_add_symbol(s, "xvoListGetValue", xvoListGetValue);
 	tcc_add_symbol(s, "xvoListSetValue", xvoListSetValue);
+	tcc_add_symbol(s, "xvoListMerge", xvoListMerge);
 	tcc_add_symbol(s, "xvoListExists", xvoListExists);
 	tcc_add_symbol(s, "xvoListRemove", xvoListRemove);
 	tcc_add_symbol(s, "xvoListItemCount", xvoListItemCount);
@@ -394,6 +396,7 @@ void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xvoCollSetParent", xvoCollSetParent);
 	tcc_add_symbol(s, "xvoTableGetValue", xvoTableGetValue);
 	tcc_add_symbol(s, "xvoTableSetValue", xvoTableSetValue);
+	tcc_add_symbol(s, "xvoTableMerge", xvoTableMerge);
 	tcc_add_symbol(s, "xvoTableExists", xvoTableExists);
 	tcc_add_symbol(s, "xvoTableRemove", xvoTableRemove);
 	tcc_add_symbol(s, "xvoTableItemCount", xvoTableItemCount);
@@ -402,6 +405,8 @@ void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xvoIsNull", xvoIsNull);
 	tcc_add_symbol(s, "xvoType", xvoType);
 	tcc_add_symbol(s, "xvoGetSize", xvoGetSize);
+	tcc_add_symbol(s, "xvoCopy", xvoCopy);
+	tcc_add_symbol(s, "xvoDeepCopy", xvoDeepCopy);
 	tcc_add_symbol(s, "xvoPrintValue", xvoPrintValue);
 	
 	// 添加函数 - JNUM
