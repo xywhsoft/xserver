@@ -1160,6 +1160,7 @@ struct mg_profitem {
 #define HTTP_DELETE		6
 #define HTTP_TRACE		7
 #define HTTP_CONNECT	8
+#define HTTP_PATCH		9
 
 
 

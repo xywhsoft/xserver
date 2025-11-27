@@ -1790,6 +1790,14 @@ int mg_http_parse(const char *s, size_t len, struct mg_http_message *hm) {
   ) {
     hm->methodCode = HTTP_PUT;
   } else if ( (hm->method.len == 5) &&
+     ( (hm->method.buf[0] == 'P') || (hm->method.buf[0] == 'p') ) &&
+     ( (hm->method.buf[1] == 'A') || (hm->method.buf[1] == 'a') ) &&
+     ( (hm->method.buf[2] == 'T') || (hm->method.buf[2] == 't') ) &&
+     ( (hm->method.buf[3] == 'C') || (hm->method.buf[3] == 'c') ) &&
+     ( (hm->method.buf[4] == 'H') || (hm->method.buf[4] == 'h') )
+  ) {
+    hm->methodCode = HTTP_PATCH;
+  } else if ( (hm->method.len == 5) &&
      ( (hm->method.buf[0] == 'T') || (hm->method.buf[0] == 't') ) &&
      ( (hm->method.buf[1] == 'R') || (hm->method.buf[1] == 'r') ) &&
      ( (hm->method.buf[2] == 'A') || (hm->method.buf[2] == 'a') ) &&
