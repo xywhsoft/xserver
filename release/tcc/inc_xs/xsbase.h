@@ -44,7 +44,7 @@ typedef struct {
 	str Desc;											// 主机描述
 	str Param;											// 启动参数
 	str Host;											// 主机地址（域名）
-	str Session;										// 主机 Session 前缀
+	bool DebugMode;										// 输出额外的信息
 	struct mg_str TLS_CA;								// 主机 TLS CA 证书路径
 	struct mg_str TLS_Cert;								// 主机 TLS 证书路径
 	struct mg_str TLS_Key;								// 主机 TLS 秘钥路径

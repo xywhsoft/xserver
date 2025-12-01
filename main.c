@@ -50,7 +50,7 @@ typedef struct {
 	str Desc;											// 主机描述
 	str Param;											// 启动参数
 	str Host;											// 主机地址（域名）
-	str Session;										// 主机 Session 前缀
+	bool DebugMode;										// 输出额外的信息
 	struct mg_str TLS_CA;								// 主机 TLS CA 证书路径
 	struct mg_str TLS_Cert;								// 主机 TLS 证书路径
 	struct mg_str TLS_Key;								// 主机 TLS 秘钥路径
@@ -149,7 +149,7 @@ void LoadHostConfig(xvalue objRoot, XS_HostObject objHost, XS_ServerObject objSe
 	objHost->Desc = xvoTableGetText(objRoot, "desc", 4);
 	objHost->Param = xvoTableGetText(objRoot, "param", 5);
 	objHost->Host = sHost;
-	objHost->Session = xvoTableGetText(objRoot, "session", 7);
+	objHost->DebugMode = xvoTableGetBool(objRoot, "debug", 5);
 	objHost->JsonNode = objRoot;
 	
 	// 创建 Host 映射

@@ -13,13 +13,13 @@
 			"name": "默认主机",
 			"desc": "主机描述",
 			"param": "启动参数",
+			"debug": true,
 			"path": "wwwroot",
 			"tls_ca": null,
 			"tls_cert": "tls/cert.pem",
 			"tls_key": "tls/key.pem",
 			"devlang": "c",
-			"devfile": "script/main.c",
-			"session": "www$"
+			"devfile": "script/main.c"
 		},
 		"hosts": [
 		]

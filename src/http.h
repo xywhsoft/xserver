@@ -10,11 +10,13 @@ void InitTLS(struct mg_connection *c, XS_HostObject objHost, XS_ServerObject obj
 	opts.cert = objHost->TLS_Cert;
 	opts.key = objHost->TLS_Key;
 	/*
-	printf("InitTLS : %s\n", objHost->Name);
-	printf("CA :\n%s\n", opts.ca.buf);
-	printf("Cert :\n%s\n", opts.cert.buf);
-	printf("Key :\n%s\n", opts.key.buf);
-	//*/
+	if ( objHost->DebugMode ) {
+		printf("InitTLS : %s\n", objHost->Name);
+		printf("CA :\n%s\n", opts.ca.buf);
+		printf("Cert :\n%s\n", opts.cert.buf);
+		printf("Key :\n%s\n", opts.key.buf);
+	}
+	*/
 	mg_tls_init(c, &opts);
 }
 
@@ -23,6 +25,9 @@ void InitTLS(struct mg_connection *c, XS_HostObject objHost, XS_ServerObject obj
 // 请求处理
 void ProcRequest_HTTP(XS_ServerObject objServer, XS_HostObject objHost, struct mg_connection* c, struct mg_http_message* hm)
 {
+	if ( objHost->DebugMode ) {
+		printf("%s [%.*s] %.*s\n", objHost->Name, hm->method.len, hm->method.buf, hm->uri.len, hm->uri.buf);
+	}
 	if ( objHost->DevLang == SLT_C ) {
 		if ( objHost->RequestProc ) {
 			void (*RequestProc)(XS_ServerObject objServer, XS_HostObject objHost, struct mg_connection *c, struct mg_http_message* hm) = objHost->RequestProc;
