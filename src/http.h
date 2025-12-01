@@ -66,20 +66,28 @@ static void ProcHTTP(struct mg_connection* c, int ev, void *ev_data) {
 		struct mg_http_message* hm = ev_data;
 		// 定位 Host
 		struct mg_str* Host = mg_http_get_header(hm, "host");
-		XS_HostObject* ppHost = xrtDictGet(objServer->HostMap, Host->buf, Host->len);
-		XS_HostObject objHost;
-		if ( ppHost ) {
-			objHost = ppHost[0];
+		XS_HostObject objHost = NULL;
+		if ( Host && (Host->len > 0) ) {
+			XS_HostObject* ppHost = xrtDictGet(objServer->HostMap, Host->buf, Host->len);
+			if ( ppHost ) {
+				objHost = ppHost[0];
+			} else {
+				if ( objServer->EnableDefaultHost ) {
+					objHost = &objServer->DefaultHost;
+				}
+			}
 		} else {
 			if ( objServer->EnableDefaultHost ) {
 				objHost = &objServer->DefaultHost;
-			} else {
-				printf("!!! ERROR !!! NO Enabled Default Host [HTTP] !");
-				return;
 			}
 		}
 		// 处理请求
-		ProcRequest_HTTP(objServer, objHost, c, hm);
+		if ( objHost ) {
+			ProcRequest_HTTP(objServer, objHost, c, hm);
+		} else {
+			printf("!!! ERROR !!! NO Enabled Default Host [HTTP] !");
+			return;
+		}
 	}
 }
 
@@ -114,20 +122,28 @@ static void ProcHTTP(struct mg_connection* c, int ev, void *ev_data) {
 			struct mg_http_message* hm = ev_data;
 			// 定位 Host
 			struct mg_str* Host = mg_http_get_header(hm, "host");
-			XS_HostObject* ppHost = xrtDictGet(objServer->HostMap, Host->buf, Host->len);
-			XS_HostObject objHost;
-			if ( ppHost ) {
-				objHost = ppHost[0];
+			XS_HostObject objHost = NULL;
+			if ( Host && (Host->len > 0) ) {
+				XS_HostObject* ppHost = xrtDictGet(objServer->HostMap, Host->buf, Host->len);
+				if ( ppHost ) {
+					objHost = ppHost[0];
+				} else {
+					if ( objServer->EnableDefaultHost ) {
+						objHost = &objServer->DefaultHost;
+					}
+				}
 			} else {
 				if ( objServer->EnableDefaultHost ) {
 					objHost = &objServer->DefaultHost;
-				} else {
-					printf("!!! ERROR !!! NO Enabled Default Host [HTTP] !");
-					return;
 				}
 			}
 			// 处理请求
-			ProcRequest_HTTP(objServer, objHost, c, hm);
+			if ( objHost ) {
+				ProcRequest_HTTP(objServer, objHost, c, hm);
+			} else {
+				printf("!!! ERROR !!! NO Enabled Default Host [HTTP] !");
+				return;
+			}
 		}
 	}
 #else
@@ -176,20 +192,28 @@ static void ProcHTTP(struct mg_connection* c, int ev, void *ev_data) {
 			struct mg_http_message* hm = ev_data;
 			// 定位 Host
 			struct mg_str* Host = mg_http_get_header(hm, "host");
-			XS_HostObject* ppHost = xrtDictGet(objServer->HostMap, Host->buf, Host->len);
-			XS_HostObject objHost;
-			if ( ppHost ) {
-				objHost = ppHost[0];
+			XS_HostObject objHost = NULL;
+			if ( Host && (Host->len > 0) ) {
+				XS_HostObject* ppHost = xrtDictGet(objServer->HostMap, Host->buf, Host->len);
+				if ( ppHost ) {
+					objHost = ppHost[0];
+				} else {
+					if ( objServer->EnableDefaultHost ) {
+						objHost = &objServer->DefaultHost;
+					}
+				}
 			} else {
 				if ( objServer->EnableDefaultHost ) {
 					objHost = &objServer->DefaultHost;
-				} else {
-					printf("!!! ERROR !!! NO Enabled Default Host [HTTP] !");
-					return;
 				}
 			}
 			// 处理请求
-			ProcRequest_HTTP(objServer, objHost, c, hm);
+			if ( objHost ) {
+				ProcRequest_HTTP(objServer, objHost, c, hm);
+			} else {
+				printf("!!! ERROR !!! NO Enabled Default Host [HTTP] !");
+				return;
+			}
 		}
 	}
 #endif
