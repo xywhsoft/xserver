@@ -333,23 +333,24 @@ bool LoadServerConfig(xvalue objRoot)
 		printf("hosts must be of type array !\n");
 		exit(EXIT_FAILURE);
 	}
-	objServer->HostCount = xvoArrayItemCount(arrHost);
+	objServer->HostCount = 0;
 	objServer->Hosts = xrtArrayCreate(sizeof(XS_HostStruct));
 	if ( objServer->Hosts == NULL ) {
 		printf("!!! ERROR !!! HostList init failed !\n");
 		exit(EXIT_FAILURE);
 	}
-	xrtArrayAlloc(objServer->Hosts, objServer->HostCount);
+	int iCount = xvoArrayItemCount(arrHost);
+	xrtArrayAlloc(objServer->Hosts, iCount);
 	
 	// 遍历读取每一个主机的信息
-	for ( int i = 0; i < objServer->HostCount; i++ ) {
+	for ( int i = 0; i < iCount; i++ ) {
 		xvalue objHostInfo = xvoArrayGetValue(arrHost, i);
 		if ( objHostInfo->Type != XVO_DT_TABLE ) {
 			printf("!!! ERROR !!! JSON Type no object [Host] (idx : %d) !\n", i);
 			exit(EXIT_FAILURE);
 		}
 		if ( xvoTableGetBool(objHostInfo, "enabled", 7) == 0 ) {
-			printf("host enabled = false\n");
+			printf("    %s host enabled = false\n", xvoTableGetText(objHostInfo, "name", 4));
 			continue;
 		}
 		unsigned int idx = xrtArrayAppend(objServer->Hosts, 1);
@@ -359,6 +360,7 @@ bool LoadServerConfig(xvalue objRoot)
 		}
 		XS_HostObject objHost = xrtArrayGet_Inline(objServer->Hosts, idx);
 		LoadHostConfig(objHostInfo, objHost, objServer);
+		objServer->HostCount++;
 	}
 	return TRUE;
 }
