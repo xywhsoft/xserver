@@ -27,8 +27,9 @@ int ScanTemplateFileProc(str sPath, size_t iSize, int bDir, ptr pData, size_t iP
 		sPtr++;
 	}
 	// 添加到全局模板表
-	char* sText = xrtFileReadAll(sPath, XRT_CP_BINARY);
-	XTE_LiteObject objTemplate = xteParse(sText, xCore->iRet, NULL);
+	size_t iRetSize = 0;
+	char* sText = xrtFileReadAll(sPath, XRT_CP_BINARY, &iRetSize);
+	XTE_LiteObject objTemplate = xteParse(sText, iRetSize, NULL);
 	if ( objTemplate->Success ) {
 		//printf("load template name : %s\n", sKey);
 		xrtDictSetPtr(TemplateTable, sKey, strlen(sKey), objTemplate, NULL);
