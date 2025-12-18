@@ -1,63 +1,47 @@
 
 
 
-// 创建字符串副本（ 需使用 xrtFree 释放 ）
+// 创建字符串副本（ 需使用 xrtFree 释放 ）(线程安全)
 XXAPI str xrtCopyStr(str sText, size_t iSize)
 {
-	if ( sText == NULL ) { xCore.iRet = 0; return xCore.sNull; }
+	if ( sText == NULL ) { return xCore.sNull; }
 	if ( iSize == 0 ) { iSize = strlen(sText); }
-	if ( iSize == 0 ) { xCore.iRet = 0; return xCore.sNull; }
+	if ( iSize == 0 ) { return xCore.sNull; }
 	str sRet = xrtMalloc(iSize + 1);
-	if ( sRet == NULL ) {
-		xCore.iRet = 0;
-		return xCore.sNull;
-	}
+	if ( sRet == NULL ) { return xCore.sNull; }
 	memcpy(sRet, sText, iSize);
 	sRet[iSize] = 0;
-	xCore.iRet = iSize;
 	return sRet;
 }
 XXAPI u16str xrtCopyStrU16(u16str sText, size_t iSize)
 {
-	if ( sText == NULL ) { xCore.iRet = 0; return (u16str)xCore.sNull; }
+	if ( sText == NULL ) { return (u16str)xCore.sNull; }
 	if ( iSize == 0 ) { iSize = u16len(sText); }
-	if ( iSize == 0 ) { xCore.iRet = 0; return (u16str)xCore.sNull; }
+	if ( iSize == 0 ) { return (u16str)xCore.sNull; }
 	u16str sRet = xrtMalloc((iSize + 1) * sizeof(unsigned short));
-	if ( sRet == NULL ) {
-		xCore.iRet = 0;
-		return (u16str)xCore.sNull;
-	}
+	if ( sRet == NULL ) { return (u16str)xCore.sNull; }
 	memcpy(sRet, sText, iSize * sizeof(unsigned short));
 	sRet[iSize] = 0;
-	xCore.iRet = iSize;
 	return sRet;
 }
 XXAPI u32str xrtCopyStrU32(u32str sText, size_t iSize)
 {
-	if ( sText == NULL ) { xCore.iRet = 0; return (u32str)xCore.sNull; }
+	if ( sText == NULL ) { return (u32str)xCore.sNull; }
 	if ( iSize == 0 ) { iSize = u32len(sText); }
-	if ( iSize == 0 ) { xCore.iRet = 0; return (u32str)xCore.sNull; }
+	if ( iSize == 0 ) { return (u32str)xCore.sNull; }
 	u32str sRet = xrtMalloc((iSize + 1) * sizeof(unsigned int));
-	if ( sRet == NULL ) {
-		xCore.iRet = 0;
-		return (u32str)xCore.sNull;
-	}
+	if ( sRet == NULL ) { return (u32str)xCore.sNull; }
 	memcpy(sRet, sText, iSize * sizeof(unsigned int));
 	sRet[iSize] = 0;
-	xCore.iRet = iSize;
 	return sRet;
 }
 XXAPI ptr xrtCopyMem(ptr pMem, size_t iSize)
 {
-	if ( pMem == NULL ) { xCore.iRet = 0; return xCore.sNull; }
-	if ( iSize == 0 ) { xCore.iRet = 0; return xCore.sNull; }
+	if ( pMem == NULL ) { return xCore.sNull; }
+	if ( iSize == 0 ) { return xCore.sNull; }
 	ptr pRet = xrtMalloc(iSize);
-	if ( pRet == NULL ) {
-		xCore.iRet = 0;
-		return xCore.sNull;
-	}
+	if ( pRet == NULL ) { return xCore.sNull; }
 	memcpy(pRet, pMem, iSize);
-	xCore.iRet = iSize;
 	return pRet;
 }
 
@@ -137,15 +121,38 @@ XXAPI str xrtUCase(str sText, size_t iSize, bool bSrcRevise)
 
 
 
-// 搜索字符串（ 没找到字符串的情况下会返回 NULL ）
+// 搜索字符串（ 没找到字符串的情况下会返回 NULL ）(线程安全)
 XXAPI str xrtFindStr(str sText, size_t iSize, str sSubText, size_t iSubSize, bool bCase)
 {
-	if ( sText == NULL ) { xCore.iRet = 0; return NULL; }
-	if ( sSubText == NULL ) { xCore.iRet = 0; return NULL; }
+	if ( sText == NULL ) { return NULL; }
+	if ( sSubText == NULL ) { return NULL; }
 	if ( iSize == 0 ) { iSize = strlen(sText); }
-	if ( iSize == 0 ) { xCore.iRet = 0; return NULL; }
+	if ( iSize == 0 ) { return NULL; }
 	if ( iSubSize == 0 ) { iSubSize = strlen(sSubText); }
-	if ( iSubSize == 0 ) { xCore.iRet = 0; return NULL; }
+	if ( iSubSize == 0 ) { return NULL; }
+	str sSub;
+	if ( bCase ) {
+		str sText1 = xrtLCase(sText, 0, FALSE);
+		str sText2 = xrtLCase(sSubText, 0, FALSE);
+		sSub = memmem(sText1, iSize, sText2, iSubSize);
+		if ( sSub ) {
+			sSub = &sText[sSub - sText1];
+		}
+		free(sText1);
+		free(sText2);
+	} else {
+		sSub = memmem(sText, iSize, sSubText, iSubSize);
+	}
+	return sSub;
+}
+XXAPI uint xrtInStr(str sText, size_t iSize, str sSubText, size_t iSubSize, bool bCase)
+{
+	if ( sText == NULL ) { return 0; }
+	if ( sSubText == NULL ) { return 0; }
+	if ( iSize == 0 ) { iSize = strlen(sText); }
+	if ( iSize == 0 ) { return 0; }
+	if ( iSubSize == 0 ) { iSubSize = strlen(sSubText); }
+	if ( iSubSize == 0 ) { return 0; }
 	str sSub;
 	if ( bCase ) {
 		str sText1 = xrtLCase(sText, 0, FALSE);
@@ -160,17 +167,10 @@ XXAPI str xrtFindStr(str sText, size_t iSize, str sSubText, size_t iSubSize, boo
 		sSub = memmem(sText, iSize, sSubText, iSubSize);
 	}
 	if ( sSub ) {
-		xCore.iRet = (sSub - sText) + 1;
-		return sSub;
+		return (sSub - sText) + 1;
 	} else {
-		xCore.iRet = 0;
-		return NULL;
+		return 0;
 	}
-}
-XXAPI uint xrtInStr(str sText, size_t iSize, str sSubText, size_t iSubSize, bool bCase)
-{
-	xrtFindStr(sText, iSize, sSubText, iSubSize, bCase);
-	return xCore.iRet;
 }
 
 
@@ -190,7 +190,7 @@ XXAPI str xrtCheckStr(str sText, size_t iSize, str sSubText, size_t iSubSize)
 					return &sText[i];
 				}
 			}
-		} else if ( sText[i] & 0b11000000 == 0b11000000 ) {
+		} else if ( (sText[i] & 0b11000000) == 0b11000000 ) {
 			// 双字节字符
 			size_t iLen = iSubSize - 1;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -199,7 +199,7 @@ XXAPI str xrtCheckStr(str sText, size_t iSize, str sSubText, size_t iSubSize)
 				}
 			}
 			i++;
-		} else if ( sText[i] & 0b11100000 == 0b11100000 ) {
+		} else if ( (sText[i] & 0b11100000) == 0b11100000 ) {
 			// 三字节字符
 			size_t iLen = iSubSize - 2;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -208,7 +208,7 @@ XXAPI str xrtCheckStr(str sText, size_t iSize, str sSubText, size_t iSubSize)
 				}
 			}
 			i += 2;
-		} else if ( sText[i] & 0b11110000 == 0b11110000 ) {
+		} else if ( (sText[i] & 0b11110000) == 0b11110000 ) {
 			// 四字节字符
 			size_t iLen = iSubSize - 3;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -217,7 +217,7 @@ XXAPI str xrtCheckStr(str sText, size_t iSize, str sSubText, size_t iSubSize)
 				}
 			}
 			i += 3;
-		} else if ( sText[i] & 0b11111000 == 0b11111000 ) {
+		} else if ( (sText[i] & 0b11111000) == 0b11111000 ) {
 			// 五字节字符
 			size_t iLen = iSubSize - 4;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -226,7 +226,7 @@ XXAPI str xrtCheckStr(str sText, size_t iSize, str sSubText, size_t iSubSize)
 				}
 			}
 			i += 4;
-		} else if ( sText[i] & 0b11111100 == 0b11111100 ) {
+		} else if ( (sText[i] & 0b11111100) == 0b11111100 ) {
 			// 六字节字符
 			size_t iLen = iSubSize - 5;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -245,11 +245,11 @@ XXAPI str xrtCheckStr(str sText, size_t iSize, str sSubText, size_t iSubSize)
 
 
 // 裁剪字符串（ bSrcRevise 为 FALSE 时，需使用 xrtFree 释放内存 ）
-XXAPI str xrtLTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool bSrcRevise)
+XXAPI str xrtLTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool bSrcRevise, size_t* iRetSize)
 {
-	if ( sText == NULL ) { xCore.iRet = 0; return xCore.sNull; }
+	if ( sText == NULL ) { if ( iRetSize ) { *iRetSize = 0; } return xCore.sNull; }
 	if ( iSize == 0 ) { iSize = strlen(sText); }
-	if ( iSize == 0 ) { xCore.iRet = 0; return xCore.sNull; }
+	if ( iSize == 0 ) { if ( iRetSize ) { *iRetSize = 0; } return xCore.sNull; }
 	if ( sSubText == NULL ) { sSubText = " \t\r\n"; iSubSize = 4; }
 	if ( iSubSize == 0 ) { iSubSize = strlen(sSubText); }
 	if ( iSubSize == 0 ) { sSubText = " \t\r\n"; iSubSize = 4; }
@@ -265,7 +265,7 @@ XXAPI str xrtLTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool 
 					break;
 				}
 			}
-		} else if ( sText[i] & 0b11000000 == 0b11000000 ) {
+		} else if ( (sText[i] & 0b11000000) == 0b11000000 ) {
 			// 双字节字符
 			size_t iLen = iSubSize - 1;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -276,7 +276,7 @@ XXAPI str xrtLTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool 
 				}
 			}
 			i++;
-		} else if ( sText[i] & 0b11100000 == 0b11100000 ) {
+		} else if ( (sText[i] & 0b11100000) == 0b11100000 ) {
 			// 三字节字符
 			size_t iLen = iSubSize - 2;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -287,7 +287,7 @@ XXAPI str xrtLTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool 
 				}
 			}
 			i += 2;
-		} else if ( sText[i] & 0b11110000 == 0b11110000 ) {
+		} else if ( (sText[i] & 0b11110000) == 0b11110000 ) {
 			// 四字节字符
 			size_t iLen = iSubSize - 3;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -298,7 +298,7 @@ XXAPI str xrtLTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool 
 				}
 			}
 			i += 3;
-		} else if ( sText[i] & 0b11111000 == 0b11111000 ) {
+		} else if ( (sText[i] & 0b11111000) == 0b11111000 ) {
 			// 五字节字符
 			size_t iLen = iSubSize - 4;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -309,7 +309,7 @@ XXAPI str xrtLTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool 
 				}
 			}
 			i += 4;
-		} else if ( sText[i] & 0b11111100 == 0b11111100 ) {
+		} else if ( (sText[i] & 0b11111100) == 0b11111100 ) {
 			// 六字节字符
 			size_t iLen = iSubSize - 5;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -327,7 +327,7 @@ XXAPI str xrtLTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool 
 			break;
 		}
 	}
-	xCore.iRet = iSize - iCount;
+	if ( iRetSize ) { *iRetSize = iSize - iCount; }
 	if ( bSrcRevise ) {
 		if ( iCount > 0 ) {
 			memmove(sText, &sText[iCount], iSize - iCount);
@@ -338,11 +338,11 @@ XXAPI str xrtLTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool 
 		return xrtCopyStr(&sText[iCount], iSize - iCount);
 	}
 }
-XXAPI str xrtRTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool bSrcRevise)
+XXAPI str xrtRTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool bSrcRevise, size_t* iRetSize)
 {
-	if ( sText == NULL ) { xCore.iRet = 0; return xCore.sNull; }
+	if ( sText == NULL ) { if ( iRetSize ) { *iRetSize = 0; } return xCore.sNull; }
 	if ( iSize == 0 ) { iSize = strlen(sText); }
-	if ( iSize == 0 ) { xCore.iRet = 0; return xCore.sNull; }
+	if ( iSize == 0 ) { if ( iRetSize ) { *iRetSize = 0; } return xCore.sNull; }
 	if ( sSubText == NULL ) { sSubText = " \t\r\n"; iSubSize = 4; }
 	if ( iSubSize == 0 ) { iSubSize = strlen(sSubText); }
 	if ( iSubSize == 0 ) { sSubText = " \t\r\n"; iSubSize = 4; }
@@ -358,7 +358,7 @@ XXAPI str xrtRTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool 
 					break;
 				}
 			}
-		} else if ( sText[i] & 0b11000000 == 0b11000000 ) {
+		} else if ( (sText[i] & 0b11000000) == 0b11000000 ) {
 			// 双字节字符
 			size_t iLen = iSubSize - 1;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -369,7 +369,7 @@ XXAPI str xrtRTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool 
 				}
 			}
 			i++;
-		} else if ( sText[i] & 0b11100000 == 0b11100000 ) {
+		} else if ( (sText[i] & 0b11100000) == 0b11100000 ) {
 			// 三字节字符
 			size_t iLen = iSubSize - 2;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -380,7 +380,7 @@ XXAPI str xrtRTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool 
 				}
 			}
 			i += 2;
-		} else if ( sText[i] & 0b11110000 == 0b11110000 ) {
+		} else if ( (sText[i] & 0b11110000) == 0b11110000 ) {
 			// 四字节字符
 			size_t iLen = iSubSize - 3;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -391,7 +391,7 @@ XXAPI str xrtRTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool 
 				}
 			}
 			i += 3;
-		} else if ( sText[i] & 0b11111000 == 0b11111000 ) {
+		} else if ( (sText[i] & 0b11111000) == 0b11111000 ) {
 			// 五字节字符
 			size_t iLen = iSubSize - 4;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -402,7 +402,7 @@ XXAPI str xrtRTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool 
 				}
 			}
 			i += 4;
-		} else if ( sText[i] & 0b11111100 == 0b11111100 ) {
+		} else if ( (sText[i] & 0b11111100) == 0b11111100 ) {
 			// 六字节字符
 			size_t iLen = iSubSize - 5;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -420,7 +420,7 @@ XXAPI str xrtRTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool 
 			break;
 		}
 	}
-	xCore.iRet = iSize - iCount;
+	if ( iRetSize ) { *iRetSize = iSize - iCount; }
 	if ( bSrcRevise ) {
 		if ( iCount > 0 ) {
 			sText[iSize - iCount] = 0;
@@ -430,11 +430,11 @@ XXAPI str xrtRTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool 
 		return xrtCopyStr(sText, iSize - iCount);
 	}
 }
-XXAPI str xrtTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool bSrcRevise)
+XXAPI str xrtTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool bSrcRevise, size_t* iRetSize)
 {
-	if ( sText == NULL ) { xCore.iRet = 0; return xCore.sNull; }
+	if ( sText == NULL ) { if ( iRetSize ) { *iRetSize = 0; } return xCore.sNull; }
 	if ( iSize == 0 ) { iSize = strlen(sText); }
-	if ( iSize == 0 ) { xCore.iRet = 0; return xCore.sNull; }
+	if ( iSize == 0 ) { if ( iRetSize ) { *iRetSize = 0; } return xCore.sNull; }
 	if ( sSubText == NULL ) { sSubText = " \t\r\n"; iSubSize = 4; }
 	if ( iSubSize == 0 ) { iSubSize = strlen(sSubText); }
 	if ( iSubSize == 0 ) { sSubText = " \t\r\n"; iSubSize = 4; }
@@ -452,7 +452,7 @@ XXAPI str xrtTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool b
 					break;
 				}
 			}
-		} else if ( sText[i] & 0b11000000 == 0b11000000 ) {
+		} else if ( (sText[i] & 0b11000000) == 0b11000000 ) {
 			// 双字节字符
 			size_t iLen = iSubSize - 1;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -463,7 +463,7 @@ XXAPI str xrtTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool b
 				}
 			}
 			i++;
-		} else if ( sText[i] & 0b11100000 == 0b11100000 ) {
+		} else if ( (sText[i] & 0b11100000) == 0b11100000 ) {
 			// 三字节字符
 			size_t iLen = iSubSize - 2;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -474,7 +474,7 @@ XXAPI str xrtTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool b
 				}
 			}
 			i += 2;
-		} else if ( sText[i] & 0b11110000 == 0b11110000 ) {
+		} else if ( (sText[i] & 0b11110000) == 0b11110000 ) {
 			// 四字节字符
 			size_t iLen = iSubSize - 3;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -485,7 +485,7 @@ XXAPI str xrtTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool b
 				}
 			}
 			i += 3;
-		} else if ( sText[i] & 0b11111000 == 0b11111000 ) {
+		} else if ( (sText[i] & 0b11111000) == 0b11111000 ) {
 			// 五字节字符
 			size_t iLen = iSubSize - 4;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -496,7 +496,7 @@ XXAPI str xrtTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool b
 				}
 			}
 			i += 4;
-		} else if ( sText[i] & 0b11111100 == 0b11111100 ) {
+		} else if ( (sText[i] & 0b11111100) == 0b11111100 ) {
 			// 六字节字符
 			size_t iLen = iSubSize - 5;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -515,10 +515,7 @@ XXAPI str xrtTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool b
 		}
 	}
 	// 全部裁剪需要特殊处理
-	if ( iCountL >= iSize ) {
-		xCore.iRet = 0;
-		return xCore.sNull;
-	}
+	if ( iCountL >= iSize ) { if ( iRetSize ) { *iRetSize = 0; } return xCore.sNull; }
 	// 裁剪右侧
 	for ( int i = iSize - 1; i >= 0; i-- ) {
 		int bBreak = TRUE;
@@ -531,7 +528,7 @@ XXAPI str xrtTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool b
 					break;
 				}
 			}
-		} else if ( sText[i] & 0b11000000 == 0b11000000 ) {
+		} else if ( (sText[i] & 0b11000000) == 0b11000000 ) {
 			// 双字节字符
 			size_t iLen = iSubSize - 1;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -542,7 +539,7 @@ XXAPI str xrtTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool b
 				}
 			}
 			i++;
-		} else if ( sText[i] & 0b11100000 == 0b11100000 ) {
+		} else if ( (sText[i] & 0b11100000) == 0b11100000 ) {
 			// 三字节字符
 			size_t iLen = iSubSize - 2;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -553,7 +550,7 @@ XXAPI str xrtTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool b
 				}
 			}
 			i += 2;
-		} else if ( sText[i] & 0b11110000 == 0b11110000 ) {
+		} else if ( (sText[i] & 0b11110000) == 0b11110000 ) {
 			// 四字节字符
 			size_t iLen = iSubSize - 3;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -564,7 +561,7 @@ XXAPI str xrtTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool b
 				}
 			}
 			i += 3;
-		} else if ( sText[i] & 0b11111000 == 0b11111000 ) {
+		} else if ( (sText[i] & 0b11111000) == 0b11111000 ) {
 			// 五字节字符
 			size_t iLen = iSubSize - 4;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -575,7 +572,7 @@ XXAPI str xrtTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool b
 				}
 			}
 			i += 4;
-		} else if ( sText[i] & 0b11111100 == 0b11111100 ) {
+		} else if ( (sText[i] & 0b11111100) == 0b11111100 ) {
 			// 六字节字符
 			size_t iLen = iSubSize - 5;
 			for ( int j = 0; j < iLen; j++ ) {
@@ -594,7 +591,7 @@ XXAPI str xrtTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool b
 		}
 	}
 	int iCount = iCountL + iCountR;
-	xCore.iRet = iSize - iCount;
+	if ( iRetSize ) { *iRetSize = iSize - iCount; }
 	if ( bSrcRevise ) {
 		if ( iCount > 0 ) {
 			memmove(sText, &sText[iCountL], iSize - iCount);
@@ -609,14 +606,14 @@ XXAPI str xrtTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool b
 
 
 // 过滤字符串（ bSrcRevise 为 FALSE 时，需使用 xrtFree 释放内存 ）
-XXAPI str xrtFilterStr(str sText, size_t iSize, str sSubText, size_t iSubSize, bool bSrcRevise)
+XXAPI str xrtFilterStr(str sText, size_t iSize, str sSubText, size_t iSubSize, bool bSrcRevise, size_t* iRetSize)
 {
-	if ( sText == NULL ) { xCore.iRet = 0; return xCore.sNull; }
+	if ( sText == NULL ) { if ( iRetSize ) { *iRetSize = 0; } return xCore.sNull; }
 	if ( iSize == 0 ) { iSize = strlen(sText); }
-	if ( iSize == 0 ) { xCore.iRet = 0; return xCore.sNull; }
-	if ( sSubText == NULL ) { if ( bSrcRevise ) { xCore.iRet = iSize; return sText; } else { xCore.iRet = iSize; return xrtCopyStr(sText, iSize); } }
+	if ( iSize == 0 ) { if ( iRetSize ) { *iRetSize = 0; } return xCore.sNull; }
+	if ( sSubText == NULL ) { if ( bSrcRevise ) { if ( iRetSize ) { *iRetSize = iSize; } return sText; } else { if ( iRetSize ) { *iRetSize = iSize; } return xrtCopyStr(sText, iSize); } }
 	if ( iSubSize == 0 ) { iSubSize = strlen(sSubText); }
-	if ( iSubSize == 0 ) { if ( bSrcRevise ) { xCore.iRet = iSize; return sText; } else { xCore.iRet = iSize; return xrtCopyStr(sText, iSize); } }
+	if ( iSubSize == 0 ) { if ( bSrcRevise ) { if ( iRetSize ) { *iRetSize = iSize; } return sText; } else { if ( iRetSize ) { *iRetSize = iSize; } return xrtCopyStr(sText, iSize); } }
 	// 不改动源数据时，直接创建副本
 	if ( bSrcRevise == FALSE ) {
 		sText = xrtCopyStr(sText, iSize);
@@ -636,7 +633,7 @@ XXAPI str xrtFilterStr(str sText, size_t iSize, str sSubText, size_t iSubSize, b
 			if ( bCopy ) {
 				sText[i - iCount] = sText[i];
 			}
-		} else if ( sText[i] & 0b11000000 == 0b11000000 ) {
+		} else if ( (sText[i] & 0b11000000) == 0b11000000 ) {
 			// 双字节字符
 			int bCopy = TRUE;
 			size_t iLen = iSubSize - 1;
@@ -652,7 +649,7 @@ XXAPI str xrtFilterStr(str sText, size_t iSize, str sSubText, size_t iSubSize, b
 				sText[i - iCount + 1] = sText[i + 1];
 			}
 			i++;
-		} else if ( sText[i] & 0b11100000 == 0b11100000 ) {
+		} else if ( (sText[i] & 0b11100000) == 0b11100000 ) {
 			// 三字节字符
 			int bCopy = TRUE;
 			size_t iLen = iSubSize - 2;
@@ -669,7 +666,7 @@ XXAPI str xrtFilterStr(str sText, size_t iSize, str sSubText, size_t iSubSize, b
 				sText[i - iCount + 2] = sText[i + 2];
 			}
 			i += 2;
-		} else if ( sText[i] & 0b11110000 == 0b11110000 ) {
+		} else if ( (sText[i] & 0b11110000) == 0b11110000 ) {
 			// 四字节字符
 			int bCopy = TRUE;
 			size_t iLen = iSubSize - 3;
@@ -687,7 +684,7 @@ XXAPI str xrtFilterStr(str sText, size_t iSize, str sSubText, size_t iSubSize, b
 				sText[i - iCount + 3] = sText[i + 3];
 			}
 			i += 3;
-		} else if ( sText[i] & 0b11111000 == 0b11111000 ) {
+		} else if ( (sText[i] & 0b11111000) == 0b11111000 ) {
 			// 五字节字符
 			int bCopy = TRUE;
 			size_t iLen = iSubSize - 4;
@@ -706,7 +703,7 @@ XXAPI str xrtFilterStr(str sText, size_t iSize, str sSubText, size_t iSubSize, b
 				sText[i - iCount + 4] = sText[i + 4];
 			}
 			i += 4;
-		} else if ( sText[i] & 0b11111100 == 0b11111100 ) {
+		} else if ( (sText[i] & 0b11111100) == 0b11111100 ) {
 			// 六字节字符
 			int bCopy = TRUE;
 			size_t iLen = iSubSize - 5;
@@ -731,7 +728,7 @@ XXAPI str xrtFilterStr(str sText, size_t iSize, str sSubText, size_t iSubSize, b
 		}
 	}
 	sText[iSize - iCount] = 0;
-	xCore.iRet = iCount;
+	if ( iRetSize ) { *iRetSize = iCount; }
 	return sText;
 }
 
@@ -740,25 +737,20 @@ XXAPI str xrtFilterStr(str sText, size_t iSize, str sSubText, size_t iSubSize, b
 // 字符串格式化（ 需使用 xrtFree 释放 ）
 XXAPI str xrtFormat(str sFormat, ...)
 {
-	if ( sFormat == NULL ) { xCore.iRet = 0; return xCore.sNull; }
+	if ( sFormat == NULL ) { return xCore.sNull; }
 	va_list ip;
 	va_start(ip, sFormat);
 	int iSize = vsnprintf(NULL, 0, sFormat, ip);
 	va_end(ip);
 	if ( iSize > 0 ) {
 		str sRet = xrtMalloc(iSize + 1);
-		if ( sRet == NULL ) {
-			xCore.iRet = 0;
-			return xCore.sNull;
-		}
+		if ( sRet == NULL ) { return xCore.sNull; }
 		va_start(ip, sFormat);
 		iSize = vsnprintf(sRet, iSize + 1, sFormat, ip);
 		va_end(ip);
 		sRet[iSize] = 0;
-		xCore.iRet = iSize;
 		return sRet;
 	} else {
-		xCore.iRet = 0;
 		return xCore.sNull;
 	}
 }
@@ -766,14 +758,14 @@ XXAPI str xrtFormat(str sFormat, ...)
 
 
 // 字符串替换（ 需使用 xrtFree 释放 ）
-XXAPI str xrtReplace(str sText, size_t iSize, str sSubText, size_t iSubSize, str sRepText, size_t iRepSize)
+XXAPI str xrtReplace(str sText, size_t iSize, str sSubText, size_t iSubSize, str sRepText, size_t iRepSize, size_t* iRetSize)
 {
-	if ( sText == NULL ) { xCore.iRet = 0; return xCore.sNull; }
+	if ( sText == NULL ) { if ( iRetSize ) { *iRetSize = 0; } return xCore.sNull; }
 	if ( iSize == 0 ) { iSize = strlen(sText); }
-	if ( iSize == 0 ) { xCore.iRet = 0; return xCore.sNull; }
-	if ( sSubText == NULL ) { xCore.iRet = iSize; return xrtCopyStr(sText, iSize); }
+	if ( iSize == 0 ) { if ( iRetSize ) { *iRetSize = 0; } return xCore.sNull; }
+	if ( sSubText == NULL ) { if ( iRetSize ) { *iRetSize = iSize; } return xrtCopyStr(sText, iSize); }
 	if ( iSubSize == 0 ) { iSubSize = strlen(sSubText); }
-	if ( iSubSize == 0 ) { xCore.iRet = iSize; return xrtCopyStr(sText, iSize); }
+	if ( iSubSize == 0 ) { if ( iRetSize ) { *iRetSize = iSize; } return xrtCopyStr(sText, iSize); }
 	if ( sRepText == NULL ) { iRepSize = 0; } else { if ( iRepSize == 0 ) { iRepSize = strlen(sRepText); } }
 	// 计算 sSubText 在 sText 中出现的次数
 	size_t iFindCount = 0;
@@ -783,12 +775,9 @@ XXAPI str xrtReplace(str sText, size_t iSize, str sSubText, size_t iSubSize, str
 		iFindCount++;
 	}
 	// 为新字符串分配内存
-	size_t iRetSize = iSize + iFindCount * (iRepSize - iSubSize);
-	str sRet = (str)xrtMalloc(iRetSize + 1);
-	if ( sRet == NULL ) {
-		xCore.iRet = 0;
-		return (str)xCore.sNull;
-	}
+	size_t iRet = iSize + iFindCount * (iRepSize - iSubSize);
+	str sRet = (str)xrtMalloc(iRet + 1);
+	if ( sRet == NULL ) { if ( iRetSize ) { *iRetSize = 0; } return (str)xCore.sNull; }
 	// 复制原始字符串, 替换需要改变的部分
 	str sRetPtr = sRet;
 	for ( sTextPtr = sText; (sSubPos = memmem(sTextPtr, iSize - (sTextPtr - sText) + 1, sSubText, iSubSize)); sTextPtr = sSubPos + iSubSize ) {
@@ -804,15 +793,15 @@ XXAPI str xrtReplace(str sText, size_t iSize, str sSubText, size_t iSubSize, str
 	if ( &sText[iSize] > sTextPtr ) {
 		memcpy(sRetPtr, sTextPtr, &sText[iSize] - sTextPtr);
 	}
-	sRet[iRetSize] = 0;
-	xCore.iRet = iRetSize;
+	sRet[iRet] = 0;
+	if ( iRetSize ) { *iRetSize = iRet; }
 	return sRet;
 }
 
 
 
 // 字符串分割（ 任何情况返回值都必须使用 xrtFree 释放，bSrcRevise 设置为 TRUE 时会破坏原数据 ）
-XXAPI str* xrtSplit(str sText, size_t iSize, str sSepText, size_t iSepSize, bool bSrcRevise)
+XXAPI str* xrtSplit(str sText, size_t iSize, str sSepText, size_t iSepSize, bool bSrcRevise, size_t* iRetSize)
 {
 	if ( sText == NULL ) { goto return_nullstr; }
 	if ( iSize == 0 ) { iSize = strlen(sText); }
@@ -896,7 +885,7 @@ XXAPI str* xrtSplit(str sText, size_t iSize, str sSepText, size_t iSepSize, bool
 	sRet[iCount] = pAddr;
 	iCount++;
 	sRet[iCount] = NULL;
-	xCore.iRet = iCount;
+	if ( iRetSize ) { *iRetSize = iCount; }
 	return sRet;
 	
 // 处理内容为 空字符串 或 NULL 的情况（只返回包含一个空元素的数组）
@@ -907,7 +896,7 @@ return_nullstr:
 	}
 	sRet[0] = xCore.sNull;
 	sRet[1] = NULL;
-	xCore.iRet = 1;
+	if ( iRetSize ) { *iRetSize = 1; }
 	return sRet;
 	
 // 处理分隔符为 空字符串 或 NULL 的情况（只返回包含一个内容的数组）
@@ -929,12 +918,12 @@ return_nullsep:
 		sRet[0] = sTextRef;
 	}
 	sRet[1] = NULL;
-	xCore.iRet = 1;
+	if ( iRetSize ) { *iRetSize = 1; }
 	return sRet;
 	
 // 内存申请异常返回
 return_error:
-	xCore.iRet = 0;
+	if ( iRetSize ) { *iRetSize = 0; }
 	return (str*)xCore.sNull;
 }
 
@@ -967,14 +956,11 @@ XXAPI str xrtRandStr(str sTemplate, size_t iSize, size_t iLen)
 #define dec2hex(c) (c > 9 ? c + 55 : c + '0')
 XXAPI str xrtHexEncode(ptr pMem, size_t iSize)
 {
-	if ( pMem == NULL ) { xCore.iRet = 0; return xCore.sNull; }
+	if ( pMem == NULL ) { return xCore.sNull; }
 	if ( iSize == 0 ) { iSize = strlen(pMem); }
-	if ( iSize == 0 ) { xCore.iRet = 0; return xCore.sNull; }
+	if ( iSize == 0 ) { return xCore.sNull; }
 	str sRet = xrtMalloc((iSize * 2) + 1);
-	if ( sRet == NULL ) {
-		xCore.iRet = 0;
-		return xCore.sNull;
-	}
+	if ( sRet == NULL ) { return xCore.sNull; }
 	uint8* pStr = pMem;
 	int iPos = 0;
 	for ( int i = 0; i < iSize; i++ ) {
@@ -984,7 +970,6 @@ XXAPI str xrtHexEncode(ptr pMem, size_t iSize)
 		sRet[iPos++] = dec2hex(i2);
 	}
 	sRet[iPos] = 0;
-	xCore.iRet = iPos;
 	return sRet;
 }
 
@@ -994,14 +979,11 @@ XXAPI str xrtHexEncode(ptr pMem, size_t iSize)
 #define hex2dec(c) (c <= '9' ? c - '0' : c <= 'F' ? c - 55 : c - 87)
 XXAPI ptr xrtHexDecode(str sText, size_t iSize)
 {
-	if ( sText == NULL ) { xCore.iRet = 0; return xCore.sNull; }
+	if ( sText == NULL ) { return xCore.sNull; }
 	if ( iSize == 0 ) { iSize = strlen(sText); }
-	if ( iSize == 0 ) { xCore.iRet = 0; return xCore.sNull; }
+	if ( iSize == 0 ) { return xCore.sNull; }
 	str sRet = xrtMalloc((iSize / 2) + 1);
-	if ( sRet == NULL ) {
-		xCore.iRet = 0;
-		return xCore.sNull;
-	}
+	if ( sRet == NULL ) { return xCore.sNull; }
 	int iPos = 0;
 	for ( int i = 0; i < iSize; i++ ) {
 		uint8 c0 = sText[i++];
@@ -1009,7 +991,6 @@ XXAPI ptr xrtHexDecode(str sText, size_t iSize)
 		sRet[iPos++] = (hex2dec(c0) << 4) + hex2dec(c1);
 	}
 	sRet[iPos] = 0;
-	xCore.iRet = iPos;
 	return sRet;
 }
 
@@ -1019,17 +1000,14 @@ XXAPI ptr xrtHexDecode(str sText, size_t iSize)
 static const str Base64EncodeTable = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 XXAPI str xrtBase64Encode(ptr pMem, size_t iSize, str sTable)
 {
-	if ( pMem == NULL ) { xCore.iRet = 0; return xCore.sNull; }
+	if ( pMem == NULL ) { return xCore.sNull; }
 	if ( iSize == 0 ) { iSize = strlen(pMem); }
-	if ( iSize == 0 ) { xCore.iRet = 0; return xCore.sNull; }
+	if ( iSize == 0 ) { return xCore.sNull; }
 	if ( sTable == NULL ) { sTable = Base64EncodeTable; }
 	// 申请返回值内存
 	size_t iRet= 4 * ((iSize + 2) / 3);
 	str sRet = xrtMalloc(iRet + 1);
-	if ( sRet == NULL ) {
-		xCore.iRet = 0;
-		return xCore.sNull;
-	}
+	if ( sRet == NULL ) { return xCore.sNull; }
 	// 开始编码
 	uint8* pStr = pMem;
 	for ( size_t i = 0, j = 0; i < iSize; ) {
@@ -1048,7 +1026,6 @@ XXAPI str xrtBase64Encode(ptr pMem, size_t iSize, str sTable)
 	}
 	// 返回编码后的数据
 	sRet[iRet] = 0;
-	xCore.iRet = iRet;
 	return sRet;
 }
 
@@ -1059,9 +1036,9 @@ static const str sErrorBase64_mul4 = "Base64 input length must be multiple of 4 
 static const str sErrorBase64_char = "Base64 input contains invalid characters !";
 XXAPI ptr xrtBase64Decode(str sText, size_t iSize, str sTable)
 {
-	if ( sText == NULL ) { xCore.iRet = 0; return xCore.sNull; }
+	if ( sText == NULL ) { return xCore.sNull; }
 	if ( iSize == 0 ) { iSize = strlen(sText); }
-	if ( iSize == 0 ) { xCore.iRet = 0; return xCore.sNull; }
+	if ( iSize == 0 ) { return xCore.sNull; }
 	int8_t Base64DecodeTable[128] = {
 		-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,		// 0-15
 		-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,		// 16-31
@@ -1080,7 +1057,6 @@ XXAPI ptr xrtBase64Decode(str sText, size_t iSize, str sTable)
 	// 计算输出缓冲区大小
 	if ( iSize % 4 != 0 ) {
 		xrtSetError(sErrorBase64_mul4, FALSE);
-		xCore.iRet = 0;
 		return xCore.sNull;
 	}
 	// 计算返回长度
@@ -1090,7 +1066,6 @@ XXAPI ptr xrtBase64Decode(str sText, size_t iSize, str sTable)
 	// 申请返回值内存
 	str sRet = xrtMalloc(iRet + 1);
 	if ( sRet == NULL ) {
-		xCore.iRet = 0;
 		return xCore.sNull;
 	}
 	// 开始解码
@@ -1103,7 +1078,6 @@ XXAPI ptr xrtBase64Decode(str sText, size_t iSize, str sTable)
 		if (sextet_a == -1 || sextet_b == -1 || sextet_c == -1 || sextet_d == -1) {
 			xrtSetError(sErrorBase64_char, FALSE);
 			xrtFree(sRet);
-			xCore.iRet = 0;
 			return xCore.sNull;
 		}
 		// 组合 4 个 6 位值为 3 个 8 位字节
@@ -1113,7 +1087,6 @@ XXAPI ptr xrtBase64Decode(str sText, size_t iSize, str sTable)
 		if ( j < iRet ) { sRet[j++] = (triple >> 0 * 8) & 0xFF; }
 	}
 	sRet[iRet] = '\0';
-	xCore.iRet = iRet;
 	return sRet;
 }
 

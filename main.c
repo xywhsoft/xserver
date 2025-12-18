@@ -154,11 +154,12 @@ void LoadHostConfig(xvalue objRoot, XS_HostObject objHost, XS_ServerObject objSe
 	
 	// 创建 Host 映射
 	if ( objHost->Host && (objHost->Host[0] != 0) ) {
-		str* arrHost = xrtSplit(objHost->Host, 0, ";", 1, FALSE);
-		int iCount = xCore.iRet;
+		size_t iCount = 0;
+		str* arrHost = xrtSplit(objHost->Host, 0, ";", 1, FALSE, &iCount);
 		for ( int i = 0; i < iCount; i++ ) {
-			char* sHostItem = xrtTrim(arrHost[i], 0, " \t\r\n", 4, FALSE);
-			bool bRet = xrtDictSetPtr(objServer->HostMap, sHostItem, strlen(sHostItem), objHost, NULL);
+			size_t iRetSize = 0;
+			char* sHostItem = xrtTrim(arrHost[i], 0, " \t\r\n", 4, FALSE, &iRetSize);
+			bool bRet = xrtDictSetPtr(objServer->HostMap, sHostItem, iRetSize, objHost, NULL);
 			if ( bRet == FALSE ) {
 				printf("!!! ERROR !!! xrtDictSet Failed [HostMap] !\n");
 				exit(EXIT_FAILURE);

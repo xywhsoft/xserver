@@ -8,6 +8,9 @@ void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xrtUnit", xrtUnit);
 	
 	// 添加函数 - Sup
+	#if defined(_WIN32) || defined(_WIN64)
+		tcc_add_symbol(s, "memmem", memmem);
+	#endif
 	tcc_add_symbol(s, "u16len", u16len);
 	tcc_add_symbol(s, "u32len", u32len);
 	
@@ -43,10 +46,12 @@ void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xrtChain", xrtChain);
 	
 	// 添加函数 - Math
+	tcc_add_symbol(s, "xrtRandSeed", xrtRandSeed);
+	tcc_add_symbol(s, "xrtRand32Ex", xrtRand32Ex);
+	tcc_add_symbol(s, "xrtRand64Ex", xrtRand64Ex);
+	tcc_add_symbol(s, "xrtRandRangeEx", xrtRandRangeEx);
 	tcc_add_symbol(s, "xrtRand32", xrtRand32);
-	tcc_add_symbol(s, "xrtSetRandSeed32", xrtSetRandSeed32);
 	tcc_add_symbol(s, "xrtRand64", xrtRand64);
-	tcc_add_symbol(s, "xrtSetRandSeed64", xrtSetRandSeed64);
 	tcc_add_symbol(s, "xrtRandRange", xrtRandRange);
 	
 	// 添加函数 - String
@@ -148,6 +153,42 @@ void ImportXRT(TCCState* s)
 	
 	// 添加函数 - Thread
 	tcc_add_symbol(s, "xrtThreadCreate", xrtThreadCreate);
+	tcc_add_symbol(s, "xrtThreadDestroy", xrtThreadDestroy);
+	tcc_add_symbol(s, "xrtThreadWait", xrtThreadWait);
+	tcc_add_symbol(s, "xrtThreadWaitTimeout", xrtThreadWaitTimeout);
+	tcc_add_symbol(s, "xrtThreadStop", xrtThreadStop);
+	tcc_add_symbol(s, "xrtThreadShouldStop", xrtThreadShouldStop);
+	tcc_add_symbol(s, "xrtThreadKill", xrtThreadKill);
+	tcc_add_symbol(s, "xrtThreadSuspend", xrtThreadSuspend);
+	tcc_add_symbol(s, "xrtThreadResume", xrtThreadResume);
+	tcc_add_symbol(s, "xrtThreadGetState", xrtThreadGetState);
+	tcc_add_symbol(s, "xrtThreadGetExitCode", xrtThreadGetExitCode);
+	tcc_add_symbol(s, "xrtThreadGetCurrentId", xrtThreadGetCurrentId);
+	tcc_add_symbol(s, "xrtThreadYield", xrtThreadYield);
+	tcc_add_symbol(s, "xrtMutexCreate", xrtMutexCreate);
+	tcc_add_symbol(s, "xrtMutexDestroy", xrtMutexDestroy);
+	tcc_add_symbol(s, "xrtMutexInit", xrtMutexInit);
+	tcc_add_symbol(s, "xrtMutexUnit", xrtMutexUnit);
+	tcc_add_symbol(s, "xrtMutexLock", xrtMutexLock);
+	tcc_add_symbol(s, "xrtMutexTryLock", xrtMutexTryLock);
+	tcc_add_symbol(s, "xrtMutexUnlock", xrtMutexUnlock);
+	tcc_add_symbol(s, "xrtSemCreate", xrtSemCreate);
+	tcc_add_symbol(s, "xrtSemDestroy", xrtSemDestroy);
+	tcc_add_symbol(s, "xrtSemInit", xrtSemInit);
+	tcc_add_symbol(s, "xrtSemUnit", xrtSemUnit);
+	tcc_add_symbol(s, "xrtSemWait", xrtSemWait);
+	tcc_add_symbol(s, "xrtSemTryWait", xrtSemTryWait);
+	tcc_add_symbol(s, "xrtSemWaitTimeout", xrtSemWaitTimeout);
+	tcc_add_symbol(s, "xrtSemPost", xrtSemPost);
+	tcc_add_symbol(s, "xrtSemPostMultiple", xrtSemPostMultiple);
+	tcc_add_symbol(s, "xrtCondCreate", xrtCondCreate);
+	tcc_add_symbol(s, "xrtCondDestroy", xrtCondDestroy);
+	tcc_add_symbol(s, "xrtCondInit", xrtCondInit);
+	tcc_add_symbol(s, "xrtCondUnit", xrtCondUnit);
+	tcc_add_symbol(s, "xrtCondWait", xrtCondWait);
+	tcc_add_symbol(s, "xrtCondWaitTimeout", xrtCondWaitTimeout);
+	tcc_add_symbol(s, "xrtCondSignal", xrtCondSignal);
+	tcc_add_symbol(s, "xrtCondBroadcast", xrtCondBroadcast);
 	
 	// 添加函数 - Hash
 	tcc_add_symbol(s, "xrtHash32_WithSeed", xrtHash32_WithSeed);
@@ -267,20 +308,6 @@ void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xrtDynStackGetPosPtr", xrtDynStackGetPosPtr);
 	tcc_add_symbol(s, "xrtDynStackGetPosPtr_Unsafe", xrtDynStackGetPosPtr_Unsafe);
 	
-	// 添加函数 - Linked List Base
-	tcc_add_symbol(s, "xrtLLB_InsertPrev", xrtLLB_InsertPrev);
-	tcc_add_symbol(s, "xrtLLB_InsertNext", xrtLLB_InsertNext);
-	tcc_add_symbol(s, "xrtLLB_Remove", xrtLLB_Remove);
-	
-	// 添加函数 - Linked List
-	tcc_add_symbol(s, "xrtLListCreate", xrtLListCreate);
-	tcc_add_symbol(s, "xrtLListDestroy", xrtLListDestroy);
-	tcc_add_symbol(s, "xrtLListInit", xrtLListInit);
-	tcc_add_symbol(s, "xrtLListUnit", xrtLListUnit);
-	tcc_add_symbol(s, "xrtLListInsertPrev", xrtLListInsertPrev);
-	tcc_add_symbol(s, "xrtLListInsertNext", xrtLListInsertNext);
-	tcc_add_symbol(s, "xrtLListRemove", xrtLListRemove);
-	
 	// 添加函数 - AVLTree Base
 	tcc_add_symbol(s, "xrtAVLTB_Insert", xrtAVLTB_Insert);
 	tcc_add_symbol(s, "xrtAVLTB_Remove", xrtAVLTB_Remove);
@@ -352,8 +379,7 @@ void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xvoCreateList", xvoCreateList);
 	tcc_add_symbol(s, "xvoCreateColl", xvoCreateColl);
 	tcc_add_symbol(s, "xvoCreateTable", xvoCreateTable);
-	tcc_add_symbol(s, "xvoCreateStruct", xvoCreateStruct);
-	tcc_add_symbol(s, "xvoCreateObject", xvoCreateObject);
+	tcc_add_symbol(s, "xvoCreateClass", xvoCreateClass);
 	tcc_add_symbol(s, "xvoCreateCustom", xvoCreateCustom);
 	tcc_add_symbol(s, "xvoGetBool", xvoGetBool);
 	tcc_add_symbol(s, "xvoGetInt", xvoGetInt);
@@ -366,8 +392,7 @@ void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xvoGetList", xvoGetList);
 	tcc_add_symbol(s, "xvoGetColl", xvoGetColl);
 	tcc_add_symbol(s, "xvoGetTable", xvoGetTable);
-	tcc_add_symbol(s, "xvoGetStruct", xvoGetStruct);
-	tcc_add_symbol(s, "xvoGetObject", xvoGetObject);
+	tcc_add_symbol(s, "xvoGetClass", xvoGetClass);
 	tcc_add_symbol(s, "xvoGetCustom", xvoGetCustom);
 	tcc_add_symbol(s, "xvoArrayGetValue", xvoArrayGetValue);
 	tcc_add_symbol(s, "xvoArrayAppendValue", xvoArrayAppendValue);

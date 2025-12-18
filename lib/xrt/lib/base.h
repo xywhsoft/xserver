@@ -1,7 +1,7 @@
 
 
 
-// �����ڴ�
+// 申请内存
 XXAPI ptr xrtMalloc(size_t iSize)
 {
 	ptr mem = xCore.malloc(iSize);
@@ -14,7 +14,7 @@ XXAPI ptr xrtMalloc(size_t iSize)
 
 
 
-// �������ڴ�
+// 申请类内存
 XXAPI ptr xrtCalloc(size_t iNum, size_t iSize)
 {
 	ptr mem = xCore.calloc(iNum, iSize);
@@ -26,7 +26,7 @@ XXAPI ptr xrtCalloc(size_t iNum, size_t iSize)
 
 
 
-// ���������ڴ�
+// 重新申请内存
 XXAPI ptr xrtRealloc(ptr pMem, size_t iSize)
 {
 	ptr mem = xCore.realloc(pMem, iSize);
@@ -38,7 +38,7 @@ XXAPI ptr xrtRealloc(ptr pMem, size_t iSize)
 
 
 
-// �ͷ��ڴ棨 �����ж��Ƿ�Ϊ null ��
+// 释放内存（ 会先判断是否为 null ）
 XXAPI void xrtFree(ptr pmem)
 {
 	if ( pmem && (pmem != xCore.sNull) ) { xCore.free(pmem); }
@@ -46,32 +46,32 @@ XXAPI void xrtFree(ptr pmem)
 
 
 
-// �������������ͷŵ���ʱ�ڴ�
+// 申请无需主动释放的临时内存（线程不安全）
 XXAPI ptr xrtTempMemory(size_t iSize)
 {
-	// �����ڴ�
+	// 申请内存
 	ptr pMem = xrtMalloc(iSize);
 	if ( pMem == NULL ) {
 		return NULL;
 	}
-	// �ͷŹ����ڴ�
+	// 释放过期内存
 	if ( xCore.TempMem[xCore.TempMemIdx] ) {
 		xrtFree(xCore.TempMem[xCore.TempMemIdx]);
 		xCore.TempMem[xCore.TempMemIdx] = NULL;
 	}
-	// ����������ʱ�ڴ�����
+	// 处理环形临时内存数据
 	xCore.TempMem[xCore.TempMemIdx] = pMem;
 	xCore.TempMemIdx++;
 	if ( xCore.TempMemIdx > 31 ) {
 		xCore.TempMemIdx = 0;
 	}
-	// �����ڴ�ָ��
+	// 返回内存指针
 	return pMem;
 }
 
 
 
-// �ͷ�������ʱ�ڴ�
+// 释放所有临时内存（线程不安全）
 XXAPI void xrtFreeTempMemory()
 {
 	for ( int i = 0; i < 32; i++ ) {
@@ -85,13 +85,15 @@ XXAPI void xrtFreeTempMemory()
 
 
 
-// ���ô���
+// 设置错误（线程不安全）
 XXAPI void xrtSetError(str sError, bool bFree)
 {
+	// 回调通知
 	if ( xCore.OnError ) {
 		xCore.OnError(sError);
 	}
-	if ( xCore.__pri_FreeError && xCore.LastError ) {
+	// 释放旧的错误信息
+	if ( xCore.__pri_FreeError && xCore.LastError && xCore.LastError != xCore.sNull ) {
 		xrtFree(xCore.LastError);
 	}
 	xCore.LastError = sError;
@@ -99,7 +101,7 @@ XXAPI void xrtSetError(str sError, bool bFree)
 }
 XXAPI void xrtSetErrorU16(u16str sError, size_t iSize, bool bFree)
 {
-	str sErrorU8 = xrtUTF16to8(sError, iSize);
+	str sErrorU8 = xrtUTF16to8(sError, iSize, NULL);
 	if ( bFree ) {
 		xrtFree(sError);
 	}
@@ -107,7 +109,7 @@ XXAPI void xrtSetErrorU16(u16str sError, size_t iSize, bool bFree)
 }
 XXAPI void xrtSetErrorU32(u32str sError, size_t iSize, bool bFree)
 {
-	str sErrorU8 = xrtUTF32to8(sError, iSize);
+	str sErrorU8 = xrtUTF32to8(sError, iSize, NULL);
 	if ( bFree ) {
 		xrtFree(sError);
 	}
@@ -116,10 +118,10 @@ XXAPI void xrtSetErrorU32(u32str sError, size_t iSize, bool bFree)
 
 
 
-// �������
+// 清除错误（线程不安全）
 XXAPI void xrtClearError()
 {
-	if ( xCore.__pri_FreeError && xCore.LastError ) {
+	if ( xCore.__pri_FreeError && xCore.LastError && xCore.LastError != xCore.sNull ) {
 		xrtFree(xCore.LastError);
 	}
 	xCore.LastError = xCore.sNull;

@@ -51,7 +51,7 @@ xdict ParseCookies(struct mg_http_message* hm)
 					}
 				} else if ( c == ';' ) {
 					if ( k && (kl > 0) && v ) {
-						str sVal = xrtRTrim(v, &s[i] - v, " \t", 2, FALSE);
+						str sVal = xrtRTrim(v, &s[i] - v, " \t", 2, FALSE, NULL);
 						str pOldVal = NULL;
 						xrtDictSetPtr(tblCookies, k, kl, sVal, (ptr)&pOldVal);
 						if ( pOldVal ) {
@@ -80,7 +80,7 @@ xdict ParseCookies(struct mg_http_message* hm)
 				}
 			}
 			if ( k && (kl > 0) && v ) {
-				str sVal = xrtRTrim(v, &s[i] - v, " \t", 2, FALSE);
+				str sVal = xrtRTrim(v, &s[i] - v, " \t", 2, FALSE, NULL);
 				str pOldVal = NULL;
 				xrtDictSetPtr(tblCookies, k, kl, sVal, (ptr)&pOldVal);
 				if ( pOldVal ) {

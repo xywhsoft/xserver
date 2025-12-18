@@ -52,7 +52,7 @@ void DynLoad_C(XS_ServerObject objServer, XS_HostObject objHost)
 		exit(EXIT_FAILURE);
 	}
 	// 编译文件
-	char* sCode = xrtFileReadAll(objHost->DevFile, XRT_CP_BINARY);
+	char* sCode = xrtFileReadAll(objHost->DevFile, XRT_CP_BINARY, NULL);
 	if ( tcc_compile_string(s, sCode) == -1 ) {
 		printf("!!! ERROR !!! tcc_compile_string failed !\n");
 		exit(EXIT_FAILURE);
