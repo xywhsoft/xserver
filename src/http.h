@@ -26,7 +26,9 @@ void InitTLS(struct mg_connection *c, XS_HostObject objHost, XS_ServerObject obj
 void ProcRequest_HTTP(XS_ServerObject objServer, XS_HostObject objHost, struct mg_connection* c, struct mg_http_message* hm)
 {
 	if ( objHost->DebugMode ) {
-		printf("%s [%.*s] %.*s\n", objHost->Name, hm->method.len, hm->method.buf, hm->uri.len, hm->uri.buf);
+		str sTime = xrtNowStr();
+		printf("[%s] %s [%.*s] %.*s\n", sTime, objHost->Name, hm->method.len, hm->method.buf, hm->uri.len, hm->uri.buf);
+		xrtFree(sTime);
 	}
 	if ( objHost->DevLang == SLT_C ) {
 		if ( objHost->RequestProc ) {
