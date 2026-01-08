@@ -35,4 +35,7 @@ void ImportAll(TCCState* s)
 	// 添加函数 - Other
 	ImportOther(s);
 	
+	// 最后，把自己也添加进去，方便脚本环境里，创建同等的运行环境
+	tcc_add_symbol(s, "ImportAll", ImportAll);
+	
 }
