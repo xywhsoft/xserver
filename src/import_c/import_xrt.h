@@ -53,6 +53,8 @@ void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xrtRand32", xrtRand32);
 	tcc_add_symbol(s, "xrtRand64", xrtRand64);
 	tcc_add_symbol(s, "xrtRandRange", xrtRandRange);
+	tcc_add_symbol(s, "xrtIntApprox", xrtIntApprox);
+	tcc_add_symbol(s, "xrtNumApprox", xrtNumApprox);
 	
 	// 添加函数 - String
 	tcc_add_symbol(s, "xrtCopyStr", xrtCopyStr);
@@ -77,6 +79,11 @@ void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xrtHexDecode", xrtHexDecode);
 	tcc_add_symbol(s, "xrtBase64Encode", xrtBase64Encode);
 	tcc_add_symbol(s, "xrtBase64Decode", xrtBase64Decode);
+	tcc_add_symbol(s, "xrtStrLike", xrtStrLike);
+	tcc_add_symbol(s, "xrtIntFormat", xrtIntFormat);
+	tcc_add_symbol(s, "xrtNumFormat", xrtNumFormat);
+	tcc_add_symbol(s, "xrtStrSim", xrtStrSim);
+	tcc_add_symbol(s, "xrtStrApprox", xrtStrApprox);
 	
 	// 添加函数 - Path
 	tcc_add_symbol(s, "xrtPathGetNameExt", xrtPathGetNameExt);
@@ -114,6 +121,33 @@ void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xrtTimeToStr", xrtTimeToStr);
 	tcc_add_symbol(s, "xrtDateAdd", xrtDateAdd);
 	tcc_add_symbol(s, "xrtDateDiff", xrtDateDiff);
+	tcc_add_symbol(s, "xrtStrToTime", xrtStrToTime);
+	tcc_add_symbol(s, "xrtQuarter", xrtQuarter);
+	tcc_add_symbol(s, "xrtDatePart", xrtDatePart);
+	tcc_add_symbol(s, "xrtTimePart", xrtTimePart);
+	tcc_add_symbol(s, "xrtIsSameDay", xrtIsSameDay);
+	tcc_add_symbol(s, "xrtIsSameMonth", xrtIsSameMonth);
+	tcc_add_symbol(s, "xrtIsSameYear", xrtIsSameYear);
+	tcc_add_symbol(s, "xrtTimeInRange", xrtTimeInRange);
+	tcc_add_symbol(s, "xrtTimeRangeOverlap", xrtTimeRangeOverlap);
+	tcc_add_symbol(s, "xrtToUnixTime", xrtToUnixTime);
+	tcc_add_symbol(s, "xrtFromUnixTime", xrtFromUnixTime);
+	tcc_add_symbol(s, "xrtFirstDayOfMonth", xrtFirstDayOfMonth);
+	tcc_add_symbol(s, "xrtLastDayOfMonth", xrtLastDayOfMonth);
+	tcc_add_symbol(s, "xrtFirstDayOfYear", xrtFirstDayOfYear);
+	tcc_add_symbol(s, "xrtLastDayOfYear", xrtLastDayOfYear);
+	tcc_add_symbol(s, "xrtFirstDayOfWeek", xrtFirstDayOfWeek);
+	tcc_add_symbol(s, "xrtLastDayOfWeek", xrtLastDayOfWeek);
+	tcc_add_symbol(s, "xrtWeekOfYear", xrtWeekOfYear);
+	tcc_add_symbol(s, "xrtWeekOfMonth", xrtWeekOfMonth);
+	tcc_add_symbol(s, "xrtNowUTC", xrtNowUTC);
+	tcc_add_symbol(s, "xrtTimezoneOffset", xrtTimezoneOffset);
+	tcc_add_symbol(s, "xrtUTCToLocal", xrtUTCToLocal);
+	tcc_add_symbol(s, "xrtLocalToUTC", xrtLocalToUTC);
+	tcc_add_symbol(s, "xrtRelativeTime", xrtRelativeTime);
+	tcc_add_symbol(s, "xrtTimeFormat", xrtTimeFormat);
+	tcc_add_symbol(s, "xrtTimeParse", xrtTimeParse);
+	tcc_add_symbol(s, "xrtTimeApprox", xrtTimeApprox);
 	
 	// 添加函数 - File
 	tcc_add_symbol(s, "xrtOpen", xrtOpen);
@@ -474,6 +508,11 @@ void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xteParseFree", xteParseFree);
 	tcc_add_symbol(s, "xteMakeActions", xteMakeActions);
 	tcc_add_symbol(s, "xteMake", xteMake);
+	tcc_add_symbol(s, "xteResolvePath", xteResolvePath);
+	tcc_add_symbol(s, "xteExprParse", xteExprParse);
+	tcc_add_symbol(s, "xteExprFree", xteExprFree);
+	tcc_add_symbol(s, "xteExprEval", xteExprEval);
+	tcc_add_symbol(s, "xteExprEvalBool", xteExprEvalBool);
 	
 	
 	
