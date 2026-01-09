@@ -1091,3 +1091,489 @@ XXAPI ptr xrtBase64Decode(str sText, size_t iSize, str sTable)
 }
 
 
+
+// 通配符匹配（ * 匹配任意字符序列，? 匹配单个UTF-8字符，bCase 为 TRUE 时忽略大小写 ）
+// 使用贪婪匹配算法：O(n*m) 最坏时间复杂度，O(1) 空间复杂度
+XXAPI bool xrtStrLike(str sText, size_t iTextSize, str sPattern, size_t iPatSize, bool bCase)
+{
+	// 参数检查
+	if ( sPattern == NULL ) { return FALSE; }
+	if ( iPatSize == 0 ) { iPatSize = strlen(sPattern); }
+	
+	// 空模式只匹配空字符串
+	if ( iPatSize == 0 ) {
+		if ( sText == NULL ) { return TRUE; }
+		if ( iTextSize == 0 ) { iTextSize = strlen(sText); }
+		return iTextSize == 0;
+	}
+	
+	// 处理空文本
+	if ( sText == NULL ) {
+		// 空文本只能匹配全是 * 的模式
+		for ( size_t i = 0; i < iPatSize; i++ ) {
+			if ( sPattern[i] != '*' ) { return FALSE; }
+		}
+		return TRUE;
+	}
+	if ( iTextSize == 0 ) { iTextSize = strlen(sText); }
+	if ( iTextSize == 0 ) {
+		for ( size_t i = 0; i < iPatSize; i++ ) {
+			if ( sPattern[i] != '*' ) { return FALSE; }
+		}
+		return TRUE;
+	}
+	
+	// 贪婪匹配算法
+	size_t t = 0;           // 文本位置
+	size_t p = 0;           // 模式位置
+	size_t starP = (size_t)-1;   // 最近的 * 在模式中的位置
+	size_t starT = 0;       // 遇到 * 时文本的位置
+	
+	while ( t < iTextSize ) {
+		if ( p < iPatSize && sPattern[p] == '*' ) {
+			// 记录 * 的位置，先假定它匹配 0 个字符
+			starP = p;
+			starT = t;
+			p++;
+		} else if ( p < iPatSize && sPattern[p] == '?' ) {
+			// ? 匹配一个完整的 UTF-8 字符
+			int charLen = xrtCharLenU8((unsigned char)sText[t]);
+			// 检查剩余长度是否足够
+			if ( t + charLen > iTextSize ) {
+				// 字符不完整，尝试回溯
+				if ( starP == (size_t)-1 ) { return FALSE; }
+				p = starP + 1;
+				starT += xrtCharLenU8((unsigned char)sText[starT]);
+				t = starT;
+			} else {
+				t += charLen;
+				p++;
+			}
+		} else {
+			// 普通字符匹配（内联字符比较）
+			unsigned char c1 = (unsigned char)sText[t];
+			unsigned char c2 = (unsigned char)sPattern[p];
+			bool bMatch = (c1 == c2);
+			if ( !bMatch && bCase ) {
+				// 大小写不敏感：只对 ASCII 字母转换
+				if ( c1 >= 'A' && c1 <= 'Z' ) { c1 += 32; }
+				if ( c2 >= 'A' && c2 <= 'Z' ) { c2 += 32; }
+				bMatch = (c1 == c2);
+			}
+			if ( p < iPatSize && bMatch ) {
+				t++;
+				p++;
+			} else {
+				// 匹配失败，回溯到上一个 *
+				if ( starP == (size_t)-1 ) { return FALSE; }
+				// 让 * 多匹配一个 UTF-8 字符
+				p = starP + 1;
+				starT += xrtCharLenU8((unsigned char)sText[starT]);
+				t = starT;
+				// 如果 starT 已超出文本范围，则匹配失败
+				if ( starT > iTextSize ) { return FALSE; }
+			}
+		}
+	}
+	
+	// 文本已匹配完，检查模式剩余部分是否全是 *
+	while ( p < iPatSize && sPattern[p] == '*' ) {
+		p++;
+	}
+	
+	return p == iPatSize;
+}
+
+
+
+// ============================================================================
+// 数值格式化函数
+// ============================================================================
+
+// 查表法: 十六进制字符表
+static const char xrt_digit_table[] = "0123456789abcdef0123456789ABCDEF";
+
+// 内部函数: 解析格式字符串
+typedef struct {
+	bool showSign;      // 显示正号
+	bool thousands;     // 千分位
+	bool percent;       // 百分比
+	bool uppercase;     // 大写十六进制
+	int base;           // 进制 (10, 16, 8, 2)
+	int width;          // 前导零宽度
+	int precision;      // 小数位数 (-1 表示未指定)
+} XrtNumFmtOpts;
+
+static inline void xrt_parse_format(str format, XrtNumFmtOpts* opts)
+{
+	opts->showSign = FALSE;
+	opts->thousands = FALSE;
+	opts->percent = FALSE;
+	opts->uppercase = FALSE;
+	opts->base = 10;
+	opts->width = 0;
+	opts->precision = -1;
+	
+	if ( format == NULL || *format == '\0' ) { return; }
+	
+	const char* p = format;
+	while ( *p ) {
+		char c = *p++;
+		switch ( c ) {
+			case '+': opts->showSign = TRUE; break;
+			case ',': opts->thousands = TRUE; break;
+			case '%': opts->percent = TRUE; break;
+			case 'x': opts->base = 16; opts->uppercase = FALSE; break;
+			case 'X': opts->base = 16; opts->uppercase = TRUE; break;
+			case 'o': opts->base = 8; break;
+			case 'b': case 'B': opts->base = 2; break;
+			case '.':
+				// 解析小数位数
+				opts->precision = 0;
+				while ( *p >= '0' && *p <= '9' ) {
+					opts->precision = opts->precision * 10 + (*p++ - '0');
+				}
+				break;
+			case '0':
+				// 解析前导零宽度
+				while ( *p >= '0' && *p <= '9' ) {
+					opts->width = opts->width * 10 + (*p++ - '0');
+				}
+				break;
+			default:
+				if ( c >= '1' && c <= '9' ) {
+					// 数字开头也解析为宽度
+					opts->width = c - '0';
+					while ( *p >= '0' && *p <= '9' ) {
+						opts->width = opts->width * 10 + (*p++ - '0');
+					}
+				}
+				break;
+		}
+	}
+}
+
+// 内部函数: uint64 转非十进制字符串（从 buffer 末尾往前写）
+static inline char* xrt_u64_to_base(char* bufEnd, uint64 value, int base, bool upper)
+{
+	char* p = bufEnd;
+	const char* digits = upper ? &xrt_digit_table[16] : xrt_digit_table;
+	
+	if ( base == 16 ) {
+		do {
+			*--p = digits[value & 0xF];
+			value >>= 4;
+		} while ( value );
+	} else if ( base == 8 ) {
+		do {
+			*--p = '0' + (char)(value & 0x7);
+			value >>= 3;
+		} while ( value );
+	} else {
+		// 二进制
+		do {
+			*--p = '0' + (char)(value & 0x1);
+			value >>= 1;
+		} while ( value );
+	}
+	
+	return p;
+}
+
+// 内部函数: 添加千分位分隔符
+static inline int xrt_add_thousands(char* dst, const char* src, int srcLen)
+{
+	int commas = (srcLen - 1) / 3;  // 需要插入的逗号数量
+	int totalLen = srcLen + commas;
+	int pos = totalLen;
+	int cnt = 0;
+	
+	for ( int i = srcLen - 1; i >= 0; i-- ) {
+		dst[--pos] = src[i];
+		if ( ++cnt == 3 && i > 0 ) {
+			dst[--pos] = ',';
+			cnt = 0;
+		}
+	}
+	
+	return totalLen;
+}
+
+// 整数格式化
+XXAPI str xrtIntFormat(int64 value, str format)
+{
+	// 解析格式
+	XrtNumFmtOpts opts;
+	xrt_parse_format(format, &opts);
+	
+	// 处理符号
+	bool negative = (value < 0);
+	uint64 absVal = negative ? (uint64)(-(value + 1)) + 1 : (uint64)value;
+	
+	// 转换为字符串
+	char tmpBuf[96];
+	char* numStart;
+	int numLen;
+	
+	if ( opts.base == 10 ) {
+		// 十进制: 使用 xrtI64ToStr
+		numLen = xrtI64ToStr(negative ? value : (int64)absVal, tmpBuf);
+		numStart = tmpBuf;
+		if ( negative ) {
+			numStart++;  // 跳过负号
+			numLen--;
+		}
+	} else {
+		// 非十进制
+		char* tmpEnd = tmpBuf + sizeof(tmpBuf);
+		numStart = xrt_u64_to_base(tmpEnd, absVal, opts.base, opts.uppercase);
+		numLen = (int)(tmpEnd - numStart);
+		opts.showSign = FALSE;
+		opts.thousands = FALSE;
+		negative = FALSE;
+	}
+	
+	// 计算所需总长度
+	int signLen = (negative || opts.showSign) ? 1 : 0;
+	int digitLen = numLen;
+	if ( opts.thousands && digitLen > 3 ) {
+		digitLen += (digitLen - 1) / 3;
+	}
+	int padLen = (opts.width > digitLen) ? (opts.width - digitLen) : 0;
+	int totalLen = signLen + padLen + digitLen;
+	
+	// 分配缓冲区
+	str buffer = xrtMalloc(totalLen + 1);
+	if ( buffer == NULL ) { return xCore.sNull; }
+	
+	char* out = buffer;
+	
+	// 写入符号
+	if ( signLen ) {
+		*out++ = negative ? '-' : '+';
+	}
+	
+	// 写入前导零
+	while ( padLen-- > 0 ) { *out++ = '0'; }
+	
+	// 写入数字
+	if ( opts.thousands && numLen > 3 ) {
+		xrt_add_thousands(out, numStart, numLen);
+		out += digitLen;
+	} else {
+		memcpy(out, numStart, numLen);
+		out += numLen;
+	}
+	
+	*out = '\0';
+	return buffer;
+}
+
+// 浮点数格式化
+XXAPI str xrtNumFormat(double value, str format)
+{
+	// 解析格式
+	XrtNumFmtOpts opts;
+	xrt_parse_format(format, &opts);
+	
+	// 处理百分比
+	if ( opts.percent ) {
+		value *= 100.0;
+	}
+	
+	// 处理特殊值
+	if ( value != value ) {  // NaN
+		str ret = xrtMalloc(4);
+		if ( ret == NULL ) { return xCore.sNull; }
+		memcpy(ret, "NaN", 4);
+		return ret;
+	}
+	if ( value > 1e308 ) {
+		str ret = xrtMalloc(4);
+		if ( ret == NULL ) { return xCore.sNull; }
+		memcpy(ret, "Inf", 4);
+		return ret;
+	}
+	if ( value < -1e308 ) {
+		str ret = xrtMalloc(5);
+		if ( ret == NULL ) { return xCore.sNull; }
+		memcpy(ret, "-Inf", 5);
+		return ret;
+	}
+	
+	// 处理符号
+	bool negative = (value < 0);
+	if ( negative ) { value = -value; }
+	
+	// 确定小数位数
+	int precision = (opts.precision >= 0) ? opts.precision : 6;
+	if ( precision > 15 ) { precision = 15; }
+	
+	// 四舍五入
+	static const double roundTable[] = {
+		0.5, 0.05, 0.005, 0.0005, 0.00005, 0.000005, 0.0000005, 0.00000005,
+		0.000000005, 0.0000000005, 0.00000000005, 0.000000000005,
+		0.0000000000005, 0.00000000000005, 0.000000000000005, 0.0000000000000005
+	};
+	value += roundTable[precision];
+	
+	// 分离整数部分和小数部分
+	uint64 intPart = (uint64)value;
+	double fracPart = value - (double)intPart;
+	
+	// 转换整数部分: 使用 xrtI64ToStr
+	char tmpBuf[32];
+	int intLen = xrtI64ToStr((int64)intPart, tmpBuf);
+	char* intStart = tmpBuf;
+	
+	// 计算所需总长度
+	int signLen = (negative || opts.showSign) ? 1 : 0;
+	int intDigitLen = intLen;
+	if ( opts.thousands && intDigitLen > 3 ) {
+		intDigitLen += (intDigitLen - 1) / 3;
+	}
+	int fracLen = (precision > 0) ? (1 + precision) : 0;
+	int percentLen = opts.percent ? 1 : 0;
+	int totalLen = signLen + intDigitLen + fracLen + percentLen;
+	
+	// 分配缓冲区
+	str buffer = xrtMalloc(totalLen + 1);
+	if ( buffer == NULL ) { return xCore.sNull; }
+	
+	char* out = buffer;
+	
+	// 写入符号
+	if ( negative ) {
+		*out++ = '-';
+	} else if ( opts.showSign ) {
+		*out++ = '+';
+	}
+	
+	// 写入整数部分
+	if ( opts.thousands && intLen > 3 ) {
+		xrt_add_thousands(out, intStart, intLen);
+		out += intDigitLen;
+	} else {
+		memcpy(out, intStart, intLen);
+		out += intLen;
+	}
+	
+	// 写入小数部分
+	if ( precision > 0 ) {
+		*out++ = '.';
+		for ( int i = 0; i < precision; i++ ) {
+			fracPart *= 10.0;
+			int digit = (int)fracPart;
+			*out++ = '0' + digit;
+			fracPart -= digit;
+		}
+	}
+	
+	// 写入百分号
+	if ( opts.percent ) {
+		*out++ = '%';
+	}
+	
+	*out = '\0';
+	return buffer;
+}
+
+
+
+// 字符串相似度（基于 Levenshtein 编辑距离，返回 0.0-1.0）
+// 高性能优化：一维数组 O(min(m,n)) 空间，内联 min 计算
+XXAPI double xrtStrSim(str s1, size_t len1, str s2, size_t len2)
+{
+	// 空指针检查
+	if ( s1 == NULL ) { s1 = ""; len1 = 0; }
+	if ( s2 == NULL ) { s2 = ""; len2 = 0; }
+	
+	// 自动计算长度
+	if ( len1 == 0 ) { len1 = strlen(s1); }
+	if ( len2 == 0 ) { len2 = strlen(s2); }
+	
+	// 快速路径：空字符串
+	if ( len1 == 0 && len2 == 0 ) { return 1.0; }
+	if ( len1 == 0 ) { return 0.0; }
+	if ( len2 == 0 ) { return 0.0; }
+	
+	// 快速路径：完全相同
+	if ( len1 == len2 && memcmp(s1, s2, len1) == 0 ) { return 1.0; }
+	
+	// 确保 s1 是较长的字符串（优化内存访问）
+	if ( len1 < len2 ) {
+		str ts = s1; s1 = s2; s2 = ts;
+		size_t tl = len1; len1 = len2; len2 = tl;
+	}
+	
+	// 分配一维 DP 数组（只需要较短字符串的长度+1）
+	size_t dpSize = len2 + 1;
+	int* dp = (int*)xrtMalloc(dpSize * sizeof(int));
+	if ( dp == NULL ) { return 0.0; }
+	
+	// 初始化第一行：dp[j] = j
+	for ( size_t j = 0; j <= len2; j++ ) {
+		dp[j] = (int)j;
+	}
+	
+	// DP 计算（行优先遍历，对缓存友好）
+	for ( size_t i = 1; i <= len1; i++ ) {
+		int prev = dp[0];  // 保存 dp[i-1][j-1]
+		dp[0] = (int)i;    // dp[i][0] = i
+		
+		unsigned char c1 = (unsigned char)s1[i - 1];
+		
+		for ( size_t j = 1; j <= len2; j++ ) {
+			int temp = dp[j];  // 保存当前值，作为下一次迭代的 prev
+			
+			if ( c1 == (unsigned char)s2[j - 1] ) {
+				// 字符相同，无需操作
+				dp[j] = prev;
+			} else {
+				// 字符不同，取 min(删除, 插入, 替换) + 1
+				int del = dp[j];      // dp[i-1][j] + 1
+				int ins = dp[j - 1];  // dp[i][j-1] + 1
+				int rep = prev;       // dp[i-1][j-1] + 1
+				
+				// 内联 min3 计算
+				int minVal = del;
+				if ( ins < minVal ) { minVal = ins; }
+				if ( rep < minVal ) { minVal = rep; }
+				
+				dp[j] = minVal + 1;
+			}
+			
+			prev = temp;
+		}
+	}
+	
+	// 获取编辑距离
+	int distance = dp[len2];
+	xrtFree(dp);
+	
+	// 计算相似度：1 - distance / maxLen
+	size_t maxLen = len1;  // len1 >= len2
+	return 1.0 - (double)distance / (double)maxLen;
+}
+
+
+
+// 字符串约等于（使用 xCore 配置）
+// iApproxStrMode=0: 通配符模式（使用 xrtStrLike，s2 为模式串）
+// iApproxStrMode=1: 相似度模式（使用 xrtStrSim 和 fApproxStrTol 阈值）
+XXAPI bool xrtStrApprox(str s1, size_t len1, str s2, size_t len2)
+{
+	if ( xCore.iApproxStrMode == XRT_STR_APPROX_LIKE ) {
+		// 通配符模式
+		return xrtStrLike(s1, len1, s2, len2, xCore.bApproxStrCase);
+	} else {
+		// 相似度模式
+		double threshold = xCore.fApproxStrTol;
+		if ( threshold <= 0.0 || threshold > 1.0 ) {
+			threshold = 0.95;  // 无效阈值使用默认值
+		}
+		double sim = xrtStrSim(s1, len1, s2, len2);
+		return sim >= threshold;
+	}
+}
+
