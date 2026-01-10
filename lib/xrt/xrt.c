@@ -14,6 +14,7 @@
 		ULONGLONG GetTickCount64();
 	#else
 		#include <winsock2.h>
+		#include <ws2tcpip.h>
 		#include "windows.h"
 		#include <shellapi.h>
 		#include <iphlpapi.h>
@@ -225,10 +226,10 @@ XXAPI void xrtUnit()
 		{
 			if ( fdwReason == DLL_PROCESS_ATTACH ) {
 				//当进程加载dll时调用dllMain
-				xCoreInit();
+				xrtInit();
 			} else if ( fdwReason == DLL_PROCESS_DETACH ) {
 				//当进程卸载dll时调用dllMain
-				xCoreUnit();
+				xrtUnit();
 			}
 			return (TRUE);
 		}

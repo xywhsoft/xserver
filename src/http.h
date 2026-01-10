@@ -1,7 +1,53 @@
 
 
 
-// HTTP 协议处理
+// 校验请求路径安全性（防止路径遍历）
+static int IsPathSafe(const char* path, size_t len)
+{
+	if ( path == NULL || len == 0 ) return FALSE;
+	
+	// 检查路径遍历攻击
+	for ( size_t i = 0; i < len - 1; i++ ) {
+		if ( (path[i] == '.') && (path[i + 1] == '.') ) {
+			// 发现 ".." 路径遍历尝试
+			return FALSE;
+		}
+	}
+	
+	// 检查绝对路径访问尝试 (Windows 和 Unix)
+	if ( len > 0 && path[0] == '/' ) {
+		if ( len > 1 && path[1] == '/' ) {
+			return FALSE;  // UNC 路径
+		}
+	}
+	if ( len > 1 && path[1] == ':' ) {
+		return FALSE;  // Windows 绝对路径
+	}
+	
+	return TRUE;
+}
+
+
+
+// 校验 Host 头格式合法性
+static int IsHostHeaderValid(const char* host, size_t len)
+{
+	if ( host == NULL || len == 0 || len > 253 ) return FALSE;
+	
+	for ( size_t i = 0; i < len; i++ ) {
+		char c = host[i];
+		// 允许: 字母、数字、点、连字符、冒号(端口)
+		if ( !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || 
+		       (c >= '0' && c <= '9') || c == '.' || c == '-' || c == ':') ) {
+			return FALSE;
+		}
+	}
+	return TRUE;
+}
+
+
+
+// HTTP TLS 初始化
 void InitTLS(struct mg_connection *c, XS_HostObject objHost, XS_ServerObject objServer)
 {
 	struct mg_tls_opts opts;
@@ -19,7 +65,15 @@ XS_HostObject LocateHost_HTTP(XS_ServerObject objServer, struct mg_http_message*
 {
 	struct mg_str* Host = mg_http_get_header(hm, "host");
 	XS_HostObject objHost = NULL;
-	if ( Host && (Host->len > 0) ) {
+	if ( Host && (Host->len > 0) && (Host->buf != NULL) ) {
+		// 校验 Host 头合法性
+		if ( !IsHostHeaderValid(Host->buf, Host->len) ) {
+			// Host 头格式非法，使用默认 Host
+			if ( objServer->EnableDefaultHost ) {
+				return &objServer->DefaultHost;
+			}
+			return NULL;
+		}
 		// 去除端口号（如果有）
 		size_t hostLen = Host->len;
 		for ( size_t i = 0; i < Host->len; i++ ) {
@@ -60,6 +114,11 @@ void ProcRequest_HTTP(XS_ServerObject objServer, XS_HostObject objHost, struct m
 	} else if ( objHost->DevLang == SLT_LUA ) {
 	} else if ( objHost->DevLang == SLT_JS ) {
 	} else {
+		// 静态文件服务 - 先检查路径安全性
+		if ( !IsPathSafe(hm->uri.buf, hm->uri.len) ) {
+			mg_http_reply(c, 403, NULL, "Forbidden: Invalid path");
+			return;
+		}
 		// 设置服务器根目录
 		struct mg_http_serve_opts opts = {0};
 		opts.root_dir = objHost->Path;
@@ -146,14 +205,25 @@ static void ProcHTTP(struct mg_connection* c, int ev, void *ev_data) {
 					printf("!!! ERROR !!! NO Enabled Default Host [TLS] !");
 				}
 			} else {
-				XS_HostObject* ppHost = xrtDictGet(objServer->HostMap, (char*)ev_data, strlen(ev_data));
-				if ( ppHost ) {
-					XS_HostObject objHost = ppHost[0];
-					InitTLS(c, objHost, objServer);
-				} else if ( objServer->EnableDefaultHost ) {
-					InitTLS(c, &objServer->DefaultHost, objServer);
+				const char* sHostName = (const char*)ev_data;
+				size_t iHostLen = strlen(sHostName);
+				// 校验 SNI 主机名合法性
+				if ( !IsHostHeaderValid(sHostName, iHostLen) ) {
+					if ( objServer->EnableDefaultHost ) {
+						InitTLS(c, &objServer->DefaultHost, objServer);
+					} else {
+						printf("!!! ERROR !!! Invalid SNI hostname [TLS] !");
+					}
 				} else {
-					printf("!!! ERROR !!! NO Enabled Default Host [TLS host missing] !");
+					XS_HostObject* ppHost = xrtDictGet(objServer->HostMap, (char*)sHostName, iHostLen);
+					if ( ppHost ) {
+						XS_HostObject objHost = ppHost[0];
+						InitTLS(c, objHost, objServer);
+					} else if ( objServer->EnableDefaultHost ) {
+						InitTLS(c, &objServer->DefaultHost, objServer);
+					} else {
+						printf("!!! ERROR !!! NO Enabled Default Host [TLS host missing] !");
+					}
 				}
 			}
 		}
@@ -215,6 +285,10 @@ int RunServerHTTP(XS_ServerObject objServer)
 // 停止 HTTP 服务
 int StopServerHTTP(XS_ServerObject objServer)
 {
+	printf("    Stop Server [HTTP] : %s\n", objServer->Name);
+	// 连接由 mg_mgr_free 统一释放
+	objServer->Conn = NULL;
+	objServer->ConnTLS = NULL;
 	return TRUE;
 }
 

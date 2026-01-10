@@ -65,23 +65,61 @@ void xsDestroyTCC(TCCState* s)
 
 
 // SQL 字符串转义（防止 SQL 注入）
+// 注意: 推荐使用参数化查询代替字符串拼接
 char* sql_escape(const char* str, size_t len)
 {
 	if ( str == NULL ) return xrtCopyStr("", 0);
 	if ( len == 0 ) len = strlen(str);
-	// 最坏情况：每个字符都需要转义，长度翻倍
-	char* result = xrtMalloc(len * 2 + 1);
-	char* p = result;
+	
+	// 计算需要的缓冲区大小（最坏情况: 每个字符都需要转义）
+	size_t iNeedSize = 0;
 	for ( size_t i = 0; i < len; i++ ) {
-		char c = str[i];
-		if ( c == '\'' ) {
+		unsigned char c = (unsigned char)str[i];
+		if ( c == '\0' ) {
+			break;  // 遇到 NULL 字节结束
+		} else if ( (c == '\'') || (c == '\\') || (c == '"') ) {
+			iNeedSize += 2;
+		} else if ( (c == '\r') || (c == '\n') || (c == '\t') || (c == '\b') ) {
+			iNeedSize += 2;
+		} else if ( c < 0x20 ) {
+			// 过滤其他控制字符
+			continue;
+		} else {
+			iNeedSize += 1;
+		}
+	}
+	
+	char* result = xrtMalloc(iNeedSize + 1);
+	char* p = result;
+	
+	for ( size_t i = 0; i < len; i++ ) {
+		unsigned char c = (unsigned char)str[i];
+		if ( c == '\0' ) {
+			break;  // 遇到 NULL 字节结束
+		} else if ( c == '\'' ) {
 			*p++ = '\'';
 			*p++ = '\'';
 		} else if ( c == '\\' ) {
 			*p++ = '\\';
 			*p++ = '\\';
-		} else if ( c == '\0' ) {
-			break;
+		} else if ( c == '"' ) {
+			*p++ = '\\';
+			*p++ = '"';
+		} else if ( c == '\r' ) {
+			*p++ = '\\';
+			*p++ = 'r';
+		} else if ( c == '\n' ) {
+			*p++ = '\\';
+			*p++ = 'n';
+		} else if ( c == '\t' ) {
+			*p++ = '\\';
+			*p++ = 't';
+		} else if ( c == '\b' ) {
+			*p++ = '\\';
+			*p++ = 'b';
+		} else if ( c < 0x20 ) {
+			// 过滤其他控制字符
+			continue;
 		} else {
 			*p++ = c;
 		}

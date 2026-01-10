@@ -45,6 +45,9 @@ int RunServerTCP(XS_ServerObject objServer)
 // 停止 TCP 服务
 int StopServerTCP(XS_ServerObject objServer)
 {
+	printf("    Stop Server [TCP] : %s\n", objServer->Name);
+	// 连接由 mg_mgr_free 统一释放
+	objServer->Conn = NULL;
 	return TRUE;
 }
 

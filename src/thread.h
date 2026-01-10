@@ -18,9 +18,10 @@ int RunServerThread(XS_ServerObject objServer)
 
 
 
-// 停止 自定义 服务
+// 停止 线程 服务
 int StopServerThread(XS_ServerObject objServer)
 {
+	printf("    Stop Server [Thread] : %s\n", objServer->Name);
 	return TRUE;
 }
 

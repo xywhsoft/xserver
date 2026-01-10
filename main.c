@@ -176,14 +176,22 @@ void LoadHostConfig(xvalue objRoot, XS_HostObject objHost, XS_ServerObject objSe
 		printf("!!! ERROR !!! host (%s - %s) must specify a directory !\n", objServer->Name, objHost->Name);
 		exit(EXIT_FAILURE);
 	} else if ( xrtPathIsAbs((char*)sPath, 0) ) {
-		objHost->Path = (char*)sPath;
+		objHost->Path = xrtCopyStr((char*)sPath, 0);
 	} else {
 		#ifdef PATH_MAX
 			objHost->Path = malloc(PATH_MAX);
-			realpath(sPath, objHost->Path);
+			if ( realpath(sPath, objHost->Path) == NULL ) {
+				printf("!!! ERROR !!! realpath failed for path: %s\n", sPath);
+				free(objHost->Path);
+				objHost->Path = xrtCopyStr((char*)sPath, 0);
+			}
 		#else
 			objHost->Path = malloc(4096);
-			realpath(sPath, objHost->Path);
+			if ( realpath(sPath, objHost->Path) == NULL ) {
+				printf("!!! ERROR !!! realpath failed for path: %s\n", sPath);
+				free(objHost->Path);
+				objHost->Path = xrtCopyStr((char*)sPath, 0);
+			}
 		#endif
 	}
 	sPath = xvoTableGetText(objRoot, "devfile", 7);
@@ -196,14 +204,22 @@ void LoadHostConfig(xvalue objRoot, XS_HostObject objHost, XS_ServerObject objSe
 			objHost->DevFile = xrtPathJoin(2, objHost->Path, 0, "main.js", 7);
 		}
 	} else if ( xrtPathIsAbs((char*)sPath, 0) ) {
-		objHost->DevFile = (char*)sPath;
+		objHost->DevFile = xrtCopyStr((char*)sPath, 0);
 	} else {
 		#ifdef PATH_MAX
 			objHost->DevFile = malloc(PATH_MAX);
-			realpath(sPath, objHost->DevFile);
+			if ( realpath(sPath, objHost->DevFile) == NULL ) {
+				printf("!!! ERROR !!! realpath failed for devfile: %s\n", sPath);
+				free(objHost->DevFile);
+				objHost->DevFile = xrtCopyStr((char*)sPath, 0);
+			}
 		#else
 			objHost->DevFile = malloc(4096);
-			realpath(sPath, objHost->DevFile);
+			if ( realpath(sPath, objHost->DevFile) == NULL ) {
+				printf("!!! ERROR !!! realpath failed for devfile: %s\n", sPath);
+				free(objHost->DevFile);
+				objHost->DevFile = xrtCopyStr((char*)sPath, 0);
+			}
 		#endif
 	}
 	
@@ -267,6 +283,47 @@ void LoadHostConfig(xvalue objRoot, XS_HostObject objHost, XS_ServerObject objSe
 		objHost->EventProc = NULL;
 		objHost->RequestProc = NULL;
 		objHost->XS_SetGlobalDate = NULL;
+	}
+}
+
+
+
+// 释放 Host 资源
+void FreeHostResource(XS_HostObject objHost)
+{
+	if ( objHost == NULL ) return;
+	
+	// 释放 TLS 证书内存
+	if ( objHost->TLS_CA.buf ) {
+		free((void*)objHost->TLS_CA.buf);
+		objHost->TLS_CA.buf = NULL;
+		objHost->TLS_CA.len = 0;
+	}
+	if ( objHost->TLS_Cert.buf ) {
+		free((void*)objHost->TLS_Cert.buf);
+		objHost->TLS_Cert.buf = NULL;
+		objHost->TLS_Cert.len = 0;
+	}
+	if ( objHost->TLS_Key.buf ) {
+		free((void*)objHost->TLS_Key.buf);
+		objHost->TLS_Key.buf = NULL;
+		objHost->TLS_Key.len = 0;
+	}
+	
+	// 释放路径内存
+	if ( objHost->Path ) {
+		xrtFree(objHost->Path);
+		objHost->Path = NULL;
+	}
+	if ( objHost->DevFile ) {
+		xrtFree(objHost->DevFile);
+		objHost->DevFile = NULL;
+	}
+	
+	// 释放 TCC 状态机
+	if ( objHost->DevObj ) {
+		tcc_delete((TCCState*)objHost->DevObj);
+		objHost->DevObj = NULL;
 	}
 }
 
@@ -435,7 +492,7 @@ int LoadConfig(str sOptFile)
 
 
 // 信号处理 [Ctrl-C]
-static int s_signo;
+static volatile sig_atomic_t s_signo = 0;
 static void signal_handler(int signo) {
 	s_signo = signo;
 }
@@ -538,8 +595,23 @@ int RunServer()
 		} else if ( objServer->Class == SPT_THREAD ) {
 			StopServerThread(objServer);
 		}
+		// 释放 Host 资源
+		FreeHostResource(&objServer->DefaultHost);
+		for ( int j = 1; j <= objServer->HostCount; j++ ) {
+			XS_HostObject objHost = xrtArrayGet_Inline(objServer->Hosts, j);
+			FreeHostResource(objHost);
+		}
+		// 释放 Host 列表和映射表
+		if ( objServer->Hosts ) {
+			xrtArrayDestroy(objServer->Hosts);
+		}
+		if ( objServer->HostMap ) {
+			xrtDictDestroy(objServer->HostMap);
+		}
 	}
 	mg_mgr_free(&mgr);
+	// 释放服务器列表
+	xrtArrayDestroy(ServerList);
 	MG_INFO(("Exiting on signal %d\n", s_signo));
 }
 
@@ -564,12 +636,17 @@ int main(int argc, char** argv)
 	
 	// 从命令行中读取配置文件路径
 	str sOptFile;
+	bool bFreeOptFile = FALSE;
 	if ( argc > 1 ) {
 		sOptFile = argv[1];
 	} else {
 		sOptFile = xrtPathJoin(2, xCore.AppPath, "xs.json");
+		bFreeOptFile = TRUE;
 	}
 	LoadConfig(sOptFile);
+	if ( bFreeOptFile ) {
+		xrtFree(sOptFile);
+	}
 	
 	// 启动服务器
 	RunServer();

@@ -97,3 +97,31 @@ void InitTemplate()
 }
 
 
+
+// 释放模板表中的模板对象回调
+static bool FreeTemplateProc(Dict_Key* pKey, ptr* ppVal, ptr pArg)
+{
+	if ( ppVal && *ppVal ) {
+		XTE_LiteObject objTemplate = (XTE_LiteObject)*ppVal;
+		xteParseFree(objTemplate);
+	}
+	return FALSE;
+}
+
+// 释放模板资源
+void FreeTemplate()
+{
+	// 释放模板表中的所有模板对象
+	if ( TemplateTable ) {
+		xrtDictWalk(TemplateTable, (ptr)FreeTemplateProc, NULL);
+		xrtDictDestroy(TemplateTable);
+		TemplateTable = NULL;
+	}
+	// 释放环境变量表
+	if ( tblENV ) {
+		xvoUnref(tblENV);
+		tblENV = NULL;
+	}
+}
+
+

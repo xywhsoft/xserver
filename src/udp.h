@@ -45,6 +45,9 @@ int RunServerUDP(XS_ServerObject objServer)
 // 停止 UDP 服务
 int StopServerUDP(XS_ServerObject objServer)
 {
+	printf("    Stop Server [UDP] : %s\n", objServer->Name);
+	// 连接由 mg_mgr_free 统一释放
+	objServer->Conn = NULL;
 	return TRUE;
 }
 

@@ -21,6 +21,7 @@ int RunServerCustom(XS_ServerObject objServer)
 // 停止 自定义 服务
 int StopServerCustom(XS_ServerObject objServer)
 {
+	printf("    Stop Server [Custom] : %s\n", objServer->Name);
 	return TRUE;
 }
 

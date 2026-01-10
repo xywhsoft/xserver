@@ -107,6 +107,10 @@ int RunServerWS(XS_ServerObject objServer)
 // 停止 WebSocket 服务
 int StopServerWS(XS_ServerObject objServer)
 {
+	printf("    Stop Server [WebSocket] : %s\n", objServer->Name);
+	// 连接由 mg_mgr_free 统一释放
+	objServer->Conn = NULL;
+	objServer->ConnTLS = NULL;
 	return TRUE;
 }
 

@@ -70,8 +70,23 @@ static int XTP_ProcessPacket(struct mg_connection *c, XS_ServerObject objServer)
 		return 0;
 	}
 	
+	// 安全性检查：防止整数溢出和越界访问
+	size_t iMinPackSize = 16 + ((size_t)pHeader->ParamCount * 4) + pHeader->CmdSize + pHeader->BodySize;
+	if ( iMinPackSize > pHeader->PackSize || pHeader->PackSize > c->recv.len ) {
+		MG_ERROR(("XTP: Packet size mismatch or overflow"));
+		c->recv.len = 0;
+		return -1;
+	}
+	
 	// 计算各部分偏移
 	unsigned int iPos = 16 + (4 * pHeader->ParamCount);
+	
+	// 检查命令读取越界
+	if ( iPos + pHeader->CmdSize > pHeader->PackSize ) {
+		MG_ERROR(("XTP: Cmd read overflow"));
+		c->recv.len = 0;
+		return -1;
+	}
 	
 	// 提取命令 (添加 \0 结尾)
 	char* sCmd = xrtMalloc(pHeader->CmdSize + 1);
@@ -86,6 +101,16 @@ static int XTP_ProcessPacket(struct mg_connection *c, XS_ServerObject objServer)
 		for ( int i = 0; i < pHeader->ParamCount; i++ ) {
 			XTP_ParamInfo* pParam = (XTP_ParamInfo*)&c->recv.buf[16 + (4 * i)];
 			
+			// 检查参数读取越界
+			if ( iPos + pParam->KeySize + pParam->ValSize > pHeader->PackSize ) {
+				MG_ERROR(("XTP: Param read overflow"));
+				xrtFree(sCmd);
+				xrtDictWalk(tblParams, (ptr)XTP_FreeParamProc, NULL);
+				xrtDictDestroy(tblParams);
+				c->recv.len = 0;
+				return -1;
+			}
+			
 			char* sKey = &c->recv.buf[iPos];
 			iPos += pParam->KeySize;
 			
@@ -98,6 +123,18 @@ static int XTP_ProcessPacket(struct mg_connection *c, XS_ServerObject objServer)
 			// 添加到字典
 			xrtDictSetPtr(tblParams, sKey, pParam->KeySize, sVal, NULL);
 		}
+	}
+	
+	// 检查 Body 读取越界
+	if ( iPos + pHeader->BodySize > pHeader->PackSize ) {
+		MG_ERROR(("XTP: Body read overflow"));
+		xrtFree(sCmd);
+		if ( tblParams ) {
+			xrtDictWalk(tblParams, (ptr)XTP_FreeParamProc, NULL);
+			xrtDictDestroy(tblParams);
+		}
+		c->recv.len = 0;
+		return -1;
 	}
 	
 	// 提取 Body (添加 \0 结尾)
@@ -165,28 +202,48 @@ int XTP_Send(struct mg_connection* c, str sCmd, size_t iCmdSize,
 		iBodySize = strlen(pBody);
 	}
 	
-	// 计算包总长度
-	uint iPackSize = 16 + (iParamCount * 4) + iCmdSize + iBodySize;
+	// 检查参数数量上限（防止整数溢出）
+	if ( iParamCount > 65535 ) {
+		MG_ERROR(("XTP_Send: Too many parameters"));
+		return FALSE;
+	}
+	
+	// 使用 size_t 计算包总长度，防止整数溢出
+	size_t iPackSize = 16 + ((size_t)iParamCount * 4) + iCmdSize + iBodySize;
 	
 	// 构建参数信息列表
 	XTP_ParamInfo* pParamInfo = NULL;
 	if ( iParamCount > 0 ) {
 		pParamInfo = xrtMalloc(iParamCount * sizeof(XTP_ParamInfo));
 		for ( uint i = 0; i < iParamCount; i++ ) {
-			pParamInfo[i].KeySize = strlen(arrParam[i]);
-			pParamInfo[i].ValSize = strlen(arrValue[i]);
-			iPackSize += pParamInfo[i].KeySize;
-			iPackSize += pParamInfo[i].ValSize;
+			size_t keyLen = strlen(arrParam[i]);
+			size_t valLen = strlen(arrValue[i]);
+			// 检查单个参数长度上限
+			if ( keyLen > 65535 || valLen > 65535 ) {
+				MG_ERROR(("XTP_Send: Parameter too long"));
+				xrtFree(pParamInfo);
+				return FALSE;
+			}
+			pParamInfo[i].KeySize = (unsigned short)keyLen;
+			pParamInfo[i].ValSize = (unsigned short)valLen;
+			iPackSize += keyLen + valLen;
 		}
+	}
+	
+	// 检查包总大小上限 (4GB)
+	if ( iPackSize > 0xFFFFFFFF ) {
+		MG_ERROR(("XTP_Send: Packet too large"));
+		if ( pParamInfo ) xrtFree(pParamInfo);
+		return FALSE;
 	}
 	
 	// 发送包头
 	XTP_PackHeader header = {
 		.HeadInfo = {'x', 't', 'p', 1},
-		.PackSize = iPackSize,
-		.CmdSize = iCmdSize,
-		.ParamCount = iParamCount,
-		.BodySize = iBodySize
+		.PackSize = (unsigned int)iPackSize,
+		.CmdSize = (unsigned short)iCmdSize,
+		.ParamCount = (unsigned short)iParamCount,
+		.BodySize = (unsigned int)iBodySize
 	};
 	mg_send(c, &header, sizeof(header));
 	
