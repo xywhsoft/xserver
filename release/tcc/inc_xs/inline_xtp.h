@@ -46,15 +46,15 @@ typedef struct {
 //   pBody       - Body 数据
 //   iBodySize   - Body 长度 (0 表示自动计算字符串长度)
 // 返回: TRUE=成功, FALSE=失败
-int (*XTP_Send)(struct mg_connection* c, str sCmd, size_t iCmdSize, 
-                uint iParamCount, str* arrParam, str* arrValue, 
-                ptr pBody, size_t iBodySize);
+int XTP_Send(struct mg_connection* c, str sCmd, size_t iCmdSize, 
+             uint iParamCount, str* arrParam, str* arrValue, 
+             ptr pBody, size_t iBodySize);
 
 // 获取 XTP 消息的参数值
 // 参数:
 //   msg  - XTP 消息对象 (XTP_MessageObject)
 //   sKey - 参数名
 // 返回: 参数值字符串，不存在则返回 NULL
-char* (*XTP_GetParam)(void* msg, const char* sKey);
+char* XTP_GetParam(void* msg, const char* sKey);
 
 
