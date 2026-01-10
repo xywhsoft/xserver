@@ -37,6 +37,9 @@ void Request_Chart_Get(XS_ServerObject objServer, XS_HostObject objHost, struct 
 	size_t iRetSize = 0;
 	char* sRet = xrtStringifyJSON(option, FALSE, &iRetSize);
 	http_reply(c, 200, "Content-Type: application/json\r\n", sRet, iRetSize);
+	// 释放内存
+	xrtFree(sRet);
+	xvoUnref(option);
 }
 
 

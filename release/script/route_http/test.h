@@ -25,6 +25,9 @@ void Request_Template(XS_ServerObject objServer, XS_HostObject objHost, struct m
 	size_t iRetSize = 0;
 	str sRet = MakePageWithTemplate("page.html", data, &iRetSize);
 	http_reply(c, 200, "Access-Control-Allow-Origin: *\r\nContent-Type: text/html\r\n", sRet, iRetSize);
+	// 释放内存
+	xrtFree(sRet);
+	xvoUnref(data);
 }
 
 

@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
+#include <limits.h>  // PATH_MAX
 
 
 
@@ -177,8 +178,13 @@ void LoadHostConfig(xvalue objRoot, XS_HostObject objHost, XS_ServerObject objSe
 	} else if ( xrtPathIsAbs((char*)sPath, 0) ) {
 		objHost->Path = (char*)sPath;
 	} else {
-		objHost->Path = malloc(4096);
-		realpath(sPath, objHost->Path);
+		#ifdef PATH_MAX
+			objHost->Path = malloc(PATH_MAX);
+			realpath(sPath, objHost->Path);
+		#else
+			objHost->Path = malloc(4096);
+			realpath(sPath, objHost->Path);
+		#endif
 	}
 	sPath = xvoTableGetText(objRoot, "devfile", 7);
 	if ( (sPath == NULL) || (strlen(sPath) == 0) ) {
@@ -192,14 +198,23 @@ void LoadHostConfig(xvalue objRoot, XS_HostObject objHost, XS_ServerObject objSe
 	} else if ( xrtPathIsAbs((char*)sPath, 0) ) {
 		objHost->DevFile = (char*)sPath;
 	} else {
-		objHost->DevFile = malloc(4096);
-		realpath(sPath, objHost->DevFile);
+		#ifdef PATH_MAX
+			objHost->DevFile = malloc(PATH_MAX);
+			realpath(sPath, objHost->DevFile);
+		#else
+			objHost->DevFile = malloc(4096);
+			realpath(sPath, objHost->DevFile);
+		#endif
 	}
 	
 	// 读取证书
 	if ( objServer->EnableTLS ) {
 		sPath = xvoTableGetText(objRoot, "tls_ca", 6);
-		char sTempPath[4096];
+		#ifdef PATH_MAX
+			char sTempPath[PATH_MAX];
+		#else
+			char sTempPath[4096];
+		#endif
 		if ( sPath ) {
 			realpath(sPath, sTempPath);
 			objHost->TLS_CA = mg_file_read(&mg_fs_posix, sTempPath);
@@ -208,11 +223,21 @@ void LoadHostConfig(xvalue objRoot, XS_HostObject objHost, XS_ServerObject objSe
 			objHost->TLS_CA.buf = NULL;
 		}
 		sPath = xvoTableGetText(objRoot, "tls_cert", 8);
-		realpath(sPath, sTempPath);
-		objHost->TLS_Cert = mg_file_read(&mg_fs_posix, sTempPath);
+		if ( sPath ) {
+			realpath(sPath, sTempPath);
+			objHost->TLS_Cert = mg_file_read(&mg_fs_posix, sTempPath);
+		} else {
+			objHost->TLS_Cert.len = 0;
+			objHost->TLS_Cert.buf = NULL;
+		}
 		sPath = xvoTableGetText(objRoot, "tls_key", 7);
-		realpath(sPath, sTempPath);
-		objHost->TLS_Key = mg_file_read(&mg_fs_posix, sTempPath);
+		if ( sPath ) {
+			realpath(sPath, sTempPath);
+			objHost->TLS_Key = mg_file_read(&mg_fs_posix, sTempPath);
+		} else {
+			objHost->TLS_Key.len = 0;
+			objHost->TLS_Key.buf = NULL;
+		}
 	}
 	
 	// 加载动态开发入口文件
@@ -405,6 +430,7 @@ int LoadConfig(str sOptFile)
 		printf("!!! ERROR !!! Option JSON File no object or array !\n");
 		exit(EXIT_FAILURE);
 	}
+	return 0;
 }
 
 

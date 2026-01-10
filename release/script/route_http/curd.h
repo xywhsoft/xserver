@@ -32,6 +32,9 @@ void Request_List(XS_ServerObject objServer, XS_HostObject objHost, struct mg_co
 	size_t iRetSize = 0;
 	char* sRet = xrtStringifyJSON(tblRet, FALSE, &iRetSize);
 	http_reply(c, 200, "Content-Type: application/json\r\n", sRet, iRetSize);
+	// 释放内存
+	xrtFree(sRet);
+	xvoUnref(tblRet);
 }
 
 
@@ -47,21 +50,30 @@ void Request_Add(XS_ServerObject objServer, XS_HostObject objHost, struct mg_con
 	xvalue objBody = xrtParseJSON(hm->body.buf, hm->body.len);
 	if ( objBody->Type != XVO_DT_TABLE ) {
 		http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"Body 域必须传递为 JSON 对象！\"}", 0);
+		xvoUnref(objBody);
 		return;
 	}
 	// 检查 name 属性是否正确
 	str sName = xvoTableGetText(objBody, "name", 4);
 	if ( (sName == NULL) || (sName[0] == 0) ) {
 		http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"参数 name 不能为空！\"}", 0);
+		xvoUnref(objBody);
 		return;
 	}
-	// 写入数据库
+	// 写入数据库（使用转义防止 SQL 注入）
 	int iAge = xvoTableGetInt(objBody, "age", 3);
 	str sMail = xvoTableGetText(objBody, "mail", 4);
 	str sdesc = xvoTableGetText(objBody, "desc", 4);
-	str sSQL = xrtFormat("INSERT INTO test (name, age, mail, desc) VALUES ('%s', %d, '%s', '%s')", sName, iAge, sMail, sdesc);
+	str sNameEsc = sql_escape(sName, 0);
+	str sMailEsc = sql_escape(sMail, 0);
+	str sdescEsc = sql_escape(sdesc, 0);
+	str sSQL = xrtFormat("INSERT INTO test (name, age, mail, desc) VALUES ('%s', %d, '%s', '%s')", sNameEsc, iAge, sMailEsc, sdescEsc);
 	xdoExecute(G_DB, sSQL);
 	xrtFree(sSQL);
+	xrtFree(sNameEsc);
+	xrtFree(sMailEsc);
+	xrtFree(sdescEsc);
+	xvoUnref(objBody);
 	// 返回消息
 	http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": true, \"msg\": \"添加数据成功！\"}", 0);
 }
@@ -79,16 +91,20 @@ void Request_Del(XS_ServerObject objServer, XS_HostObject objHost, struct mg_con
 	xvalue objBody = xrtParseJSON(hm->body.buf, hm->body.len);
 	if ( objBody->Type != XVO_DT_ARRAY ) {
 		http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"Body 域必须传递为 JSON 数组！\"}", 0);
+		xvoUnref(objBody);
 		return;
 	}
 	// 遍历数组删除数据
 	int iCount = xvoArrayItemCount(objBody);
 	for ( int i = 0; i < iCount; i++ ) {
 		str id = xvoArrayGetText(objBody, i);
-		str sSQL = xrtFormat("DELETE FROM test WHERE id = %s", id);
+		str idEsc = sql_escape(id, 0);
+		str sSQL = xrtFormat("DELETE FROM test WHERE id = '%s'", idEsc);
 		xdoExecute(G_DB, sSQL);
 		xrtFree(sSQL);
+		xrtFree(idEsc);
 	}
+	xvoUnref(objBody);
 	// 返回消息
 	http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": true, \"msg\": \"数据删除成功！\"}", 0);
 }
@@ -106,25 +122,40 @@ void Request_Edit(XS_ServerObject objServer, XS_HostObject objHost, struct mg_co
 	xvalue objBody = xrtParseJSON(hm->body.buf, hm->body.len);
 	if ( objBody->Type != XVO_DT_TABLE ) {
 		http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"Body 域必须传递为 JSON 对象！\"}", 0);
+		xvoUnref(objBody);
 		return;
 	}
 	// 检查 id 属性是否正确
 	str sID = xvoTableGetText(objBody, "id", 2);
 	if ( (sID == NULL) || (sID[0] == 0) ) {
 		http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"参数 id 不能为空！\"}", 0);
+		xvoUnref(objBody);
 		return;
 	}
-	// 检查 field 属性是否正确
+	// 检查 field 属性是否正确（只允许特定字段名防止注入）
 	str sField = xvoTableGetText(objBody, "field", 5);
 	if ( (sField == NULL) || (sField[0] == 0) ) {
 		http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"参数 field 不能为空！\"}", 0);
+		xvoUnref(objBody);
 		return;
 	}
-	// 修改属性
+	// 白名单验证字段名（防止字段名注入）
+	if ( strcmp(sField, "name") != 0 && strcmp(sField, "age") != 0 && 
+	     strcmp(sField, "mail") != 0 && strcmp(sField, "desc") != 0 ) {
+		http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"无效的字段名！\"}", 0);
+		xvoUnref(objBody);
+		return;
+	}
+	// 修改属性（使用转义防止 SQL 注入）
 	str sValue = xvoTableGetText(objBody, "value", 5);
-	str sSQL = xrtFormat("UPDATE test SET %s = '%s' WHERE id = %s", sField, sValue, sID);
+	str sValueEsc = sql_escape(sValue, 0);
+	str sIDEsc = sql_escape(sID, 0);
+	str sSQL = xrtFormat("UPDATE test SET %s = '%s' WHERE id = '%s'", sField, sValueEsc, sIDEsc);
 	xdoExecute(G_DB, sSQL);
 	xrtFree(sSQL);
+	xrtFree(sValueEsc);
+	xrtFree(sIDEsc);
+	xvoUnref(objBody);
 	// 返回消息
 	http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": true, \"msg\": \"数据编辑成功！\"}", 0);
 }

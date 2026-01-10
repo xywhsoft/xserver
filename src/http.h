@@ -9,15 +9,35 @@ void InitTLS(struct mg_connection *c, XS_HostObject objHost, XS_ServerObject obj
 	opts.ca = objHost->TLS_CA;
 	opts.cert = objHost->TLS_Cert;
 	opts.key = objHost->TLS_Key;
-	/*
-	if ( objHost->DebugMode ) {
-		printf("InitTLS : %s\n", objHost->Name);
-		printf("CA :\n%s\n", opts.ca.buf);
-		printf("Cert :\n%s\n", opts.cert.buf);
-		printf("Key :\n%s\n", opts.key.buf);
-	}
-	*/
 	mg_tls_init(c, &opts);
+}
+
+
+
+// 根据 HTTP 请求定位 Host
+XS_HostObject LocateHost_HTTP(XS_ServerObject objServer, struct mg_http_message* hm)
+{
+	struct mg_str* Host = mg_http_get_header(hm, "host");
+	XS_HostObject objHost = NULL;
+	if ( Host && (Host->len > 0) ) {
+		// 去除端口号（如果有）
+		size_t hostLen = Host->len;
+		for ( size_t i = 0; i < Host->len; i++ ) {
+			if ( Host->buf[i] == ':' ) {
+				hostLen = i;
+				break;
+			}
+		}
+		XS_HostObject* ppHost = xrtDictGet(objServer->HostMap, Host->buf, hostLen);
+		if ( ppHost ) {
+			objHost = ppHost[0];
+		} else if ( objServer->EnableDefaultHost ) {
+			objHost = &objServer->DefaultHost;
+		}
+	} else if ( objServer->EnableDefaultHost ) {
+		objHost = &objServer->DefaultHost;
+	}
+	return objHost;
 }
 
 
@@ -66,29 +86,11 @@ static void ProcHTTP(struct mg_connection* c, int ev, void *ev_data) {
 	// 进入协议处理逻辑
 	if ( ev == MG_EV_HTTP_MSG ) {
 		struct mg_http_message* hm = ev_data;
-		// 定位 Host
-		struct mg_str* Host = mg_http_get_header(hm, "host");
-		XS_HostObject objHost = NULL;
-		if ( Host && (Host->len > 0) ) {
-			XS_HostObject* ppHost = xrtDictGet(objServer->HostMap, Host->buf, Host->len);
-			if ( ppHost ) {
-				objHost = ppHost[0];
-			} else {
-				if ( objServer->EnableDefaultHost ) {
-					objHost = &objServer->DefaultHost;
-				}
-			}
-		} else {
-			if ( objServer->EnableDefaultHost ) {
-				objHost = &objServer->DefaultHost;
-			}
-		}
-		// 处理请求
+		XS_HostObject objHost = LocateHost_HTTP(objServer, hm);
 		if ( objHost ) {
 			ProcRequest_HTTP(objServer, objHost, c, hm);
 		} else {
 			printf("!!! ERROR !!! NO Enabled Default Host [HTTP] !");
-			return;
 		}
 	}
 }
@@ -101,7 +103,6 @@ static void ProcHTTP(struct mg_connection* c, int ev, void *ev_data) {
 		XS_ServerObject objServer = (XS_ServerObject)c->fn_data;
 		// 设置 TLS 证书
 		if ( ev == MG_EV_ACCEPT ) {
-			// 使用 mbedtls 时，仅支持默认 Host
 			if ( objServer->EnableDefaultHost ) {
 				InitTLS(c, &objServer->DefaultHost, objServer);
 			} else {
@@ -122,29 +123,11 @@ static void ProcHTTP(struct mg_connection* c, int ev, void *ev_data) {
 		// 进入协议处理逻辑
 		if ( ev == MG_EV_HTTP_MSG ) {
 			struct mg_http_message* hm = ev_data;
-			// 定位 Host
-			struct mg_str* Host = mg_http_get_header(hm, "host");
-			XS_HostObject objHost = NULL;
-			if ( Host && (Host->len > 0) ) {
-				XS_HostObject* ppHost = xrtDictGet(objServer->HostMap, Host->buf, Host->len);
-				if ( ppHost ) {
-					objHost = ppHost[0];
-				} else {
-					if ( objServer->EnableDefaultHost ) {
-						objHost = &objServer->DefaultHost;
-					}
-				}
-			} else {
-				if ( objServer->EnableDefaultHost ) {
-					objHost = &objServer->DefaultHost;
-				}
-			}
-			// 处理请求
+			XS_HostObject objHost = LocateHost_HTTP(objServer, hm);
 			if ( objHost ) {
 				ProcRequest_HTTP(objServer, objHost, c, hm);
 			} else {
-				printf("!!! ERROR !!! NO Enabled Default Host [HTTP] !");
-				return;
+				printf("!!! ERROR !!! NO Enabled Default Host [HTTPS] !");
 			}
 		}
 	}
@@ -163,18 +146,14 @@ static void ProcHTTP(struct mg_connection* c, int ev, void *ev_data) {
 					printf("!!! ERROR !!! NO Enabled Default Host [TLS] !");
 				}
 			} else {
-				// 读取 Host 映射
 				XS_HostObject* ppHost = xrtDictGet(objServer->HostMap, (char*)ev_data, strlen(ev_data));
 				if ( ppHost ) {
 					XS_HostObject objHost = ppHost[0];
 					InitTLS(c, objHost, objServer);
+				} else if ( objServer->EnableDefaultHost ) {
+					InitTLS(c, &objServer->DefaultHost, objServer);
 				} else {
-					// 找不到 Host 使用默认 Host
-					if ( objServer->EnableDefaultHost ) {
-						InitTLS(c, &objServer->DefaultHost, objServer);
-					} else {
-						printf("!!! ERROR !!! NO Enabled Default Host [TLS host missing] !");
-					}
+					printf("!!! ERROR !!! NO Enabled Default Host [TLS host missing] !");
 				}
 			}
 		}
@@ -192,29 +171,11 @@ static void ProcHTTP(struct mg_connection* c, int ev, void *ev_data) {
 		// 进入协议处理逻辑
 		if ( ev == MG_EV_HTTP_MSG ) {
 			struct mg_http_message* hm = ev_data;
-			// 定位 Host
-			struct mg_str* Host = mg_http_get_header(hm, "host");
-			XS_HostObject objHost = NULL;
-			if ( Host && (Host->len > 0) ) {
-				XS_HostObject* ppHost = xrtDictGet(objServer->HostMap, Host->buf, Host->len);
-				if ( ppHost ) {
-					objHost = ppHost[0];
-				} else {
-					if ( objServer->EnableDefaultHost ) {
-						objHost = &objServer->DefaultHost;
-					}
-				}
-			} else {
-				if ( objServer->EnableDefaultHost ) {
-					objHost = &objServer->DefaultHost;
-				}
-			}
-			// 处理请求
+			XS_HostObject objHost = LocateHost_HTTP(objServer, hm);
 			if ( objHost ) {
 				ProcRequest_HTTP(objServer, objHost, c, hm);
 			} else {
-				printf("!!! ERROR !!! NO Enabled Default Host [HTTP] !");
-				return;
+				printf("!!! ERROR !!! NO Enabled Default Host [HTTPS] !");
 			}
 		}
 	}

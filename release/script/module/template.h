@@ -42,6 +42,7 @@ int ScanTemplateFileProc(str sPath, size_t iSize, int bDir, ptr pData, size_t iP
 		printf("Error Info : RefLine : %d\n", objTemplate->ErrorRefLine);
 		printf("Error Info : RefLinePos : %d\n", objTemplate->ErrorRefLinePos);
 		printf("Error Info : RefPos : %d [%.10s]\n", objTemplate->ErrorRefPos, &sText[objTemplate->ErrorRefPos]);
+		xteParseFree(objTemplate);  // 解析失败时释放模板对象
 	}
 	xrtFree(sText);
 	xrtFree(sKey);

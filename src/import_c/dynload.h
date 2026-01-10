@@ -5,47 +5,20 @@
 
 
 
-// C 语言脚本报错处理
-void handle_error(void *opaque, const char *msg)
-{
-    fprintf(opaque, "%s\n", msg);
-}
-
-
-
 // 创建动态加载 C 语言脚本运行环境
 void DynLoad_C(XS_ServerObject objServer, XS_HostObject objHost)
 {
-	TCCState* s = tcc_new();
+	// 使用 xsCreateTCC 创建 TCC 状态机
+	TCCState* s = xsCreateTCC(objHost->Path);
 	if ( s == NULL ) {
 		printf("!!! ERROR !!! TCCState create failed !\n");
 		exit(EXIT_FAILURE);
 	}
-	// 设置错误输出回调函数
-	tcc_set_error_func(s, stderr, handle_error);
-	// 添加 引用文件、库文件 目录
-	#if defined(_WIN32) || defined(_WIN64)
-		tcc_add_include_path(s, "tcc/include_win/winapi");
-		tcc_add_include_path(s, "tcc/include_win");
-	#else
-		tcc_add_include_path(s, "tcc/include_linux");
-		tcc_add_include_path(s, "/usr/include");
-		tcc_add_library_path(s, "/usr/lib");
-		tcc_add_include_path(s, "/usr/include/x86_64-linux-gnu");
-		tcc_add_include_path(s, "/usr/include/x86_64-linux-gnu/sys");
-		tcc_add_library_path(s, "/usr/lib/x86_64-linux-gnu");
-	#endif
-	tcc_add_include_path(s, "tcc/inc_xs");
-	tcc_add_include_path(s, "tcc/include");
-	tcc_add_library_path(s, "tcc/lib");
-	tcc_add_include_path(s, objHost->Path);
-	tcc_add_library_path(s, objHost->Path);
+	// 添加开发文件目录
 	char* sPath = xrtPathGetDir(objHost->DevFile, 0);
 	tcc_add_include_path(s, sPath);
 	tcc_add_library_path(s, sPath);
 	xrtFree(sPath);
-	// 设置编译到内存
-	tcc_set_output_type(s, TCC_OUTPUT_MEMORY);
 	// 检查文件是否存在
 	if ( xrtFileExists(objHost->DevFile) == FALSE ) {
 		printf("!!! ERROR !!! cannot find file : %s\n", objHost->DevFile);
@@ -55,10 +28,10 @@ void DynLoad_C(XS_ServerObject objServer, XS_HostObject objHost)
 	char* sCode = xrtFileReadAll(objHost->DevFile, XRT_CP_BINARY, NULL);
 	if ( tcc_compile_string(s, sCode) == -1 ) {
 		printf("!!! ERROR !!! tcc_compile_string failed !\n");
+		xrtFree(sCode);
 		exit(EXIT_FAILURE);
 	}
-	// 导入运行时和全局数据
-	ImportAll(s);
+	xrtFree(sCode);
 	// 地址重定向
 	if ( tcc_relocate(s) < 0 ) {
 		printf("!!! ERROR !!! tcc_relocate failed !\n");

@@ -1,57 +1,83 @@
 
 
 
-// 订阅列表数据结构
-static const char *s_listen_on = "ws://localhost:8000";
-static const char *s_web_root = ".";
-static const char *s_ca_path = "ca.pem";
-static const char *s_cert_path = "cert.pem";
-static const char *s_key_path = "key.pem";
-
-
-
-
-
-// MQTT 协议处理
+// WebSocket 协议处理
 static void ProcWS(struct mg_connection *c, int ev, void *ev_data) {
 	XS_ServerObject objServer = (XS_ServerObject)c->fn_data;
-	if ( ev == MG_EV_OPEN ) {
-		// c->is_hexdumping = 1;
-	} else if( ev == MG_EV_ACCEPT && mg_url_is_ssl(s_listen_on) ) {
-		struct mg_str ca = mg_file_read(&mg_fs_posix, s_ca_path);
-		struct mg_str cert = mg_file_read(&mg_fs_posix, s_cert_path);
-		struct mg_str key = mg_file_read(&mg_fs_posix, s_key_path);
-		struct mg_tls_opts opts = {.ca = ca, .cert = cert, .key = key};
-		mg_tls_init(c, &opts);
-	} else if ( ev == MG_EV_HTTP_MSG ) {
+	// 先尝试调用自定义的协议处理逻辑
+	if ( objServer->DefaultHost.DevLang == SLT_C ) {
+		if ( objServer->DefaultHost.EventProc ) {
+			int (*EventProc)(XS_ServerObject objServer, XS_HostObject objHost, struct mg_connection *c, int ev, void *ev_data) = objServer->DefaultHost.EventProc;
+			if ( EventProc(objServer, &objServer->DefaultHost, c, ev, ev_data) ) {
+				return;
+			}
+		}
+	} else if ( objServer->DefaultHost.DevLang == SLT_LUA ) {
+	} else if ( objServer->DefaultHost.DevLang == SLT_JS ) {
+	}
+	// 进入协议处理逻辑
+	if ( ev == MG_EV_HTTP_MSG ) {
 		struct mg_http_message *hm = (struct mg_http_message *) ev_data;
-		if (mg_match(hm->uri, mg_str("/websocket"), NULL)) {
-			// Upgrade to websocket. From now on, a connection is a full-duplex
-			// Websocket connection, which will receive MG_EV_WS_MSG events.
+		if ( mg_match(hm->uri, mg_str("/websocket"), NULL) ) {
+			// 升级到 WebSocket
 			mg_ws_upgrade(c, hm, NULL);
-		} else if ( mg_match(hm->uri, mg_str("/rest"), NULL) ) {
-			// Serve REST response
-			mg_http_reply(c, 200, "", "{\"result\": %d}\n", 123);
 		} else {
-			// Serve static files
-			struct mg_http_serve_opts opts = {.root_dir = s_web_root};
+			// 静态文件服务
+			struct mg_http_serve_opts opts = {.root_dir = objServer->DefaultHost.Path};
 			mg_http_serve_dir(c, ev_data, &opts);
 		}
 	} else if ( ev == MG_EV_WS_MSG ) {
-		// Got websocket frame. Received data is wm->data. Echo it back!
+		// WebSocket 消息处理（默认回显）
 		struct mg_ws_message *wm = (struct mg_ws_message *) ev_data;
 		mg_ws_send(c, wm->data.buf, wm->data.len, WEBSOCKET_OP_TEXT);
 	}
 }
+
+
+
+// WebSocket TLS 协议处理
 static void ProcWSS(struct mg_connection *c, int ev, void *ev_data) {
 	XS_ServerObject objServer = (XS_ServerObject)c->fn_data;
+	// 设置 TLS 证书
+	if ( ev == MG_EV_ACCEPT ) {
+		if ( objServer->EnableDefaultHost ) {
+			InitTLS(c, &objServer->DefaultHost, objServer);
+		} else {
+			printf("!!! ERROR !!! NO Enabled Default Host [WSS] !");
+			return;
+		}
+	}
+	// 先尝试调用自定义的协议处理逻辑
+	if ( objServer->DefaultHost.DevLang == SLT_C ) {
+		if ( objServer->DefaultHost.EventProc ) {
+			int (*EventProc)(XS_ServerObject objServer, XS_HostObject objHost, struct mg_connection *c, int ev, void *ev_data) = objServer->DefaultHost.EventProc;
+			if ( EventProc(objServer, &objServer->DefaultHost, c, ev, ev_data) ) {
+				return;
+			}
+		}
+	} else if ( objServer->DefaultHost.DevLang == SLT_LUA ) {
+	} else if ( objServer->DefaultHost.DevLang == SLT_JS ) {
+	}
+	// 进入协议处理逻辑
+	if ( ev == MG_EV_HTTP_MSG ) {
+		struct mg_http_message *hm = (struct mg_http_message *) ev_data;
+		if ( mg_match(hm->uri, mg_str("/websocket"), NULL) ) {
+			mg_ws_upgrade(c, hm, NULL);
+		} else {
+			struct mg_http_serve_opts opts = {.root_dir = objServer->DefaultHost.Path};
+			mg_http_serve_dir(c, ev_data, &opts);
+		}
+	} else if ( ev == MG_EV_WS_MSG ) {
+		struct mg_ws_message *wm = (struct mg_ws_message *) ev_data;
+		mg_ws_send(c, wm->data.buf, wm->data.len, WEBSOCKET_OP_TEXT);
+	}
 }
 
 
 
 
 
-// 启动 MQTT 服务
+// 启动 WebSocket 服务
 int RunServerWS(XS_ServerObject objServer)
 {
 	// 启动 WebSocket 服务
@@ -73,11 +99,12 @@ int RunServerWS(XS_ServerObject objServer)
 			objServer->ConnTLS = objConn;
 		}
 	}
+	return TRUE;
 }
 
 
 
-// 停止 HTTP 服务
+// 停止 WebSocket 服务
 int StopServerWS(XS_ServerObject objServer)
 {
 	return TRUE;

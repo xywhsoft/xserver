@@ -1,6 +1,97 @@
 
 
 
+// 函数定义
+void ImportAll(TCCState* s);
+
+
+
+// TCC 状态机错误处理回调
+static void xsCreateTCC_ErrorHandler(void *opaque, const char *msg)
+{
+	fprintf(stderr, "[TCC] %s\n", msg);
+}
+
+
+
+// 动态创建 TCC 状态机（与 xs 主程序一样的配置）
+// 返回创建好的 TCCState，失败返回 NULL
+TCCState* xsCreateTCC(const char* sWorkPath)
+{
+	TCCState* s = tcc_new();
+	if ( s == NULL ) {
+		return NULL;
+	}
+	// 设置错误输出回调函数
+	tcc_set_error_func(s, stderr, xsCreateTCC_ErrorHandler);
+	// 添加系统引用文件目录
+	#if defined(_WIN32) || defined(_WIN64)
+		tcc_add_include_path(s, "tcc/include_win/winapi");
+		tcc_add_include_path(s, "tcc/include_win");
+	#else
+		tcc_add_include_path(s, "tcc/include_linux");
+		tcc_add_include_path(s, "/usr/include");
+		tcc_add_library_path(s, "/usr/lib");
+		tcc_add_include_path(s, "/usr/include/x86_64-linux-gnu");
+		tcc_add_include_path(s, "/usr/include/x86_64-linux-gnu/sys");
+		tcc_add_library_path(s, "/usr/lib/x86_64-linux-gnu");
+	#endif
+	// 添加 xserver 引用文件目录
+	tcc_add_include_path(s, "tcc/inc_xs");
+	tcc_add_include_path(s, "tcc/include");
+	tcc_add_library_path(s, "tcc/lib");
+	// 添加工作目录
+	if ( sWorkPath && sWorkPath[0] != '\0' ) {
+		tcc_add_include_path(s, sWorkPath);
+		tcc_add_library_path(s, sWorkPath);
+	}
+	// 设置编译到内存
+	tcc_set_output_type(s, TCC_OUTPUT_MEMORY);
+	// 导入运行时和全局数据
+	ImportAll(s);
+	return s;
+}
+
+
+
+// 销毁 TCC 状态机
+void xsDestroyTCC(TCCState* s)
+{
+	if ( s ) {
+		tcc_delete(s);
+	}
+}
+
+
+
+// SQL 字符串转义（防止 SQL 注入）
+char* sql_escape(const char* str, size_t len)
+{
+	if ( str == NULL ) return xrtCopyStr("", 0);
+	if ( len == 0 ) len = strlen(str);
+	// 最坏情况：每个字符都需要转义，长度翻倍
+	char* result = xrtMalloc(len * 2 + 1);
+	char* p = result;
+	for ( size_t i = 0; i < len; i++ ) {
+		char c = str[i];
+		if ( c == '\'' ) {
+			*p++ = '\'';
+			*p++ = '\'';
+		} else if ( c == '\\' ) {
+			*p++ = '\\';
+			*p++ = '\\';
+		} else if ( c == '\0' ) {
+			break;
+		} else {
+			*p++ = c;
+		}
+	}
+	*p = '\0';
+	return result;
+}
+
+
+
 // HTTP 响应（根据 mg_http_reply 修改而来，不会进行 printf 代入）
 const char *mg_http_status_code_str(int status_code);
 void http_reply(struct mg_connection* c, int code, const char* headers, const char* sBody, size_t iSize)
@@ -41,7 +132,7 @@ xdict ParseCookies(struct mg_http_message* hm)
 					if ( k ) {
 						for ( int j = i; j >= 0; j-- ) {
 							c = s[j];
-							if ( (c != ' ') || (c != '\t') || (c != '\r') || (c != '\n') ) {
+							if ( (c != ' ') && (c != '\t') && (c != '\r') && (c != '\n') ) {
 								kl = &s[i] - k;
 								m = TRUE;
 							}
@@ -108,6 +199,7 @@ void FreeCookies(xdict tblCookies)
 {
 	if ( tblCookies ) {
 		xrtDictWalk(tblCookies, (ptr)FreeCookies_FreeProc, NULL);
+		xrtDictDestroy(tblCookies);
 	}
 }
 

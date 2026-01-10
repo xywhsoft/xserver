@@ -76,6 +76,7 @@ static void ProcMQTT(struct mg_connection *c, int ev, void *ev_data) {
 			struct mg_str topic;
 			int num_topics = 0;
 			while ( (pos = mg_mqtt_next_sub(mm, &topic, &qos, pos)) > 0) {
+				if ( num_topics >= 256 ) break;  // 防止缓冲区溢出
 				struct sub *sub = calloc(1, sizeof(*sub));
 				sub->c = c;
 				sub->topic = mg_strdup(topic);
@@ -110,6 +111,21 @@ static void ProcMQTT(struct mg_connection *c, int ev, void *ev_data) {
 			mg_mqtt_send_header(c, MQTT_CMD_PINGRESP, 0, 0);
 		}
 	} else if ( ev == MG_EV_CLOSE ) {
+		// 连接关闭时，清理该连接的所有订阅
+		struct sub **prev = &s_subs;
+		struct sub *sub = s_subs;
+		while ( sub != NULL ) {
+			struct sub *next = sub->next;
+			if ( sub->c == c ) {
+				MG_INFO( ("UNSUB %p [%.*s]", c->fd, (int) sub->topic.len, sub->topic.buf) );
+				*prev = next;
+				free((void*)sub->topic.buf);  // 释放 mg_strdup 分配的内存
+				free(sub);
+			} else {
+				prev = &sub->next;
+			}
+			sub = next;
+		}
 	}
 }
 
@@ -118,6 +134,92 @@ static void ProcMQTT(struct mg_connection *c, int ev, void *ev_data) {
 // MQTTS 协议处理
 static void ProcMQTTS(struct mg_connection *c, int ev, void *ev_data) {
 	XS_ServerObject objServer = (XS_ServerObject)c->fn_data;
+	// 设置 TLS 证书
+	if ( ev == MG_EV_ACCEPT ) {
+		if ( objServer->EnableDefaultHost ) {
+			InitTLS(c, &objServer->DefaultHost, objServer);
+		} else {
+			printf("!!! ERROR !!! NO Enabled Default Host [MQTTS] !");
+			return;
+		}
+	}
+	// 先尝试调用自定义的协议处理逻辑
+	if ( objServer->DefaultHost.DevLang == SLT_C ) {
+		if ( objServer->DefaultHost.EventProc ) {
+			int (*EventProc)(XS_ServerObject objServer, XS_HostObject objHost, struct mg_connection *c, int ev, void *ev_data) = objServer->DefaultHost.EventProc;
+			if ( EventProc(objServer, &objServer->DefaultHost, c, ev, ev_data) ) {
+				return;
+			}
+		}
+	} else if ( objServer->DefaultHost.DevLang == SLT_LUA ) {
+	} else if ( objServer->DefaultHost.DevLang == SLT_JS ) {
+	}
+	// 进入协议处理逻辑
+	if ( ev == MG_EV_MQTT_CMD ) {
+		struct mg_mqtt_message* mm = (struct mg_mqtt_message*)ev_data;
+		if ( mm->cmd == MQTT_CMD_CONNECT ) {
+			if (mm->dgram.len < 9) {
+				mg_error(c, "Malformed MQTT frame");
+			} else if (mm->dgram.buf[8] != 4) {
+				mg_error(c, "Unsupported MQTT version %d", mm->dgram.buf[8]);
+			} else {
+				uint8_t response[] = {0, 0};
+				mg_mqtt_send_header(c, MQTT_CMD_CONNACK, 0, sizeof(response));
+				mg_send(c, response, sizeof(response));
+			}
+		} else if ( mm->cmd == MQTT_CMD_SUBSCRIBE ) {
+			size_t pos = 4;
+			uint8_t qos, resp[256];
+			struct mg_str topic;
+			int num_topics = 0;
+			while ( (pos = mg_mqtt_next_sub(mm, &topic, &qos, pos)) > 0) {
+				if ( num_topics >= 256 ) break;
+				struct sub *sub = calloc(1, sizeof(*sub));
+				sub->c = c;
+				sub->topic = mg_strdup(topic);
+				sub->qos = qos;
+				LIST_ADD_HEAD(struct sub, &s_subs, sub);
+				MG_INFO( ("SUB %p [%.*s]", c->fd, (int) sub->topic.len, sub->topic.buf) );
+				for (size_t i = 0; i < sub->topic.len; i++) {
+					if (sub->topic.buf[i] == '+') ((char *) sub->topic.buf)[i] = '*';
+				}
+				resp[num_topics++] = qos;
+			}
+			mg_mqtt_send_header(c, MQTT_CMD_SUBACK, 0, num_topics + 2);
+			uint16_t id = mg_htons(mm->id);
+			mg_send(c, &id, 2);
+			mg_send(c, resp, num_topics);
+		} else if ( mm->cmd == MQTT_CMD_PUBLISH ) {
+			for ( struct sub *sub = s_subs; sub != NULL; sub = sub->next ) {
+				if (mg_match(mm->topic, sub->topic, NULL)) {
+					struct mg_mqtt_opts pub_opts;
+					memset(&pub_opts, 0, sizeof(pub_opts));
+					pub_opts.topic = mm->topic;
+					pub_opts.message = mm->data;
+					pub_opts.qos = 1;
+					pub_opts.retain = false;
+					mg_mqtt_pub(sub->c, &pub_opts);
+				}
+			}
+		} else if ( mm->cmd == MQTT_CMD_PINGREQ ) {
+			mg_mqtt_send_header(c, MQTT_CMD_PINGRESP, 0, 0);
+		}
+	} else if ( ev == MG_EV_CLOSE ) {
+		struct sub **prev = &s_subs;
+		struct sub *sub = s_subs;
+		while ( sub != NULL ) {
+			struct sub *next = sub->next;
+			if ( sub->c == c ) {
+				MG_INFO( ("UNSUB %p [%.*s]", c->fd, (int) sub->topic.len, sub->topic.buf) );
+				*prev = next;
+				free((void*)sub->topic.buf);
+				free(sub);
+			} else {
+				prev = &sub->next;
+			}
+			sub = next;
+		}
+	}
 }
 
 
@@ -151,9 +253,18 @@ int RunServerMQTT(XS_ServerObject objServer)
 
 
 
-// 停止 HTTP 服务
+// 停止 MQTT 服务
 int StopServerMQTT(XS_ServerObject objServer)
 {
+	// 清理所有订阅
+	struct sub *sub = s_subs;
+	while ( sub != NULL ) {
+		struct sub *next = sub->next;
+		free((void*)sub->topic.buf);
+		free(sub);
+		sub = next;
+	}
+	s_subs = NULL;
 	return TRUE;
 }
 

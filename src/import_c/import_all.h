@@ -7,6 +7,7 @@
 #include "import_sqlite.h"
 #include "import_xdo.h"
 //#include "import_md4c.h"
+#include "import_xtp.h"
 #include "import_other.h"
 
 
@@ -34,6 +35,9 @@ void ImportAll(TCCState* s)
 	
 	// 添加函数 - Other
 	ImportOther(s);
+	
+	// 添加函数 - XTP
+	ImportXTP(s);
 	
 	// 最后，把自己也添加进去，方便脚本环境里，创建同等的运行环境
 	tcc_add_symbol(s, "ImportAll", ImportAll);

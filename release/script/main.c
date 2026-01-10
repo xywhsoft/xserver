@@ -76,8 +76,10 @@ void ServiceInit(XS_ServerObject objServer, XS_HostObject objHost)
 	// 连接到主数据库
 	str FileDB = xrtPathJoin(2, DBPath, "main.db");
 	G_DB = xdoConnectSQLite(FileDB);
+	xrtFree(FileDB);  // 释放路径内存
 	if ( G_DB == NULL ) {
 		printf("!!! ERROR !!! ServiceInit - xdoConnectSQLite error.\n");
+		return;  // 数据库连接失败时返回
 	}
 	
 	
@@ -104,6 +106,21 @@ void ServiceUnit(XS_ServerObject objServer, XS_HostObject objHost)
 	xrtDictDestroy(StaticRouteTableHTTP);
 	
 	// 释放数据库
-	xdoDisconnect(G_DB);
+	if ( G_DB ) {
+		xdoDisconnect(G_DB);
+	}
+	
+	// 释放全局路径内存
+	xrtFree(AppPath);
+	xrtFree(DBPath);
+	xrtFree(TempPath);
+	xrtFree(ToolPath);
+	xrtFree(OptionPath);
+	xrtFree(TemplatePath);
+	
+	// 释放模板环境变量
+	if ( tblENV ) {
+		xvoUnref(tblENV);
+	}
 	
 }
