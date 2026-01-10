@@ -42,6 +42,5 @@ xs.json 数据结构可以是一张表，或者一个数组
 			ServiceStart			服务启动（仅默认主机支持这个字段；HTTP、MQTT等内置逻辑的服务不会调用此函数，自定义服务函数不存在则不会调用）
 			ServiceUnit				服务启动后调用（仅默认主机支持这个字段；函数不存在则不会调用）
 			RequestProc				HTTP 请求回调（函数不存在则不会调用）
-	session							session 前缀
 
 
