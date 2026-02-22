@@ -31,9 +31,14 @@ TCCState* xsCreateTCC(const char* sWorkPath)
 	#else
 		tcc_add_include_path(s, "tcc/include_linux");
 		tcc_add_include_path(s, "/usr/include");
-		tcc_add_library_path(s, "/usr/lib");
+		tcc_add_include_path(s, "/usr/include/uapi");
+		tcc_add_include_path(s, "/usr/include/asm-generic");
+		tcc_add_include_path(s, "/usr/include/i386-linux-gnu");
+		tcc_add_include_path(s, "/usr/include/i386-linux-gnu/sys");
 		tcc_add_include_path(s, "/usr/include/x86_64-linux-gnu");
 		tcc_add_include_path(s, "/usr/include/x86_64-linux-gnu/sys");
+		tcc_add_library_path(s, "/usr/lib");
+		tcc_add_library_path(s, "/usr/lib/i386-linux-gnu");
 		tcc_add_library_path(s, "/usr/lib/x86_64-linux-gnu");
 	#endif
 	// 添加 xserver 引用文件目录
