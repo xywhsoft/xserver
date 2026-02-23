@@ -31,8 +31,6 @@ TCCState* xsCreateTCC(const char* sWorkPath)
 	#else
 		tcc_add_include_path(s, "tcc/include_linux");
 		tcc_add_include_path(s, "/usr/include");
-		tcc_add_include_path(s, "/usr/include/uapi");
-		tcc_add_include_path(s, "/usr/include/asm-generic");
 		tcc_add_include_path(s, "/usr/include/i386-linux-gnu");
 		tcc_add_include_path(s, "/usr/include/i386-linux-gnu/sys");
 		tcc_add_include_path(s, "/usr/include/x86_64-linux-gnu");
