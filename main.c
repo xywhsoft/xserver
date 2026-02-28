@@ -8,6 +8,8 @@
 
 
 
+// 定义 XRT_IMPLEMENTATION 导入功能实现
+#define XRT_IMPLEMENTATION
 #include "lib/xrt/xrt.h"
 #include "lib/mongoose.h"
 #include "lib/libtcc.h"

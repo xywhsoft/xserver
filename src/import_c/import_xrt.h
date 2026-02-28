@@ -84,6 +84,8 @@ void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xrtNumFormat", xrtNumFormat);
 	tcc_add_symbol(s, "xrtStrSim", xrtStrSim);
 	tcc_add_symbol(s, "xrtStrApprox", xrtStrApprox);
+	tcc_add_symbol(s, "xrtUrlEncode", xrtUrlEncode);
+	tcc_add_symbol(s, "xrtUrlDecode", xrtUrlDecode);
 	
 	// 添加函数 - Path
 	tcc_add_symbol(s, "xrtPathGetNameExt", xrtPathGetNameExt);
@@ -223,6 +225,35 @@ void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xrtCondWaitTimeout", xrtCondWaitTimeout);
 	tcc_add_symbol(s, "xrtCondSignal", xrtCondSignal);
 	tcc_add_symbol(s, "xrtCondBroadcast", xrtCondBroadcast);
+	tcc_add_symbol(s, "xrtRWLockCreate", xrtRWLockCreate);
+	tcc_add_symbol(s, "xrtRWLockDestroy", xrtRWLockDestroy);
+	tcc_add_symbol(s, "xrtRWLockInit", xrtRWLockInit);
+	tcc_add_symbol(s, "xrtRWLockUnit", xrtRWLockUnit);
+	tcc_add_symbol(s, "xrtRWLockReadLock", xrtRWLockReadLock);
+	tcc_add_symbol(s, "xrtRWLockTryReadLock", xrtRWLockTryReadLock);
+	tcc_add_symbol(s, "xrtRWLockReadUnlock", xrtRWLockReadUnlock);
+	tcc_add_symbol(s, "xrtRWLockWriteLock", xrtRWLockWriteLock);
+	tcc_add_symbol(s, "xrtRWLockTryWriteLock", xrtRWLockTryWriteLock);
+	tcc_add_symbol(s, "xrtRWLockWriteUnlock", xrtRWLockWriteUnlock);
+	tcc_add_symbol(s, "xrtRWLockDowngrade", xrtRWLockDowngrade);
+	tcc_add_symbol(s, "xrtRWLockUpgrade", xrtRWLockUpgrade);
+	
+	// 添加函数 - Coroutine 协程库
+	tcc_add_symbol(s, "xrtCoCreate", xrtCoCreate);
+	tcc_add_symbol(s, "xrtCoDestroy", xrtCoDestroy);
+	tcc_add_symbol(s, "xrtCoResume", xrtCoResume);
+	tcc_add_symbol(s, "xrtCoYield", xrtCoYield);
+	tcc_add_symbol(s, "xrtCoGetState", xrtCoGetState);
+	tcc_add_symbol(s, "xrtCoGetCurrent", xrtCoGetCurrent);
+	tcc_add_symbol(s, "xrtCoSetUserData", xrtCoSetUserData);
+	tcc_add_symbol(s, "xrtCoGetUserData", xrtCoGetUserData);
+	tcc_add_symbol(s, "xrtCoSchedCreate", xrtCoSchedCreate);
+	tcc_add_symbol(s, "xrtCoSchedDestroy", xrtCoSchedDestroy);
+	tcc_add_symbol(s, "xrtCoSchedSpawn", xrtCoSchedSpawn);
+	tcc_add_symbol(s, "xrtCoSchedStep", xrtCoSchedStep);
+	tcc_add_symbol(s, "xrtCoSchedRun", xrtCoSchedRun);
+	tcc_add_symbol(s, "xrtCoSchedGetAlive", xrtCoSchedGetAlive);
+	tcc_add_symbol(s, "xrtCoSleep", xrtCoSleep);
 	
 	// 添加函数 - Hash
 	tcc_add_symbol(s, "xrtHash32_WithSeed", xrtHash32_WithSeed);
@@ -239,6 +270,155 @@ void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xrtGetLocalRawIP", xrtGetLocalRawIP);
 	tcc_add_symbol(s, "xrtGetLocalMAC", xrtGetLocalMAC);
 	tcc_add_symbol(s, "xrtGetLocalName", xrtGetLocalName);
+	
+	// 添加函数 - Crypto 加密算法库
+	tcc_add_symbol(s, "xrtSHA256", xrtSHA256);
+	tcc_add_symbol(s, "xrtSHA256Init", xrtSHA256Init);
+	tcc_add_symbol(s, "xrtSHA256Update", xrtSHA256Update);
+	tcc_add_symbol(s, "xrtSHA256Final", xrtSHA256Final);
+	tcc_add_symbol(s, "xrtSHA384", xrtSHA384);
+	tcc_add_symbol(s, "xrtSHA384Init", xrtSHA384Init);
+	tcc_add_symbol(s, "xrtSHA384Final", xrtSHA384Final);
+	tcc_add_symbol(s, "xrtSHA512", xrtSHA512);
+	tcc_add_symbol(s, "xrtSHA512Init", xrtSHA512Init);
+	tcc_add_symbol(s, "xrtSHA512Update", xrtSHA512Update);
+	tcc_add_symbol(s, "xrtSHA512Final", xrtSHA512Final);
+	tcc_add_symbol(s, "xrtHMAC_SHA256", xrtHMAC_SHA256);
+	tcc_add_symbol(s, "xrtHMAC_SHA384", xrtHMAC_SHA384);
+	tcc_add_symbol(s, "xrtHMAC_SHA512", xrtHMAC_SHA512);
+	tcc_add_symbol(s, "xrtChaCha20", xrtChaCha20);
+	tcc_add_symbol(s, "xrtChaCha20Poly1305Encrypt", xrtChaCha20Poly1305Encrypt);
+	tcc_add_symbol(s, "xrtChaCha20Poly1305Decrypt", xrtChaCha20Poly1305Decrypt);
+	tcc_add_symbol(s, "xrtAES128GCMEncrypt", xrtAES128GCMEncrypt);
+	tcc_add_symbol(s, "xrtAES128GCMDecrypt", xrtAES128GCMDecrypt);
+	tcc_add_symbol(s, "xrtAES256GCMEncrypt", xrtAES256GCMEncrypt);
+	tcc_add_symbol(s, "xrtAES256GCMDecrypt", xrtAES256GCMDecrypt);
+	tcc_add_symbol(s, "xrtX25519Keypair", xrtX25519Keypair);
+	tcc_add_symbol(s, "xrtX25519SharedSecret", xrtX25519SharedSecret);
+	tcc_add_symbol(s, "xrtECDHSecp256r1Keypair", xrtECDHSecp256r1Keypair);
+	tcc_add_symbol(s, "xrtECDHSecp256r1SharedSecret", xrtECDHSecp256r1SharedSecret);
+	tcc_add_symbol(s, "xrtEd25519Verify", xrtEd25519Verify);
+	tcc_add_symbol(s, "xrtECDSAVerify", xrtECDSAVerify);
+	tcc_add_symbol(s, "xrtRSAModPow", xrtRSAModPow);
+	tcc_add_symbol(s, "xrtRSAPSSVerify", xrtRSAPSSVerify);
+	tcc_add_symbol(s, "xrtRSAPKCS1Verify", xrtRSAPKCS1Verify);
+	tcc_add_symbol(s, "xrtHKDFExtract", xrtHKDFExtract);
+	tcc_add_symbol(s, "xrtHKDFExpand", xrtHKDFExpand);
+	tcc_add_symbol(s, "xrtHKDFExtract_SHA384", xrtHKDFExtract_SHA384);
+	tcc_add_symbol(s, "xrtHKDFExpand_SHA384", xrtHKDFExpand_SHA384);
+	tcc_add_symbol(s, "xrtRandomBytes", xrtRandomBytes);
+	
+	// 添加函数 - Socket 基础操作
+	tcc_add_symbol(s, "xrtSockCreate", xrtSockCreate);
+	tcc_add_symbol(s, "xrtSockClose", xrtSockClose);
+	tcc_add_symbol(s, "xrtSockSetNonBlock", xrtSockSetNonBlock);
+	tcc_add_symbol(s, "xrtSockSetReuseAddr", xrtSockSetReuseAddr);
+	tcc_add_symbol(s, "xrtSockSetTimeout", xrtSockSetTimeout);
+	tcc_add_symbol(s, "xrtSockSetNoDelay", xrtSockSetNoDelay);
+	tcc_add_symbol(s, "xrtSockSetKeepAlive", xrtSockSetKeepAlive);
+	tcc_add_symbol(s, "xrtNetAddrInit", xrtNetAddrInit);
+	tcc_add_symbol(s, "xrtNetAddrFromSockAddr", xrtNetAddrFromSockAddr);
+	tcc_add_symbol(s, "xrtNetAddrToSockAddr", xrtNetAddrToSockAddr);
+	tcc_add_symbol(s, "xrtNetIPFromStr", xrtNetIPFromStr);
+	tcc_add_symbol(s, "xrtNetIPToStr", xrtNetIPToStr);
+	tcc_add_symbol(s, "xrtSockBind", xrtSockBind);
+	tcc_add_symbol(s, "xrtSockListen", xrtSockListen);
+	tcc_add_symbol(s, "xrtSockAccept", xrtSockAccept);
+	tcc_add_symbol(s, "xrtSockConnect", xrtSockConnect);
+	tcc_add_symbol(s, "xrtSockSend", xrtSockSend);
+	tcc_add_symbol(s, "xrtSockRecv", xrtSockRecv);
+	tcc_add_symbol(s, "xrtSockSendTo", xrtSockSendTo);
+	tcc_add_symbol(s, "xrtSockRecvFrom", xrtSockRecvFrom);
+	tcc_add_symbol(s, "xrtNetResolve", xrtNetResolve);
+	tcc_add_symbol(s, "xrtNetBufInit", xrtNetBufInit);
+	tcc_add_symbol(s, "xrtNetBufFree", xrtNetBufFree);
+	tcc_add_symbol(s, "xrtNetBufAppend", xrtNetBufAppend);
+	tcc_add_symbol(s, "xrtNetBufConsume", xrtNetBufConsume);
+	tcc_add_symbol(s, "xrtNetBufClear", xrtNetBufClear);
+	tcc_add_symbol(s, "xrtNetRingBufInit", xrtNetRingBufInit);
+	tcc_add_symbol(s, "xrtNetRingBufFree", xrtNetRingBufFree);
+	tcc_add_symbol(s, "xrtNetRingBufWrite", xrtNetRingBufWrite);
+	tcc_add_symbol(s, "xrtNetRingBufRead", xrtNetRingBufRead);
+	tcc_add_symbol(s, "xrtNetRingBufPeek", xrtNetRingBufPeek);
+	tcc_add_symbol(s, "xrtNetRingBufConsume", xrtNetRingBufConsume);
+	tcc_add_symbol(s, "xrtNetRingBufReadable", xrtNetRingBufReadable);
+	tcc_add_symbol(s, "xrtNetRingBufWritable", xrtNetRingBufWritable);
+	
+	// 添加函数 - IO 模型 (Poller)
+	tcc_add_symbol(s, "xrtPollCreate", xrtPollCreate);
+	tcc_add_symbol(s, "xrtPollDestroy", xrtPollDestroy);
+	tcc_add_symbol(s, "xrtPollAdd", xrtPollAdd);
+	tcc_add_symbol(s, "xrtPollRemove", xrtPollRemove);
+	tcc_add_symbol(s, "xrtPollPostRecv", xrtPollPostRecv);
+	tcc_add_symbol(s, "xrtPollPostSend", xrtPollPostSend);
+	tcc_add_symbol(s, "xrtPollPostAccept", xrtPollPostAccept);
+	tcc_add_symbol(s, "xrtPollWait", xrtPollWait);
+	tcc_add_symbol(s, "xrtPollWakeup", xrtPollWakeup);
+	tcc_add_symbol(s, "xrtPollGetUserData", xrtPollGetUserData);
+	
+	// 添加函数 - Event Loop (事件循环)
+	tcc_add_symbol(s, "xrtEventLoopCreate", xrtEventLoopCreate);
+	tcc_add_symbol(s, "xrtEventLoopDestroy", xrtEventLoopDestroy);
+	tcc_add_symbol(s, "xrtEventLoopRun", xrtEventLoopRun);
+	tcc_add_symbol(s, "xrtEventLoopStop", xrtEventLoopStop);
+	tcc_add_symbol(s, "xrtEventLoopRunOnce", xrtEventLoopRunOnce);
+	tcc_add_symbol(s, "xrtEventLoopGetPoller", xrtEventLoopGetPoller);
+	
+	// 添加函数 - TLS
+	tcc_add_symbol(s, "xrtTlsCreate", xrtTlsCreate);
+	tcc_add_symbol(s, "xrtTlsDestroy", xrtTlsDestroy);
+	tcc_add_symbol(s, "xrtTlsHandshake", xrtTlsHandshake);
+	tcc_add_symbol(s, "xrtTlsRead", xrtTlsRead);
+	tcc_add_symbol(s, "xrtTlsWrite", xrtTlsWrite);
+	tcc_add_symbol(s, "xrtTlsClose", xrtTlsClose);
+	tcc_add_symbol(s, "xrtTlsIsReady", xrtTlsIsReady);
+	tcc_add_symbol(s, "xrtTlsGetSNI", xrtTlsGetSNI);
+	tcc_add_symbol(s, "xrtTlsSetCert", xrtTlsSetCert);
+	
+	// 添加函数 - TCP 服务器
+	tcc_add_symbol(s, "xrtTcpServerCreate", xrtTcpServerCreate);
+	tcc_add_symbol(s, "xrtTcpServerCreateEx", xrtTcpServerCreateEx);
+	tcc_add_symbol(s, "xrtTcpServerDestroy", xrtTcpServerDestroy);
+	tcc_add_symbol(s, "xrtTcpServerStart", xrtTcpServerStart);
+	tcc_add_symbol(s, "xrtTcpServerStop", xrtTcpServerStop);
+	tcc_add_symbol(s, "xrtTcpServerSend", xrtTcpServerSend);
+	tcc_add_symbol(s, "xrtTcpServerDisconnect", xrtTcpServerDisconnect);
+	tcc_add_symbol(s, "xrtTcpServerEnableTLS", xrtTcpServerEnableTLS);
+	tcc_add_symbol(s, "xrtTcpServerGetClientCount", xrtTcpServerGetClientCount);
+	tcc_add_symbol(s, "xrtTcpServerSetUserData", xrtTcpServerSetUserData);
+	tcc_add_symbol(s, "xrtTcpServerGetUserData", xrtTcpServerGetUserData);
+	
+	// 添加函数 - TCP 客户端
+	tcc_add_symbol(s, "xrtTcpClientCreate", xrtTcpClientCreate);
+	tcc_add_symbol(s, "xrtTcpClientCreateEx", xrtTcpClientCreateEx);
+	tcc_add_symbol(s, "xrtTcpClientDestroy", xrtTcpClientDestroy);
+	tcc_add_symbol(s, "xrtTcpClientConnect", xrtTcpClientConnect);
+	tcc_add_symbol(s, "xrtTcpClientDisconnect", xrtTcpClientDisconnect);
+	tcc_add_symbol(s, "xrtTcpClientSend", xrtTcpClientSend);
+	tcc_add_symbol(s, "xrtTcpClientEnableTLS", xrtTcpClientEnableTLS);
+	tcc_add_symbol(s, "xrtTcpClientIsConnected", xrtTcpClientIsConnected);
+	tcc_add_symbol(s, "xrtTcpClientSetUserData", xrtTcpClientSetUserData);
+	tcc_add_symbol(s, "xrtTcpClientGetUserData", xrtTcpClientGetUserData);
+	
+	// 添加函数 - UDP 服务器
+	tcc_add_symbol(s, "xrtUdpServerCreate", xrtUdpServerCreate);
+	tcc_add_symbol(s, "xrtUdpServerCreateEx", xrtUdpServerCreateEx);
+	tcc_add_symbol(s, "xrtUdpServerDestroy", xrtUdpServerDestroy);
+	tcc_add_symbol(s, "xrtUdpServerStart", xrtUdpServerStart);
+	tcc_add_symbol(s, "xrtUdpServerStop", xrtUdpServerStop);
+	tcc_add_symbol(s, "xrtUdpServerSendTo", xrtUdpServerSendTo);
+	tcc_add_symbol(s, "xrtUdpServerSetUserData", xrtUdpServerSetUserData);
+	tcc_add_symbol(s, "xrtUdpServerGetUserData", xrtUdpServerGetUserData);
+	
+	// 添加函数 - UDP 客户端
+	tcc_add_symbol(s, "xrtUdpClientCreate", xrtUdpClientCreate);
+	tcc_add_symbol(s, "xrtUdpClientCreateEx", xrtUdpClientCreateEx);
+	tcc_add_symbol(s, "xrtUdpClientDestroy", xrtUdpClientDestroy);
+	tcc_add_symbol(s, "xrtUdpClientStart", xrtUdpClientStart);
+	tcc_add_symbol(s, "xrtUdpClientStop", xrtUdpClientStop);
+	tcc_add_symbol(s, "xrtUdpClientSendTo", xrtUdpClientSendTo);
+	tcc_add_symbol(s, "xrtUdpClientSetUserData", xrtUdpClientSetUserData);
+	tcc_add_symbol(s, "xrtUdpClientGetUserData", xrtUdpClientGetUserData);
 	
 	// 添加函数 - XID
 	tcc_add_symbol(s, "xrtEncodeXID", xrtEncodeXID);
@@ -496,6 +676,36 @@ void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xrtParseJSON_File", xrtParseJSON_File);
 	tcc_add_symbol(s, "xrtStringifyJSON", xrtStringifyJSON);
 	tcc_add_symbol(s, "xrtStringifyJSON_File", xrtStringifyJSON_File);
+	
+	// 添加函数 - HTTP Client
+	tcc_add_symbol(s, "xrtHttpGet", xrtHttpGet);
+	tcc_add_symbol(s, "xrtHttpPost", xrtHttpPost);
+	tcc_add_symbol(s, "xrtHttpGetFile", xrtHttpGetFile);
+	tcc_add_symbol(s, "xrtHttpPostFile", xrtHttpPostFile);
+	tcc_add_symbol(s, "xrtHttpRespFree", xrtHttpRespFree);
+	tcc_add_symbol(s, "xrtHttpReqCreate", xrtHttpReqCreate);
+	tcc_add_symbol(s, "xrtHttpReqFree", xrtHttpReqFree);
+	tcc_add_symbol(s, "xrtHttpReqSetHeader", xrtHttpReqSetHeader);
+	tcc_add_symbol(s, "xrtHttpReqSetBody", xrtHttpReqSetBody);
+	tcc_add_symbol(s, "xrtHttpReqAddField", xrtHttpReqAddField);
+	tcc_add_symbol(s, "xrtHttpReqAddFormField", xrtHttpReqAddFormField);
+	tcc_add_symbol(s, "xrtHttpReqAddFormFile", xrtHttpReqAddFormFile);
+	tcc_add_symbol(s, "xrtHttpReqAddFormData", xrtHttpReqAddFormData);
+	tcc_add_symbol(s, "xrtHttpReqSetTimeout", xrtHttpReqSetTimeout);
+	tcc_add_symbol(s, "xrtHttpReqSetRedirect", xrtHttpReqSetRedirect);
+	tcc_add_symbol(s, "xrtHttpReqSetVerifySSL", xrtHttpReqSetVerifySSL);
+	tcc_add_symbol(s, "xrtHttpReqSetCallback", xrtHttpReqSetCallback);
+	tcc_add_symbol(s, "xrtHttpReqSetUserData", xrtHttpReqSetUserData);
+	tcc_add_symbol(s, "xrtHttpReqEnableCookies", xrtHttpReqEnableCookies);
+	tcc_add_symbol(s, "xrtHttpReqSetCookie", xrtHttpReqSetCookie);
+	tcc_add_symbol(s, "xrtHttpReqRemoveCookie", xrtHttpReqRemoveCookie);
+	tcc_add_symbol(s, "xrtHttpReqExecute", xrtHttpReqExecute);
+	tcc_add_symbol(s, "xrtHttpRespCode", xrtHttpRespCode);
+	tcc_add_symbol(s, "xrtHttpRespBody", xrtHttpRespBody);
+	tcc_add_symbol(s, "xrtHttpRespBodyLen", xrtHttpRespBodyLen);
+	tcc_add_symbol(s, "xrtHttpRespHeader", xrtHttpRespHeader);
+	tcc_add_symbol(s, "xrtHttpRespCookie", xrtHttpRespCookie);
+	tcc_add_symbol(s, "xrtHttpRespContentType", xrtHttpRespContentType);
 	
 	// 添加函数 - Template
 	tcc_add_symbol(s, "xteCreateIdentList", xteCreateIdentList);
