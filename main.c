@@ -6,21 +6,23 @@
 #include <signal.h>
 #include <limits.h>  // PATH_MAX
 
+// Windows 下 realpath 的兼容实现
+#if defined(_WIN32) || defined(_WIN64)
+#include <windows.h>
+#define realpath(path, resolved) _fullpath(resolved, path, PATH_MAX)
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+#endif
 
 
 // 定义 XRT_IMPLEMENTATION 导入功能实现
 #define XRT_IMPLEMENTATION
 #include "lib/xrt/xrt.h"
-#include "lib/mongoose.h"
 #include "lib/libtcc.h"
 #include "lib/sqlite3.h"
-//#include "lib/sqlite3ext.h"
-//#include "lib/md4c.h"
-//#include "lib/md4c-html.h"
 #include "lib/xdo/xdo.h"
 #include "lib/xdo/sqlite.h"
-//#include "lib/xdo/odbc.h"
-//#include "lib/xdo/mysql.h"
 
 
 
@@ -29,12 +31,11 @@
 // 服务器类型定义
 #define SPT_NONE		0			// 未知服务
 #define SPT_HTTP		1			// HTTP 服务
-#define SPT_MQTT		2			// MQTT 服务
 #define SPT_WS			3			// WebSocket 服务
 #define SPT_XTP			4			// XTP 服务
 #define SPT_TCP			0x10000		// TCP 协议
 #define SPT_UDP			0x10001		// UDP 协议
-#define SPT_CUSTOM		-1			// 自定义服务（事件驱动
+#define SPT_CUSTOM		-1			// 自定义服务（事件驱动）
 #define SPT_THREAD		-2			// 单开一条线程运行的特殊服务
 
 
@@ -47,6 +48,14 @@
 
 
 
+// 事件类型定义 (供 TCC 脚本使用)
+#define XRT_EV_ACCEPT	1		// 接受连接
+#define XRT_EV_RECV		2		// 收到数据
+#define XRT_EV_CLOSE	3		// 连接关闭
+#define XRT_EV_SEND		4		// 发送完成
+
+
+
 // 服务器结构体
 typedef struct {
 	str Name;											// 主机名称
@@ -54,23 +63,23 @@ typedef struct {
 	str Param;											// 启动参数
 	str Host;											// 主机地址（域名）
 	bool DebugMode;										// 输出额外的信息
-	struct mg_str TLS_CA;								// 主机 TLS CA 证书路径
-	struct mg_str TLS_Cert;								// 主机 TLS 证书路径
-	struct mg_str TLS_Key;								// 主机 TLS 秘钥路径
+	xtlsconfig tTlsConfig;								// TLS 配置
 	str Path;											// 主机根目录
 	int DevLang;										// 开发语言
 	str DevFile;										// 开发文件，动态开发工程的总入口点
 	ptr JsonNode;										// 配置文件的 JSON 对象
 	ptr DevObj;											// 开发语言上下文对象
 	ptr ServiceInit;									// 服务启动前调用（函数不存在则不会调用）
-	ptr ServiceStart;									// 服务启动（HTTP、MQTT等内置逻辑的服务不会调用此函数，自定义服务函数不存在则不会调用）
+	ptr ServiceStart;									// 服务启动（HTTP等内置逻辑的服务不会调用此函数）
 	ptr ServiceUnit;									// 服务启动后调用（函数不存在则不会调用）
 	ptr EventProc;										// 服务器网络事件回调（函数不存在则不会调用）
 	ptr RequestProc;									// HTTP 请求回调（函数不存在则不会调用）
+	ptr WsEventProc;									// WebSocket 事件回调（函数不存在则不会调用）
 	void (*XS_SetGlobalDate)(int idx, void* ptr);		// XS 传递全局数据回调函数
 } XS_HostStruct, *XS_HostObject;
+
 typedef struct {
-	int Class;											// 服务器类型（HTTP、MQTT、Custom、Thread、等）
+	int Class;											// 服务器类型（HTTP、Custom、Thread、等）
 	str Name;											// 服务器名称
 	str Desc;											// 服务器描述
 	str Param;											// 启动参数
@@ -83,22 +92,23 @@ typedef struct {
 	xarray Hosts;										// Host 列表
 	xdict HostMap;										// Host 字典（用于快速定位 Host 数据结构）
 	ptr JsonNode;										// 配置文件的 JSON 对象
-	struct mg_connection* Conn;							// mongoose 连接对象
-	struct mg_connection* ConnTLS;						// mongoose 连接对象 TLS
+	ptr pServer;										// xrt 服务器对象 (xhttpserver*/xtcpserver*/...)
+	ptr pServerTLS;										// xrt TLS 服务器对象
 } XS_ServerStruct, *XS_ServerObject;
 
 
 
 
 
-// Mongoose 事件管理结构
-struct mg_mgr mgr;
+// 全局事件循环
+xeventloop* g_pLoop = NULL;
 
-// 	全局数据 - 服务器列表
+// 全局数据 - 服务器列表
 xarray ServerList;
 
 
-
+// 前向声明
+static void ParseAddr(const char* sAddr, char* sIP, size_t iIPSize, uint16* pPort);
 
 
 // 功能补全函数库
@@ -113,7 +123,6 @@ xarray ServerList;
 
 // 业务实现头文件
 #include "src/http.h"
-#include "src/mqtt.h"
 #include "src/websocket.h"
 #include "src/xtp.h"
 #include "src/tcp.h"
@@ -122,6 +131,43 @@ xarray ServerList;
 #include "src/thread.h"
 
 
+
+
+
+// 解析地址端口 (格式: "IP:Port" 或 ":Port" 或 "http://IP:Port")
+static void ParseAddr(const char* sAddr, char* sIP, size_t iIPSize, uint16* pPort)
+{
+	if ( sAddr == NULL || sAddr[0] == '\0' ) {
+		strncpy(sIP, "0.0.0.0", iIPSize);
+		*pPort = 80;
+		return;
+	}
+	
+	// 跳过 URL 协议前缀 (http://, https://, etc.)
+	const char* p = sAddr;
+	if ( strncmp(p, "http://", 7) == 0 ) {
+		p += 7;
+	} else if ( strncmp(p, "https://", 8) == 0 ) {
+		p += 8;
+	}
+	
+	// 查找最后一个冒号（端口分隔符）
+	const char* pColon = strrchr(p, ':');
+	if ( pColon == NULL ) {
+		strncpy(sIP, p, iIPSize);
+		sIP[iIPSize - 1] = '\0';
+		*pPort = 80;
+	} else if ( pColon == p ) {
+		strncpy(sIP, "0.0.0.0", iIPSize);
+		*pPort = (uint16)atoi(pColon + 1);
+	} else {
+		size_t iLen = pColon - p;
+		if ( iLen >= iIPSize ) iLen = iIPSize - 1;
+		strncpy(sIP, p, iLen);
+		sIP[iLen] = '\0';
+		*pPort = (uint16)atoi(pColon + 1);
+	}
+}
 
 
 
@@ -225,58 +271,37 @@ void LoadHostConfig(xvalue objRoot, XS_HostObject objHost, XS_ServerObject objSe
 		#endif
 	}
 	
-	// 读取证书
+	// 读取 TLS 证书配置
 	if ( objServer->EnableTLS ) {
-		sPath = xvoTableGetText(objRoot, "tls_ca", 6);
-		#ifdef PATH_MAX
-			char sTempPath[PATH_MAX];
-		#else
-			char sTempPath[4096];
-		#endif
-		if ( sPath ) {
-			realpath(sPath, sTempPath);
-			objHost->TLS_CA = mg_file_read(&mg_fs_posix, sTempPath);
-		} else {
-			objHost->TLS_CA.len = 0;
-			objHost->TLS_CA.buf = NULL;
-		}
-		sPath = xvoTableGetText(objRoot, "tls_cert", 8);
-		if ( sPath ) {
-			realpath(sPath, sTempPath);
-			objHost->TLS_Cert = mg_file_read(&mg_fs_posix, sTempPath);
-		} else {
-			objHost->TLS_Cert.len = 0;
-			objHost->TLS_Cert.buf = NULL;
-		}
-		sPath = xvoTableGetText(objRoot, "tls_key", 7);
-		if ( sPath ) {
-			realpath(sPath, sTempPath);
-			objHost->TLS_Key = mg_file_read(&mg_fs_posix, sTempPath);
-		} else {
-			objHost->TLS_Key.len = 0;
-			objHost->TLS_Key.buf = NULL;
+		memset(&objHost->tTlsConfig, 0, sizeof(xtlsconfig));
+		
+		const char* sCertPath = xvoTableGetText(objRoot, "tls_cert", 8);
+		const char* sKeyPath = xvoTableGetText(objRoot, "tls_key", 7);
+		
+		if ( sCertPath && sCertPath[0] != '\0' ) {
+			#ifdef PATH_MAX
+				char sTempPath[PATH_MAX];
+			#else
+				char sTempPath[4096];
+			#endif
+			
+			// 读取证书文件
+			if ( realpath(sCertPath, sTempPath) != NULL ) {
+				objHost->tTlsConfig.sCertFile = xrtCopyStr(sTempPath, 0);
+			}
+			
+			// 读取私钥文件
+			if ( sKeyPath && sKeyPath[0] != '\0' ) {
+				if ( realpath(sKeyPath, sTempPath) != NULL ) {
+					objHost->tTlsConfig.sKeyFile = xrtCopyStr(sTempPath, 0);
+				}
+			}
 		}
 	}
 	
 	// 加载动态开发入口文件
 	if ( objHost->DevLang == SLT_C ) {
 		DynLoad_C(objServer, objHost);
-	} else if ( objHost->DevLang == SLT_LUA ) {
-		objHost->DevObj = NULL;
-		objHost->ServiceInit = NULL;
-		objHost->ServiceStart = NULL;
-		objHost->ServiceUnit = NULL;
-		objHost->EventProc = NULL;
-		objHost->RequestProc = NULL;
-		objHost->XS_SetGlobalDate = NULL;
-	} else if ( objHost->DevLang == SLT_JS ) {
-		objHost->DevObj = NULL;
-		objHost->ServiceInit = NULL;
-		objHost->ServiceStart = NULL;
-		objHost->ServiceUnit = NULL;
-		objHost->EventProc = NULL;
-		objHost->RequestProc = NULL;
-		objHost->XS_SetGlobalDate = NULL;
 	} else {
 		objHost->DevObj = NULL;
 		objHost->ServiceInit = NULL;
@@ -284,6 +309,7 @@ void LoadHostConfig(xvalue objRoot, XS_HostObject objHost, XS_ServerObject objSe
 		objHost->ServiceUnit = NULL;
 		objHost->EventProc = NULL;
 		objHost->RequestProc = NULL;
+		objHost->WsEventProc = NULL;
 		objHost->XS_SetGlobalDate = NULL;
 	}
 }
@@ -295,21 +321,14 @@ void FreeHostResource(XS_HostObject objHost)
 {
 	if ( objHost == NULL ) return;
 	
-	// 释放 TLS 证书内存
-	if ( objHost->TLS_CA.buf ) {
-		free((void*)objHost->TLS_CA.buf);
-		objHost->TLS_CA.buf = NULL;
-		objHost->TLS_CA.len = 0;
+	// 释放 TLS 证书路径
+	if ( objHost->tTlsConfig.sCertFile ) {
+		xrtFree((void*)objHost->tTlsConfig.sCertFile);
+		objHost->tTlsConfig.sCertFile = NULL;
 	}
-	if ( objHost->TLS_Cert.buf ) {
-		free((void*)objHost->TLS_Cert.buf);
-		objHost->TLS_Cert.buf = NULL;
-		objHost->TLS_Cert.len = 0;
-	}
-	if ( objHost->TLS_Key.buf ) {
-		free((void*)objHost->TLS_Key.buf);
-		objHost->TLS_Key.buf = NULL;
-		objHost->TLS_Key.len = 0;
+	if ( objHost->tTlsConfig.sKeyFile ) {
+		xrtFree((void*)objHost->tTlsConfig.sKeyFile);
+		objHost->tTlsConfig.sKeyFile = NULL;
 	}
 	
 	// 释放路径内存
@@ -350,8 +369,6 @@ bool LoadServerConfig(xvalue objRoot)
 	char* sClass = xvoTableGetText(objRoot, "class", 5);
 	if ( strcasecmp(sClass, "http") == 0 ) {
 		iClass = SPT_HTTP;
-	} else if ( strcasecmp(sClass, "mqtt") == 0 ) {
-		iClass = SPT_MQTT;
 	} else if ( strcasecmp(sClass, "ws") == 0 ) {
 		iClass = SPT_WS;
 	} else if ( strcasecmp(sClass, "xtp") == 0 ) {
@@ -391,6 +408,8 @@ bool LoadServerConfig(xvalue objRoot)
 		objServer->AddrTLS = NULL;
 	}
 	objServer->JsonNode = objRoot;
+	objServer->pServer = NULL;
+	objServer->pServerTLS = NULL;
 	
 	// 读取默认主机配置
 	xvalue objDefHost = xvoTableGetValue(objRoot, "host_default", 12);
@@ -508,12 +527,19 @@ int RunServer()
 		printf("The server list is empty .\n");
 		return 0;
 	}
+	
 	// 添加信号处理回调
 	signal(SIGINT, signal_handler);				// 控制台按 Ctrl + C 触发
 	signal(SIGTERM, signal_handler);			// 程序结束触发
+	
+	// 创建全局事件循环
+	g_pLoop = xrtEventLoopCreate();
+	if ( g_pLoop == NULL ) {
+		printf("!!! ERROR !!! xrtEventLoopCreate failed !\n");
+		exit(EXIT_FAILURE);
+	}
+	
 	// 启动服务
-	mg_log_set(MG_LL_INFO);
-	mg_mgr_init(&mgr);
 	for ( int i = 1; i <= ServerList->Count; i++ ) {
 		XS_ServerObject objServer = xrtArrayGet_Inline(ServerList, i);
 		
@@ -540,11 +566,10 @@ int RunServer()
 				ServiceInit(objServer, objHost);
 			}
 		}
+		
 		// 启动服务
 		if ( objServer->Class == SPT_HTTP ) {
 			RunServerHTTP(objServer);
-		} else if ( objServer->Class == SPT_MQTT ) {
-			RunServerMQTT(objServer);
 		} else if ( objServer->Class == SPT_WS ) {
 			RunServerWS(objServer);
 		} else if ( objServer->Class == SPT_XTP ) {
@@ -560,10 +585,12 @@ int RunServer()
 		}
 	}
 	printf("\n");
-	// 等待服务停止
+	
+	// 事件循环 (使用 xrt 事件循环)
 	while ( s_signo == 0 ) {
-		mg_mgr_poll(&mgr, 1000);
+		xrtEventLoopRunOnce(g_pLoop, 1000);
 	}
+	
 	// 停止服务
 	for ( int i = 1; i <= ServerList->Count; i++ ) {
 		XS_ServerObject objServer = xrtArrayGet_Inline(ServerList, i);
@@ -582,8 +609,6 @@ int RunServer()
 		// 卸载服务
 		if ( objServer->Class == SPT_HTTP ) {
 			StopServerHTTP(objServer);
-		} else if ( objServer->Class == SPT_MQTT ) {
-			StopServerMQTT(objServer);
 		} else if ( objServer->Class == SPT_WS ) {
 			StopServerWS(objServer);
 		} else if ( objServer->Class == SPT_XTP ) {
@@ -611,10 +636,15 @@ int RunServer()
 			xrtDictDestroy(objServer->HostMap);
 		}
 	}
-	mg_mgr_free(&mgr);
+	
+	// 销毁事件循环
+	xrtEventLoopDestroy(g_pLoop);
+	g_pLoop = NULL;
+	
 	// 释放服务器列表
 	xrtArrayDestroy(ServerList);
-	MG_INFO(("Exiting on signal %d\n", s_signo));
+	printf("Exiting on signal %d\n", s_signo);
+	return 0;
 }
 
 

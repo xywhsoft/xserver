@@ -2,7 +2,7 @@
 
 
 // XTP 协议函数前向声明 (类型在 xtp.h 中定义)
-int XTP_Send(struct mg_connection* c, str sCmd, size_t iCmdSize, 
+int XTP_Send(xtcpserver* pServer, int iClientId, str sCmd, size_t iCmdSize, 
 			 uint iParamCount, str* arrParam, str* arrValue, 
 			 ptr pBody, size_t iBodySize);
 char* XTP_GetParam(void* msg, const char* sKey);

@@ -1,6 +1,11 @@
 
 
 
+// ==================== HTTP 服务 ====================
+// 基于 xrt HTTP 服务器 (xhttpserver) 实现
+
+
+
 // 校验请求路径安全性（防止路径遍历）
 static int IsPathSafe(const char* path, size_t len)
 {
@@ -47,42 +52,33 @@ static int IsHostHeaderValid(const char* host, size_t len)
 
 
 
-// HTTP TLS 初始化
-void InitTLS(struct mg_connection *c, XS_HostObject objHost, XS_ServerObject objServer)
-{
-	struct mg_tls_opts opts;
-	memset(&opts, 0, sizeof(opts));
-	opts.ca = objHost->TLS_CA;
-	opts.cert = objHost->TLS_Cert;
-	opts.key = objHost->TLS_Key;
-	mg_tls_init(c, &opts);
-}
-
-
-
 // 根据 HTTP 请求定位 Host
-XS_HostObject LocateHost_HTTP(XS_ServerObject objServer, struct mg_http_message* hm)
+static XS_HostObject LocateHost_HTTP(XS_ServerObject objServer, xhttpdreq* pReq)
 {
-	struct mg_str* Host = mg_http_get_header(hm, "host");
+	const char* sHost = xrtHttpReqGetHeader(pReq, "host");
 	XS_HostObject objHost = NULL;
-	if ( Host && (Host->len > 0) && (Host->buf != NULL) ) {
+	
+	if ( sHost && sHost[0] != '\0' ) {
+		size_t iHostLen = strlen(sHost);
+		
 		// 校验 Host 头合法性
-		if ( !IsHostHeaderValid(Host->buf, Host->len) ) {
+		if ( !IsHostHeaderValid(sHost, iHostLen) ) {
 			// Host 头格式非法，使用默认 Host
 			if ( objServer->EnableDefaultHost ) {
 				return &objServer->DefaultHost;
 			}
 			return NULL;
 		}
+		
 		// 去除端口号（如果有）
-		size_t hostLen = Host->len;
-		for ( size_t i = 0; i < Host->len; i++ ) {
-			if ( Host->buf[i] == ':' ) {
-				hostLen = i;
+		for ( size_t i = 0; i < iHostLen; i++ ) {
+			if ( sHost[i] == ':' ) {
+				iHostLen = i;
 				break;
 			}
 		}
-		XS_HostObject* ppHost = xrtDictGet(objServer->HostMap, Host->buf, hostLen);
+		
+		XS_HostObject* ppHost = xrtDictGet(objServer->HostMap, (ptr)sHost, iHostLen);
 		if ( ppHost ) {
 			objHost = ppHost[0];
 		} else if ( objServer->EnableDefaultHost ) {
@@ -96,187 +92,192 @@ XS_HostObject LocateHost_HTTP(XS_ServerObject objServer, struct mg_http_message*
 
 
 
-// 请求处理
-void ProcRequest_HTTP(XS_ServerObject objServer, XS_HostObject objHost, struct mg_connection* c, struct mg_http_message* hm)
+// HTTP 请求回调
+static void OnHttpRequest(ptr pUserData, xnetconn* pConn, xhttpdreq* pReq)
 {
+	XS_ServerObject objServer = (XS_ServerObject)pUserData;
+	XS_HostObject objHost = LocateHost_HTTP(objServer, pReq);
+	
+	if ( objHost == NULL ) {
+		xrtHttpReply(pConn, 404, NULL, "Host not found");
+		return;
+	}
+	
+	// 调试输出
 	if ( objHost->DebugMode ) {
 		str sTime = xrtNowStr();
-		printf("[%s] %s [%.*s] %.*s\n", sTime, objHost->Name, hm->method.len, hm->method.buf, hm->uri.len, hm->uri.buf);
+		printf("[%s] %s [%s] %s\n", sTime, objHost->Name, pReq->sMethod, pReq->sUri);
 		xrtFree(sTime);
 	}
+	
+	// 检查路径安全性
+	if ( !IsPathSafe(pReq->sUri, strlen(pReq->sUri)) ) {
+		xrtHttpReply(pConn, 403, NULL, "Forbidden: Invalid path");
+		return;
+	}
+	
+	// 调用脚本回调或静态文件服务
 	if ( objHost->DevLang == SLT_C ) {
 		if ( objHost->RequestProc ) {
-			void (*RequestProc)(XS_ServerObject objServer, XS_HostObject objHost, struct mg_connection *c, struct mg_http_message* hm) = objHost->RequestProc;
-			RequestProc(objServer, objHost, c, hm);
+			void (*RequestProc)(XS_ServerObject, XS_HostObject, xnetconn*, xhttpdreq*) = objHost->RequestProc;
+			RequestProc(objServer, objHost, pConn, pReq);
 		} else {
-			mg_http_reply(c, 500, NULL, "not found RequestProc!");
+			xrtHttpReply(pConn, 500, NULL, "RequestProc not found");
 		}
-	} else if ( objHost->DevLang == SLT_LUA ) {
-	} else if ( objHost->DevLang == SLT_JS ) {
 	} else {
-		// 静态文件服务 - 先检查路径安全性
-		if ( !IsPathSafe(hm->uri.buf, hm->uri.len) ) {
-			mg_http_reply(c, 403, NULL, "Forbidden: Invalid path");
-			return;
-		}
-		// 设置服务器根目录
-		struct mg_http_serve_opts opts = {0};
-		opts.root_dir = objHost->Path;
-		mg_http_serve_dir(c, hm, &opts);
+		// 静态文件服务
+		xrtHttpServeDir(pConn, pReq, objHost->Path);
 	}
 }
 
 
 
-// HTTP 协议处理
-static void ProcHTTP(struct mg_connection* c, int ev, void *ev_data) {
-	XS_ServerObject objServer = (XS_ServerObject)c->fn_data;
-	// 先尝试调用自定义的协议处理逻辑
-	if ( objServer->DefaultHost.DevLang == SLT_C ) {
-		if ( objServer->DefaultHost.EventProc ) {
-			int (*EventProc)(XS_ServerObject objServer, XS_HostObject objHost, struct mg_connection *c, int ev, void *ev_data) = objServer->DefaultHost.EventProc;
-			if ( EventProc(objServer, &objServer->DefaultHost, c, ev, ev_data) ) {
-				return;
-			}
-		}
-	} else if ( objServer->DefaultHost.DevLang == SLT_LUA ) {
-	} else if ( objServer->DefaultHost.DevLang == SLT_JS ) {
-	}
-	// 进入协议处理逻辑
-	if ( ev == MG_EV_HTTP_MSG ) {
-		struct mg_http_message* hm = ev_data;
-		XS_HostObject objHost = LocateHost_HTTP(objServer, hm);
-		if ( objHost ) {
-			ProcRequest_HTTP(objServer, objHost, c, hm);
-		} else {
-			printf("!!! ERROR !!! NO Enabled Default Host [HTTP] !");
-		}
-	}
+// HTTP 连接关闭回调
+static void OnHttpClose(ptr pUserData, xnetconn* pConn)
+{
+	// 连接关闭处理（如需要可在此添加日志）
 }
 
 
 
-// HTTPS 协议处理
-#if MG_TLS == MG_TLS_MBED
-	static void ProcHTTPS(struct mg_connection* c, int ev, void *ev_data) {
-		XS_ServerObject objServer = (XS_ServerObject)c->fn_data;
-		// 设置 TLS 证书
-		if ( ev == MG_EV_ACCEPT ) {
-			if ( objServer->EnableDefaultHost ) {
-				InitTLS(c, &objServer->DefaultHost, objServer);
-			} else {
-				printf("!!! ERROR !!! NO Enabled Default Host [TLS host missing] !");
-			}
-		}
-		// 先尝试调用自定义的协议处理逻辑
-		if ( objServer->DefaultHost.DevLang == SLT_C ) {
-			if ( objServer->DefaultHost.EventProc ) {
-				int (*EventProc)(XS_ServerObject objServer, XS_HostObject objHost, struct mg_connection *c, int ev, void *ev_data) = objServer->DefaultHost.EventProc;
-				if ( EventProc(objServer, &objServer->DefaultHost, c, ev, ev_data) ) {
-					return;
-				}
-			}
-		} else if ( objServer->DefaultHost.DevLang == SLT_LUA ) {
-		} else if ( objServer->DefaultHost.DevLang == SLT_JS ) {
-		}
-		// 进入协议处理逻辑
-		if ( ev == MG_EV_HTTP_MSG ) {
-			struct mg_http_message* hm = ev_data;
-			XS_HostObject objHost = LocateHost_HTTP(objServer, hm);
-			if ( objHost ) {
-				ProcRequest_HTTP(objServer, objHost, c, hm);
-			} else {
-				printf("!!! ERROR !!! NO Enabled Default Host [HTTPS] !");
-			}
-		}
+// WebSocket 升级请求回调
+static bool OnHttpUpgrade(ptr pUserData, xnetconn* pConn, xhttpdreq* pReq)
+{
+	XS_ServerObject objServer = (XS_ServerObject)pUserData;
+	XS_HostObject objHost = LocateHost_HTTP(objServer, pReq);
+	
+	if ( objHost == NULL ) {
+		return false;
 	}
-#else
-	static void ProcHTTPS(struct mg_connection* c, int ev, void *ev_data) {
-		XS_ServerObject objServer = (XS_ServerObject)c->fn_data;
-		// 设置 TLS 证书
-		if ( ev == MG_EV_ACCEPT ) {
-			mg_tls_init_accept(c);
-		}
-		if ( ev == MG_EV_TLS_HSCH ) {
-			if ( ev_data == NULL ) {
-				if ( objServer->EnableDefaultHost ) {
-					InitTLS(c, &objServer->DefaultHost, objServer);
-				} else {
-					printf("!!! ERROR !!! NO Enabled Default Host [TLS] !");
-				}
-			} else {
-				const char* sHostName = (const char*)ev_data;
-				size_t iHostLen = strlen(sHostName);
-				// 校验 SNI 主机名合法性
-				if ( !IsHostHeaderValid(sHostName, iHostLen) ) {
-					if ( objServer->EnableDefaultHost ) {
-						InitTLS(c, &objServer->DefaultHost, objServer);
-					} else {
-						printf("!!! ERROR !!! Invalid SNI hostname [TLS] !");
-					}
-				} else {
-					XS_HostObject* ppHost = xrtDictGet(objServer->HostMap, (char*)sHostName, iHostLen);
-					if ( ppHost ) {
-						XS_HostObject objHost = ppHost[0];
-						InitTLS(c, objHost, objServer);
-					} else if ( objServer->EnableDefaultHost ) {
-						InitTLS(c, &objServer->DefaultHost, objServer);
-					} else {
-						printf("!!! ERROR !!! NO Enabled Default Host [TLS host missing] !");
-					}
-				}
-			}
-		}
-		// 先尝试调用自定义的协议处理逻辑
-		if ( objServer->DefaultHost.DevLang == SLT_C ) {
-			if ( objServer->DefaultHost.EventProc ) {
-				int (*EventProc)(XS_ServerObject objServer, XS_HostObject objHost, struct mg_connection *c, int ev, void *ev_data) = objServer->DefaultHost.EventProc;
-				if ( EventProc(objServer, &objServer->DefaultHost, c, ev, ev_data) ) {
-					return;
-				}
-			}
-		} else if ( objServer->DefaultHost.DevLang == SLT_LUA ) {
-		} else if ( objServer->DefaultHost.DevLang == SLT_JS ) {
-		}
-		// 进入协议处理逻辑
-		if ( ev == MG_EV_HTTP_MSG ) {
-			struct mg_http_message* hm = ev_data;
-			XS_HostObject objHost = LocateHost_HTTP(objServer, hm);
-			if ( objHost ) {
-				ProcRequest_HTTP(objServer, objHost, c, hm);
-			} else {
-				printf("!!! ERROR !!! NO Enabled Default Host [HTTPS] !");
-			}
-		}
+	
+	// 如果 Host 有 WebSocket 事件处理，则允许升级
+	if ( objHost->WsEventProc ) {
+		// 保存 Host 信息到连接用户数据
+		pConn->pUserData = objHost;
+		return true;
 	}
-#endif
+	
+	return false;
+}
 
 
+
+// TLS SNI 回调 - 根据域名选择证书
+static void OnHttpSNI(xtlsctx* pCtx, const char* sHostName, ptr pUserData)
+{
+	XS_ServerObject objServer = (XS_ServerObject)pUserData;
+	
+	if ( sHostName == NULL || sHostName[0] == '\0' ) {
+		// 使用默认证书
+		if ( objServer->EnableDefaultHost && objServer->DefaultHost.tTlsConfig.sCertFile ) {
+			xrtTlsSetCert(pCtx, objServer->DefaultHost.tTlsConfig.sCertFile,
+			              objServer->DefaultHost.tTlsConfig.sKeyFile);
+		}
+		return;
+	}
+	
+	size_t iHostLen = strlen(sHostName);
+	
+	// 校验 SNI 主机名合法性
+	if ( !IsHostHeaderValid(sHostName, iHostLen) ) {
+		if ( objServer->EnableDefaultHost && objServer->DefaultHost.tTlsConfig.sCertFile ) {
+			xrtTlsSetCert(pCtx, objServer->DefaultHost.tTlsConfig.sCertFile,
+			              objServer->DefaultHost.tTlsConfig.sKeyFile);
+		}
+		return;
+	}
+	
+	// 查找匹配的 Host
+	XS_HostObject* ppHost = xrtDictGet(objServer->HostMap, (ptr)sHostName, iHostLen);
+	if ( ppHost && ppHost[0]->tTlsConfig.sCertFile ) {
+		xrtTlsSetCert(pCtx, ppHost[0]->tTlsConfig.sCertFile,
+		              ppHost[0]->tTlsConfig.sKeyFile);
+	} else if ( objServer->EnableDefaultHost && objServer->DefaultHost.tTlsConfig.sCertFile ) {
+		xrtTlsSetCert(pCtx, objServer->DefaultHost.tTlsConfig.sCertFile,
+		              objServer->DefaultHost.tTlsConfig.sKeyFile);
+	}
+}
 
 
 
 // 启动 HTTP 服务
 int RunServerHTTP(XS_ServerObject objServer)
 {
-	// 启动 HTTP 服务
-	printf("\n    Run Server [HTTP] : %s (%s)\n", objServer->Name, objServer->Addr);
-	struct mg_connection* objConn = mg_http_listen(&mgr, objServer->Addr, ProcHTTP, objServer);
-	if ( objConn == NULL ) {
-		printf("    !!! ERROR !!! Cannot listen on %s. Use http://ADDR:PORT or :PORT\n", objServer->Addr);
+	char sIP[64] = {0};
+	uint16 iPort = 0;
+	
+	// 解析地址端口
+	ParseAddr(objServer->Addr, sIP, sizeof(sIP), &iPort);
+	
+	// 配置 HTTP 服务器
+	xhttpsrvconfig tConfig = {0};
+	tConfig.iMaxClients = 1024;
+	tConfig.iMaxHeaderSize = 8192;
+	tConfig.iMaxBodySize = 10 * 1024 * 1024;  // 10MB
+	tConfig.iKeepAliveTimeout = 60;
+	
+	// 事件回调
+	xhttpsrvevents tEvents = {0};
+	tEvents.OnRequest = OnHttpRequest;
+	tEvents.OnClose = OnHttpClose;
+	tEvents.OnUpgrade = OnHttpUpgrade;
+	
+	// 创建 HTTP 服务器 (共享事件循环)
+	printf("    Run Server [HTTP] : %s (%s:%d)\n", objServer->Name, sIP, iPort);
+	xhttpserver* pServer = xrtHttpServerCreateEx(g_pLoop, sIP, iPort, &tConfig, &tEvents);
+	if ( pServer == NULL ) {
+		printf("    !!! ERROR !!! Cannot create HTTP server on %s:%d\n", sIP, iPort);
 		exit(EXIT_FAILURE);
-	} else {
-		objServer->Conn = objConn;
 	}
+	
+	// 设置用户数据为 Server 对象
+	xrtHttpServerSetUserData(pServer, objServer);
+	objServer->pServer = pServer;
+	
+	// 启动服务器
+	if ( xrtHttpServerStart(pServer) != XRT_NET_OK ) {
+		printf("    !!! ERROR !!! Cannot start HTTP server\n");
+		exit(EXIT_FAILURE);
+	}
+	
+	// HTTPS (TLS)
 	if ( objServer->EnableTLS ) {
-		printf("    Run Server [HTTPS] : %s (%s)\n", objServer->Name, objServer->AddrTLS);
-		objConn = mg_http_listen(&mgr, objServer->AddrTLS, ProcHTTPS, objServer);
-		if ( objConn == NULL ) {
-			printf("    !!! ERROR !!! Cannot listen on %s. Use https://ADDR:PORT or :PORT\n", objServer->AddrTLS);
+		uint16 iTlsPort = 0;
+		ParseAddr(objServer->AddrTLS, sIP, sizeof(sIP), &iTlsPort);
+		
+		printf("    Run Server [HTTPS] : %s (%s:%d)\n", objServer->Name, sIP, iTlsPort);
+		
+		// 创建 HTTPS 服务器
+		xhttpserver* pServerTLS = xrtHttpServerCreateEx(g_pLoop, sIP, iTlsPort, &tConfig, &tEvents);
+		if ( pServerTLS == NULL ) {
+			printf("    !!! ERROR !!! Cannot create HTTPS server on %s:%d\n", sIP, iTlsPort);
 			exit(EXIT_FAILURE);
-		} else {
-			objServer->ConnTLS = objConn;
+		}
+		
+		xrtHttpServerSetUserData(pServerTLS, objServer);
+		objServer->pServerTLS = pServerTLS;
+		
+		// 配置 TLS (使用默认 Host 的证书)
+		if ( objServer->EnableDefaultHost && objServer->DefaultHost.tTlsConfig.sCertFile ) {
+			xtlsconfig tTlsConfig = {0};
+			tTlsConfig.sCertFile = objServer->DefaultHost.tTlsConfig.sCertFile;
+			tTlsConfig.sKeyFile = objServer->DefaultHost.tTlsConfig.sKeyFile;
+			tTlsConfig.OnSNI = OnHttpSNI;
+			tTlsConfig.pSNIUserData = objServer;
+			
+			if ( xrtHttpServerEnableTLS(pServerTLS, &tTlsConfig) != XRT_NET_OK ) {
+				printf("    !!! ERROR !!! Cannot enable TLS for HTTPS server\n");
+				exit(EXIT_FAILURE);
+			}
+		}
+		
+		// 启动 HTTPS 服务器
+		if ( xrtHttpServerStart(pServerTLS) != XRT_NET_OK ) {
+			printf("    !!! ERROR !!! Cannot start HTTPS server\n");
+			exit(EXIT_FAILURE);
 		}
 	}
+	
 	return TRUE;
 }
 
@@ -286,9 +287,16 @@ int RunServerHTTP(XS_ServerObject objServer)
 int StopServerHTTP(XS_ServerObject objServer)
 {
 	printf("    Stop Server [HTTP] : %s\n", objServer->Name);
-	// 连接由 mg_mgr_free 统一释放
-	objServer->Conn = NULL;
-	objServer->ConnTLS = NULL;
+	
+	if ( objServer->pServer ) {
+		xrtHttpServerDestroy((xhttpserver*)objServer->pServer);
+		objServer->pServer = NULL;
+	}
+	if ( objServer->pServerTLS ) {
+		xrtHttpServerDestroy((xhttpserver*)objServer->pServerTLS);
+		objServer->pServerTLS = NULL;
+	}
+	
 	return TRUE;
 }
 

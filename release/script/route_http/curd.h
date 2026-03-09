@@ -2,12 +2,12 @@
 
 
 // 获取数据列表
-void Request_List(XS_ServerObject objServer, XS_HostObject objHost, struct mg_connection* c, struct mg_http_message* hm)
+void Request_List(XS_ServerObject objServer, XS_HostObject objHost, xnetconn* pConn, xhttpdreq* pReq)
 {
 	// 查询数据库
 	XDO_Recordset rs = xdoSelect(G_DB, "SELECT * FROM test;");
 	if ( rs == NULL ) {
-		mg_http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"%s\"}", xCore->LastError);
+		xrtHttpReplyFmt(pConn, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"%s\"}", xCore->LastError);
 		return;
 	}
 	// 构建返回值
@@ -31,7 +31,7 @@ void Request_List(XS_ServerObject objServer, XS_HostObject objHost, struct mg_co
 	// 生成 JSON
 	size_t iRetSize = 0;
 	char* sRet = xrtStringifyJSON(tblRet, FALSE, &iRetSize);
-	http_reply(c, 200, "Content-Type: application/json\r\n", sRet, iRetSize);
+	xrtHttpReplyJSON(pConn, 200, sRet);
 	// 释放内存
 	xrtFree(sRet);
 	xvoUnref(tblRet);
@@ -40,23 +40,23 @@ void Request_List(XS_ServerObject objServer, XS_HostObject objHost, struct mg_co
 
 
 // 添加数据
-void Request_Add(XS_ServerObject objServer, XS_HostObject objHost, struct mg_connection* c, struct mg_http_message* hm)
+void Request_Add(XS_ServerObject objServer, XS_HostObject objHost, xnetconn* pConn, xhttpdreq* pReq)
 {
 	// 解析 body 域
-	if ( hm->body.len == 0 ) {
-		http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"Body 域不能为空！\"}", 0);
+	if ( pReq->iBodyLen == 0 ) {
+		xrtHttpReplyJSON(pConn, 200, "{\"result\": false, \"msg\": \"Body 域不能为空！\"}");
 		return;
 	}
-	xvalue objBody = xrtParseJSON(hm->body.buf, hm->body.len);
+	xvalue objBody = xrtParseJSON(pReq->pBody, pReq->iBodyLen);
 	if ( objBody->Type != XVO_DT_TABLE ) {
-		http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"Body 域必须传递为 JSON 对象！\"}", 0);
+		xrtHttpReplyJSON(pConn, 200, "{\"result\": false, \"msg\": \"Body 域必须传递为 JSON 对象！\"}");
 		xvoUnref(objBody);
 		return;
 	}
 	// 检查 name 属性是否正确
 	str sName = xvoTableGetText(objBody, "name", 4);
 	if ( (sName == NULL) || (sName[0] == 0) ) {
-		http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"参数 name 不能为空！\"}", 0);
+		xrtHttpReplyJSON(pConn, 200, "{\"result\": false, \"msg\": \"参数 name 不能为空！\"}");
 		xvoUnref(objBody);
 		return;
 	}
@@ -75,22 +75,22 @@ void Request_Add(XS_ServerObject objServer, XS_HostObject objHost, struct mg_con
 	xrtFree(sdescEsc);
 	xvoUnref(objBody);
 	// 返回消息
-	http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": true, \"msg\": \"添加数据成功！\"}", 0);
+	xrtHttpReplyJSON(pConn, 200, "{\"result\": true, \"msg\": \"添加数据成功！\"}");
 }
 
 
 
 // 删除数据
-void Request_Del(XS_ServerObject objServer, XS_HostObject objHost, struct mg_connection* c, struct mg_http_message* hm)
+void Request_Del(XS_ServerObject objServer, XS_HostObject objHost, xnetconn* pConn, xhttpdreq* pReq)
 {
 	// 解析 body 域
-	if ( hm->body.len == 0 ) {
-		http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"Body 域不能为空！\"}", 0);
+	if ( pReq->iBodyLen == 0 ) {
+		xrtHttpReplyJSON(pConn, 200, "{\"result\": false, \"msg\": \"Body 域不能为空！\"}");
 		return;
 	}
-	xvalue objBody = xrtParseJSON(hm->body.buf, hm->body.len);
+	xvalue objBody = xrtParseJSON(pReq->pBody, pReq->iBodyLen);
 	if ( objBody->Type != XVO_DT_ARRAY ) {
-		http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"Body 域必须传递为 JSON 数组！\"}", 0);
+		xrtHttpReplyJSON(pConn, 200, "{\"result\": false, \"msg\": \"Body 域必须传递为 JSON 数组！\"}");
 		xvoUnref(objBody);
 		return;
 	}
@@ -106,43 +106,43 @@ void Request_Del(XS_ServerObject objServer, XS_HostObject objHost, struct mg_con
 	}
 	xvoUnref(objBody);
 	// 返回消息
-	http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": true, \"msg\": \"数据删除成功！\"}", 0);
+	xrtHttpReplyJSON(pConn, 200, "{\"result\": true, \"msg\": \"数据删除成功！\"}");
 }
 
 
 
 // 编辑数据
-void Request_Edit(XS_ServerObject objServer, XS_HostObject objHost, struct mg_connection* c, struct mg_http_message* hm)
+void Request_Edit(XS_ServerObject objServer, XS_HostObject objHost, xnetconn* pConn, xhttpdreq* pReq)
 {
 	// 解析 body 域
-	if ( hm->body.len == 0 ) {
-		http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"Body 域不能为空！\"}", 0);
+	if ( pReq->iBodyLen == 0 ) {
+		xrtHttpReplyJSON(pConn, 200, "{\"result\": false, \"msg\": \"Body 域不能为空！\"}");
 		return;
 	}
-	xvalue objBody = xrtParseJSON(hm->body.buf, hm->body.len);
+	xvalue objBody = xrtParseJSON(pReq->pBody, pReq->iBodyLen);
 	if ( objBody->Type != XVO_DT_TABLE ) {
-		http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"Body 域必须传递为 JSON 对象！\"}", 0);
+		xrtHttpReplyJSON(pConn, 200, "{\"result\": false, \"msg\": \"Body 域必须传递为 JSON 对象！\"}");
 		xvoUnref(objBody);
 		return;
 	}
 	// 检查 id 属性是否正确
 	str sID = xvoTableGetText(objBody, "id", 2);
 	if ( (sID == NULL) || (sID[0] == 0) ) {
-		http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"参数 id 不能为空！\"}", 0);
+		xrtHttpReplyJSON(pConn, 200, "{\"result\": false, \"msg\": \"参数 id 不能为空！\"}");
 		xvoUnref(objBody);
 		return;
 	}
 	// 检查 field 属性是否正确（只允许特定字段名防止注入）
 	str sField = xvoTableGetText(objBody, "field", 5);
 	if ( (sField == NULL) || (sField[0] == 0) ) {
-		http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"参数 field 不能为空！\"}", 0);
+		xrtHttpReplyJSON(pConn, 200, "{\"result\": false, \"msg\": \"参数 field 不能为空！\"}");
 		xvoUnref(objBody);
 		return;
 	}
 	// 白名单验证字段名（防止字段名注入）
 	if ( strcmp(sField, "name") != 0 && strcmp(sField, "age") != 0 && 
 	     strcmp(sField, "mail") != 0 && strcmp(sField, "desc") != 0 ) {
-		http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"无效的字段名！\"}", 0);
+		xrtHttpReplyJSON(pConn, 200, "{\"result\": false, \"msg\": \"无效的字段名！\"}");
 		xvoUnref(objBody);
 		return;
 	}
@@ -157,7 +157,7 @@ void Request_Edit(XS_ServerObject objServer, XS_HostObject objHost, struct mg_co
 	xrtFree(sIDEsc);
 	xvoUnref(objBody);
 	// 返回消息
-	http_reply(c, 200, "Content-Type: application/json\r\n", "{\"result\": true, \"msg\": \"数据编辑成功！\"}", 0);
+	xrtHttpReplyJSON(pConn, 200, "{\"result\": true, \"msg\": \"数据编辑成功！\"}");
 }
 
 

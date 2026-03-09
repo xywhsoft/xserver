@@ -2,7 +2,7 @@
 
 
 // 获取图表数据
-void Request_Chart_Get(XS_ServerObject objServer, XS_HostObject objHost, struct mg_connection* c, struct mg_http_message* hm)
+void Request_Chart_Get(XS_ServerObject objServer, XS_HostObject objHost, xnetconn* pConn, xhttpdreq* pReq)
 {
 	xvalue option = xvoCreateTable();
 	xvalue xAxis = xvoCreateTable();
@@ -36,7 +36,7 @@ void Request_Chart_Get(XS_ServerObject objServer, XS_HostObject objHost, struct 
 	// 生成 JSON
 	size_t iRetSize = 0;
 	char* sRet = xrtStringifyJSON(option, FALSE, &iRetSize);
-	http_reply(c, 200, "Content-Type: application/json\r\n", sRet, iRetSize);
+	xrtHttpReplyJSON(pConn, 200, sRet);
 	// 释放内存
 	xrtFree(sRet);
 	xvoUnref(option);

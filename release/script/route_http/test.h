@@ -2,15 +2,15 @@
 
 
 // 测试 HTTP 客户端
-void Request_Test(XS_ServerObject objServer, XS_HostObject objHost, struct mg_connection* c, struct mg_http_message* hm)
+void Request_Test(XS_ServerObject objServer, XS_HostObject objHost, xnetconn* pConn, xhttpdreq* pReq)
 {
-	http_reply(c, 200, "Access-Control-Allow-Origin: *\r\nContent-Type: text/html\r\n", "page load success !", 0);
+	xrtHttpReply(pConn, 200, "Access-Control-Allow-Origin: *\r\nContent-Type: text/html\r\n", "page load success !");
 }
 
 
 
 // 代入模板
-void Request_Template(XS_ServerObject objServer, XS_HostObject objHost, struct mg_connection* c, struct mg_http_message* hm)
+void Request_Template(XS_ServerObject objServer, XS_HostObject objHost, xnetconn* pConn, xhttpdreq* pReq)
 {
 	xvalue data = xvoCreateTable();
 	xvoTableSetText(data, "title", 5, "网站标题", 0, FALSE);
@@ -24,7 +24,7 @@ void Request_Template(XS_ServerObject objServer, XS_HostObject objHost, struct m
 	xvoTableSetValue(data, "list", 4, list, TRUE);
 	size_t iRetSize = 0;
 	str sRet = MakePageWithTemplate("page.html", data, &iRetSize);
-	http_reply(c, 200, "Access-Control-Allow-Origin: *\r\nContent-Type: text/html\r\n", sRet, iRetSize);
+	xrtHttpReply(pConn, 200, "Access-Control-Allow-Origin: *\r\nContent-Type: text/html\r\n", sRet);
 	// 释放内存
 	xrtFree(sRet);
 	xvoUnref(data);

@@ -1,75 +1,58 @@
 
 
 
-// WebSocket 协议处理
-static void ProcWS(struct mg_connection *c, int ev, void *ev_data) {
-	XS_ServerObject objServer = (XS_ServerObject)c->fn_data;
-	// 先尝试调用自定义的协议处理逻辑
-	if ( objServer->DefaultHost.DevLang == SLT_C ) {
-		if ( objServer->DefaultHost.EventProc ) {
-			int (*EventProc)(XS_ServerObject objServer, XS_HostObject objHost, struct mg_connection *c, int ev, void *ev_data) = objServer->DefaultHost.EventProc;
-			if ( EventProc(objServer, &objServer->DefaultHost, c, ev, ev_data) ) {
-				return;
-			}
-		}
-	} else if ( objServer->DefaultHost.DevLang == SLT_LUA ) {
-	} else if ( objServer->DefaultHost.DevLang == SLT_JS ) {
-	}
-	// 进入协议处理逻辑
-	if ( ev == MG_EV_HTTP_MSG ) {
-		struct mg_http_message *hm = (struct mg_http_message *) ev_data;
-		if ( mg_match(hm->uri, mg_str("/websocket"), NULL) ) {
-			// 升级到 WebSocket
-			mg_ws_upgrade(c, hm, NULL);
-		} else {
-			// 静态文件服务
-			struct mg_http_serve_opts opts = {.root_dir = objServer->DefaultHost.Path};
-			mg_http_serve_dir(c, ev_data, &opts);
-		}
-	} else if ( ev == MG_EV_WS_MSG ) {
-		// WebSocket 消息处理（默认回显）
-		struct mg_ws_message *wm = (struct mg_ws_message *) ev_data;
-		mg_ws_send(c, wm->data.buf, wm->data.len, WEBSOCKET_OP_TEXT);
+// ==================== WebSocket 服务 ====================
+// 基于 xrt WebSocket 服务器 (xwsserver) 实现
+
+
+
+// WebSocket 连接打开回调
+static void OnWsOpen(ptr pOwner, xnetconn* pConn)
+{
+	xwsserver* pWsServer = (xwsserver*)pOwner;
+	XS_ServerObject objServer = (XS_ServerObject)xrtWsServerGetUserData(pWsServer);
+	
+	if ( objServer->DefaultHost.WsEventProc ) {
+		void (*WsEventProc)(XS_ServerObject, XS_HostObject, xnetconn*, int, int, const char*, size_t) 
+			= objServer->DefaultHost.WsEventProc;
+		WsEventProc(objServer, &objServer->DefaultHost, pConn, XRT_EV_ACCEPT, 0, NULL, 0);
 	}
 }
 
 
 
-// WebSocket TLS 协议处理
-static void ProcWSS(struct mg_connection *c, int ev, void *ev_data) {
-	XS_ServerObject objServer = (XS_ServerObject)c->fn_data;
-	// 设置 TLS 证书
-	if ( ev == MG_EV_ACCEPT ) {
-		if ( objServer->EnableDefaultHost ) {
-			InitTLS(c, &objServer->DefaultHost, objServer);
-		} else {
-			printf("!!! ERROR !!! NO Enabled Default Host [WSS] !");
-			return;
+// WebSocket 消息回调
+static void OnWsMessage(ptr pOwner, xnetconn* pConn, int iOpcode, const char* pData, size_t iLen)
+{
+	xwsserver* pWsServer = (xwsserver*)pOwner;
+	XS_ServerObject objServer = (XS_ServerObject)xrtWsServerGetUserData(pWsServer);
+	
+	if ( objServer->DefaultHost.WsEventProc ) {
+		void (*WsEventProc)(XS_ServerObject, XS_HostObject, xnetconn*, int, int, const char*, size_t) 
+			= objServer->DefaultHost.WsEventProc;
+		WsEventProc(objServer, &objServer->DefaultHost, pConn, XRT_EV_RECV, iOpcode, pData, iLen);
+	} else {
+		// 默认回显
+		if ( iOpcode == XRT_WS_OP_TEXT ) {
+			xrtWsServerSendText(pWsServer, pConn->iId, pData, iLen);
+		} else if ( iOpcode == XRT_WS_OP_BINARY ) {
+			xrtWsServerSendBinary(pWsServer, pConn->iId, pData, iLen);
 		}
 	}
-	// 先尝试调用自定义的协议处理逻辑
-	if ( objServer->DefaultHost.DevLang == SLT_C ) {
-		if ( objServer->DefaultHost.EventProc ) {
-			int (*EventProc)(XS_ServerObject objServer, XS_HostObject objHost, struct mg_connection *c, int ev, void *ev_data) = objServer->DefaultHost.EventProc;
-			if ( EventProc(objServer, &objServer->DefaultHost, c, ev, ev_data) ) {
-				return;
-			}
-		}
-	} else if ( objServer->DefaultHost.DevLang == SLT_LUA ) {
-	} else if ( objServer->DefaultHost.DevLang == SLT_JS ) {
-	}
-	// 进入协议处理逻辑
-	if ( ev == MG_EV_HTTP_MSG ) {
-		struct mg_http_message *hm = (struct mg_http_message *) ev_data;
-		if ( mg_match(hm->uri, mg_str("/websocket"), NULL) ) {
-			mg_ws_upgrade(c, hm, NULL);
-		} else {
-			struct mg_http_serve_opts opts = {.root_dir = objServer->DefaultHost.Path};
-			mg_http_serve_dir(c, ev_data, &opts);
-		}
-	} else if ( ev == MG_EV_WS_MSG ) {
-		struct mg_ws_message *wm = (struct mg_ws_message *) ev_data;
-		mg_ws_send(c, wm->data.buf, wm->data.len, WEBSOCKET_OP_TEXT);
+}
+
+
+
+// WebSocket 连接关闭回调
+static void OnWsClose(ptr pOwner, xnetconn* pConn, uint16 iCode, const char* sReason)
+{
+	xwsserver* pWsServer = (xwsserver*)pOwner;
+	XS_ServerObject objServer = (XS_ServerObject)xrtWsServerGetUserData(pWsServer);
+	
+	if ( objServer->DefaultHost.WsEventProc ) {
+		void (*WsEventProc)(XS_ServerObject, XS_HostObject, xnetconn*, int, int, const char*, size_t) 
+			= objServer->DefaultHost.WsEventProc;
+		WsEventProc(objServer, &objServer->DefaultHost, pConn, XRT_EV_CLOSE, iCode, sReason, sReason ? strlen(sReason) : 0);
 	}
 }
 
@@ -80,25 +63,78 @@ static void ProcWSS(struct mg_connection *c, int ev, void *ev_data) {
 // 启动 WebSocket 服务
 int RunServerWS(XS_ServerObject objServer)
 {
-	// 启动 WebSocket 服务
-	printf("\n    Run Server [WebSocket] : %s (%s)\n", objServer->Name, objServer->Addr);
-	struct mg_connection* objConn = mg_http_listen(&mgr, objServer->Addr, ProcWS, objServer);
-	if ( objConn == NULL ) {
-		printf("    !!! ERROR !!! Cannot listen on %s. Use ws://ADDR:PORT or :PORT\n", objServer->Addr);
+	char sIP[64] = {0};
+	uint16 iPort = 0;
+	
+	// 解析地址端口
+	ParseAddr(objServer->Addr, sIP, sizeof(sIP), &iPort);
+	
+	// 配置 WebSocket 服务器
+	xwsconfig tConfig = {0};
+	tConfig.sPath = "/";
+	tConfig.iMaxMessageSize = 10 * 1024 * 1024;  // 10MB
+	tConfig.iHandshakeTimeoutSec = 30;
+	
+	// 事件回调
+	xwsevents tEvents = {0};
+	tEvents.OnOpen = OnWsOpen;
+	tEvents.OnMessage = OnWsMessage;
+	tEvents.OnClose = OnWsClose;
+	
+	// 创建 WebSocket 服务器 (共享事件循环)
+	printf("    Run Server [WebSocket] : %s (%s:%d)\n", objServer->Name, sIP, iPort);
+	xwsserver* pServer = xrtWsServerCreateEx(g_pLoop, sIP, iPort, &tConfig, &tEvents);
+	if ( pServer == NULL ) {
+		printf("    !!! ERROR !!! Cannot create WebSocket server on %s:%d\n", sIP, iPort);
 		exit(EXIT_FAILURE);
-	} else {
-		objServer->Conn = objConn;
 	}
+	
+	// 设置用户数据为 Server 对象
+	xrtWsServerSetUserData(pServer, objServer);
+	objServer->pServer = pServer;
+	
+	// 启动服务器
+	if ( xrtWsServerStart(pServer) != XRT_NET_OK ) {
+		printf("    !!! ERROR !!! Cannot start WebSocket server\n");
+		exit(EXIT_FAILURE);
+	}
+	
+	// WSS (TLS)
 	if ( objServer->EnableTLS ) {
-		printf("    Run Server [WebSocketS] : %s (%s)\n", objServer->Name, objServer->Addr);
-		objConn = mg_http_listen(&mgr, objServer->AddrTLS, ProcWSS, objServer);
-		if ( objConn == NULL ) {
-			printf("    !!! ERROR !!! Cannot listen on %s. Use wss://ADDR:PORT or :PORT\n", objServer->AddrTLS);
+		uint16 iTlsPort = 0;
+		ParseAddr(objServer->AddrTLS, sIP, sizeof(sIP), &iTlsPort);
+		
+		printf("    Run Server [WebSocket TLS] : %s (%s:%d)\n", objServer->Name, sIP, iTlsPort);
+		
+		// 创建 WSS 服务器
+		xwsserver* pServerTLS = xrtWsServerCreateEx(g_pLoop, sIP, iTlsPort, &tConfig, &tEvents);
+		if ( pServerTLS == NULL ) {
+			printf("    !!! ERROR !!! Cannot create WSS server on %s:%d\n", sIP, iTlsPort);
 			exit(EXIT_FAILURE);
-		} else {
-			objServer->ConnTLS = objConn;
+		}
+		
+		xrtWsServerSetUserData(pServerTLS, objServer);
+		objServer->pServerTLS = pServerTLS;
+		
+		// 配置 TLS
+		if ( objServer->EnableDefaultHost && objServer->DefaultHost.tTlsConfig.sCertFile ) {
+			xtlsconfig tTlsConfig = {0};
+			tTlsConfig.sCertFile = objServer->DefaultHost.tTlsConfig.sCertFile;
+			tTlsConfig.sKeyFile = objServer->DefaultHost.tTlsConfig.sKeyFile;
+			
+			if ( xrtWsServerEnableTLS(pServerTLS, &tTlsConfig) != XRT_NET_OK ) {
+				printf("    !!! ERROR !!! Cannot enable TLS for WSS server\n");
+				exit(EXIT_FAILURE);
+			}
+		}
+		
+		// 启动 WSS 服务器
+		if ( xrtWsServerStart(pServerTLS) != XRT_NET_OK ) {
+			printf("    !!! ERROR !!! Cannot start WSS server\n");
+			exit(EXIT_FAILURE);
 		}
 	}
+	
 	return TRUE;
 }
 
@@ -108,9 +144,16 @@ int RunServerWS(XS_ServerObject objServer)
 int StopServerWS(XS_ServerObject objServer)
 {
 	printf("    Stop Server [WebSocket] : %s\n", objServer->Name);
-	// 连接由 mg_mgr_free 统一释放
-	objServer->Conn = NULL;
-	objServer->ConnTLS = NULL;
+	
+	if ( objServer->pServer ) {
+		xrtWsServerDestroy((xwsserver*)objServer->pServer);
+		objServer->pServer = NULL;
+	}
+	if ( objServer->pServerTLS ) {
+		xrtWsServerDestroy((xwsserver*)objServer->pServerTLS);
+		objServer->pServerTLS = NULL;
+	}
+	
 	return TRUE;
 }
 

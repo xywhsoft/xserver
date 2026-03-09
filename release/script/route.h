@@ -3,7 +3,7 @@
 
 // 全局静态路由表 - HTTP
 typedef struct {
-	void (*Proc)(XS_ServerObject objServer, XS_HostObject objHost, struct mg_connection* c, struct mg_http_message* hm);
+	void (*Proc)(XS_ServerObject objServer, XS_HostObject objHost, xnetconn* pConn, xhttpdreq* pReq);
 } RouteItemHTTP;
 xdict StaticRouteTableHTTP;
 

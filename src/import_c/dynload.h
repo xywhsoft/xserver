@@ -44,6 +44,7 @@ void DynLoad_C(XS_ServerObject objServer, XS_HostObject objHost)
 	objHost->ServiceUnit = tcc_get_symbol(s, "ServiceUnit");
 	objHost->EventProc = tcc_get_symbol(s, "EventProc");
 	objHost->RequestProc = tcc_get_symbol(s, "RequestProc");
+	objHost->WsEventProc = tcc_get_symbol(s, "WsEventProc");
 	objHost->XS_SetGlobalDate = tcc_get_symbol(s, "XS_SetGlobalDate");
 }
 
@@ -53,9 +54,9 @@ void DynLoad_C(XS_ServerObject objServer, XS_HostObject objHost)
 void DynLoad_C_GlobalData(XS_ServerObject objServer, XS_HostObject objHost)
 {
 	if ( objHost->XS_SetGlobalDate ) {
-		objHost->XS_SetGlobalDate(1, &mgr);
-		objHost->XS_SetGlobalDate(2, ServerList);
-		objHost->XS_SetGlobalDate(3, &xCore);
+		objHost->XS_SetGlobalDate(1, g_pLoop);       // xeventloop*
+		objHost->XS_SetGlobalDate(2, ServerList);    // 服务器列表
+		objHost->XS_SetGlobalDate(3, &xCore);        // xrt 核心
 	}
 }
 
@@ -99,6 +100,7 @@ static int DynReload_C(XS_ServerObject objServer, XS_HostObject objHost)
 	objHost->ServiceUnit = NULL;
 	objHost->EventProc = NULL;
 	objHost->RequestProc = NULL;
+	objHost->WsEventProc = NULL;
 	objHost->XS_SetGlobalDate = NULL;
 	
 	// 创建新 TCC 状态机
@@ -140,6 +142,7 @@ static int DynReload_C(XS_ServerObject objServer, XS_HostObject objHost)
 	objHost->ServiceUnit = tcc_get_symbol(s, "ServiceUnit");
 	objHost->EventProc = tcc_get_symbol(s, "EventProc");
 	objHost->RequestProc = tcc_get_symbol(s, "RequestProc");
+	objHost->WsEventProc = tcc_get_symbol(s, "WsEventProc");
 	objHost->XS_SetGlobalDate = tcc_get_symbol(s, "XS_SetGlobalDate");
 	
 	// 传递全局数据
