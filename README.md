@@ -93,8 +93,10 @@ gcc main.c lib/sqlite3.c tcc/libtcc.c \
     "class": "http",
     "name": "我的 HTTP 服务器",
     "desc": "主 Web 服务器",
-    "addr": "http://0.0.0.0:80",
+    "ip": "0.0.0.0",
+    "port": 80,
     "tls": false,
+    "port_tls": 443,
     "host_default": {
       "enabled": true,
       "name": "默认主机",
@@ -121,9 +123,11 @@ gcc main.c lib/sqlite3.c tcc/libtcc.c \
 | class | string | 服务器类型：`http`, `ws`, `tcp`, `udp`, `xtp`, `custom` |
 | name | string | 服务器名称 |
 | desc | string | 服务器描述 |
-| addr | string | 绑定地址（例如：`http://0.0.0.0:80`） |
+| ip | string | 监听 IP，例如 `0.0.0.0` |
+| port | integer | 监听端口 |
 | tls | boolean | 启用 TLS 加密 |
-| addr_tls | string | TLS 绑定地址 |
+| port_tls | integer | TLS 监听端口，默认复用 `ip` |
+| ip_tls | string | 可选的 TLS 监听 IP，仅在需要与 `ip` 不同时使用 |
 | host_default | object | 默认虚拟主机配置 |
 | hosts | array | 额外的虚拟主机列表 |
 
@@ -180,9 +184,21 @@ void ServiceUnit(XS_ServerObject objServer, XS_HostObject objHost)
 - `xsHostName / xsHostPath / xsHostDevFile / xsHostParam / xsHostDebug / xsHostDevMode`
 - `xsReqMethod / xsReqTarget / xsReqPath / xsReqQuery / xsReqHeader`
 - `xsHttpStatus / xsHttpHeader / xsHttpText / xsHttpBody / xsHttpJson`
+- `xsWsIsOpen / xsWsSendText / xsWsSendBinary / xsWsClose`
+- `xsStreamSend / xsStreamClose`
+- `xsXtpSend / xsXtpSendEx / xsXtpReply / xsXtpReplyEx`
+- `xsXtpMsgId / xsXtpMsgType / xsXtpMsgFlags / xsXtpStatus`
+- `xsXtpCmd / xsXtpCmdLen / xsXtpBody / xsXtpBodyLen`
+- `xsXtpParamCount / xsXtpParamKeyAt / xsXtpParamValueAt / xsXtpFindParamView`
+- `xsXtpGetParam`（便利函数，内部复制到线程局部缓冲区）
+- `xsDgramSendTo / xsDgramReply / xsAddrText`
 - `xsReloadCurrentHost / xsReloadHostByName`
 - `xsDataRegister / xsDataGet / xsDataRetain / xsDataRelease / xsDataRemove`
+- `xsDataRegisterEx`（支持 `namespace / tag / ttl`）
+- `xsDataFindFirst`
+- `xsBusLastErrorCode / xsBusLastError`
 - `xsMsgSendToServer / xsMsgSendToHost`
+- `xsMsgBroadcast`
 - `xsAppPath`
 
 如果需要迁移旧脚本里对 `xrt`、`sqlite3` 的直接调用，优先包含 `xs_vnext_full.h`。
@@ -195,13 +211,61 @@ void ServiceUnit(XS_ServerObject objServer, XS_HostObject objHost)
 - `GET /json`
 - `GET /bus/status`
 - `GET /bus/send`
+- `GET /bus/registry`
+- `GET /bus/namespaces`
+- `GET /bus/register`
+- `GET /bus/find`
+- `GET /bus/remove`
 - `GET /app/list`
 - `POST /app/add`
 - `POST /app/edit`
 - `POST /app/del`
 
+另外提供了独立的 WebSocket demo：
+
+- 配置文件：`release/xs_ws.json`
+- TLS 配置文件：`release/xs_wss.json`
+- 脚本入口：`release/script_vnext/ws_main.c`
+- `ws_protocol` 可用于要求客户端协商指定子协议；当前 demo 使用 `xs-demo`
+- 未带正确子协议的客户端握手会被拒绝，带 `xs-demo` 的客户端可以正常连接
+- `wss` demo 使用 `release/tls/xtps_cert.pem` 和 `release/tls/xtps_key.pem`
+- `release/wwwroot/ws.html` 现已支持一键切换 `ws://127.0.0.1:8081/` 与 `wss://127.0.0.1:8444/`
+
+另外提供了独立的 UDP demo：
+
+- 配置文件：`release/xs_udp.json`
+- 脚本入口：`release/script_vnext/udp_main.c`
+
+另外提供了独立的 XTP demo：
+
+- 配置文件：`release/xs_xtp.json`
+- 脚本入口：`release/script_vnext/xtp_main.c`
+
+另外提供了独立的 XTPS demo：
+
+- 配置文件：`release/xs_xtps.json`
+- 测试证书：`release/tls/xtps_cert.pem`
+- 测试私钥：`release/tls/xtps_key.pem`
+
+当前 `XTP` 在 vNext 中只支持 `v2` 头格式，不再兼容旧版 `xtp\1`。`v2` 固定头为 32 字节，包含：
+
+- `msg_type`
+- `msg_id`
+- `flags`
+- `status`
+- `cmd_size`
+- `param_count`
+- `body_size`
+
+其中：
+
+- `msg_id == 0` 的 `request` 视为单向消息，不要求回复
+- `msg_id != 0` 的 `request` 可通过 `xsXtpReply / xsXtpReplyEx` 回包
+- `response` 必须回显原始 `msg_id`
+- `status` 用于响应状态码
+
 其中 `/app/*` demo 已经切到 SQLite 预编译语句模式，不再依赖 `xdo`。
-`/bus/*` demo 用于演示进程内宿主总线和全局共享数据表，不是通过 HTTP 协议转发消息。
+`/bus/*` demo 用于演示进程内宿主总线和全局共享数据表，不是通过 HTTP 协议转发消息。当前 registry 已支持 `namespace`、`tag` 和 `ttl(ms)`，并支持按 `namespace/tag` 过滤查看、批量清理，以及查看 namespace 聚合统计。`xs.*` 和 `__xs*` 命名空间当前保留给系统使用。注册失败时会返回 `bus_code / bus_error`，便于定位具体错误原因。
 
 ## 可用的回调函数
 
@@ -212,8 +276,18 @@ void ServiceUnit(XS_ServerObject objServer, XS_HostObject objHost)
 | `ServiceStop` | 服务停止接流量时调用 |
 | `ServiceUnit` | 服务最终销毁前调用 |
 | `RequestProc` | HTTP 请求处理器 |
+| `WsOpenProc` | WebSocket 连接建立时调用 |
+| `WsTextProc` | WebSocket 文本消息处理器 |
+| `WsBinaryProc` | WebSocket 二进制消息处理器 |
+| `WsCloseProc` | WebSocket 连接关闭时调用 |
+
+WebSocket 脚本 API 额外提供：
+
+- `xsWsProtocol`
+- `xsWsPing`
 | `MessageProc` | 宿主总线消息处理器 |
 | `EventProc` | 网络事件处理器（自定义协议） |
+| `EventXtpProc` | XTP 消息处理器 |
 
 ## 调试入口
 
@@ -222,8 +296,33 @@ void ServiceUnit(XS_ServerObject objServer, XS_HostObject objHost)
 - `GET /__xs/status`
 - `GET /__xs/reload`
 - `GET /__xs/reload?host=<主机名>&force=true`
+- `GET /__xs/reload_config`
+- `GET /__xs/reload_config?server=<服务名>&host=<主机名>`
+- `GET /__xs/reload_status`
 
 当前 `reload` 已支持 Host 级脚本热重载；`force` 参数已进入接口语义，但连接排空策略仍会在后续阶段继续完善。
+当前 `reload_config` 已支持最小配置热加载，并在新配置 `build/init/start` 失败时保留旧服务继续可用。
+当前 `reload_config` 已支持按 `server` 定向重载。
+对于 `http/ws` 这类 `host-aware` 协议，传入 `host` 时会执行真正的 Host 原位重载；失败时可通过 `reload_status` 查看最近一次异步重载结果。
+
+当前网络服务配置还支持：
+
+- `backlog`
+- `recv_limit`
+- `path_limit`
+- `header_limit`
+- `body_limit`
+
+其中：
+
+- `backlog` 用于监听队列长度
+- `recv_limit` 用于单连接接收缓冲上限
+- `path_limit` 用于限制 HTTP 请求 `path + query` 的总长度，且不能超过 `xrt` 当前的固定解析上限
+- `header_limit` 用于限制 HTTP 请求头数量，且不能超过 `xrt` 当前的固定上限
+- `body_limit` 用于限制 HTTP 请求体大小，且必须小于等于 `recv_limit`
+- `static` Host 默认只允许 `GET / HEAD`，其他方法返回 `405`
+- `static` Host 默认拒绝点文件、反斜杠路径，以及 `.c/.h/.json/.db/.sqlite/.pem/.key/.log/.bak` 等敏感文件扩展名
+- HTTP 响应默认附带 `X-Content-Type-Options: nosniff`，`/__xs/*` 管理接口默认附带 `Cache-Control: no-store`
 
 ## 项目结构
 

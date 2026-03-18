@@ -213,7 +213,34 @@ bool RequestProc(XS_ServerObject objServer, XS_HostObject objHost, XS_RequestObj
 		return true;
 	}
 	if ( strcmp(sPath, "/bus/registry") == 0 ) {
-		char* sRet = xsBusStatusJson();
+		char sNamespace[128];
+		char sTag[128];
+		char* sRet;
+		
+		sNamespace[0] = '\0';
+		sTag[0] = '\0';
+		(void)XS_QueryGetParam(sQuery, "namespace", sNamespace, sizeof(sNamespace));
+		(void)XS_QueryGetParam(sQuery, "tag", sTag, sizeof(sTag));
+		if ( sNamespace[0] != '\0' || sTag[0] != '\0' ) {
+			sRet = xsBusStatusJsonEx(sNamespace[0] ? sNamespace : NULL, sTag[0] ? sTag : NULL);
+		} else {
+			sRet = xsBusStatusJson();
+		}
+		
+		if ( sRet == NULL ) {
+			return xsHttpJson(objResp, 500, "Internal Server Error", "{\"result\":false}") != 0;
+		}
+		
+		if ( xsHttpJson(objResp, 200, "OK", sRet) == 0 ) {
+			xrtFree(sRet);
+			return false;
+		}
+		
+		xrtFree(sRet);
+		return true;
+	}
+	if ( strcmp(sPath, "/bus/namespaces") == 0 ) {
+		char* sRet = xsBusNamespaceJson();
 		
 		if ( sRet == NULL ) {
 			return xsHttpJson(objResp, 500, "Internal Server Error", "{\"result\":false}") != 0;
@@ -230,36 +257,109 @@ bool RequestProc(XS_ServerObject objServer, XS_HostObject objHost, XS_RequestObj
 	if ( strcmp(sPath, "/bus/register") == 0 ) {
 		xvalue objBusData = xvoCreateTable();
 		int64_t iDataID;
+		char sNamespace[128];
 		char sTag[128];
+		char sTTL[64];
+		int64_t iTTL = 0;
 		
 		xvoTableSetText(objBusData, "server", 6, xsServerName(objServer), 0, FALSE);
 		xvoTableSetText(objBusData, "host", 4, xsHostName(objHost), 0, FALSE);
 		xvoTableSetText(objBusData, "path", 4, sPath, 0, FALSE);
 		xvoTableSetText(objBusData, "query", 5, sQuery ? sQuery : "", 0, FALSE);
+		if ( XS_QueryGetParam(sQuery, "namespace", sNamespace, sizeof(sNamespace)) && sNamespace[0] != '\0' ) {
+			xvoTableSetText(objBusData, "namespace", 9, sNamespace, 0, FALSE);
+		} else {
+			sNamespace[0] = '\0';
+		}
 		if ( XS_QueryGetParam(sQuery, "tag", sTag, sizeof(sTag)) && sTag[0] != '\0' ) {
 			xvoTableSetText(objBusData, "tag", 3, sTag, 0, FALSE);
+		} else {
+			sTag[0] = '\0';
+		}
+		if ( XS_QueryGetParam(sQuery, "ttl", sTTL, sizeof(sTTL)) && sTTL[0] != '\0' ) {
+			iTTL = _atoi64(sTTL);
+			xvoTableSetInt(objBusData, "ttl", 3, iTTL);
 		}
 		
-		iDataID = xsDataRegister(objBusData);
+		iDataID = xsDataRegisterEx(objBusData, sNamespace[0] ? sNamespace : NULL, sTag[0] ? sTag : NULL, iTTL);
 		xvoUnref(objBusData);
 		if ( iDataID <= 0 ) {
-			return xsHttpJson(objResp, 500, "Internal Server Error", "{\"result\":false,\"msg\":\"register failed\"}") != 0;
+			snprintf(
+				sBody,
+				sizeof(sBody),
+				"{\"result\":false,\"msg\":\"register failed\",\"bus_code\":%d,\"bus_error\":\"%s\"}",
+				xsBusLastErrorCode(),
+				xsBusLastError()
+			);
+			if ( xsBusLastErrorCode() == 2 ) {
+				return xsHttpJson(objResp, 400, "Bad Request", sBody) != 0;
+			}
+			return xsHttpJson(objResp, 500, "Internal Server Error", sBody) != 0;
 		}
 		
 		snprintf(
 			sBody,
 			sizeof(sBody),
-			"{\"result\":true,\"message\":\"data registered\",\"data_id\":%lld}",
-			(long long)iDataID
+			"{\"result\":true,\"message\":\"data registered\",\"data_id\":%lld,\"ttl\":%lld,\"namespace\":\"%s\",\"tag\":\"%s\"}",
+			(long long)iDataID,
+			(long long)iTTL,
+			sNamespace,
+			sTag
+		);
+		return xsHttpJson(objResp, 200, "OK", sBody) != 0;
+	}
+	if ( strcmp(sPath, "/bus/find") == 0 ) {
+		char sNamespace[128];
+		char sTag[128];
+		int64_t iDataID;
+		
+		sNamespace[0] = '\0';
+		sTag[0] = '\0';
+		(void)XS_QueryGetParam(sQuery, "namespace", sNamespace, sizeof(sNamespace));
+		(void)XS_QueryGetParam(sQuery, "tag", sTag, sizeof(sTag));
+		iDataID = xsDataFindFirst(sNamespace[0] ? sNamespace : NULL, sTag[0] ? sTag : NULL);
+		
+		snprintf(
+			sBody,
+			sizeof(sBody),
+			"{\"result\":true,\"data_id\":%lld,\"namespace\":\"%s\",\"tag\":\"%s\"}",
+			(long long)iDataID,
+			sNamespace,
+			sTag
 		);
 		return xsHttpJson(objResp, 200, "OK", sBody) != 0;
 	}
 	if ( strcmp(sPath, "/bus/remove") == 0 ) {
+		char sAll[16];
+		char sNamespace[128];
 		char sID[64];
+		char sTag[128];
 		int64_t iDataID = 0;
+		int64_t iRemoved;
 		
 		if ( XS_QueryGetParam(sQuery, "id", sID, sizeof(sID)) && sID[0] != '\0' ) {
 			iDataID = _atoi64(sID);
+		}
+		if ( iDataID <= 0 ) {
+			sNamespace[0] = '\0';
+			sTag[0] = '\0';
+			(void)XS_QueryGetParam(sQuery, "namespace", sNamespace, sizeof(sNamespace));
+			(void)XS_QueryGetParam(sQuery, "tag", sTag, sizeof(sTag));
+			if ( sNamespace[0] != '\0' || sTag[0] != '\0' ) {
+				if ( XS_QueryGetParam(sQuery, "all", sAll, sizeof(sAll)) && (strcmp(sAll, "true") == 0 || strcmp(sAll, "1") == 0) ) {
+					iRemoved = xsDataRemoveByQuery(sNamespace[0] ? sNamespace : NULL, sTag[0] ? sTag : NULL, 256);
+					snprintf(
+						sBody,
+						sizeof(sBody),
+						"{\"result\":true,\"message\":\"data removed\",\"removed\":%lld,\"namespace\":\"%s\",\"tag\":\"%s\"}",
+						(long long)iRemoved,
+						sNamespace,
+						sTag
+					);
+					return xsHttpJson(objResp, 200, "OK", sBody) != 0;
+				}
+				iDataID = xsDataFindFirst(sNamespace[0] ? sNamespace : NULL, sTag[0] ? sTag : NULL);
+			}
 		}
 		if ( iDataID <= 0 ) {
 			return xsHttpJson(objResp, 400, "Bad Request", "{\"result\":false,\"msg\":\"invalid id\"}") != 0;
@@ -289,8 +389,12 @@ bool RequestProc(XS_ServerObject objServer, XS_HostObject objHost, XS_RequestObj
 		if ( !XS_QueryGetParam(sQuery, "topic", sTopic, sizeof(sTopic)) || sTopic[0] == '\0' ) {
 			pTopic = "demo.bus.sync";
 		}
-		if ( XS_QueryGetParam(sQuery, "target", sTarget, sizeof(sTarget)) && strcmp(sTarget, "host") == 0 ) {
-			sMode = "host";
+		if ( XS_QueryGetParam(sQuery, "target", sTarget, sizeof(sTarget)) ) {
+			if ( strcmp(sTarget, "host") == 0 ) {
+				sMode = "host";
+			} else if ( strcmp(sTarget, "broadcast") == 0 ) {
+				sMode = "broadcast";
+			}
 		}
 		
 		xvoTableSetText(objBusData, "server", 6, xsServerName(objServer), 0, FALSE);
@@ -310,6 +414,8 @@ bool RequestProc(XS_ServerObject objServer, XS_HostObject objHost, XS_RequestObj
 		
 		if ( strcmp(sMode, "host") == 0 ) {
 			bSendOk = xsMsgSendToHost(xsServerName(objServer), xsHostName(objHost), pTopic, iDataID, NULL) != 0;
+		} else if ( strcmp(sMode, "broadcast") == 0 ) {
+			bSendOk = xsMsgBroadcast(pTopic, iDataID, NULL) != 0;
 		} else {
 			bSendOk = xsMsgSendToServer(xsServerName(objServer), pTopic, iDataID, NULL) != 0;
 		}

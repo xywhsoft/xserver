@@ -4,6 +4,10 @@
 typedef void (*XS_ScriptServiceProc)(ptr objServer, ptr objHost);
 typedef bool (*XS_ScriptHttpRequestProc)(ptr objServer, ptr objHost, const void* pReq, void* pResp);
 typedef bool (*XS_ScriptMessageProc)(ptr objServer, ptr objHost, const char* sTopic, int64 iDataID, xvalue objArgs);
+typedef void (*XS_ScriptWsOpenProc)(ptr objServer, ptr objHost, void* pConn);
+typedef bool (*XS_ScriptWsTextProc)(ptr objServer, ptr objHost, void* pConn, const char* pData, size_t iLen);
+typedef bool (*XS_ScriptWsBinaryProc)(ptr objServer, ptr objHost, void* pConn, const void* pData, size_t iLen);
+typedef void (*XS_ScriptWsCloseProc)(ptr objServer, ptr objHost, void* pConn, int iReason);
 typedef void (*XS_ScriptSetGlobalDataProc)(int idx, void* ptr);
 
 typedef enum {
@@ -30,6 +34,10 @@ typedef struct XS_HostConfig {
 	XS_ScriptServiceProc procServiceUnit;
 	XS_ScriptHttpRequestProc procHttpRequest;
 	XS_ScriptMessageProc procMessage;
+	XS_ScriptWsOpenProc procWsOpen;
+	XS_ScriptWsTextProc procWsText;
+	XS_ScriptWsBinaryProc procWsBinary;
+	XS_ScriptWsCloseProc procWsClose;
 	XS_ScriptSetGlobalDataProc procSetGlobalData;
 } XS_HostConfig;
 

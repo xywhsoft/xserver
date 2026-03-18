@@ -28,6 +28,7 @@ static inline void XS_Log(XS_LogLevel iLevel, const char* sFormat, ...)
 	vprintf(sFormat, args);
 	va_end(args);
 	printf("\n");
+	fflush(stdout);
 }
 
 #define XS_LogDebug(...) XS_Log(XS_LOG_DEBUG, __VA_ARGS__)

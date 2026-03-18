@@ -219,6 +219,13 @@ vNext 建议保留的 `class`：
 - `http/ws` 使用 `server + host`
 - `tcp/udp/xtp/custom` 使用 `server-only`
 
+Server 监听配置采用按 `class` 分化后的字段模型：
+
+- 主模型使用 `ip + port`
+- `http` 的 TLS 扩展使用 `tls + port_tls`
+- `ip_tls` 仅作为可选覆盖字段，默认复用 `ip`
+- 不再支持 `addr / addr_tls` 这类 URL 风格绑定字段
+
 
 
 ## 8. 脚本宿主模型
@@ -258,6 +265,22 @@ TCC 仍然作为全功能 C 语言脚本宿主，不做权限限制。
 
 - `http/ws`：脚本绑定到 `Host`
 - `tcp/udp/xtp/custom`：脚本绑定到 `Server`
+
+当前 `server-only` 宿主能力已经覆盖：
+
+- `custom/tcp`：连接打开、收包、关闭、脚本回调
+- `udp`：datagram 收包、默认回显、脚本回调与按来源地址回复
+- `xtp`：`v2` 二进制包解析、请求/应答模型、零拷贝参数视图、脚本消息回调与回包
+
+第一阶段已落地的 WebSocket 宿主回调：
+
+- `WsOpenProc`
+- `WsTextProc`
+- `WsBinaryProc`
+- `WsCloseProc`
+- `ws` server 现已支持 `ws_protocol`，可要求客户端协商固定子协议
+- 当 `ws_protocol` 已配置时，未协商正确子协议的握手请求会直接拒绝
+- `ws` 现已支持 `tls + port_tls` 的 `wss` 运行模式
 
 
 
@@ -355,10 +378,17 @@ TCC 仍然作为全功能 C 语言脚本宿主，不做权限限制。
 建议宿主 API：
 
 - `xsDataRegister`
+- `xsDataRegisterEx`
 - `xsDataGet`
 - `xsDataRetain`
 - `xsDataRelease`
 - `xsDataRemove`
+
+其中第一阶段建议支持：
+
+- `namespace`
+- `tag`
+- `ttl`
 
 ### 10.4 消息模型
 
@@ -366,6 +396,7 @@ TCC 仍然作为全功能 C 语言脚本宿主，不做权限限制。
 
 - `xsMsgSendToServer`
 - `xsMsgSendToHost`
+- `xsMsgBroadcast`
 
 脚本通过消息只传：
 
@@ -388,6 +419,22 @@ TCC 仍然作为全功能 C 语言脚本宿主，不做权限限制。
 - 跨进程
 - 跨机器
 - 持久化总线
+
+第一阶段已经开始提供：
+
+- registry 状态导出
+- `namespace / tag` 定位与删除
+- `namespace / tag` 条件过滤与批量清理
+- namespace 聚合统计视图
+- 注册失败错误码与错误文本
+- 过期自动清理骨架
+
+第一阶段保留约定：
+
+- `xs.*`
+- `__xs*`
+
+以上命名空间保留给系统内部使用，业务脚本不应注册到这些命名空间。
 
 
 
@@ -417,6 +464,20 @@ TCC 仍然作为全功能 C 语言脚本宿主，不做权限限制。
 - 哪些 Host 仅热更新脚本
 - 哪些对象需要重建
 - 哪些服务需要重启
+
+第一阶段最小实现要求：
+
+- 通过 HTTP 调试入口触发 `reload_config`
+- 先完成新配置的 `load/build/init`
+- 仅在启动前最后一步停止旧服务
+- 如果新服务启动失败，立即恢复旧 runtime
+- 支持 `server` 定向重载
+- 对 `http/ws` 支持 Host 原位重载
+- 提供 `reload_status` 查询最近一次异步重载结果
+- 网络服务统一支持 `backlog / recv_limit` 这类基础安全与容量参数
+- HTTP 宿主层额外支持 `path_limit / header_limit / body_limit` 这类请求入口限制
+- 静态 Host 默认仅接受 `GET / HEAD`，避免实验期过于宽松的行为进入生产
+- 静态 Host 默认拒绝敏感路径与敏感扩展名暴露，HTTP 响应默认追加基础安全头
 
 ### 10.4 force 语义
 

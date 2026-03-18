@@ -130,10 +130,86 @@ static inline bool XS_HttpRespondText(xhttpdresponse* pResp, uint32 iStatus, con
 	return xrtHttpdResponseSetBodyCopy(pResp, sText, strlen(sText), "text/plain; charset=utf-8");
 }
 
+static inline void XS_HttpApplyDefaultHeaders(const xhttpdrequest* pReq, xhttpdresponse* pResp)
+{
+	if ( pResp == NULL ) {
+		return;
+	}
+
+	(void)xrtHttpdResponseSetHeader(pResp, "X-Content-Type-Options", "nosniff");
+	if ( pReq && strncmp(pReq->sPath, "/__xs/", 6) == 0 ) {
+		(void)xrtHttpdResponseSetHeader(pResp, "Cache-Control", "no-store");
+	}
+}
+
+static inline bool XS_HttpValidateRequest(XS_ServerConfig* objServer, const xhttpdrequest* pReq, xhttpdresponse* pResp)
+{
+	size_t iPathLen;
+	size_t iQueryLen;
+
+	if ( objServer == NULL || pReq == NULL || pResp == NULL ) {
+		return FALSE;
+	}
+
+	if ( objServer->HeaderLimit > 0u && pReq->iHeaderCount > objServer->HeaderLimit ) {
+		return XS_HttpRespondText(pResp, 431, "Request Header Fields Too Large", "header count limit exceeded");
+	}
+
+	if ( objServer->BodyLimit > 0u && pReq->iBodyLen > (size_t)objServer->BodyLimit ) {
+		return XS_HttpRespondText(pResp, 413, "Payload Too Large", "request body limit exceeded");
+	}
+
+	iPathLen = strlen(pReq->sPath);
+	iQueryLen = strlen(pReq->sQuery);
+	if ( objServer->PathLimit > 0u && (iPathLen + iQueryLen) > (size_t)objServer->PathLimit ) {
+		return XS_HttpRespondText(pResp, 414, "URI Too Long", "request path limit exceeded");
+	}
+
+	return FALSE;
+}
+
+static inline bool XS_HttpStaticPathSensitive(const char* sRelPath)
+{
+	const char* sExt;
+	const char* pSeg;
+
+	if ( sRelPath == NULL || sRelPath[0] == '\0' ) {
+		return TRUE;
+	}
+
+	for ( pSeg = sRelPath; *pSeg; pSeg++ ) {
+		if ( *pSeg == '\\' ) {
+			return TRUE;
+		}
+		if ( *pSeg == '.' && (pSeg == sRelPath || pSeg[-1] == '/') ) {
+			return TRUE;
+		}
+	}
+
+	sExt = strrchr(sRelPath, '.');
+	if ( sExt == NULL ) {
+		return FALSE;
+	}
+
+	if ( _stricmp(sExt, ".c") == 0 ) return TRUE;
+	if ( _stricmp(sExt, ".h") == 0 ) return TRUE;
+	if ( _stricmp(sExt, ".json") == 0 ) return TRUE;
+	if ( _stricmp(sExt, ".db") == 0 ) return TRUE;
+	if ( _stricmp(sExt, ".sqlite") == 0 ) return TRUE;
+	if ( _stricmp(sExt, ".sqlite3") == 0 ) return TRUE;
+	if ( _stricmp(sExt, ".pem") == 0 ) return TRUE;
+	if ( _stricmp(sExt, ".key") == 0 ) return TRUE;
+	if ( _stricmp(sExt, ".log") == 0 ) return TRUE;
+	if ( _stricmp(sExt, ".bak") == 0 ) return TRUE;
+
+	return FALSE;
+}
+
 static inline bool XS_HttpServeStatic(const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
 	const char* sReqPath;
 	const char* sRelPath;
+	char sLength[32];
 	char* sFilePath;
 	ptr pFileData;
 	size_t iFileSize;
@@ -141,6 +217,11 @@ static inline bool XS_HttpServeStatic(const XS_HostConfig* objHost, const xhttpd
 	
 	if ( objHost == NULL || pReq == NULL || pResp == NULL || objHost->Path == NULL ) {
 		return FALSE;
+	}
+
+	if ( _stricmp(pReq->sMethod, "GET") != 0 && _stricmp(pReq->sMethod, "HEAD") != 0 ) {
+		xrtHttpdResponseSetHeader(pResp, "Allow", "GET, HEAD");
+		return XS_HttpRespondText(pResp, 405, "Method Not Allowed", "static host only supports GET or HEAD");
 	}
 	
 	sReqPath = pReq->sPath[0] ? pReq->sPath : "/";
@@ -154,6 +235,10 @@ static inline bool XS_HttpServeStatic(const XS_HostConfig* objHost, const xhttpd
 		sRelPath = sReqPath + 1;
 	} else {
 		sRelPath = sReqPath;
+	}
+
+	if ( XS_HttpStaticPathSensitive(sRelPath) ) {
+		return XS_HttpRespondText(pResp, 403, "Forbidden", "static path denied");
 	}
 	
 	sFilePath = xrtPathJoin(2, objHost->Path, sRelPath);
@@ -174,6 +259,14 @@ static inline bool XS_HttpServeStatic(const XS_HostConfig* objHost, const xhttpd
 	
 	sMime = XS_HttpMimeTypeByPath(sFilePath);
 	xrtHttpdResponseSetStatus(pResp, 200, "OK");
+	if ( _stricmp(pReq->sMethod, "HEAD") == 0 ) {
+		snprintf(sLength, sizeof(sLength), "%llu", (unsigned long long)iFileSize);
+		(void)xrtHttpdResponseSetHeader(pResp, "Content-Type", sMime);
+		(void)xrtHttpdResponseSetHeader(pResp, "Content-Length", sLength);
+		xrtFree(pFileData);
+		xrtFree(sFilePath);
+		return TRUE;
+	}
 	if ( !xrtHttpdResponseSetBodyCopy(pResp, pFileData, iFileSize, sMime) ) {
 		xrtFree(pFileData);
 		xrtFree(sFilePath);
@@ -312,6 +405,11 @@ static inline char* XS_HttpQueryText(const char* sQuery, const char* sName)
 	return NULL;
 }
 
+static inline char* XS_HttpQueryDup(const char* sQuery, const char* sName)
+{
+	return XS_HttpQueryText(sQuery, sName);
+}
+
 static inline bool XS_HttpHandleReload(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
 	char* sReloadHostName;
@@ -375,6 +473,81 @@ static inline bool XS_HttpHandleReload(XS_ServerConfig* objServer, const XS_Host
 	);
 }
 
+static inline bool XS_HttpHandleConfigReload(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
+{
+	char sBody[512];
+	char* sServerName;
+	char* sHostName;
+	bool bQueued;
+	bool bForce;
+	
+	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
+		return FALSE;
+	}
+	if ( strcmp(pReq->sPath, "/__xs/reload_config") != 0 ) {
+		return FALSE;
+	}
+	if ( !(objServer->Debug || objHost->Debug) ) {
+		return XS_HttpRespondText(pResp, 403, "Forbidden", "config reload api disabled");
+	}
+	if ( _stricmp(pReq->sMethod, "GET") != 0 && _stricmp(pReq->sMethod, "POST") != 0 ) {
+		return XS_HttpRespondText(pResp, 405, "Method Not Allowed", "config reload api only supports GET or POST");
+	}
+	
+	bForce = XS_HttpQueryBool(pReq->sQuery, "force", FALSE);
+	sServerName = XS_HttpQueryDup(pReq->sQuery, "server");
+	sHostName = XS_HttpQueryDup(pReq->sQuery, "host");
+	if ( (sServerName == NULL || sServerName[0] == '\0') && sHostName && sHostName[0] != '\0' ) {
+		sServerName = XS_CopyText(objServer->Name);
+	}
+	bQueued = XS_RequestConfigReloadEx(sServerName, sHostName, bForce);
+	snprintf(
+		sBody,
+		sizeof(sBody),
+		"config_reload=%s\nserver=%s\ntarget_server=%s\ntarget_host=%s\nforce=%s\n",
+		bQueued ? "queued" : "busy",
+		objServer->Name ? objServer->Name : "(null)",
+		(sServerName && sServerName[0]) ? sServerName : "(all)",
+		(sHostName && sHostName[0]) ? sHostName : "(all)",
+		bForce ? "true" : "false"
+	);
+	if ( sServerName ) {
+		xrtFree(sServerName);
+	}
+	if ( sHostName ) {
+		xrtFree(sHostName);
+	}
+	return XS_HttpRespondText(pResp, bQueued ? 200 : 409, bQueued ? "OK" : "Conflict", sBody);
+}
+
+static inline bool XS_HttpHandleConfigReloadStatus(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
+{
+	char sBody[512];
+	
+	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
+		return FALSE;
+	}
+	if ( strcmp(pReq->sPath, "/__xs/reload_status") != 0 ) {
+		return FALSE;
+	}
+	if ( !(objServer->Debug || objHost->Debug) ) {
+		return XS_HttpRespondText(pResp, 403, "Forbidden", "config reload status api disabled");
+	}
+	
+	snprintf(
+		sBody,
+		sizeof(sBody),
+		"busy=%s\nhas_result=%s\nsuccess=%s\nserver=%s\nhost=%s\nmessage=%s\n",
+		XS_ConfigReloadStatusBusy() ? "true" : "false",
+		XS_ConfigReloadStatusHasResult() ? "true" : "false",
+		XS_ConfigReloadStatusSuccess() ? "true" : "false",
+		XS_ConfigReloadStatusServer(),
+		XS_ConfigReloadStatusHost(),
+		XS_ConfigReloadStatusMessage()
+	);
+	return XS_HttpRespondText(pResp, 200, "OK", sBody);
+}
+
 static inline bool XS_HttpHandleStatus(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
 	char sBody[2048];
@@ -396,13 +569,18 @@ static inline bool XS_HttpHandleStatus(XS_ServerConfig* objServer, const XS_Host
 	iLen = (size_t)snprintf(
 		sBody,
 		sizeof(sBody),
-		"server=%s\nclass=%s\naddr=%s\ndebug=%s\nhost_aware=%s\ndefault_host=%s\n",
+		"server=%s\nclass=%s\naddr=%s\ndebug=%s\nhost_aware=%s\ndefault_host=%s\npath_limit=%u\nheader_limit=%u\nbody_limit=%u\nrecv_limit=%u\nbacklog=%u\n",
 		objServer->Name ? objServer->Name : "(null)",
 		XS_ServerClassName(objServer->Class),
 		objServer->Addr ? objServer->Addr : "(null)",
 		objServer->Debug ? "true" : "false",
 		objServer->HostAware ? "true" : "false",
-		objServer->EnableDefaultHost ? "true" : "false"
+		objServer->EnableDefaultHost ? "true" : "false",
+		(unsigned int)objServer->PathLimit,
+		(unsigned int)objServer->HeaderLimit,
+		(unsigned int)objServer->BodyLimit,
+		(unsigned int)objServer->RecvLimit,
+		(unsigned int)objServer->Backlog
 	);
 	
 	if ( objServer->EnableDefaultHost && iLen < sizeof(sBody) ) {
@@ -464,10 +642,16 @@ static bool XS_HttpOnRequest(ptr pOwner, xhttpdserver* pServer, xhttpdconn* pCon
 	if ( pReq == NULL || pResp == NULL ) {
 		return FALSE;
 	}
+
+	XS_HttpApplyDefaultHeaders(pReq, pResp);
 	
 	objHost = XS_HttpLocateHost(objServer, pReq);
 	if ( objHost == NULL ) {
 		return XS_HttpRespondText(pResp, 404, "Not Found", "host not found");
+	}
+
+	if ( XS_HttpValidateRequest(objServer, pReq, pResp) ) {
+		return TRUE;
 	}
 	
 	XS_LogInfo(
@@ -479,6 +663,12 @@ static bool XS_HttpOnRequest(ptr pOwner, xhttpdserver* pServer, xhttpdconn* pCon
 	);
 	
 	if ( XS_HttpHandleReload(objServer, objHost, pReq, pResp) ) {
+		return TRUE;
+	}
+	if ( XS_HttpHandleConfigReload(objServer, objHost, pReq, pResp) ) {
+		return TRUE;
+	}
+	if ( XS_HttpHandleConfigReloadStatus(objServer, objHost, pReq, pResp) ) {
 		return TRUE;
 	}
 	if ( XS_HttpHandleStatus(objServer, objHost, pReq, pResp) ) {
@@ -564,6 +754,8 @@ static inline bool XS_ParseBindAddr(const char* sAddr, xnetaddr* pAddr)
 		pWork += 5;
 	} else if ( strncmp(pWork, "wss://", 6) == 0 ) {
 		pWork += 6;
+	} else if ( strncmp(pWork, "tcp://", 6) == 0 ) {
+		pWork += 6;
 	}
 	
 	pColon = strrchr(pWork, ':');
@@ -588,6 +780,33 @@ static inline bool XS_ParseBindAddr(const char* sAddr, xnetaddr* pAddr)
 	}
 	
 	return TRUE;
+}
+
+static inline bool XS_BuildBindAddr(const XS_ServerConfig* objServer, bool bTLS, xnetaddr* pAddr)
+{
+	const char* sIP;
+	uint16 iPort;
+	const char* sLegacyAddr;
+	
+	if ( objServer == NULL || pAddr == NULL ) {
+		return FALSE;
+	}
+	
+	if ( bTLS ) {
+		sIP = objServer->BindIPTLS;
+		iPort = objServer->BindPortTLS;
+		sLegacyAddr = objServer->AddrTLS;
+	} else {
+		sIP = objServer->BindIP;
+		iPort = objServer->BindPort;
+		sLegacyAddr = objServer->Addr;
+	}
+	
+	if ( sIP && sIP[0] != '\0' && iPort > 0 ) {
+		return xrtNetAddrParse(pAddr, sIP, iPort) == XRT_NET_OK;
+	}
+	
+	return XS_ParseBindAddr(sLegacyAddr, pAddr);
 }
 
 static inline bool XS_HttpInitServer(xnetengine* pEngine, XS_ServerConfig* objServer)
@@ -623,10 +842,12 @@ static inline bool XS_HttpInitServer(xnetengine* pEngine, XS_ServerConfig* objSe
 	}
 	
 	xrtHttpdConfigInit(&tConfig);
-	if ( !XS_ParseBindAddr(objServer->Addr, &tConfig.tBindAddr) ) {
+	if ( !XS_BuildBindAddr(objServer, FALSE, &tConfig.tBindAddr) ) {
 		XS_ReportError("http init failed: invalid addr: %s", objServer->Addr ? objServer->Addr : "(null)");
 		return FALSE;
 	}
+	tConfig.iBacklog = objServer->Backlog;
+	tConfig.iRecvLimit = objServer->RecvLimit;
 	
 	memset(&tEvents, 0, sizeof(tEvents));
 	tEvents.OnOpen = XS_HttpOnOpen;

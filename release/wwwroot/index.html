@@ -319,6 +319,8 @@
 					<a class="secondary" href="/chart.html" target="_blank">打开图表页</a>
 					<a class="secondary" href="/template" target="_blank">打开模板页</a>
 					<a class="secondary" href="/json" target="_blank">查看 JSON</a>
+					<a class="secondary" href="/ws.html" target="_blank">WS 测试页</a>
+					<a class="secondary" href="/ws.html" target="_blank">WSS 测试入口</a>
 				</div>
 			</div>
 			<div class="hero-side">
@@ -386,6 +388,14 @@
 							<div class="demo-link-title">宿主调试状态</div>
 							<div class="demo-link-desc">查看当前 server、default host、script_loaded 等摘要。</div>
 						</a>
+						<a class="demo-link" href="/ws.html" target="_blank">
+							<div class="demo-link-title">WebSocket 测试页</div>
+							<div class="demo-link-desc">联调 `xs_ws.json` 对应的 WebSocket demo，验证连接、发送和回显。</div>
+						</a>
+						<a class="demo-link" href="/ws.html" target="_blank">
+							<div class="demo-link-title">WSS 测试页</div>
+							<div class="demo-link-desc">页面内一键切到 `wss://127.0.0.1:8444/`，验证 TLS WebSocket 与子协议协商。</div>
+						</a>
 					</div>
 					<div class="reload-box">
 						<div class="demo-link-title">脚本热重载演示</div>
@@ -402,11 +412,16 @@
 						<div class="bus-actions">
 							<button type="button" class="bus-btn" id="BusSendServerBtn">发送到 Server</button>
 							<button type="button" class="bus-btn alt" id="BusSendHostBtn">发送到当前 Host</button>
+							<button type="button" class="bus-btn" id="BusSendBroadcastBtn">广播到全部</button>
 						</div>
 						<div class="bus-tools">
+							<input type="text" id="BusNamespaceInput" placeholder="namespace，可留空">
 							<input type="text" id="BusTagInput" placeholder="持久注册 tag，可留空">
+							<input type="text" id="BusTTLInput" placeholder="TTL(ms)，0 表示不过期">
 							<button type="button" class="bus-btn" id="BusRegisterBtn">注册数据</button>
+							<button type="button" class="bus-btn" id="BusFindBtn">查找数据</button>
 							<button type="button" class="bus-btn alt" id="BusRemoveBtn">移除最后 ID</button>
+							<button type="button" class="bus-btn alt" id="BusRemoveAllBtn">批量清理</button>
 						</div>
 						<div class="bus-result" id="BusSendResult">尚未发送消息。</div>
 					</div>
@@ -419,6 +434,8 @@
 				<pre class="code-box" id="BusRaw">loading...</pre>
 				<h2 class="section-title" style="margin-top:20px;">Bus Registry</h2>
 				<pre class="code-box" id="BusRegistryRaw">loading...</pre>
+				<h2 class="section-title" style="margin-top:20px;">Bus Namespaces</h2>
+				<pre class="code-box" id="BusNamespaceRaw">loading...</pre>
 			</div>
 		</section>
 	</div>
@@ -505,7 +522,22 @@
 			};
 			var procLoadBusRegistry = function()
 			{
-				fetch('/bus/registry')
+				var objNamespace = document.getElementById('BusNamespaceInput');
+				var objTag = document.getElementById('BusTagInput');
+				var sURL = '/bus/registry';
+				var arrQuery = [];
+				
+				if ( objNamespace && objNamespace.value ) {
+					arrQuery.push('namespace=' + encodeURIComponent(objNamespace.value));
+				}
+				if ( objTag && objTag.value ) {
+					arrQuery.push('tag=' + encodeURIComponent(objTag.value));
+				}
+				if ( arrQuery.length > 0 ) {
+					sURL += '?' + arrQuery.join('&');
+				}
+				
+				fetch(sURL)
 				.then(function(objResp){
 					return objResp.text();
 				})
@@ -514,6 +546,19 @@
 				})
 				.catch(function(objErr){
 					procSetText('BusRegistryRaw', String(objErr));
+				});
+			};
+			var procLoadBusNamespaces = function()
+			{
+				fetch('/bus/namespaces')
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sText){
+					procSetText('BusNamespaceRaw', sText || '');
+				})
+				.catch(function(objErr){
+					procSetText('BusNamespaceRaw', String(objErr));
 				});
 			};
 			var procDoReload = function()
@@ -541,6 +586,7 @@
 					procLoadJson();
 					procLoadBus();
 					procLoadBusRegistry();
+					procLoadBusNamespaces();
 					table.reloadData('DataList', {
 						scrollPos: 'fixed'
 					});
@@ -568,6 +614,7 @@
 					procSetText('BusSendResult', sText || '');
 					window.setTimeout(procLoadBus, 300);
 					window.setTimeout(procLoadBusRegistry, 300);
+					window.setTimeout(procLoadBusNamespaces, 300);
 				})
 				.catch(function(objErr){
 					procSetText('BusSendResult', String(objErr));
@@ -575,11 +622,23 @@
 			};
 			var procDoBusRegister = function()
 			{
+				var objNamespace = document.getElementById('BusNamespaceInput');
 				var objTag = document.getElementById('BusTagInput');
+				var objTTL = document.getElementById('BusTTLInput');
 				var sURL = '/bus/register';
+				var arrQuery = [];
 				
+				if ( objNamespace && objNamespace.value ) {
+					arrQuery.push('namespace=' + encodeURIComponent(objNamespace.value));
+				}
 				if ( objTag && objTag.value ) {
-					sURL += '?tag=' + encodeURIComponent(objTag.value);
+					arrQuery.push('tag=' + encodeURIComponent(objTag.value));
+				}
+				if ( objTTL && objTTL.value ) {
+					arrQuery.push('ttl=' + encodeURIComponent(objTTL.value));
+				}
+				if ( arrQuery.length > 0 ) {
+					sURL += '?' + arrQuery.join('&');
 				}
 				procSetText('BusSendResult', '正在注册共享数据...');
 				fetch(sURL)
@@ -589,6 +648,37 @@
 				.then(function(sText){
 					procSetText('BusSendResult', sText || '');
 					window.setTimeout(procLoadBusRegistry, 300);
+					window.setTimeout(procLoadBusNamespaces, 300);
+				})
+				.catch(function(objErr){
+					procSetText('BusSendResult', String(objErr));
+				});
+			};
+			var procDoBusFind = function()
+			{
+				var objNamespace = document.getElementById('BusNamespaceInput');
+				var objTag = document.getElementById('BusTagInput');
+				var sURL = '/bus/find';
+				var arrQuery = [];
+				
+				if ( objNamespace && objNamespace.value ) {
+					arrQuery.push('namespace=' + encodeURIComponent(objNamespace.value));
+				}
+				if ( objTag && objTag.value ) {
+					arrQuery.push('tag=' + encodeURIComponent(objTag.value));
+				}
+				if ( arrQuery.length > 0 ) {
+					sURL += '?' + arrQuery.join('&');
+				}
+				procSetText('BusSendResult', '正在查找共享数据...');
+				fetch(sURL)
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sText){
+					procSetText('BusSendResult', sText || '');
+					window.setTimeout(procLoadBusRegistry, 300);
+					window.setTimeout(procLoadBusNamespaces, 300);
 				})
 				.catch(function(objErr){
 					procSetText('BusSendResult', String(objErr));
@@ -596,10 +686,41 @@
 			};
 			var procDoBusRemove = function()
 			{
+				var objNamespace = document.getElementById('BusNamespaceInput');
+				var objTag = document.getElementById('BusTagInput');
 				var sText = document.getElementById('BusRegistryRaw').textContent || '';
 				var tblData;
 				var arrItems;
 				var iDataID;
+				
+				if ( ((objNamespace && objNamespace.value) || (objTag && objTag.value)) ) {
+					var sURL = '/bus/remove';
+					var arrQuery = [];
+					
+					if ( objNamespace && objNamespace.value ) {
+						arrQuery.push('namespace=' + encodeURIComponent(objNamespace.value));
+					}
+					if ( objTag && objTag.value ) {
+						arrQuery.push('tag=' + encodeURIComponent(objTag.value));
+					}
+					if ( arrQuery.length > 0 ) {
+						sURL += '?' + arrQuery.join('&');
+					}
+					procSetText('BusSendResult', '正在按 namespace/tag 移除共享数据...');
+					fetch(sURL)
+					.then(function(objResp){
+						return objResp.text();
+					})
+					.then(function(sResp){
+						procSetText('BusSendResult', sResp || '');
+						window.setTimeout(procLoadBusRegistry, 300);
+						window.setTimeout(procLoadBusNamespaces, 300);
+					})
+					.catch(function(objErr){
+						procSetText('BusSendResult', String(objErr));
+					});
+					return;
+				}
 				
 				try {
 					tblData = JSON.parse(sText);
@@ -615,6 +736,34 @@
 				iDataID = arrItems[arrItems.length - 1].id;
 				procSetText('BusSendResult', '正在移除共享数据 #' + iDataID + ' ...');
 				fetch('/bus/remove?id=' + encodeURIComponent(String(iDataID)))
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sResp){
+					procSetText('BusSendResult', sResp || '');
+					window.setTimeout(procLoadBusRegistry, 300);
+					window.setTimeout(procLoadBusNamespaces, 300);
+				})
+				.catch(function(objErr){
+					procSetText('BusSendResult', String(objErr));
+				});
+			};
+			var procDoBusRemoveAll = function()
+			{
+				var objNamespace = document.getElementById('BusNamespaceInput');
+				var objTag = document.getElementById('BusTagInput');
+				var sURL = '/bus/remove?all=true';
+				var arrQuery = ['all=true'];
+				
+				if ( objNamespace && objNamespace.value ) {
+					arrQuery.push('namespace=' + encodeURIComponent(objNamespace.value));
+				}
+				if ( objTag && objTag.value ) {
+					arrQuery.push('tag=' + encodeURIComponent(objTag.value));
+				}
+				sURL = '/bus/remove?' + arrQuery.join('&');
+				procSetText('BusSendResult', '正在批量清理共享数据...');
+				fetch(sURL)
 				.then(function(objResp){
 					return objResp.text();
 				})
@@ -661,6 +810,7 @@
 					procLoadJson();
 					procLoadBus();
 					procLoadBusRegistry();
+					procLoadBusNamespaces();
 				},
 				error: function(res, msg){
 					console.log(res, msg);
@@ -778,12 +928,18 @@
 			document.getElementById('BusSendHostBtn').addEventListener('click', function(){
 				procDoBusSend('host');
 			});
+			document.getElementById('BusSendBroadcastBtn').addEventListener('click', function(){
+				procDoBusSend('broadcast');
+			});
 			document.getElementById('BusRegisterBtn').addEventListener('click', procDoBusRegister);
+			document.getElementById('BusFindBtn').addEventListener('click', procDoBusFind);
 			document.getElementById('BusRemoveBtn').addEventListener('click', procDoBusRemove);
+			document.getElementById('BusRemoveAllBtn').addEventListener('click', procDoBusRemoveAll);
 			procLoadStatus();
 			procLoadJson();
 			procLoadBus();
 			procLoadBusRegistry();
+			procLoadBusNamespaces();
 		});
 	</script>
 </body>

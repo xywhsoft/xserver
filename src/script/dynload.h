@@ -1,6 +1,26 @@
 #ifndef XS_SCRIPT_DYNLOAD_H
 #define XS_SCRIPT_DYNLOAD_H
 
+static inline void XS_ResetServerScriptState(XS_ServerConfig* objServer)
+{
+	if ( objServer == NULL ) {
+		return;
+	}
+	
+	objServer->pScriptState = NULL;
+	objServer->procServiceInit = NULL;
+	objServer->procServiceStart = NULL;
+	objServer->procServiceStop = NULL;
+	objServer->procServiceUnit = NULL;
+	objServer->procMessage = NULL;
+	objServer->procStreamOpen = NULL;
+	objServer->procStreamData = NULL;
+	objServer->procStreamClose = NULL;
+	objServer->procDgramRecv = NULL;
+	objServer->procXtpMessage = NULL;
+	objServer->procSetGlobalData = NULL;
+}
+
 static inline void XS_ResetHostScriptState(XS_HostConfig* objHost)
 {
 	if ( objHost == NULL ) {
@@ -14,7 +34,143 @@ static inline void XS_ResetHostScriptState(XS_HostConfig* objHost)
 	objHost->procServiceUnit = NULL;
 	objHost->procHttpRequest = NULL;
 	objHost->procMessage = NULL;
+	objHost->procWsOpen = NULL;
+	objHost->procWsText = NULL;
+	objHost->procWsBinary = NULL;
+	objHost->procWsClose = NULL;
 	objHost->procSetGlobalData = NULL;
+}
+
+static inline bool XS_BuildServerScriptState(XS_ServerConfig* objServer, TCCState** ppState)
+{
+	TCCState* s;
+	char* sWorkPath;
+	char* sCode;
+	
+	if ( ppState == NULL ) {
+		return FALSE;
+	}
+	if ( objServer == NULL || objServer->DevMode != XS_DEV_SCRIPT_C ) {
+		*ppState = NULL;
+		return TRUE;
+	}
+	if ( objServer->DevFile == NULL || objServer->DevFile[0] == '\0' ) {
+		XS_ReportError("server script load failed: server=%s devfile is empty", XS_ScriptServerName(objServer));
+		return FALSE;
+	}
+	if ( xrtFileExists(objServer->DevFile) == FALSE ) {
+		XS_ReportError("server script load failed: file not found: %s", objServer->DevFile);
+		return FALSE;
+	}
+	
+	s = XS_CreateTCC(objServer->Path, XS_ImportScriptAPI);
+	if ( s == NULL ) {
+		XS_ReportError("server script load failed: cannot create TCC: server=%s", XS_ScriptServerName(objServer));
+		return FALSE;
+	}
+	
+	sWorkPath = xrtPathGetDir(objServer->DevFile, 0);
+	if ( sWorkPath && sWorkPath[0] != '\0' ) {
+		tcc_add_include_path(s, sWorkPath);
+		tcc_add_library_path(s, sWorkPath);
+	}
+	
+	sCode = xrtFileReadAll(objServer->DevFile, XRT_CP_BINARY, NULL);
+	if ( sCode == NULL ) {
+		if ( sWorkPath ) xrtFree(sWorkPath);
+		XS_DestroyTCC(s);
+		XS_ReportError("server script load failed: read error: %s", objServer->DevFile);
+		return FALSE;
+	}
+	
+	if ( tcc_compile_string(s, sCode) == -1 ) {
+		xrtFree(sCode);
+		if ( sWorkPath ) xrtFree(sWorkPath);
+		XS_DestroyTCC(s);
+		XS_ReportError("server script load failed: compile error: %s", objServer->DevFile);
+		return FALSE;
+	}
+	
+	xrtFree(sCode);
+	if ( sWorkPath ) {
+		xrtFree(sWorkPath);
+	}
+	
+	if ( tcc_relocate(s) < 0 ) {
+		XS_DestroyTCC(s);
+		XS_ReportError("server script load failed: relocate error: %s", objServer->DevFile);
+		return FALSE;
+	}
+	
+	*ppState = s;
+	return TRUE;
+}
+
+static inline void XS_AttachServerScriptState(XS_ServerConfig* objServer, TCCState* s)
+{
+	if ( objServer == NULL ) {
+		return;
+	}
+	
+	XS_ResetServerScriptState(objServer);
+	objServer->pScriptState = s;
+	if ( s == NULL ) {
+		return;
+	}
+	
+	objServer->procServiceInit = (XS_ScriptServiceProc)tcc_get_symbol(s, "ServiceInit");
+	objServer->procServiceStart = (XS_ScriptServiceProc)tcc_get_symbol(s, "ServiceStart");
+	objServer->procServiceStop = (XS_ScriptServiceProc)tcc_get_symbol(s, "ServiceStop");
+	objServer->procServiceUnit = (XS_ScriptServiceProc)tcc_get_symbol(s, "ServiceUnit");
+	objServer->procMessage = (XS_ScriptMessageProc)tcc_get_symbol(s, "MessageProc");
+	objServer->procStreamOpen = (XS_ScriptStreamOpenProc)tcc_get_symbol(s, "EventOpenProc");
+	objServer->procStreamData = (XS_ScriptStreamDataProc)tcc_get_symbol(s, "EventDataProc");
+	objServer->procStreamClose = (XS_ScriptStreamCloseProc)tcc_get_symbol(s, "EventCloseProc");
+	objServer->procDgramRecv = (XS_ScriptDgramRecvProc)tcc_get_symbol(s, "EventDgramProc");
+	objServer->procXtpMessage = (XS_ScriptXtpMessageProc)tcc_get_symbol(s, "EventXtpProc");
+	objServer->procSetGlobalData = (XS_ScriptSetGlobalDataProc)tcc_get_symbol(s, "XS_SetGlobalDate");
+	
+	if ( objServer->procSetGlobalData ) {
+		objServer->procSetGlobalData(1, NULL);
+		objServer->procSetGlobalData(2, NULL);
+		objServer->procSetGlobalData(3, xrtInit());
+	}
+	
+	XS_LogInfo(
+		"server script loaded: server=%s file=%s",
+		XS_ScriptServerName(objServer),
+		objServer->DevFile ? objServer->DevFile : "(null)"
+	);
+}
+
+static inline bool XS_LoadServerScriptObject(XS_ServerConfig* objServer)
+{
+	TCCState* s = NULL;
+	
+	if ( !XS_BuildServerScriptState(objServer, &s) ) {
+		return FALSE;
+	}
+	
+	XS_AttachServerScriptState(objServer, s);
+	return TRUE;
+}
+
+static inline void XS_UnloadServerScriptObject(XS_ServerConfig* objServer)
+{
+	TCCState* s;
+	
+	if ( objServer == NULL ) {
+		return;
+	}
+	
+	s = (TCCState*)objServer->pScriptState;
+	if ( objServer->procServiceUnit ) {
+		objServer->procServiceUnit(objServer, NULL);
+	}
+	XS_ResetServerScriptState(objServer);
+	if ( s ) {
+		XS_DestroyTCC(s);
+	}
 }
 
 static inline bool XS_BuildHostScriptState(XS_ServerConfig* objServer, XS_HostConfig* objHost, TCCState** ppState)
@@ -125,6 +281,10 @@ static inline void XS_AttachHostScriptState(XS_ServerConfig* objServer, XS_HostC
 	objHost->procServiceUnit = (XS_ScriptServiceProc)tcc_get_symbol(s, "ServiceUnit");
 	objHost->procHttpRequest = (XS_ScriptHttpRequestProc)tcc_get_symbol(s, "RequestProc");
 	objHost->procMessage = (XS_ScriptMessageProc)tcc_get_symbol(s, "MessageProc");
+	objHost->procWsOpen = (XS_ScriptWsOpenProc)tcc_get_symbol(s, "WsOpenProc");
+	objHost->procWsText = (XS_ScriptWsTextProc)tcc_get_symbol(s, "WsTextProc");
+	objHost->procWsBinary = (XS_ScriptWsBinaryProc)tcc_get_symbol(s, "WsBinaryProc");
+	objHost->procWsClose = (XS_ScriptWsCloseProc)tcc_get_symbol(s, "WsCloseProc");
 	objHost->procSetGlobalData = (XS_ScriptSetGlobalDataProc)tcc_get_symbol(s, "XS_SetGlobalDate");
 	
 	if ( objHost->procSetGlobalData ) {
@@ -261,6 +421,11 @@ static inline bool XS_LoadServerScripts(XS_ServerConfig* objServer)
 			}
 		}
 	}
+	else if ( objServer->DevMode == XS_DEV_SCRIPT_C ) {
+		if ( !XS_LoadServerScriptObject(objServer) ) {
+			return FALSE;
+		}
+	}
 	
 	return TRUE;
 }
@@ -284,6 +449,9 @@ static inline bool XS_InitServerScripts(XS_ServerConfig* objServer)
 				objHost->procServiceInit(objServer, objHost);
 			}
 		}
+	}
+	else if ( objServer->procServiceInit ) {
+		objServer->procServiceInit(objServer, NULL);
 	}
 	
 	return TRUE;
@@ -309,6 +477,9 @@ static inline bool XS_StartServerScripts(XS_ServerConfig* objServer)
 			}
 		}
 	}
+	else if ( objServer->procServiceStart ) {
+		objServer->procServiceStart(objServer, NULL);
+	}
 	
 	return TRUE;
 }
@@ -333,6 +504,9 @@ static inline void XS_StopServerScripts(XS_ServerConfig* objServer)
 			}
 		}
 	}
+	else if ( objServer->procServiceStop ) {
+		objServer->procServiceStop(objServer, NULL);
+	}
 }
 
 static inline void XS_UnloadServerScripts(XS_ServerConfig* objServer)
@@ -352,6 +526,9 @@ static inline void XS_UnloadServerScripts(XS_ServerConfig* objServer)
 			XS_HostConfig* objHost = xrtArrayGet_Inline(objServer->Hosts, i);
 			XS_UnloadHostScript(objServer, objHost);
 		}
+	}
+	else {
+		XS_UnloadServerScriptObject(objServer);
 	}
 }
 

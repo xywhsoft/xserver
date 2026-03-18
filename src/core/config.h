@@ -39,6 +39,8 @@ static inline const char* XS_DevModeName(XS_DevMode iMode)
 
 static bool XS_WarnUnknownFieldProc(Dict_Key* pKey, ptr pVal, ptr pArg)
 {
+	char sKeyBuf[256];
+	size_t iKeyLen;
 	struct {
 		const XS_FieldRule* arrRule;
 		size_t iRuleCount;
@@ -46,9 +48,20 @@ static bool XS_WarnUnknownFieldProc(Dict_Key* pKey, ptr pVal, ptr pArg)
 	} *objCtx = pArg;
 	
 	(void)pVal;
-	
-	if ( !XS_FindFieldRule(objCtx->arrRule, objCtx->iRuleCount, (const char*)pKey->Key, pKey->KeyLen) ) {
-		XS_ReportWarn("%s contains unknown field: %.*s", objCtx->sScope, (int)pKey->KeyLen, (const char*)pKey->Key);
+
+	if ( pKey == NULL || pKey->Key == NULL ) {
+		return FALSE;
+	}
+
+	iKeyLen = pKey->KeyLen;
+	if ( iKeyLen >= sizeof(sKeyBuf) ) {
+		iKeyLen = sizeof(sKeyBuf) - 1;
+	}
+	memcpy(sKeyBuf, pKey->Key, iKeyLen);
+	sKeyBuf[iKeyLen] = '\0';
+
+	if ( !XS_FindFieldRule(objCtx->arrRule, objCtx->iRuleCount, sKeyBuf, strlen(sKeyBuf)) ) {
+		XS_ReportWarn("%s contains unknown field: %s", objCtx->sScope, sKeyBuf);
 	}
 	
 	return FALSE;
@@ -212,6 +225,90 @@ static inline bool XS_LoadHostConfig(xvalue objTable, const char* sBaseDir, XS_H
 	return TRUE;
 }
 
+static inline char* XS_MakeBindText(const char* sIP, uint16 iPort)
+{
+	char sBuf[320];
+	const char* sBindIP;
+	
+	if ( sIP == NULL || sIP[0] == '\0' || iPort == 0 ) {
+		return NULL;
+	}
+	
+	sBindIP = sIP;
+	if ( strchr(sBindIP, ':') != NULL && sBindIP[0] != '[' ) {
+		snprintf(sBuf, sizeof(sBuf), "[%s]:%u", sBindIP, (unsigned)iPort);
+	} else {
+		snprintf(sBuf, sizeof(sBuf), "%s:%u", sBindIP, (unsigned)iPort);
+	}
+	
+	return xrtCopyStr(sBuf, 0);
+}
+
+static inline bool XS_LoadBindConfig(
+	xvalue objTable,
+	const char* sIPKey,
+	int iIPKeyLen,
+	const char* sPortKey,
+	int iPortKeyLen,
+	char** ppIP,
+	uint16* pPort,
+	char** ppAddr,
+	const char* sScope,
+	bool bRequired
+)
+{
+	const char* sIPText;
+	xvalue objPortVal;
+	
+	if ( ppIP ) *ppIP = NULL;
+	if ( pPort ) *pPort = 0;
+	if ( ppAddr ) *ppAddr = NULL;
+	
+	sIPText = xvoTableGetText(objTable, (char*)sIPKey, iIPKeyLen);
+	objPortVal = xvoTableGetValue(objTable, (char*)sPortKey, iPortKeyLen);
+	
+	if ( sIPText && sIPText[0] != '\0' ) {
+		int64 iPort64;
+		
+		if ( objPortVal == NULL || objPortVal->Type == XVO_DT_NULL ) {
+			XS_ReportError("%s missing required field: %s", sScope, sPortKey);
+			return FALSE;
+		}
+		if ( objPortVal->Type != XVO_DT_INT ) {
+			XS_ReportError("%s field type invalid: %s", sScope, sPortKey);
+			return FALSE;
+		}
+		
+		iPort64 = xvoGetInt(objPortVal);
+		if ( iPort64 <= 0 || iPort64 > 65535 ) {
+			XS_ReportError("%s field out of range: %s", sScope, sPortKey);
+			return FALSE;
+		}
+		
+		if ( ppIP ) {
+			*ppIP = XS_CopyText(sIPText);
+			if ( *ppIP == NULL ) {
+				XS_ReportError("%s alloc failed: %s", sScope, sIPKey);
+				return FALSE;
+			}
+		}
+		if ( pPort ) {
+			*pPort = (uint16)iPort64;
+		}
+		if ( ppAddr ) {
+			*ppAddr = XS_MakeBindText(sIPText, (uint16)iPort64);
+		}
+		return TRUE;
+	}
+	
+	if ( bRequired ) {
+		XS_ReportError("%s missing bind fields: %s/%s", sScope, sIPKey, sPortKey);
+		return FALSE;
+	}
+	
+	return TRUE;
+}
+
 static inline bool XS_LoadServerConfig(xvalue objTable, const char* sBaseDir, XS_ServerConfig* objServer, int iIndex)
 {
 	static const XS_FieldRule arrRule[] = {
@@ -220,13 +317,24 @@ static inline bool XS_LoadServerConfig(xvalue objTable, const char* sBaseDir, XS
 		{"name", XVO_DT_TEXT, FALSE},
 		{"desc", XVO_DT_TEXT, FALSE},
 		{"param", XVO_DT_TEXT, FALSE},
-		{"addr", XVO_DT_TEXT, FALSE},
+		{"backlog", XVO_DT_INT, FALSE},
+		{"recv_limit", XVO_DT_INT, FALSE},
+		{"path_limit", XVO_DT_INT, FALSE},
+		{"header_limit", XVO_DT_INT, FALSE},
+		{"body_limit", XVO_DT_INT, FALSE},
+		{"ip", XVO_DT_TEXT, FALSE},
+		{"port", XVO_DT_INT, FALSE},
+		{"ws_protocol", XVO_DT_TEXT, FALSE},
 		{"tls", XVO_DT_BOOL, FALSE},
-		{"addr_tls", XVO_DT_TEXT, FALSE},
+		{"ip_tls", XVO_DT_TEXT, FALSE},
+		{"port_tls", XVO_DT_INT, FALSE},
 		{"debug", XVO_DT_BOOL, FALSE},
 		{"path", XVO_DT_TEXT, FALSE},
 		{"devlang", XVO_DT_TEXT, FALSE},
 		{"devfile", XVO_DT_TEXT, FALSE},
+		{"tls_ca", XVO_DT_TEXT, FALSE},
+		{"tls_cert", XVO_DT_TEXT, FALSE},
+		{"tls_key", XVO_DT_TEXT, FALSE},
 		{"host_default", XVO_DT_TABLE, FALSE},
 		{"hosts", XVO_DT_ARRAY, FALSE}
 	};
@@ -234,6 +342,7 @@ static inline bool XS_LoadServerConfig(xvalue objTable, const char* sBaseDir, XS
 	const char* sClass;
 	xvalue objHostDef;
 	xvalue arrHost;
+	xvalue objVal;
 	uint32 i;
 	
 	sprintf(sScope, "server[%d]", iIndex);
@@ -251,13 +360,24 @@ static inline bool XS_LoadServerConfig(xvalue objTable, const char* sBaseDir, XS
 	if ( !XS_RequireFieldType(objTable, "name", 4, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "desc", 4, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "param", 5, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
-	if ( !XS_RequireFieldType(objTable, "addr", 4, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldType(objTable, "backlog", 7, XVO_DT_INT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldType(objTable, "recv_limit", 10, XVO_DT_INT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldType(objTable, "path_limit", 10, XVO_DT_INT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldType(objTable, "header_limit", 12, XVO_DT_INT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldType(objTable, "body_limit", 10, XVO_DT_INT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldType(objTable, "ip", 2, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldType(objTable, "port", 4, XVO_DT_INT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldType(objTable, "ws_protocol", 11, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "tls", 3, XVO_DT_BOOL, sScope, FALSE) ) return FALSE;
-	if ( !XS_RequireFieldType(objTable, "addr_tls", 8, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldType(objTable, "ip_tls", 6, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldType(objTable, "port_tls", 8, XVO_DT_INT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "debug", 5, XVO_DT_BOOL, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "path", 4, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "devlang", 7, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "devfile", 7, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldType(objTable, "tls_ca", 6, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldType(objTable, "tls_cert", 8, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldType(objTable, "tls_key", 7, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "host_default", 12, XVO_DT_TABLE, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "hosts", 5, XVO_DT_ARRAY, sScope, FALSE) ) return FALSE;
 	
@@ -269,17 +389,95 @@ static inline bool XS_LoadServerConfig(xvalue objTable, const char* sBaseDir, XS
 	objServer->Name = XS_CopyText(xvoTableGetText(objTable, "name", 4));
 	objServer->Desc = XS_CopyText(xvoTableGetText(objTable, "desc", 4));
 	objServer->Param = XS_CopyText(xvoTableGetText(objTable, "param", 5));
-	objServer->Addr = XS_CopyText(xvoTableGetText(objTable, "addr", 4));
+	objVal = xvoTableGetValue(objTable, "backlog", 7);
+	if ( objVal && objVal->Type != XVO_DT_NULL ) {
+		int64 iBacklog = xvoTableGetInt(objTable, "backlog", 7);
+		if ( iBacklog <= 0 || iBacklog > (int64)UINT32_MAX ) {
+			XS_ReportError("%s field out of range: backlog", sScope);
+			return FALSE;
+		}
+		objServer->Backlog = (uint32)iBacklog;
+	}
+	objVal = xvoTableGetValue(objTable, "recv_limit", 10);
+	if ( objVal && objVal->Type != XVO_DT_NULL ) {
+		int64 iRecvLimit = xvoTableGetInt(objTable, "recv_limit", 10);
+		if ( iRecvLimit <= 0 || iRecvLimit > (int64)UINT32_MAX ) {
+			XS_ReportError("%s field out of range: recv_limit", sScope);
+			return FALSE;
+		}
+		objServer->RecvLimit = (uint32)iRecvLimit;
+	}
+	objServer->WsProtocol = XS_CopyText(xvoTableGetText(objTable, "ws_protocol", 11));
 	objServer->EnableTLS = xvoTableGetBool(objTable, "tls", 3);
-	objServer->AddrTLS = XS_CopyText(xvoTableGetText(objTable, "addr_tls", 8));
 	objServer->Debug = xvoTableGetBool(objTable, "debug", 5);
 	objServer->Path = XS_NormalizePath(sBaseDir, xvoTableGetText(objTable, "path", 4));
 	objServer->DevMode = XS_ParseDevMode(xvoTableGetText(objTable, "devlang", 7), XS_DEV_PROTOCOL);
 	objServer->DevFile = XS_NormalizePath(sBaseDir, xvoTableGetText(objTable, "devfile", 7));
+	XS_LoadTlsConfig(objTable, sBaseDir, &objServer->TlsConfig);
 	
 	if ( objServer->Class == XS_SVC_NONE ) {
 		XS_ReportError("%s class invalid: %s", sScope, sClass ? sClass : "(null)");
 		return FALSE;
+	}
+
+	if ( objServer->Class == XS_SVC_HTTP ) {
+		objVal = xvoTableGetValue(objTable, "path_limit", 10);
+		if ( objVal && objVal->Type != XVO_DT_NULL ) {
+			int64 iPathLimit = xvoTableGetInt(objTable, "path_limit", 10);
+			if ( iPathLimit <= 0 || iPathLimit > (int64)(XHTTPD_PATH_CAP + XHTTPD_QUERY_CAP) ) {
+				XS_ReportError("%s field out of range: path_limit", sScope);
+				return FALSE;
+			}
+			objServer->PathLimit = (uint32)iPathLimit;
+		}
+		objVal = xvoTableGetValue(objTable, "header_limit", 12);
+		if ( objVal && objVal->Type != XVO_DT_NULL ) {
+			int64 iHeaderLimit = xvoTableGetInt(objTable, "header_limit", 12);
+			if ( iHeaderLimit <= 0 || iHeaderLimit > (int64)XHTTPD_MAX_HEADERS ) {
+				XS_ReportError("%s field out of range: header_limit", sScope);
+				return FALSE;
+			}
+			objServer->HeaderLimit = (uint32)iHeaderLimit;
+		}
+		objVal = xvoTableGetValue(objTable, "body_limit", 10);
+		if ( objVal && objVal->Type != XVO_DT_NULL ) {
+			int64 iBodyLimit = xvoTableGetInt(objTable, "body_limit", 10);
+			if ( iBodyLimit <= 0 || iBodyLimit > (int64)UINT32_MAX ) {
+				XS_ReportError("%s field out of range: body_limit", sScope);
+				return FALSE;
+			}
+			objServer->BodyLimit = (uint32)iBodyLimit;
+		}
+		if ( objServer->BodyLimit > objServer->RecvLimit ) {
+			XS_ReportError("%s invalid limit combination: body_limit > recv_limit", sScope);
+			return FALSE;
+		}
+	}
+	
+	if ( !XS_LoadBindConfig(objTable, "ip", 2, "port", 4, &objServer->BindIP, &objServer->BindPort, &objServer->Addr, sScope, TRUE) ) {
+		return FALSE;
+	}
+	if ( objServer->EnableTLS ) {
+		if ( !XS_LoadBindConfig(objTable, "ip_tls", 6, "port_tls", 8, &objServer->BindIPTLS, &objServer->BindPortTLS, &objServer->AddrTLS, sScope, FALSE) ) {
+			return FALSE;
+		}
+		if ( objServer->BindIPTLS == NULL && objServer->BindIP ) {
+			objServer->BindIPTLS = XS_CopyText(objServer->BindIP);
+		}
+		if ( objServer->BindPortTLS == 0 ) {
+			xvalue objPortTlsVal = xvoTableGetValue(objTable, "port_tls", 8);
+			if ( objPortTlsVal && objPortTlsVal->Type == XVO_DT_INT ) {
+				int64 iPortTls64 = xvoGetInt(objPortTlsVal);
+				if ( iPortTls64 <= 0 || iPortTls64 > 65535 ) {
+					XS_ReportError("%s field out of range: port_tls", sScope);
+					return FALSE;
+				}
+				objServer->BindPortTLS = (uint16)iPortTls64;
+			}
+		}
+		if ( objServer->BindPortTLS > 0 && objServer->AddrTLS == NULL ) {
+			objServer->AddrTLS = XS_MakeBindText(objServer->BindIPTLS ? objServer->BindIPTLS : objServer->BindIP, objServer->BindPortTLS);
+		}
 	}
 	
 	if ( objServer->HostAware ) {

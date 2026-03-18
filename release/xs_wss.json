@@ -1,0 +1,27 @@
+[
+	{
+		"enabled": true,
+		"class": "ws",
+		"name": "test WSS Server",
+		"desc": "vNext secure websocket demo",
+		"backlog": 128,
+		"recv_limit": 1048576,
+		"ws_protocol": "xs-demo",
+		"ip": "0.0.0.0",
+		"port": 8081,
+		"tls": true,
+		"port_tls": 8444,
+		"tls_cert": "tls/xtps_cert.pem",
+		"tls_key": "tls/xtps_key.pem",
+		"debug": true,
+		"host_default": {
+			"enabled": true,
+			"name": "默认主机",
+			"path": "wwwroot",
+			"devlang": "c",
+			"devfile": "script_vnext/ws_main.c",
+			"debug": true
+		},
+		"hosts": []
+	}
+]

@@ -24,6 +24,7 @@ static inline void XS_ReportWarn(const char* sFormat, ...)
 	vprintf(sFormat, args);
 	va_end(args);
 	printf("\n");
+	fflush(stdout);
 }
 
 static inline void XS_ReportError(const char* sFormat, ...)
@@ -36,6 +37,7 @@ static inline void XS_ReportError(const char* sFormat, ...)
 	vprintf(sFormat, args);
 	va_end(args);
 	printf("\n");
+	fflush(stdout);
 }
 
 static inline bool XS_HasErrors()

@@ -1,0 +1,16 @@
+[
+	{
+		"enabled": true,
+		"class": "custom",
+		"name": "test Custom Server",
+		"desc": "vNext custom stream demo",
+		"backlog": 128,
+		"recv_limit": 1048576,
+		"ip": "0.0.0.0",
+		"port": 9091,
+		"debug": true,
+		"path": "script_vnext",
+		"devlang": "c",
+		"devfile": "script_vnext/custom_main.c"
+	}
+]

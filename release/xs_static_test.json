@@ -1,0 +1,23 @@
+[
+	{
+		"enabled": true,
+		"class": "http",
+		"name": "test Static HTTP Server",
+		"backlog": 128,
+		"recv_limit": 1048576,
+		"path_limit": 200,
+		"header_limit": 32,
+		"body_limit": 262144,
+		"ip": "0.0.0.0",
+		"port": 8082,
+		"debug": true,
+		"host_default": {
+			"enabled": true,
+			"name": "默认主机",
+			"path": "wwwroot",
+			"devlang": "static",
+			"debug": true
+		},
+		"hosts": []
+	}
+]

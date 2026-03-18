@@ -6,6 +6,154 @@ typedef struct {
 	xarray Servers;
 } XS_Runtime;
 
+static inline bool XS_RuntimeInitOneServer(XS_Runtime* objRuntime, XS_ServerConfig* objServer)
+{
+	if ( objRuntime == NULL || objServer == NULL ) {
+		return FALSE;
+	}
+	
+	if ( !XS_LoadServerScripts(objServer) ) {
+		return FALSE;
+	}
+	if ( !XS_InitServerScripts(objServer) ) {
+		return FALSE;
+	}
+	
+	switch ( objServer->Class ) {
+		case XS_SVC_HTTP:
+			if ( !XS_HttpInitServer(objRuntime->pEngine, objServer) ) {
+				return FALSE;
+			}
+			break;
+		case XS_SVC_WS:
+			if ( !XS_WsInitServer(objRuntime->pEngine, objServer) ) {
+				return FALSE;
+			}
+			break;
+		case XS_SVC_TCP:
+			if ( !XS_TcpInitServer(objRuntime->pEngine, objServer) ) {
+				return FALSE;
+			}
+			break;
+		case XS_SVC_UDP:
+			if ( !XS_UdpInitServer(objRuntime->pEngine, objServer) ) {
+				return FALSE;
+			}
+			break;
+		case XS_SVC_XTP:
+			if ( !XS_XtpInitServer(objRuntime->pEngine, objServer) ) {
+				return FALSE;
+			}
+			break;
+		case XS_SVC_CUSTOM:
+			if ( !XS_CustomInitServer(objRuntime->pEngine, objServer) ) {
+				return FALSE;
+			}
+			break;
+		default:
+			XS_LogInfo(
+				"runtime init placeholder: class=%s server=%s",
+				XS_ServerClassName(objServer->Class),
+				objServer->Name ? objServer->Name : "(null)"
+			);
+			break;
+	}
+	
+	return TRUE;
+}
+
+static inline bool XS_RuntimeStartOneServer(XS_ServerConfig* objServer)
+{
+	if ( objServer == NULL ) {
+		return FALSE;
+	}
+	
+	if ( !XS_StartServerScripts(objServer) ) {
+		return FALSE;
+	}
+	
+	switch ( objServer->Class ) {
+		case XS_SVC_HTTP:
+			if ( !XS_HttpStartServer(objServer) ) {
+				return FALSE;
+			}
+			break;
+		case XS_SVC_WS:
+			if ( !XS_WsStartServer(objServer) ) {
+				return FALSE;
+			}
+			break;
+		case XS_SVC_TCP:
+			if ( !XS_TcpStartServer(objServer) ) {
+				return FALSE;
+			}
+			break;
+		case XS_SVC_UDP:
+			if ( !XS_UdpStartServer(objServer) ) {
+				return FALSE;
+			}
+			break;
+		case XS_SVC_XTP:
+			if ( !XS_XtpStartServer(objServer) ) {
+				return FALSE;
+			}
+			break;
+		case XS_SVC_CUSTOM:
+			if ( !XS_CustomStartServer(objServer) ) {
+				return FALSE;
+			}
+			break;
+		default:
+			XS_LogInfo(
+				"runtime start placeholder: class=%s server=%s",
+				XS_ServerClassName(objServer->Class),
+				objServer->Name ? objServer->Name : "(null)"
+			);
+			break;
+	}
+	
+	return TRUE;
+}
+
+static inline void XS_RuntimeStopOneServer(XS_ServerConfig* objServer)
+{
+	if ( objServer == NULL ) {
+		return;
+	}
+	
+	XS_StopServerScripts(objServer);
+	
+	switch ( objServer->Class ) {
+		case XS_SVC_HTTP:
+			XS_HttpStopServer(objServer);
+			break;
+		case XS_SVC_WS:
+			XS_WsStopServer(objServer);
+			break;
+		case XS_SVC_TCP:
+			XS_TcpStopServer(objServer);
+			break;
+		case XS_SVC_UDP:
+			XS_UdpStopServer(objServer);
+			break;
+		case XS_SVC_XTP:
+			XS_XtpStopServer(objServer);
+			break;
+		case XS_SVC_CUSTOM:
+			XS_CustomStopServer(objServer);
+			break;
+		default:
+			XS_LogInfo(
+				"runtime stop placeholder: class=%s server=%s",
+				XS_ServerClassName(objServer->Class),
+				objServer->Name ? objServer->Name : "(null)"
+			);
+			break;
+	}
+	
+	XS_UnloadServerScripts(objServer);
+}
+
 static inline void XS_InitRuntime(XS_Runtime* objRuntime)
 {
 	memset(objRuntime, 0, sizeof(XS_Runtime));
@@ -109,27 +257,8 @@ static inline bool XS_RuntimeInitServers(XS_Runtime* objRuntime)
 	
 	for ( i = 1; i <= objRuntime->Servers->Count; i++ ) {
 		XS_ServerConfig* objServer = xrtArrayGet_Inline(objRuntime->Servers, i);
-		
-		if ( !XS_LoadServerScripts(objServer) ) {
+		if ( !XS_RuntimeInitOneServer(objRuntime, objServer) ) {
 			return FALSE;
-		}
-		if ( !XS_InitServerScripts(objServer) ) {
-			return FALSE;
-		}
-		
-		switch ( objServer->Class ) {
-			case XS_SVC_HTTP:
-				if ( !XS_HttpInitServer(objRuntime->pEngine, objServer) ) {
-					return FALSE;
-				}
-				break;
-			default:
-				XS_LogInfo(
-					"runtime init placeholder: class=%s server=%s",
-					XS_ServerClassName(objServer->Class),
-					objServer->Name ? objServer->Name : "(null)"
-				);
-				break;
 		}
 	}
 	
@@ -146,24 +275,8 @@ static inline bool XS_RuntimeStartServers(XS_Runtime* objRuntime)
 	
 	for ( i = 1; i <= objRuntime->Servers->Count; i++ ) {
 		XS_ServerConfig* objServer = xrtArrayGet_Inline(objRuntime->Servers, i);
-		
-		if ( !XS_StartServerScripts(objServer) ) {
+		if ( !XS_RuntimeStartOneServer(objServer) ) {
 			return FALSE;
-		}
-		
-		switch ( objServer->Class ) {
-			case XS_SVC_HTTP:
-				if ( !XS_HttpStartServer(objServer) ) {
-					return FALSE;
-				}
-				break;
-			default:
-				XS_LogInfo(
-					"runtime start placeholder: class=%s server=%s",
-					XS_ServerClassName(objServer->Class),
-					objServer->Name ? objServer->Name : "(null)"
-				);
-				break;
 		}
 	}
 	
@@ -180,23 +293,7 @@ static inline void XS_RuntimeStopServers(XS_Runtime* objRuntime)
 	
 	for ( i = 1; i <= objRuntime->Servers->Count; i++ ) {
 		XS_ServerConfig* objServer = xrtArrayGet_Inline(objRuntime->Servers, i);
-		
-		XS_StopServerScripts(objServer);
-		
-		switch ( objServer->Class ) {
-			case XS_SVC_HTTP:
-				XS_HttpStopServer(objServer);
-				break;
-			default:
-				XS_LogInfo(
-					"runtime stop placeholder: class=%s server=%s",
-					XS_ServerClassName(objServer->Class),
-					objServer->Name ? objServer->Name : "(null)"
-				);
-				break;
-		}
-		
-		XS_UnloadServerScripts(objServer);
+		XS_RuntimeStopOneServer(objServer);
 	}
 }
 

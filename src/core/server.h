@@ -11,6 +11,12 @@ typedef enum {
 	XS_SVC_CUSTOM = 6
 } XS_ServerClass;
 
+typedef void (*XS_ScriptStreamOpenProc)(ptr objServer, void* pStream);
+typedef bool (*XS_ScriptStreamDataProc)(ptr objServer, void* pStream, const void* pData, size_t iLen);
+typedef void (*XS_ScriptStreamCloseProc)(ptr objServer, void* pStream, int iReason);
+typedef bool (*XS_ScriptDgramRecvProc)(ptr objServer, void* pSock, const xnetaddr* pFrom, const void* pData, size_t iLen);
+typedef bool (*XS_ScriptXtpMessageProc)(ptr objServer, void* pStream, void* pMsg);
+
 typedef struct XS_ServerConfig {
 	bool Enabled;
 	XS_ServerClass Class;
@@ -18,9 +24,20 @@ typedef struct XS_ServerConfig {
 	char* Name;
 	char* Desc;
 	char* Param;
+	uint32 Backlog;
+	uint32 RecvLimit;
+	uint32 PathLimit;
+	uint32 HeaderLimit;
+	uint32 BodyLimit;
+	char* BindIP;
+	uint16 BindPort;
 	char* Addr;
+	char* WsProtocol;
 	bool EnableTLS;
+	char* BindIPTLS;
+	uint16 BindPortTLS;
 	char* AddrTLS;
+	xtlsconfig TlsConfig;
 	bool Debug;
 	bool HostAware;
 	bool EnableDefaultHost;
@@ -29,6 +46,18 @@ typedef struct XS_ServerConfig {
 	XS_DevMode DevMode;
 	char* Path;
 	char* DevFile;
+	ptr pScriptState;
+	XS_ScriptServiceProc procServiceInit;
+	XS_ScriptServiceProc procServiceStart;
+	XS_ScriptServiceProc procServiceStop;
+	XS_ScriptServiceProc procServiceUnit;
+	XS_ScriptMessageProc procMessage;
+	XS_ScriptStreamOpenProc procStreamOpen;
+	XS_ScriptStreamDataProc procStreamData;
+	XS_ScriptStreamCloseProc procStreamClose;
+	XS_ScriptDgramRecvProc procDgramRecv;
+	XS_ScriptXtpMessageProc procXtpMessage;
+	XS_ScriptSetGlobalDataProc procSetGlobalData;
 	ptr pHandle;
 } XS_ServerConfig;
 
@@ -66,8 +95,14 @@ static inline void XS_InitServerConfig(XS_ServerConfig* objServer)
 {
 	memset(objServer, 0, sizeof(XS_ServerConfig));
 	objServer->Enabled = TRUE;
+	objServer->Backlog = 128u;
+	objServer->RecvLimit = 1024u * 1024u;
+	objServer->PathLimit = 200u;
+	objServer->HeaderLimit = XHTTPD_MAX_HEADERS;
+	objServer->BodyLimit = 256u * 1024u;
 	objServer->Hosts = xrtArrayCreate(sizeof(XS_HostConfig), XRT_OBJMODE_LOCAL);
 	objServer->DevMode = XS_DEV_PROTOCOL;
+	objServer->pScriptState = NULL;
 	objServer->pHandle = NULL;
 	XS_InitHostConfig(&objServer->DefaultHost);
 }
@@ -84,8 +119,14 @@ static inline void XS_FreeServerConfig(XS_ServerConfig* objServer)
 	if ( objServer->Name ) xrtFree(objServer->Name);
 	if ( objServer->Desc ) xrtFree(objServer->Desc);
 	if ( objServer->Param ) xrtFree(objServer->Param);
+	if ( objServer->BindIP ) xrtFree(objServer->BindIP);
 	if ( objServer->Addr ) xrtFree(objServer->Addr);
+	if ( objServer->WsProtocol ) xrtFree(objServer->WsProtocol);
+	if ( objServer->BindIPTLS ) xrtFree(objServer->BindIPTLS);
 	if ( objServer->AddrTLS ) xrtFree(objServer->AddrTLS);
+	if ( objServer->TlsConfig.sCaFile ) xrtFree((void*)objServer->TlsConfig.sCaFile);
+	if ( objServer->TlsConfig.sCertFile ) xrtFree((void*)objServer->TlsConfig.sCertFile);
+	if ( objServer->TlsConfig.sKeyFile ) xrtFree((void*)objServer->TlsConfig.sKeyFile);
 	if ( objServer->Path ) xrtFree(objServer->Path);
 	if ( objServer->DevFile ) xrtFree(objServer->DevFile);
 	

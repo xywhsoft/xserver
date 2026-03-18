@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+	<title>XServer WebSocket Demo</title>
+	<style>
+		body {
+			margin: 0;
+			padding: 24px;
+			background:
+				radial-gradient(circle at top left, rgba(30, 159, 255, 0.12), transparent 260px),
+				linear-gradient(180deg, #f6fbff 0%, #eef4f8 100%);
+			color: #203040;
+			font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+		}
+		.page {
+			max-width: 960px;
+			margin: 0 auto;
+		}
+		.card {
+			background: rgba(255, 255, 255, 0.94);
+			border-radius: 20px;
+			box-shadow: 0 18px 40px rgba(28, 54, 88, 0.10);
+			padding: 22px;
+		}
+		h1 {
+			margin: 0 0 12px;
+			font-size: 30px;
+		}
+		p {
+			margin: 0 0 16px;
+			line-height: 1.8;
+			color: #587088;
+		}
+		.toolbar,
+		.form-line {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 12px;
+		}
+		.form-line {
+			margin-bottom: 14px;
+		}
+		input,
+		textarea,
+		button {
+			font: inherit;
+		}
+		input,
+		textarea {
+			width: 100%;
+			border: 1px solid #cfe0ee;
+			border-radius: 14px;
+			padding: 12px 14px;
+			box-sizing: border-box;
+			background: #fbfdff;
+			color: #203040;
+		}
+		textarea {
+			min-height: 120px;
+			resize: vertical;
+		}
+		.input-grow {
+			flex: 1 1 280px;
+		}
+		.btn {
+			border: 0;
+			border-radius: 14px;
+			padding: 12px 18px;
+			background: #1e9fff;
+			color: #fff;
+			font-weight: 700;
+			cursor: pointer;
+		}
+		.btn.alt {
+			background: #169b62;
+		}
+		.btn.warn {
+			background: #ff8f1f;
+		}
+		.status {
+			margin: 14px 0 18px;
+			padding: 12px 14px;
+			border-radius: 14px;
+			background: #eff7ff;
+			color: #24506f;
+			font-weight: 700;
+		}
+		.log {
+			margin-top: 18px;
+			padding: 14px;
+			border-radius: 16px;
+			background: #0f1720;
+			color: #d8e4ef;
+			min-height: 260px;
+			white-space: pre-wrap;
+			word-break: break-word;
+			line-height: 1.7;
+		}
+		.tip {
+			margin-top: 16px;
+			font-size: 13px;
+			color: #60768c;
+		}
+		@media (max-width: 720px) {
+			body {
+				padding: 16px;
+			}
+			h1 {
+				font-size: 24px;
+			}
+		}
+	</style>
+</head>
+<body>
+	<div class="page">
+		<div class="card">
+			<h1>WebSocket Demo</h1>
+			<p>这个页面用于联调 `release/xs_ws.json` 对应的 WebSocket 服务。默认连接到 `ws://127.0.0.1:8081/`，文本消息会由 `script_vnext/ws_main.c` 回显。</p>
+			<div class="form-line">
+				<div class="input-grow">
+					<input id="WsUrl" type="text" value="ws://127.0.0.1:8081/" placeholder="WebSocket URL">
+				</div>
+				<div class="input-grow">
+					<input id="WsProtocol" type="text" value="xs-demo" placeholder="WebSocket Subprotocol">
+				</div>
+			</div>
+			<div class="toolbar">
+				<button class="btn" id="BtnConnect" type="button">连接</button>
+				<button class="btn alt" id="BtnSend" type="button">发送文本</button>
+				<button class="btn alt" id="BtnPing" type="button">发送 Ping</button>
+				<button class="btn warn" id="BtnClose" type="button">断开</button>
+			</div>
+			<div class="toolbar" style="margin-top:12px;">
+				<button class="btn" id="BtnUseWs" type="button">切到 WS</button>
+				<button class="btn alt" id="BtnUseWss" type="button">切到 WSS</button>
+			</div>
+			<div class="status" id="WsStatus">状态：未连接</div>
+			<div class="form-line">
+				<div class="input-grow">
+					<textarea id="WsText" placeholder="输入要发送的文本">hello from browser</textarea>
+				</div>
+			</div>
+			<div class="log" id="WsLog">ready\n</div>
+			<div class="tip">提示：当前页面仅用于联调 ws demo，不依赖 layui。</div>
+		</div>
+	</div>
+	<script>
+		(function(){
+			var hSocket = null;
+			var objStatus = document.getElementById('WsStatus');
+			var objLog = document.getElementById('WsLog');
+			var objUrl = document.getElementById('WsUrl');
+			var objProtocol = document.getElementById('WsProtocol');
+			var objText = document.getElementById('WsText');
+			var procSetStatus = function(sText)
+			{
+				objStatus.textContent = '状态：' + sText;
+			};
+			var procAppendLog = function(sText)
+			{
+				objLog.textContent += sText + '\n';
+				objLog.scrollTop = objLog.scrollHeight;
+			};
+			var procCloseSocket = function()
+			{
+				if ( hSocket ) {
+					try {
+						hSocket.close();
+					} catch (objErr) {
+						procAppendLog('[close error] ' + String(objErr));
+					}
+					hSocket = null;
+				}
+			};
+			document.getElementById('BtnConnect').addEventListener('click', function()
+			{
+				procCloseSocket();
+				procSetStatus('连接中');
+				procAppendLog('[connect] ' + objUrl.value + ' protocol=' + objProtocol.value);
+				hSocket = objProtocol.value ? new WebSocket(objUrl.value, objProtocol.value) : new WebSocket(objUrl.value);
+				hSocket.onopen = function()
+				{
+					procSetStatus('已连接');
+					procAppendLog('[open] protocol=' + (hSocket.protocol || ''));
+				};
+				hSocket.onmessage = function(objEvent)
+				{
+					procAppendLog('[recv] ' + objEvent.data);
+				};
+				hSocket.onerror = function()
+				{
+					procSetStatus('发生错误');
+					procAppendLog('[error]');
+				};
+				hSocket.onclose = function(objEvent)
+				{
+					procSetStatus('已断开');
+					procAppendLog('[close] code=' + objEvent.code + ' reason=' + (objEvent.reason || ''));
+					hSocket = null;
+				};
+			});
+			document.getElementById('BtnSend').addEventListener('click', function()
+			{
+				if ( !hSocket || hSocket.readyState !== WebSocket.OPEN ) {
+					procAppendLog('[send] socket not open');
+					return;
+				}
+				hSocket.send(objText.value);
+				procAppendLog('[send] ' + objText.value);
+			});
+			document.getElementById('BtnPing').addEventListener('click', function()
+			{
+				if ( !hSocket || hSocket.readyState !== WebSocket.OPEN ) {
+					procAppendLog('[ping] socket not open');
+					return;
+				}
+				if ( typeof hSocket.send === 'function' ) {
+					hSocket.send('__xs_ping__');
+					procAppendLog('[ping] browser websocket does not expose native ping, sent text marker instead');
+				}
+			});
+			document.getElementById('BtnClose').addEventListener('click', function()
+			{
+				procCloseSocket();
+				procSetStatus('已断开');
+			});
+			document.getElementById('BtnUseWs').addEventListener('click', function()
+			{
+				objUrl.value = 'ws://127.0.0.1:8081/';
+				objProtocol.value = 'xs-demo';
+				procAppendLog('[preset] switched to ws://127.0.0.1:8081/');
+			});
+			document.getElementById('BtnUseWss').addEventListener('click', function()
+			{
+				objUrl.value = 'wss://127.0.0.1:8444/';
+				objProtocol.value = 'xs-demo';
+				procAppendLog('[preset] switched to wss://127.0.0.1:8444/');
+			});
+		})();
+	</script>
+</body>
+</html>

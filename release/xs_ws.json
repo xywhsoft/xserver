@@ -1,0 +1,23 @@
+[
+	{
+		"enabled": true,
+		"class": "ws",
+		"name": "test WebSocket Server",
+		"desc": "vNext websocket demo",
+		"backlog": 128,
+		"recv_limit": 1048576,
+		"ws_protocol": "xs-demo",
+		"ip": "0.0.0.0",
+		"port": 8081,
+		"debug": true,
+		"host_default": {
+			"enabled": true,
+			"name": "默认主机",
+			"path": "wwwroot",
+			"devlang": "c",
+			"devfile": "script_vnext/ws_main.c",
+			"debug": true
+		},
+		"hosts": []
+	}
+]
