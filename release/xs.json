@@ -19,7 +19,7 @@
 			"tls_cert": "tls/cert.pem",
 			"tls_key": "tls/key.pem",
 			"devlang": "c",
-			"devfile": "script/main.c"
+			"devfile": "script_vnext/main.c"
 		},
 		"hosts": [
 		]

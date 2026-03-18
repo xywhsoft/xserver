@@ -1,3 +1,3 @@
 #!/bin/bash
 
-gcc -g main.c lib/mongoose.c lib/sqlite3.c tcc/libtcc.c -DMG_TLS=MG_TLS_BUILTIN -o xs_debug
+gcc main.c lib/sqlite3.c tcc/libtcc.c -DXRT_BUILD_CORE -DXRT_MEM_DEBUG -g -O0 -ldl -lpthread -o release/xsdbg

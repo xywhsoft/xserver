@@ -3,9 +3,176 @@
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-	<title>范例页面</title>
+	<title>XServer vNext Demo</title>
 	<link rel="stylesheet" type="text/css" href="/res/layui/css/layui.css">
 	<style>
+		body {
+			margin: 0;
+			padding: 24px;
+			background:
+				radial-gradient(circle at top left, rgba(30, 159, 255, 0.10), transparent 280px),
+				radial-gradient(circle at top right, rgba(22, 155, 98, 0.10), transparent 260px),
+				#f5f8fc;
+			color: #1f2d3d;
+		}
+		.page {
+			max-width: 1280px;
+			margin: 0 auto;
+		}
+		.hero {
+			display: grid;
+			grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.9fr);
+			gap: 16px;
+			margin-bottom: 16px;
+		}
+		.hero-main,
+		.hero-side,
+		.section-card {
+			background: rgba(255, 255, 255, 0.92);
+			backdrop-filter: blur(6px);
+			border-radius: 20px;
+			box-shadow: 0 18px 42px rgba(31, 56, 88, 0.10);
+		}
+		.hero-main {
+			padding: 24px;
+		}
+		.hero-side {
+			padding: 20px;
+		}
+		.kicker {
+			display: inline-flex;
+			align-items: center;
+			padding: 6px 12px;
+			border-radius: 999px;
+			background: #e9f5ff;
+			color: #1677c8;
+			font-size: 13px;
+			font-weight: 700;
+			letter-spacing: 0.04em;
+			text-transform: uppercase;
+		}
+		.hero-title {
+			margin: 16px 0 10px;
+			font-size: 36px;
+			line-height: 1.15;
+		}
+		.hero-desc {
+			margin: 0;
+			font-size: 16px;
+			line-height: 1.75;
+			color: #4f6478;
+		}
+		.hero-actions {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 10px;
+			margin-top: 18px;
+		}
+		.hero-actions a {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			min-width: 120px;
+			padding: 10px 16px;
+			border-radius: 12px;
+			text-decoration: none;
+			font-weight: 700;
+		}
+		.hero-actions a.primary {
+			background: #1e9fff;
+			color: #fff;
+		}
+		.hero-actions a.secondary {
+			background: #edf3f8;
+			color: #29435c;
+		}
+		.status-title,
+		.section-title {
+			margin: 0 0 12px;
+			font-size: 20px;
+		}
+		.status-grid,
+		.cap-grid {
+			display: grid;
+			gap: 12px;
+		}
+		.status-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.status-item,
+		.cap-item {
+			padding: 14px;
+			border-radius: 14px;
+			background: #f6f9fc;
+		}
+		.status-label,
+		.cap-label {
+			margin-bottom: 6px;
+			font-size: 12px;
+			color: #6c8298;
+			text-transform: uppercase;
+			letter-spacing: 0.05em;
+		}
+		.status-value {
+			font-size: 16px;
+			font-weight: 700;
+			word-break: break-all;
+		}
+		.section-grid {
+			display: grid;
+			grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+			gap: 16px;
+			align-items: start;
+		}
+		.section-card {
+			padding: 20px;
+		}
+		.section-sub {
+			margin: -2px 0 16px;
+			color: #62788d;
+			line-height: 1.7;
+		}
+		.cap-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			margin-bottom: 16px;
+		}
+		.cap-value {
+			font-size: 18px;
+			font-weight: 700;
+		}
+		.demo-links {
+			display: grid;
+			gap: 10px;
+		}
+		.demo-link {
+			display: block;
+			padding: 14px 16px;
+			border-radius: 14px;
+			background: #f6f9fc;
+			text-decoration: none;
+			color: #1f2d3d;
+			transition: transform 0.18s ease, box-shadow 0.18s ease;
+		}
+		.demo-link:hover {
+			transform: translateY(-1px);
+			box-shadow: 0 10px 20px rgba(31, 56, 88, 0.08);
+		}
+		.demo-link-title {
+			font-size: 15px;
+			font-weight: 700;
+		}
+		.demo-link-desc {
+			margin-top: 4px;
+			font-size: 13px;
+			color: #62788d;
+			line-height: 1.6;
+		}
+		.table-wrap {
+			margin-top: 16px;
+			border-radius: 16px;
+			overflow: hidden;
+			background: #fff;
+		}
 		.layui-table-cell {
 			text-align: center;
 			height: 32px;
@@ -15,17 +182,247 @@
 		.layui-unselect {
 			height: 32px;
 		}
+		.code-box {
+			margin: 0;
+			padding: 14px 16px;
+			border-radius: 14px;
+			background: #0f1720;
+			color: #d7e6f5;
+			font-size: 12px;
+			line-height: 1.7;
+			white-space: pre-wrap;
+			word-break: break-word;
+			min-height: 170px;
+		}
+		.action-stack {
+			display: grid;
+			gap: 16px;
+		}
+		.reload-box {
+			padding: 14px 16px;
+			border-radius: 14px;
+			background: #f6f9fc;
+		}
+		.reload-line {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 10px;
+			margin-top: 10px;
+		}
+		.reload-line label {
+			display: inline-flex;
+			align-items: center;
+			gap: 6px;
+			font-size: 14px;
+			color: #486176;
+		}
+		.reload-result {
+			margin-top: 10px;
+			font-size: 13px;
+			line-height: 1.7;
+			color: #486176;
+			white-space: pre-wrap;
+			word-break: break-word;
+		}
+		.reload-btn {
+			border: 0;
+			border-radius: 12px;
+			background: #169b62;
+			color: #fff;
+			padding: 10px 14px;
+			font-weight: 700;
+			cursor: pointer;
+		}
+		.reload-btn:disabled {
+			opacity: 0.6;
+			cursor: wait;
+		}
+		.bus-box {
+			padding: 14px 16px;
+			border-radius: 14px;
+			background: #f6f9fc;
+		}
+		.bus-actions {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 10px;
+			margin-top: 10px;
+		}
+		.bus-tools {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 10px;
+			margin-top: 10px;
+		}
+		.bus-tools input {
+			flex: 1 1 180px;
+			min-width: 0;
+			padding: 10px 12px;
+			border: 1px solid #d5e1ec;
+			border-radius: 12px;
+			background: #fff;
+			color: #29435c;
+		}
+		.bus-btn {
+			border: 0;
+			border-radius: 12px;
+			background: #1e9fff;
+			color: #fff;
+			padding: 10px 14px;
+			font-weight: 700;
+			cursor: pointer;
+		}
+		.bus-btn.alt {
+			background: #ff8f1f;
+		}
+		.bus-result {
+			margin-top: 10px;
+			font-size: 13px;
+			line-height: 1.7;
+			color: #486176;
+			white-space: pre-wrap;
+			word-break: break-word;
+		}
+		@media (max-width: 1024px) {
+			.hero,
+			.section-grid {
+				grid-template-columns: 1fr;
+			}
+		}
+		@media (max-width: 720px) {
+			body {
+				padding: 16px;
+			}
+			.hero-title {
+				font-size: 28px;
+			}
+			.status-grid,
+			.cap-grid {
+				grid-template-columns: 1fr;
+			}
+		}
 	</style>
 </head>
 <body>
-	<!-- 标题 -->
-	<h1 style="text-align: center">数据库内容</h1>
-	
-	<!-- 表格 -->
-	<table class="layui-hide" id="DataList" lay-filter="DataList">
-	</table>
-	
-	<!-- 表格工具栏 -->
+	<div class="page">
+		<section class="hero">
+			<div class="hero-main">
+				<div class="kicker">XServer vNext Demo Portal</div>
+				<h1 class="hero-title">脚本宿主、静态回退、SQLite CRUD、模板和图表已汇总到一个首页。</h1>
+				<p class="hero-desc">
+					这个页面用于验证当前 vNext 主线的综合状态。底层使用 xrt 网络设施，HTTP Host 挂载 TCC C 脚本宿主，
+					业务 demo 已切到 SQLite 预编译语句方式，不再依赖 xdo。
+				</p>
+				<div class="hero-actions">
+					<a class="primary" href="/add.html" target="_blank">打开新增页</a>
+					<a class="secondary" href="/chart.html" target="_blank">打开图表页</a>
+					<a class="secondary" href="/template" target="_blank">打开模板页</a>
+					<a class="secondary" href="/json" target="_blank">查看 JSON</a>
+				</div>
+			</div>
+			<div class="hero-side">
+				<h2 class="status-title">宿主状态</h2>
+				<div class="status-grid">
+					<div class="status-item">
+						<div class="status-label">Server</div>
+						<div class="status-value" id="StatusServer">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Class</div>
+						<div class="status-value" id="StatusClass">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Default Host</div>
+						<div class="status-value" id="StatusHost">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Script Loaded</div>
+						<div class="status-value" id="StatusScript">-</div>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<section class="section-grid">
+			<div class="section-card">
+				<h2 class="section-title">SQLite CRUD Demo</h2>
+				<p class="section-sub">
+					这里展示 `/app/list /app/add /app/edit /app/del` 的综合状态。数据已经切到独立的 `xs_demo_test` 表，
+					用于隔离旧 demo 的历史污染。
+				</p>
+				<div class="cap-grid">
+					<div class="cap-item">
+						<div class="cap-label">Record Count</div>
+						<div class="cap-value" id="CapCount">-</div>
+					</div>
+					<div class="cap-item">
+						<div class="cap-label">Last Message</div>
+						<div class="cap-value" id="CapMsg">-</div>
+					</div>
+				</div>
+				<div class="table-wrap">
+					<table class="layui-hide" id="DataList" lay-filter="DataList"></table>
+				</div>
+			</div>
+			<div class="section-card">
+				<h2 class="section-title">能力入口</h2>
+				<p class="section-sub">这些页面和接口都已经接到当前 Host 的真实脚本实现。</p>
+				<div class="action-stack">
+					<div class="demo-links">
+						<a class="demo-link" href="/chart.html" target="_blank">
+							<div class="demo-link-title">图表页面</div>
+							<div class="demo-link-desc">调用 `/chart/get`，验证脚本生成图表数据。</div>
+						</a>
+						<a class="demo-link" href="/template" target="_blank">
+							<div class="demo-link-title">模板页面</div>
+							<div class="demo-link-desc">调用 xrt 模板能力，验证模板读取、解析与渲染。</div>
+						</a>
+						<a class="demo-link" href="/json" target="_blank">
+							<div class="demo-link-title">JSON 状态</div>
+							<div class="demo-link-desc">查看脚本宿主暴露的 server/host/app_path 等状态。</div>
+						</a>
+						<a class="demo-link" href="/__xs/status" target="_blank">
+							<div class="demo-link-title">宿主调试状态</div>
+							<div class="demo-link-desc">查看当前 server、default host、script_loaded 等摘要。</div>
+						</a>
+					</div>
+					<div class="reload-box">
+						<div class="demo-link-title">脚本热重载演示</div>
+						<div class="demo-link-desc">页面内直接调用 `/__xs/reload`。默认重载当前 Host，可选 `force`。</div>
+						<div class="reload-line">
+							<button type="button" class="reload-btn" id="ReloadBtn">立即热重载</button>
+							<label><input type="checkbox" id="ReloadForce"> Force 模式</label>
+						</div>
+						<div class="reload-result" id="ReloadResult">尚未触发热重载。</div>
+					</div>
+					<div class="bus-box">
+						<div class="demo-link-title">全局总线演示</div>
+						<div class="demo-link-desc">通过宿主 bus 进行进程内消息投递，不经过 HTTP 协议栈转发。当前 demo 支持 server 级广播和 host 定向投递。</div>
+						<div class="bus-actions">
+							<button type="button" class="bus-btn" id="BusSendServerBtn">发送到 Server</button>
+							<button type="button" class="bus-btn alt" id="BusSendHostBtn">发送到当前 Host</button>
+						</div>
+						<div class="bus-tools">
+							<input type="text" id="BusTagInput" placeholder="持久注册 tag，可留空">
+							<button type="button" class="bus-btn" id="BusRegisterBtn">注册数据</button>
+							<button type="button" class="bus-btn alt" id="BusRemoveBtn">移除最后 ID</button>
+						</div>
+						<div class="bus-result" id="BusSendResult">尚未发送消息。</div>
+					</div>
+				</div>
+				<h2 class="section-title" style="margin-top:20px;">JSON 预览</h2>
+				<pre class="code-box" id="JsonRaw">loading...</pre>
+				<h2 class="section-title" style="margin-top:20px;">原始宿主状态</h2>
+				<pre class="code-box" id="StatusRaw">loading...</pre>
+				<h2 class="section-title" style="margin-top:20px;">Bus 状态</h2>
+				<pre class="code-box" id="BusRaw">loading...</pre>
+				<h2 class="section-title" style="margin-top:20px;">Bus Registry</h2>
+				<pre class="code-box" id="BusRegistryRaw">loading...</pre>
+			</div>
+		</section>
+	</div>
+
 	<script type="text/html" id="DeviceToolbar">
 		<div class="layui-btn-container">
 			<button class="layui-btn layui-btn-sm layui-bg-blue" lay-event="AddRow">添加数据</button>
@@ -33,53 +430,248 @@
 			<button class="layui-btn layui-btn-sm layui-bg-blue" lay-event="RefreshList">刷新列表</button>
 		</div>
 	</script>
-	
-	<!-- body 末尾处引入 layui -->
+
 	<script src="/res/layui/layui.js"></script>
-	
-	<!-- 功能逻辑实现 -->
 	<script>
-		layui.use(['table', 'dropdown'], function(){
-			var form = layui.form;
+		layui.use(['table'], function(){
 			var table = layui.table;
-			var dropdown = layui.dropdown;
 			var layer = layui.layer;
-			var util = layui.util;
+			var procMessage = function(tblData)
+			{
+				if ( !tblData ) {
+					return '';
+				}
+				return tblData.msg || tblData.message || '';
+			};
+			var procSetText = function(sID, sText)
+			{
+				var obj = document.getElementById(sID);
+				if ( obj ) {
+					obj.textContent = sText;
+				}
+			};
+			var procLoadStatus = function()
+			{
+				fetch('/__xs/status')
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sText){
+					var arrLine = sText.split(/\r?\n/);
+					var tblData = {};
+					var i;
+					for ( i = 0; i < arrLine.length; i++ ) {
+						var sLine = arrLine[i];
+						var iPos = sLine.indexOf('=');
+						if ( iPos > 0 ) {
+							tblData[sLine.slice(0, iPos)] = sLine.slice(iPos + 1);
+						}
+					}
+					procSetText('StatusServer', tblData.server || '-');
+					procSetText('StatusClass', tblData.class || '-');
+					procSetText('StatusHost', tblData['default.name'] || '-');
+					procSetText('StatusScript', tblData['default.script_loaded'] || '-');
+					procSetText('StatusRaw', sText || '');
+				})
+				.catch(function(objErr){
+					procSetText('StatusRaw', String(objErr));
+				});
+			};
+			var procLoadJson = function()
+			{
+				fetch('/json')
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sText){
+					procSetText('JsonRaw', sText || '');
+				})
+				.catch(function(objErr){
+					procSetText('JsonRaw', String(objErr));
+				});
+			};
+			var procLoadBus = function()
+			{
+				fetch('/bus/status')
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sText){
+					procSetText('BusRaw', sText || '');
+				})
+				.catch(function(objErr){
+					procSetText('BusRaw', String(objErr));
+				});
+			};
+			var procLoadBusRegistry = function()
+			{
+				fetch('/bus/registry')
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sText){
+					procSetText('BusRegistryRaw', sText || '');
+				})
+				.catch(function(objErr){
+					procSetText('BusRegistryRaw', String(objErr));
+				});
+			};
+			var procDoReload = function()
+			{
+				var objBtn = document.getElementById('ReloadBtn');
+				var objForce = document.getElementById('ReloadForce');
+				var sURL = '/__xs/reload';
+				
+				if ( objForce && objForce.checked ) {
+					sURL += '?force=true';
+				}
+				if ( objBtn ) {
+					objBtn.disabled = true;
+					objBtn.textContent = '重载中...';
+				}
+				procSetText('ReloadResult', '正在请求热重载...');
+				
+				fetch(sURL)
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sText){
+					procSetText('ReloadResult', sText || '');
+					procLoadStatus();
+					procLoadJson();
+					procLoadBus();
+					procLoadBusRegistry();
+					table.reloadData('DataList', {
+						scrollPos: 'fixed'
+					});
+				})
+				.catch(function(objErr){
+					procSetText('ReloadResult', String(objErr));
+				})
+				.finally(function(){
+					if ( objBtn ) {
+						objBtn.disabled = false;
+						objBtn.textContent = '立即热重载';
+					}
+				});
+			};
+			var procDoBusSend = function(sTarget)
+			{
+				var sURL = '/bus/send?target=' + encodeURIComponent(sTarget || 'server');
+				
+				procSetText('BusSendResult', '正在投递消息...');
+				fetch(sURL)
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sText){
+					procSetText('BusSendResult', sText || '');
+					window.setTimeout(procLoadBus, 300);
+					window.setTimeout(procLoadBusRegistry, 300);
+				})
+				.catch(function(objErr){
+					procSetText('BusSendResult', String(objErr));
+				});
+			};
+			var procDoBusRegister = function()
+			{
+				var objTag = document.getElementById('BusTagInput');
+				var sURL = '/bus/register';
+				
+				if ( objTag && objTag.value ) {
+					sURL += '?tag=' + encodeURIComponent(objTag.value);
+				}
+				procSetText('BusSendResult', '正在注册共享数据...');
+				fetch(sURL)
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sText){
+					procSetText('BusSendResult', sText || '');
+					window.setTimeout(procLoadBusRegistry, 300);
+				})
+				.catch(function(objErr){
+					procSetText('BusSendResult', String(objErr));
+				});
+			};
+			var procDoBusRemove = function()
+			{
+				var sText = document.getElementById('BusRegistryRaw').textContent || '';
+				var tblData;
+				var arrItems;
+				var iDataID;
+				
+				try {
+					tblData = JSON.parse(sText);
+				} catch (objErr) {
+					procSetText('BusSendResult', 'registry 不是合法 JSON，无法移除。');
+					return;
+				}
+				arrItems = tblData.items || [];
+				if ( arrItems.length === 0 ) {
+					procSetText('BusSendResult', '当前 registry 为空。');
+					return;
+				}
+				iDataID = arrItems[arrItems.length - 1].id;
+				procSetText('BusSendResult', '正在移除共享数据 #' + iDataID + ' ...');
+				fetch('/bus/remove?id=' + encodeURIComponent(String(iDataID)))
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sResp){
+					procSetText('BusSendResult', sResp || '');
+					window.setTimeout(procLoadBusRegistry, 300);
+				})
+				.catch(function(objErr){
+					procSetText('BusSendResult', String(objErr));
+				});
+			};
 			
-			// 创建渲染实例
 			table.render({
 				elem: '#DataList',
 				url: '/app/list',
 				toolbar: '#DeviceToolbar',
 				defaultToolbar: ['filter', 'exports', 'print'],
-				height: 'full-56', // 最大高度减去其他容器已占有的高度差
+				height: 520,
 				cellMinWidth: 60,
 				totalRow: false,
 				page: true,
+				parseData: function(res)
+				{
+					procSetText('CapCount', String(res.count || 0));
+					procSetText('CapMsg', procMessage(res) || '-');
+					return {
+						code: res.code || 0,
+						msg: procMessage(res),
+						count: res.count || 0,
+						data: res.data || []
+					};
+				},
 				cols: [[
 					{type: 'checkbox', fixed: 'left'},
-					{field:'id', fixed: 'left', width:60, title: 'ID', sort: true, unresize: true},
-					{field:'name', width:120, title: '姓名', sort: true, edit: 'text'},
-					{field:'age', width:80, title: '年龄', sort: true, edit: 'text'},
-					{field:'mail', width:240, title: '邮箱', sort: true, edit: 'text'},
-					{field:'desc', minWidth:160, title: '备注', sort: true, edit: 'text'}
+					{field:'id', fixed: 'left', width:70, title: 'ID', sort: true, unresize: true},
+					{field:'name', width:140, title: '姓名', sort: true, edit: 'text'},
+					{field:'age', width:90, title: '年龄', sort: true, edit: 'text'},
+					{field:'mail', width:260, title: '邮箱', sort: true, edit: 'text'},
+					{field:'desc', minWidth:180, title: '备注', sort: true, edit: 'text'}
 				]],
-				done: function(){
-					var id = this.id;
+				done: function(res){
+					procSetText('CapCount', String(res.count || 0));
+					procLoadStatus();
+					procLoadJson();
+					procLoadBus();
+					procLoadBusRegistry();
 				},
 				error: function(res, msg){
-					console.log(res, msg)
+					console.log(res, msg);
 				}
 			});
 			
-			// 工具栏事件
 			table.on('toolbar(DataList)', function(obj){
 				var id = obj.config.id;
 				var checkStatus = table.checkStatus(id);
-				var othis = lay(this);
 				switch(obj.event){
 					case 'AddRow':
-						// 添加数据
 						layer.open({
 							title: '添加数据',
 							type: 2,
@@ -89,91 +681,109 @@
 							content: '/add.html',
 							end: function(){
 								table.reloadData('DataList', {
-									scrollPos: 'fixed'  // 保持滚动条位置不变 - v2.7.3 新增
+									scrollPos: 'fixed'
 								});
+								procLoadStatus();
 							}
 						});
 					break;
 					case 'DelRow':
-						// 删除数据
-						var data = checkStatus.data;
-						if ( data.length == 0 ) {
-							layer.msg("请先选择要删除的数据！", {icon: 2});
+						var arrData = checkStatus.data;
+						if ( arrData.length == 0 ) {
+							layer.msg('请先选择要删除的数据！', {icon: 2});
 						} else {
-							arrID = new Array();
-							for ( var i = 0; i < data.length; i++ ) {
-								arrID.push(data[i]["id"])
+							var arrID = [];
+							var i;
+							for ( i = 0; i < arrData.length; i++ ) {
+								arrID.push(arrData[i].id);
 							}
-							// 发送请求
-							fetch("/app/del", {
+							fetch('/app/del', {
 								method: 'POST',
 								headers: {
 									'Content-Type': 'application/json'
 								},
 								body: JSON.stringify(arrID)
 							})
-							.then(response => response.json())
-							.then(data => {
-								if ( data.result ) {
+							.then(function(objResp){
+								return objResp.json();
+							})
+							.then(function(tblData){
+								if ( tblData.result ) {
 									table.reloadData('DataList', {
-										scrollPos: 'fixed'  // 保持滚动条位置不变 - v2.7.3 新增
+										scrollPos: 'fixed'
 									});
-									layer.msg(data.message, {icon: 1});
+									layer.msg(procMessage(tblData), {icon: 1});
 								} else {
-									layer.msg('请求服务报错：' + data.message, {icon: 2}, function(){});
+									layer.msg('请求服务报错：' + procMessage(tblData), {icon: 2});
 								}
 							})
-							.catch(error => {
-								layer.msg('请求出错，请查看开发者工具检查原因', {icon: 2}, function(){});
-								console.error('Error:', error)
+							.catch(function(objErr){
+								layer.msg('请求出错，请查看开发者工具检查原因', {icon: 2});
+								console.error('Error:', objErr);
 							});
 						}
 					break;
 					case 'RefreshList':
-						// 刷新列表
 						table.reloadData('DataList', {
-							scrollPos: 'fixed'  // 保持滚动条位置不变 - v2.7.3 新增
+							scrollPos: 'fixed'
 						});
+						procLoadStatus();
 					break;
-				};
+				}
 			});
 			
-			// 单元格编辑事件 - 输入框
 			table.on('edit(DataList)', function(obj){
-				var field = obj.field;			// 得到字段
-				var value = obj.value;			// 得到修改后的值
-				var oldValue = obj.oldValue		// 得到修改前的值
-				var data = obj.data;			// 得到所在行所有键值
-				var tblData = { id: data.id, field: field, value: value };
+				var sField = obj.field;
+				var sValue = obj.value;
+				var sOldValue = obj.oldValue;
+				var tblRow = obj.data;
+				var tblData = { id: tblRow.id, field: sField, value: sValue };
 				
-				// 发送请求
-				fetch("/app/edit", {
+				fetch('/app/edit', {
 					method: 'POST',
 					headers: {
 						'Content-Type': 'application/json'
 					},
 					body: JSON.stringify(tblData)
 				})
-				.then(response => response.json())
-				.then(data => {
-					if ( data.result ) {
-						layer.msg(data.message, {icon: 1});
+				.then(function(objResp){
+					return objResp.json();
+				})
+				.then(function(tblRet){
+					if ( tblRet.result ) {
+						layer.msg(procMessage(tblRet), {icon: 1});
+						table.reloadData('DataList', {
+							scrollPos: 'fixed'
+						});
 					} else {
-						var update = {};
-						update[field] = oldValue;
-						obj.update(update, true);
-						layer.msg('请求服务报错：' + data.message, {icon: 2}, function(){});
+						var tblUpdate = {};
+						tblUpdate[sField] = sOldValue;
+						obj.update(tblUpdate, true);
+						layer.msg('请求服务报错：' + procMessage(tblRet), {icon: 2});
 					}
 				})
-				.catch(error => {
-					var update = {};
-					update[field] = oldValue;
-					obj.update(update, true);
-					layer.msg('请求出错，请查看开发者工具检查原因', {icon: 2}, function(){});
-					console.error('Error:', error)
+				.catch(function(objErr){
+					var tblUpdate = {};
+					tblUpdate[sField] = sOldValue;
+					obj.update(tblUpdate, true);
+					layer.msg('请求出错，请查看开发者工具检查原因', {icon: 2});
+					console.error('Error:', objErr);
 				});
 			});
 			
+			document.getElementById('ReloadBtn').addEventListener('click', procDoReload);
+			document.getElementById('BusSendServerBtn').addEventListener('click', function(){
+				procDoBusSend('server');
+			});
+			document.getElementById('BusSendHostBtn').addEventListener('click', function(){
+				procDoBusSend('host');
+			});
+			document.getElementById('BusRegisterBtn').addEventListener('click', procDoBusRegister);
+			document.getElementById('BusRemoveBtn').addEventListener('click', procDoBusRemove);
+			procLoadStatus();
+			procLoadJson();
+			procLoadBus();
+			procLoadBusRegistry();
 		});
 	</script>
 </body>

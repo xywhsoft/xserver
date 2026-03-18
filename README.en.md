@@ -4,29 +4,26 @@
 
 ## Overview
 
-**XServer** is a high-performance, multi-protocol network server framework written in C. It features dynamic script loading capabilities and supports multiple virtual hosts, making it ideal for embedded systems, IoT gateways, and edge computing scenarios.
+**XServer** is a high-performance, multi-protocol server host framework written in C. It uses `xrt` as its infrastructure layer and provides dynamic script loading plus virtual host support for embedded systems, IoT gateways, and edge computing scenarios.
 
 ## Key Features
 
-- 🚀 **Multi-Protocol Support**: HTTP/HTTPS, MQTT, WebSocket, TCP/UDP, and custom protocols
+- 🚀 **Multi-Protocol Support**: HTTP/HTTPS, WebSocket, TCP/UDP, XTP, and custom protocols
 - 🔄 **Dynamic Script Loading**: Runtime C code compilation using TCC (Tiny C Compiler)
 - 🌐 **Virtual Hosts**: Support for multiple domains with independent configurations
 - 🔐 **TLS 1.3 Support**: Built-in encryption with SNI support
-- ⚡ **High Performance**: Lightweight single executable with Mongoose network library
+- ⚡ **High Performance**: Built on `xrt` network infrastructure and host-side protocol assembly
 - 📝 **JSON Configuration**: Easy server and host configuration via JSON files
-- 🗄️ **Database Support**: SQLite, MySQL, ODBC via XDO abstraction layer
 
 ## Supported Protocols
 
 | Protocol | Description |
 |----------|-------------|
 | HTTP/HTTPS | Web services with TLS support |
-| MQTT | IoT messaging protocol |
 | WebSocket | Real-time bidirectional communication |
 | XTP | Custom transport protocol |
 | TCP/UDP | Raw network protocols |
 | Custom | Event-driven custom services |
-| Thread | Independent thread-based services |
 
 ## Architecture
 
@@ -36,15 +33,15 @@
 ├─────────────────────────────────────────┤
 │  Configuration Loader (xs.json)         │
 ├─────────────────────────────────────────┤
-│         Mongoose Event Manager          │
+│      XRT Network Infrastructure         │
 ├──────────┬──────────┬──────────┬────────┤
-│  HTTP    │  MQTT    │  WebSocket│ Custom │
+│  HTTP    │   XTP    │  WebSocket│ Custom │
 ├──────────┴──────────┴──────────┴────────┤
 │       Virtual Host Router               │
 ├─────────────────────────────────────────┤
 │   TCC Dynamic Script Compiler           │
 ├─────────────────────────────────────────┤
-│  XRT Runtime Library | XDO Database     │
+│      XRT Runtime and Host Support       │
 └─────────────────────────────────────────┘
 ```
 
@@ -52,21 +49,35 @@
 
 ### 1. Build
 
-**Windows:**
+**Windows Release:**
 ```bash
 build.bat
 ```
 
-**Linux:**
+**Windows Debug:**
+```bash
+build_debug.bat
+```
+
+**Linux Release:**
 ```bash
 ./build.sh
 ```
 
-The build command compiles:
+**Linux Debug:**
 ```bash
-gcc main.c lib/xrt/xrt.c lib/mongoose.c lib/sqlite3.c tcc/libtcc.c \
-    -lshlwapi -lgdi32 -lws2_32 -lIPHLPAPI \
-    -DMG_TLS=MG_TLS_BUILTIN -O2 -s \
+./build_debug.sh
+```
+
+Current build outputs:
+- `release/xs(.exe)`: release build
+- `release/xsdbg(.exe)`: debug build
+
+Release build command:
+```bash
+gcc main.c lib/sqlite3.c tcc/libtcc.c \
+    -lshlwapi -lgdi32 -lws2_32 -lIPHLPAPI -lbcrypt \
+    -O2 -s \
     -ffunction-sections -fdata-sections -Wl,--gc-sections \
     -o release/xs.exe
 ```
@@ -89,8 +100,7 @@ Edit `release/xs.json`:
       "name": "Default Host",
       "path": "wwwroot",
       "devlang": "c",
-      "devfile": "script/main.c",
-      "session": "www$"
+      "devfile": "script_vnext/main.c"
     },
     "hosts": []
   }
@@ -99,10 +109,7 @@ Edit `release/xs.json`:
 
 ### 3. Run
 
-```bash
-cd release
-xs.exe [config_file.json]  # Uses xs.json by default
-```
+Run `xs` or `xsdbg` inside `release`; both use `xs.json` by default.
 
 ## Configuration Reference
 
@@ -111,7 +118,7 @@ xs.exe [config_file.json]  # Uses xs.json by default
 | Field | Type | Description |
 |-------|------|-------------|
 | enabled | boolean | Enable/disable this server |
-| class | string | Server type: `http`, `mqtt`, `ws`, `tcp`, `udp`, `custom`, `thread` |
+| class | string | Server type: `http`, `ws`, `tcp`, `udp`, `xtp`, `custom` |
 | name | string | Server name |
 | desc | string | Server description |
 | addr | string | Bind address (e.g., `http://0.0.0.0:80`) |
@@ -128,47 +135,35 @@ xs.exe [config_file.json]  # Uses xs.json by default
 | name | string | Host name |
 | host | string | Domain binding (semicolon-separated) |
 | path | string | Root directory (relative or absolute) |
-| devlang | string | Development language: `static`, `c`, `lua`, `js` |
+| devlang | string | Development mode: `static`, `c`, `script-c`, `protocol` |
 | devfile | string | Script entry file |
 | tls_ca | string | TLS CA certificate path |
 | tls_cert | string | TLS certificate path |
 | tls_key | string | TLS private key path |
-| session | string | Session prefix |
 
 ## Dynamic Script Development
 
-XServer uses TCC to compile C scripts at runtime. Create a script file with callback functions:
+XServer vNext currently uses `release/tcc/inc_xs/xs_vnext.h` as its minimal script host header, and `release/script_vnext/main.c` as the demo script.
+
+Minimal script example:
 
 ```c
-#include <xsbase.h>
+#include <xs_vnext.h>
 
-// Service initialization (called once at startup)
 void ServiceInit(XS_ServerObject objServer, XS_HostObject objHost)
 {
-    printf("Service initializing...\n");
-    // Initialize databases, load resources, etc.
+	printf("init: %s\n", xsHostName(objHost));
 }
 
-// HTTP request handler
-void RequestProc(XS_ServerObject objServer, XS_HostObject objHost, 
-                 struct mg_connection* c, struct mg_http_message* hm)
+bool RequestProc(XS_ServerObject objServer, XS_HostObject objHost,
+                 XS_RequestObject objReq, XS_ResponseObject objResp)
 {
-    // Route matching
-    if (mg_match(hm->uri, mg_str("/api/hello"), NULL)) {
-        mg_http_reply(c, 200, "Content-Type: application/json\r\n", 
-                     "{\"message\":\"Hello World\"}");
-        return;
-    }
-    
-    // Serve static files
-    struct mg_http_serve_opts opts = {.root_dir = objHost->Path};
-    mg_http_serve_dir(c, hm, &opts);
+	return xsHttpText(objResp, 200, "OK", "hello from vNext") != 0;
 }
 
-// Service cleanup (called at shutdown)
 void ServiceUnit(XS_ServerObject objServer, XS_HostObject objHost)
 {
-    printf("Service shutting down...\n");
+	printf("unit: %s\n", xsHostName(objHost));
 }
 ```
 
@@ -177,30 +172,38 @@ void ServiceUnit(XS_ServerObject objServer, XS_HostObject objHost)
 | Function | Description |
 |----------|-------------|
 | `ServiceInit` | Called before service starts |
-| `ServiceStart` | Called when service starts (custom services only) |
-| `ServiceUnit` | Called when service stops |
+| `ServiceStart` | Called before traffic starts |
+| `ServiceStop` | Called when traffic is stopping |
+| `ServiceUnit` | Called before final destruction |
 | `RequestProc` | HTTP request handler |
 | `EventProc` | Network event handler (custom protocols) |
+
+## Debug Endpoints
+
+When `server.debug` or `host.debug` is `true`, HTTP hosts expose minimal debug endpoints:
+
+- `GET /__xs/status`
+- `GET /__xs/reload`
+- `GET /__xs/reload?host=<host-name>&force=true`
+
+Host-level script hot reload is already available. The `force` connection-drain policy is part of the API contract and will be completed further in later stages.
 
 ## Project Structure
 
 ```
 xserver/
 ├── lib/                    # Libraries
-│   ├── xrt/               # Runtime library (arrays, dicts, JSON, etc.)
-│   ├── xdo/               # Database abstraction layer
-│   ├── mongoose.c/h       # Network library
+│   ├── xrt.h              # XRT single-header runtime
 │   ├── libtcc.h           # Dynamic compiler
 │   └── sqlite3.c/h        # Database engine
 ├── src/                    # Protocol implementations
-│   ├── http.h             # HTTP protocol
-│   ├── mqtt.h             # MQTT protocol
-│   ├── websocket.h        # WebSocket
-│   ├── tcp.h, udp.h       # TCP/UDP
-│   ├── custom.h           # Custom services
-│   └── import_c/          # Dynamic script loader
+│   ├── core/              # Core objects and lifecycle
+│   ├── protocol/          # Protocol adapter layer
+│   ├── script/            # TCC script host
+│   └── support/           # Support utilities
 ├── release/                # Distribution directory
-│   ├── script/            # Business scripts (dynamically loaded)
+│   ├── script/            # Legacy business script reference
+│   ├── script_vnext/      # vNext demo scripts
 │   ├── wwwroot/           # Web root
 │   ├── tcc/               # TCC runtime
 │   └── xs.json            # Server configuration
@@ -212,28 +215,26 @@ xserver/
 ## Use Cases
 
 - **Embedded Web Servers**: Lightweight HTTP server for embedded devices
-- **IoT Gateways**: MQTT broker and protocol conversion
 - **Edge Computing**: Microservice nodes at the network edge
 - **API Gateway**: RESTful API routing and aggregation
 - **Static File Server**: High-performance static content delivery
 - **Real-time Services**: WebSocket-based push notifications
+- **Private Protocol Services**: Binary services built on XTP or TCP
 
 ## Technical Highlights
 
-1. **Hot Reload**: Update business logic without restarting via dynamic C compilation
+1. **Hot Reload**: Host-level C script hot reload is already available
 2. **Single Binary**: No external dependencies, easy deployment
-3. **High Performance**: C language + Mongoose ensures excellent concurrency
-4. **Flexible Configuration**: JSON-driven, supports multiple services and hosts
-5. **Rich Protocols**: One framework supports 8+ network protocols
+3. **High Performance**: C + XRT network facilities ensure strong concurrency
+4. **Flexible Configuration**: JSON-driven, supports multiple services and host-aware protocols
+5. **Rich Protocols**: One framework supports HTTP, WS, TCP, UDP, XTP, and custom protocols
 6. **Developer Friendly**: Write "scripts" in C with runtime compilation
 
 ## Dependencies
 
-- **Mongoose**: Embedded network library
 - **TCC**: Tiny C Compiler for runtime compilation
 - **SQLite3**: Embedded database
 - **XRT**: Custom runtime library
-- **XDO**: Database abstraction layer
 
 ## License
 

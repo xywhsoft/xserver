@@ -8,41 +8,51 @@
 	<style>
 		body {
 			margin: 20px;
+			background: #f6f8fb;
+		}
+		.form-card {
+			max-width: 560px;
+			padding: 20px 12px 8px;
+			background: #fff;
+			border-radius: 16px;
+			box-shadow: 0 12px 32px rgba(31, 56, 88, 0.08);
 		}
 	</style>
 </head>
 <body>
-	<form class="layui-form" action="">
-		<div class="layui-form-item">
-			<label class="layui-form-label">姓名</label>
-			<div class="layui-input-block">
-				<input type="text" name="name" lay-verify="required" placeholder="请输入" autocomplete="off" class="layui-input">
+	<div class="form-card">
+		<form class="layui-form" action="">
+			<div class="layui-form-item">
+				<label class="layui-form-label">姓名</label>
+				<div class="layui-input-block">
+					<input type="text" name="name" lay-verify="required" placeholder="请输入" autocomplete="off" class="layui-input">
+				</div>
 			</div>
-		</div>
-		<div class="layui-form-item">
-			<label class="layui-form-label">年龄</label>
-			<div class="layui-input-block">
-				<input type="text" name="age" placeholder="请输入" autocomplete="off" class="layui-input">
+			<div class="layui-form-item">
+				<label class="layui-form-label">年龄</label>
+				<div class="layui-input-block">
+					<input type="text" name="age" placeholder="请输入" autocomplete="off" class="layui-input">
+				</div>
 			</div>
-		</div>
-		<div class="layui-form-item">
-			<label class="layui-form-label">邮箱</label>
-			<div class="layui-input-block">
-				<input type="text" name="mail" placeholder="请输入" autocomplete="off" class="layui-input">
+			<div class="layui-form-item">
+				<label class="layui-form-label">邮箱</label>
+				<div class="layui-input-block">
+					<input type="text" name="mail" placeholder="请输入" autocomplete="off" class="layui-input">
+				</div>
 			</div>
-		</div>
-		<div class="layui-form-item">
-			<label class="layui-form-label">备注</label>
-			<div class="layui-input-block">
-				<input type="text" name="desc" placeholder="请输入" autocomplete="off" class="layui-input">
+			<div class="layui-form-item">
+				<label class="layui-form-label">备注</label>
+				<div class="layui-input-block">
+					<input type="text" name="desc" placeholder="请输入" autocomplete="off" class="layui-input">
+				</div>
 			</div>
-		</div>
-		<div class="layui-form-item">
-			<div class="layui-input-block">
-				<button type="submit" class="layui-btn layui-bg-blue" lay-submit lay-filter="AddRow">立即提交</button>
+			<div class="layui-form-item">
+				<div class="layui-input-block">
+					<button type="submit" class="layui-btn layui-bg-blue" lay-submit lay-filter="AddRow">立即提交</button>
+				</div>
 			</div>
-		</div>
-	</form>
+		</form>
+	</div>
 	
 	<!-- body 末尾处引入 layui -->
 	<script src="/res/layui/layui.js"></script>
@@ -52,11 +62,19 @@
 			var layer = layui.layer;
 			var laydate = layui.laydate;
 			var util = layui.util;
+			var procMessage = function(tblData)
+			{
+				if ( !tblData ) {
+					return '';
+				}
+				return tblData.msg || tblData.message || '';
+			};
 			
 			// 提交事件
 			form.on('submit(AddRow)', function(data){
 				// 获取表单字段值
 				var field = data.field;
+				var index = parent.layer.getFrameIndex(window.name);
 				
 				// 发送请求
 				fetch("/app/add", {
@@ -70,9 +88,9 @@
 				.then(data => {
 					if ( data.result ) {
 						parent.layer.close(index);
-						parent.layer.msg(data.message, {icon: 1});
+						parent.layer.msg(procMessage(data), {icon: 1});
 					} else {
-						parent.layer.msg('请求服务报错：' + data.message, {icon: 2}, function(){});
+						parent.layer.msg('请求服务报错：' + procMessage(data), {icon: 2}, function(){});
 					}
 				})
 				.catch(error => {

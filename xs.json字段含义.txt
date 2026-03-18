@@ -5,18 +5,20 @@ xs.json 数据结构可以是一张表，或者一个数组
 下面是这张表的字段和含义：
 
 	enabled							是否启用服务
-	class							服务类型
+		class							服务类型
 		可选值：
 			http					启动HTTP服务
-			mqtt					启动MQTT服务
+			ws						启动 WebSocket 服务
+			tcp						启动 TCP 服务
+			udp						启动 UDP 服务
+			xtp						启动 XTP 服务
 			custom					启动自定义服务（通过对应编程语言的回调函数决定功能）
-			thread					启动一条线程运行服务（通过对应编程语言的回调函数决定功能）
 	name							服务名称
 	desc							服务描述
 	param							服务器启动参数（XS 不会主动使用这个字段，供二次开发用）
-	addr							服务绑定的地址和端口（custom 和 thread 类型时，XS 不会主动使用这个字段）
-	tls								是否启用 TLS 1.3 加密传输（custom 和 thread 类型时，XS 不会主动使用这个字段）
-	addr_tls						加密传输的地址和端口（custom 和 thread 类型时，XS 不会主动使用这个字段）
+	addr							服务绑定的地址和端口（custom 类型时，XS 不会主动使用这个字段）
+	tls								是否启用 TLS 1.3 加密传输（custom 类型时，XS 不会主动使用这个字段）
+	addr_tls						加密传输的地址和端口（custom 类型时，XS 不会主动使用这个字段）
 	host_default					服务默认 host（理解为一个服务绑定多个域名，找不到对应 host 就使用这个）
 	hosts							host 列表
 
