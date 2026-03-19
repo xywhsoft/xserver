@@ -1,6 +1,21 @@
 #ifndef XS_PROTOCOL_WS_H
 #define XS_PROTOCOL_WS_H
 
+static inline int64 XS_WsMetricAdd(volatile int64* pValue, int64 iDelta)
+{
+	return XS_HttpMetricAdd(pValue, iDelta);
+}
+
+static inline int64 XS_WsMetricGet(const volatile int64* pValue)
+{
+	return XS_HttpMetricGet(pValue);
+}
+
+static inline void XS_WsMetricUpdateMax(volatile int64* pValue, int64 iValue)
+{
+	XS_HttpMetricUpdateMax(pValue, iValue);
+}
+
 static inline XS_HostConfig* XS_WsResolveHost(XS_ServerConfig* objServer)
 {
 	uint32 i;
@@ -28,6 +43,9 @@ static void XS_WsOnOpen(ptr pOwner, xwsserver* pServer, xwsconn* pConn)
 	XS_ServerConfig* objServer = (XS_ServerConfig*)pOwner;
 	XS_HostConfig* objHost = XS_WsResolveHost(objServer);
 	(void)pServer;
+
+	XS_WsMetricAdd(&g_iXsWsOpenCount, 1);
+	XS_WsMetricUpdateMax(&g_iXsWsConnPeak, XS_WsMetricAdd(&g_iXsWsConnCurrent, 1));
 	
 	XS_LogInfo(
 		"ws open: server=%s host=%s",
@@ -46,6 +64,8 @@ static void XS_WsOnText(ptr pOwner, xwsserver* pServer, xwsconn* pConn, const ch
 	XS_HostConfig* objHost = XS_WsResolveHost(objServer);
 	bool bHandled = FALSE;
 	(void)pServer;
+
+	XS_WsMetricAdd(&g_iXsWsTextCount, 1);
 	
 	if ( objHost && objHost->procWsText ) {
 		bHandled = objHost->procWsText(objServer, objHost, pConn, pData, iLen);
@@ -62,6 +82,8 @@ static void XS_WsOnBinary(ptr pOwner, xwsserver* pServer, xwsconn* pConn, const 
 	XS_HostConfig* objHost = XS_WsResolveHost(objServer);
 	bool bHandled = FALSE;
 	(void)pServer;
+
+	XS_WsMetricAdd(&g_iXsWsBinaryCount, 1);
 	
 	if ( objHost && objHost->procWsBinary ) {
 		bHandled = objHost->procWsBinary(objServer, objHost, pConn, pData, iLen);
@@ -72,11 +94,56 @@ static void XS_WsOnBinary(ptr pOwner, xwsserver* pServer, xwsconn* pConn, const 
 	}
 }
 
+static void XS_WsOnPing(ptr pOwner, xwsserver* pServer, xwsconn* pConn, const void* pData, size_t iLen)
+{
+	XS_ServerConfig* objServer = (XS_ServerConfig*)pOwner;
+	XS_HostConfig* objHost = XS_WsResolveHost(objServer);
+	(void)pServer;
+
+	XS_WsMetricAdd(&g_iXsWsPingCount, 1);
+
+	XS_LogInfo(
+		"ws ping: server=%s host=%s bytes=%u",
+		objServer && objServer->Name ? objServer->Name : "(null)",
+		objHost && objHost->Name ? objHost->Name : "(default)",
+		(unsigned)iLen
+	);
+
+	if ( objHost && objHost->procWsPing ) {
+		objHost->procWsPing(objServer, objHost, pConn, pData, iLen);
+	}
+}
+
+static void XS_WsOnPong(ptr pOwner, xwsserver* pServer, xwsconn* pConn, const void* pData, size_t iLen)
+{
+	XS_ServerConfig* objServer = (XS_ServerConfig*)pOwner;
+	XS_HostConfig* objHost = XS_WsResolveHost(objServer);
+	(void)pServer;
+
+	XS_WsMetricAdd(&g_iXsWsPongCount, 1);
+
+	XS_LogInfo(
+		"ws pong: server=%s host=%s bytes=%u",
+		objServer && objServer->Name ? objServer->Name : "(null)",
+		objHost && objHost->Name ? objHost->Name : "(default)",
+		(unsigned)iLen
+	);
+
+	if ( objHost && objHost->procWsPong ) {
+		objHost->procWsPong(objServer, objHost, pConn, pData, iLen);
+	}
+}
+
 static void XS_WsOnClose(ptr pOwner, xwsserver* pServer, xwsconn* pConn, xnet_result iReason)
 {
 	XS_ServerConfig* objServer = (XS_ServerConfig*)pOwner;
 	XS_HostConfig* objHost = XS_WsResolveHost(objServer);
 	(void)pServer;
+
+	XS_WsMetricAdd(&g_iXsWsCloseCount, 1);
+	if ( XS_WsMetricAdd(&g_iXsWsConnCurrent, -1) < 0 ) {
+		XS_WsMetricAdd(&g_iXsWsConnCurrent, -XS_WsMetricGet(&g_iXsWsConnCurrent));
+	}
 	
 	XS_LogInfo(
 		"ws close: server=%s host=%s reason=%d",
@@ -95,6 +162,8 @@ static void XS_WsOnError(ptr pOwner, xwsserver* pServer, xwsconn* pConn, int iSy
 	XS_ServerConfig* objServer = (XS_ServerConfig*)pOwner;
 	(void)pServer;
 	(void)pConn;
+
+	XS_WsMetricAdd(&g_iXsWsErrorCount, 1);
 	
 	XS_LogWarn(
 		"ws error: server=%s sys=%d",
@@ -127,7 +196,7 @@ static inline bool XS_WsInitServer(xnetengine* pEngine, XS_ServerConfig* objServ
 		return FALSE;
 	}
 	tConfig.iBacklog = objServer->Backlog;
-	tConfig.iRecvLimit = objServer->RecvLimit;
+	tConfig.iRecvLimit = objServer->WsMessageLimit ? objServer->WsMessageLimit : objServer->RecvLimit;
 	if ( objServer->EnableTLS ) {
 		tConfig.pTlsConfig = &objServer->TlsConfig;
 	}
@@ -139,6 +208,8 @@ static inline bool XS_WsInitServer(xnetengine* pEngine, XS_ServerConfig* objServ
 	tEvents.OnOpen = XS_WsOnOpen;
 	tEvents.OnText = XS_WsOnText;
 	tEvents.OnBinary = XS_WsOnBinary;
+	tEvents.OnPing = XS_WsOnPing;
+	tEvents.OnPong = XS_WsOnPong;
 	tEvents.OnClose = XS_WsOnClose;
 	tEvents.OnError = XS_WsOnError;
 	
@@ -150,12 +221,14 @@ static inline bool XS_WsInitServer(xnetengine* pEngine, XS_ServerConfig* objServ
 	
 	objServer->pHandle = pServer;
 	XS_LogInfo(
-		"ws init: name=%s addr=%s host=%s protocol=%s tls=%s",
+		"ws init: name=%s addr=%s host=%s protocol=%s tls=%s recv=%u message=%u",
 		objServer->Name ? objServer->Name : "(null)",
 		objServer->EnableTLS ? (objServer->AddrTLS ? objServer->AddrTLS : "(null)") : (objServer->Addr ? objServer->Addr : "(null)"),
 		XS_WsResolveHost(objServer) && XS_WsResolveHost(objServer)->Name ? XS_WsResolveHost(objServer)->Name : "(default)",
 		objServer->WsProtocol ? objServer->WsProtocol : "",
-		objServer->EnableTLS ? "true" : "false"
+		objServer->EnableTLS ? "true" : "false",
+		(unsigned)objServer->RecvLimit,
+		(unsigned)tConfig.iRecvLimit
 	);
 	return TRUE;
 }

@@ -277,8 +277,11 @@ TCC 仍然作为全功能 C 语言脚本宿主，不做权限限制。
 - `WsOpenProc`
 - `WsTextProc`
 - `WsBinaryProc`
+- `WsPingProc`
+- `WsPongProc`
 - `WsCloseProc`
 - `ws` server 现已支持 `ws_protocol`，可要求客户端协商固定子协议
+- `ws` server 现已支持 `ws_message_limit`，可单独限制单条消息聚合后的最大大小
 - 当 `ws_protocol` 已配置时，未协商正确子协议的握手请求会直接拒绝
 - `ws` 现已支持 `tls + port_tls` 的 `wss` 运行模式
 
@@ -478,6 +481,27 @@ TCC 仍然作为全功能 C 语言脚本宿主，不做权限限制。
 - HTTP 宿主层额外支持 `path_limit / header_limit / body_limit` 这类请求入口限制
 - 静态 Host 默认仅接受 `GET / HEAD`，避免实验期过于宽松的行为进入生产
 - 静态 Host 默认拒绝敏感路径与敏感扩展名暴露，HTTP 响应默认追加基础安全头
+- `__xs/status_json` 已提供结构化宿主状态输出，便于外部工具和页面直接消费
+- `__xs/health` 已提供适合探针的文本健康检查与明确状态码
+- `__xs/dashboard` 已提供适合终端排障的纯文本总览输出
+- `__xs/check_config` / `__xs/check_config_json` 已提供在线配置校验入口，可在不触发 reload 的情况下验证当前配置文件
+- `__xs/reload_json` 已提供结构化脚本热重载触发结果输出，便于管理面统一走 JSON
+- `__xs/reload_config_json` 已提供结构化配置热加载触发结果输出，便于管理面统一走 JSON
+- `__xs/reload_status_json` 已提供结构化配置热加载结果输出，便于管理面直接读取
+- `__xs/reload_clear` 已提供最近一次配置热加载结果的显式清空入口
+- `__xs/health_json` 已提供宿主 + reload + bus 的轻量健康摘要，适合监控与探测
+- `__xs/dashboard_json` 已提供 status / health / reload / bus 的结构化总览，便于首页与外部工具减少多次请求
+- `__xs/http_metrics` / `__xs/http_metrics_json` / `__xs/http_metrics_clear` 已提供 HTTP 请求计数、响应分布与清零入口，便于压测窗口、故障复盘与运维观察
+- `__xs/status_json`、`__xs/health_json`、`__xs/dashboard` / `__xs/dashboard_json` 当前额外输出 `bind_ip / bind_port / tls / bind_ip_tls / bind_port_tls / addr_tls / ws_protocol / ws_message_limit / ws_conn_current / ws_conn_peak / ws_open_count / ws_close_count / ws_text_count / ws_binary_count / ws_ping_count / ws_pong_count / ws_error_count / tls_cert_file / tls_key_file / tls_ca_file / current_dir / app_file / app_mtime / app_size / app_path / build / compiler / platform / arch / mem_debug / pid / start_time / uptime_ms / engine_workers / runtime_server_count / manage_api / config_name / config_mtime / config_size / http_req_count / http_2xx_count / http_3xx_count / http_4xx_count / http_5xx_count / http_conn_current / http_conn_peak / http_get_count / http_post_count / http_head_count / http_other_count / http_time_total_ms / http_time_max_ms / http_time_avg_ms / http_last_method / http_last_status / http_last_path / http_last_target / http_last_time / http_last_age_ms / http_last_app_method / http_last_app_status / http_last_app_path / http_last_app_target / http_last_app_time / http_last_app_age_ms`，便于定位实际监听地址、TLS 监听、WebSocket 子协议、WebSocket 消息上限、WebSocket 连接与消息计数、TLS 证书路径、当前工作目录、程序文件与配置文件更新时间和大小、运行进程、目录、构建变体、编译器、目标平台架构、内存调试状态、持续运行时间、运行中的服务数量、工作线程规模、HTTP 请求规模、方法分布、当前连接、峰值连接、最近一次任意请求，以及最近一次非 `__xs/*` 业务请求的方法、路径、状态与处理耗时，以及管理面启用状态
+- `__xs/reload_status_json`、`__xs/health_json`、`__xs/dashboard_json` 当前额外输出 `reload_total_count / reload_success_count / reload_failure_count`，用于区分最近一次结果与累计重载统计
+- `__xs/reload_reset` 已提供配置热加载累计统计清零入口；与 `__xs/reload_clear` 的“只清最近一次结果”语义分开，便于窗口化观察 reload 统计
+- `__xs/check_config_json`、`__xs/dashboard_json` 当前额外输出 `check_total_count / check_success_count / check_failure_count / check_last_time / check_last_age_ms`，用于观察在线配置校验的累计调用、最近一次校验时间以及距离上次校验过去多久
+- `__xs/health` 文本接口当前也会输出 `reload_time / reload_age_ms / check_total_count / check_success_count / check_failure_count / check_last_time / check_last_age_ms / bus_queue_count / bus_data_count / bus_total_queued / bus_total_delivered / bus_total_dropped / bus_last_queue_time / bus_last_queue_time_text / bus_last_dispatch_time / bus_last_dispatch_time_text`，便于纯文本探针直接观察热加载、配置校验与总线运行态
+- `__xs/health_json` 当前也已补齐 `check_total_count / check_success_count / check_failure_count / check_last_time / check_last_age_ms / bus_total_queued / bus_total_delivered / bus_total_dropped / bus_last_queue_time / bus_last_queue_time_text / bus_last_dispatch_time / bus_last_dispatch_time_text / http_last_method / http_last_status / http_last_path / http_last_target / http_last_time / http_last_age_ms`
+- 首页状态卡当前已直接展示 `Reload Last / Reload Age / Reload Total / Reload Success / Reload Failure / Check Last / Check Age / Check Total / Check Success / Check Failure / HTTP Last / HTTP Last Age / HTTP Last Path / Bus Queue Time / Bus Dispatch Time`
+- `__xs/check_config_clear` 已提供在线配置校验统计清零入口，便于按时间窗口重新观察配置校验调用情况
+- `__xs/bus/status` / `__xs/bus/registry` / `__xs/bus/namespaces` / `__xs/bus/find` / `__xs/bus/exists` / `__xs/bus/get` / `__xs/bus/values` / `__xs/bus/retain` / `__xs/bus/release` / `__xs/bus/touch` / `__xs/bus/register` / `__xs/bus/set` / `__xs/bus/send` / `__xs/bus/remove` / `__xs/bus/reset` 已作为宿主层总线管理接口落地，且首页已支持显式 `data_id` 管理，也支持仅通过 `namespace/tag` 读取、续期、`retain/release`、更新与删除共享数据
+- bus 管理面已提供累计统计：`total_queued / total_delivered / total_dropped / last_queue_time / last_dispatch_time / last_queue_time_text / last_dispatch_time_text`，其中 `__xs/bus/reset` 只清空统计，不清空共享数据表
 
 ### 10.4 force 语义
 

@@ -7,6 +7,8 @@ typedef bool (*XS_ScriptMessageProc)(ptr objServer, ptr objHost, const char* sTo
 typedef void (*XS_ScriptWsOpenProc)(ptr objServer, ptr objHost, void* pConn);
 typedef bool (*XS_ScriptWsTextProc)(ptr objServer, ptr objHost, void* pConn, const char* pData, size_t iLen);
 typedef bool (*XS_ScriptWsBinaryProc)(ptr objServer, ptr objHost, void* pConn, const void* pData, size_t iLen);
+typedef void (*XS_ScriptWsPingProc)(ptr objServer, ptr objHost, void* pConn, const void* pData, size_t iLen);
+typedef void (*XS_ScriptWsPongProc)(ptr objServer, ptr objHost, void* pConn, const void* pData, size_t iLen);
 typedef void (*XS_ScriptWsCloseProc)(ptr objServer, ptr objHost, void* pConn, int iReason);
 typedef void (*XS_ScriptSetGlobalDataProc)(int idx, void* ptr);
 
@@ -37,6 +39,8 @@ typedef struct XS_HostConfig {
 	XS_ScriptWsOpenProc procWsOpen;
 	XS_ScriptWsTextProc procWsText;
 	XS_ScriptWsBinaryProc procWsBinary;
+	XS_ScriptWsPingProc procWsPing;
+	XS_ScriptWsPongProc procWsPong;
 	XS_ScriptWsCloseProc procWsClose;
 	XS_ScriptSetGlobalDataProc procSetGlobalData;
 } XS_HostConfig;

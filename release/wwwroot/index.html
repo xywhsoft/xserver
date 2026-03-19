@@ -225,6 +225,34 @@
 			white-space: pre-wrap;
 			word-break: break-word;
 		}
+		.config-box {
+			padding: 14px 16px;
+			border-radius: 14px;
+			background: #f6f9fc;
+		}
+		.config-tools {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 10px;
+			margin-top: 10px;
+		}
+		.config-tools input {
+			flex: 1 1 180px;
+			min-width: 0;
+			padding: 10px 12px;
+			border: 1px solid #d5e1ec;
+			border-radius: 12px;
+			background: #fff;
+			color: #29435c;
+		}
+		.config-result {
+			margin-top: 10px;
+			font-size: 13px;
+			line-height: 1.7;
+			color: #486176;
+			white-space: pre-wrap;
+			word-break: break-word;
+		}
 		.reload-btn {
 			border: 0;
 			border-radius: 12px;
@@ -342,6 +370,242 @@
 						<div class="status-label">Script Loaded</div>
 						<div class="status-value" id="StatusScript">-</div>
 					</div>
+					<div class="status-item">
+						<div class="status-label">Health</div>
+						<div class="status-value" id="StatusHealth">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Reload Last</div>
+						<div class="status-value" id="StatusReloadLast">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Reload Age</div>
+						<div class="status-value" id="StatusReloadAge">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Reload Total</div>
+						<div class="status-value" id="StatusReloadTotal">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Reload Success</div>
+						<div class="status-value" id="StatusReloadSuccess">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Reload Failure</div>
+						<div class="status-value" id="StatusReloadFailure">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Bus Data</div>
+						<div class="status-value" id="StatusBusData">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Config</div>
+						<div class="status-value" id="StatusConfig">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Config Name</div>
+						<div class="status-value" id="StatusConfigName">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Config MTime</div>
+						<div class="status-value" id="StatusConfigMTime">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Config Size</div>
+						<div class="status-value" id="StatusConfigSize">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Config Check</div>
+						<div class="status-value" id="StatusConfigCheck">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Check Last</div>
+						<div class="status-value" id="StatusCheckLast">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Check Age</div>
+						<div class="status-value" id="StatusCheckAge">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Check Total</div>
+						<div class="status-value" id="StatusCheckTotal">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Check Success</div>
+						<div class="status-value" id="StatusCheckSuccess">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Check Failure</div>
+						<div class="status-value" id="StatusCheckFailure">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">App Path</div>
+						<div class="status-value" id="StatusAppPath">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">App MTime</div>
+						<div class="status-value" id="StatusAppMTime">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">App Size</div>
+						<div class="status-value" id="StatusAppSize">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Current Dir</div>
+						<div class="status-value" id="StatusCurrentDir">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">PID</div>
+						<div class="status-value" id="StatusPID">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Uptime</div>
+						<div class="status-value" id="StatusUptime">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Workers</div>
+						<div class="status-value" id="StatusWorkers">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">HTTP Req</div>
+						<div class="status-value" id="StatusHttpReq">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">HTTP 2xx</div>
+						<div class="status-value" id="StatusHttp2xx">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">HTTP 4xx</div>
+						<div class="status-value" id="StatusHttp4xx">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">HTTP 5xx</div>
+						<div class="status-value" id="StatusHttp5xx">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">HTTP Conn</div>
+						<div class="status-value" id="StatusHttpConn">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">HTTP Peak</div>
+						<div class="status-value" id="StatusHttpPeak">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">GET / POST</div>
+						<div class="status-value" id="StatusHttpMethods">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">HTTP Avg</div>
+						<div class="status-value" id="StatusHttpAvg">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">HTTP Max</div>
+						<div class="status-value" id="StatusHttpMax">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">HTTP Last</div>
+						<div class="status-value" id="StatusHttpLast">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">HTTP Last Age</div>
+						<div class="status-value" id="StatusHttpLastAge">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">HTTP Last Path</div>
+						<div class="status-value" id="StatusHttpLastPath">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">HTTP App Last</div>
+						<div class="status-value" id="StatusHttpAppLast">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">HTTP App Age</div>
+						<div class="status-value" id="StatusHttpAppLastAge">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">HTTP App Path</div>
+						<div class="status-value" id="StatusHttpAppLastPath">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">WS Limit</div>
+						<div class="status-value" id="StatusWsLimit">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">WS Conn</div>
+						<div class="status-value" id="StatusWsConn">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">WS Peak</div>
+						<div class="status-value" id="StatusWsPeak">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">WS Open / Close</div>
+						<div class="status-value" id="StatusWsOpenClose">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">WS Text / Binary</div>
+						<div class="status-value" id="StatusWsTextBinary">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">WS Ping / Pong</div>
+						<div class="status-value" id="StatusWsPingPong">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">WS Error</div>
+						<div class="status-value" id="StatusWsError">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Bus Queued</div>
+						<div class="status-value" id="StatusBusQueued">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Bus Delivered</div>
+						<div class="status-value" id="StatusBusDelivered">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Bus Dropped</div>
+						<div class="status-value" id="StatusBusDropped">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Bus Queue Time</div>
+						<div class="status-value" id="StatusBusQueueTime">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Bus Dispatch Time</div>
+						<div class="status-value" id="StatusBusDispatchTime">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Servers</div>
+						<div class="status-value" id="StatusServerCount">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Build</div>
+						<div class="status-value" id="StatusBuild">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Compiler</div>
+						<div class="status-value" id="StatusCompiler">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Platform</div>
+						<div class="status-value" id="StatusPlatform">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Manage API</div>
+						<div class="status-value" id="StatusManageApi">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">TLS</div>
+						<div class="status-value" id="StatusTls">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Listen</div>
+						<div class="status-value" id="StatusListen">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Mem Debug</div>
+						<div class="status-value" id="StatusMemDebug">-</div>
+					</div>
 				</div>
 			</div>
 		</section>
@@ -388,6 +652,58 @@
 							<div class="demo-link-title">宿主调试状态</div>
 							<div class="demo-link-desc">查看当前 server、default host、script_loaded 等摘要。</div>
 						</a>
+						<a class="demo-link" href="/__xs/status_json" target="_blank">
+							<div class="demo-link-title">宿主状态 JSON</div>
+							<div class="demo-link-desc">直接读取结构化状态，便于脚本和外部工具消费。</div>
+						</a>
+						<a class="demo-link" href="/__xs/health_json" target="_blank">
+							<div class="demo-link-title">健康检查 JSON</div>
+							<div class="demo-link-desc">汇总宿主、reload、bus 的轻量健康摘要。</div>
+						</a>
+						<a class="demo-link" href="/__xs/health" target="_blank">
+							<div class="demo-link-title">健康检查文本</div>
+							<div class="demo-link-desc">返回简洁文本和明确的 200/503 状态码，适合探针。</div>
+						</a>
+						<a class="demo-link" href="/__xs/http_metrics_json" target="_blank">
+							<div class="demo-link-title">HTTP 指标 JSON</div>
+							<div class="demo-link-desc">查看当前进程内 HTTP 请求总量与 2xx/3xx/4xx/5xx 分布。</div>
+						</a>
+						<a class="demo-link" href="/__xs/http_metrics_clear" target="_blank">
+							<div class="demo-link-title">清空 HTTP 指标</div>
+							<div class="demo-link-desc">将 HTTP 计数归零，便于压测窗口或故障复盘重新采样。</div>
+						</a>
+						<a class="demo-link" href="/__xs/ws_metrics_json" target="_blank">
+							<div class="demo-link-title">WS 指标 JSON</div>
+							<div class="demo-link-desc">查看当前进程内 WebSocket 连接、消息、ping/pong 与错误统计。</div>
+						</a>
+						<a class="demo-link" href="/__xs/ws_metrics_clear" target="_blank">
+							<div class="demo-link-title">清空 WS 指标</div>
+							<div class="demo-link-desc">将 WebSocket 计数归零，便于压测窗口或故障复盘重新采样。</div>
+						</a>
+						<a class="demo-link" href="/__xs/dashboard" target="_blank">
+							<div class="demo-link-title">总览文本</div>
+							<div class="demo-link-desc">以纯文本输出 status、health、reload、bus 的总览摘要。</div>
+						</a>
+						<a class="demo-link" href="/__xs/dashboard_json" target="_blank">
+							<div class="demo-link-title">总览 JSON</div>
+							<div class="demo-link-desc">汇总 status、health、reload、bus 的结构化总览。</div>
+						</a>
+						<a class="demo-link" href="/__xs/check_config" target="_blank">
+							<div class="demo-link-title">配置校验文本</div>
+							<div class="demo-link-desc">在线校验当前配置文件，不触发热加载。</div>
+						</a>
+						<a class="demo-link" href="/__xs/check_config_json" target="_blank">
+							<div class="demo-link-title">配置校验 JSON</div>
+							<div class="demo-link-desc">结构化返回配置校验结果、配置路径和服务数量。</div>
+						</a>
+						<a class="demo-link" href="/__xs/reload_json" target="_blank">
+							<div class="demo-link-title">热重载 JSON</div>
+							<div class="demo-link-desc">结构化触发脚本热重载，便于页面与工具直接消费。</div>
+						</a>
+						<a class="demo-link" href="/__xs/bus/status" target="_blank">
+							<div class="demo-link-title">Bus 宿主管理状态</div>
+							<div class="demo-link-desc">直接查看宿主层 bus 注册表与队列状态，不经过业务脚本路由。</div>
+						</a>
 						<a class="demo-link" href="/ws.html" target="_blank">
 							<div class="demo-link-title">WebSocket 测试页</div>
 							<div class="demo-link-desc">联调 `xs_ws.json` 对应的 WebSocket demo，验证连接、发送和回显。</div>
@@ -399,27 +715,76 @@
 					</div>
 					<div class="reload-box">
 						<div class="demo-link-title">脚本热重载演示</div>
-						<div class="demo-link-desc">页面内直接调用 `/__xs/reload`。默认重载当前 Host，可选 `force`。</div>
+						<div class="demo-link-desc">页面内直接调用 `/__xs/reload_json`。默认重载当前 Host，可选 `force`。</div>
 						<div class="reload-line">
 							<button type="button" class="reload-btn" id="ReloadBtn">立即热重载</button>
 							<label><input type="checkbox" id="ReloadForce"> Force 模式</label>
 						</div>
 						<div class="reload-result" id="ReloadResult">尚未触发热重载。</div>
 					</div>
+					<div class="config-box">
+						<div class="demo-link-title">配置热加载演示</div>
+						<div class="demo-link-desc">通过 `/__xs/reload_config_json` 触发最小配置热加载，并读取 `/__xs/reload_status_json` 查看最终结果。</div>
+						<div class="config-tools">
+							<input type="text" id="ReloadServerInput" placeholder="server，可留空表示全部">
+							<input type="text" id="ReloadHostInput" placeholder="host，仅 http/ws 有效">
+							<button type="button" class="reload-btn" id="ReloadConfigBtn">重载配置</button>
+							<button type="button" class="bus-btn" id="ReloadStatusBtn">刷新结果</button>
+							<button type="button" class="bus-btn alt" id="ReloadClearBtn">清空结果</button>
+							<button type="button" class="bus-btn alt" id="ReloadResetBtn">清空统计</button>
+							<a class="demo-link" href="/__xs/reload_config_json" target="_blank" style="margin:0;">触发 JSON</a>
+							<a class="demo-link" href="/__xs/reload_status_json" target="_blank" style="margin:0;">查看状态 JSON</a>
+							<a class="demo-link" href="/__xs/reload_reset" target="_blank" style="margin:0;">清空统计</a>
+						</div>
+						<div class="config-result" id="ReloadConfigResult">尚未触发配置热加载。</div>
+						<pre class="code-box" id="ReloadConfigRaw" style="margin-top:10px; min-height:120px;">loading...</pre>
+					</div>
+					<div class="config-box">
+						<div class="demo-link-title">在线配置校验</div>
+						<div class="demo-link-desc">通过 `/__xs/check_config_json` 在线校验当前配置文件，不触发热加载。</div>
+						<div class="config-tools">
+							<input type="text" id="CheckConfigFileInput" placeholder="可选 file，默认当前运行配置">
+							<button type="button" class="reload-btn" id="CheckConfigBtn">校验配置</button>
+							<button type="button" class="reload-btn" id="CheckConfigClearBtn">清空统计</button>
+							<a class="demo-link" href="/__xs/check_config" target="_blank" style="margin:0;">查看文本</a>
+							<a class="demo-link" href="/__xs/check_config_json" target="_blank" style="margin:0;">查看 JSON</a>
+							<a class="demo-link" href="/__xs/check_config_clear" target="_blank" style="margin:0;">清空统计</a>
+						</div>
+						<div class="config-result" id="CheckConfigResult">尚未触发配置校验。</div>
+						<pre class="code-box" id="CheckConfigRaw" style="margin-top:10px; min-height:120px;">loading...</pre>
+					</div>
 					<div class="bus-box">
 						<div class="demo-link-title">全局总线演示</div>
-						<div class="demo-link-desc">通过宿主 bus 进行进程内消息投递，不经过 HTTP 协议栈转发。当前 demo 支持 server 级广播和 host 定向投递。</div>
+						<div class="demo-link-desc">当前页面上的 bus 收发与注册表管理都已切到正式的 `/__xs/bus/*` 宿主管理接口，不再依赖业务脚本路由。</div>
 						<div class="bus-actions">
 							<button type="button" class="bus-btn" id="BusSendServerBtn">发送到 Server</button>
 							<button type="button" class="bus-btn alt" id="BusSendHostBtn">发送到当前 Host</button>
 							<button type="button" class="bus-btn" id="BusSendBroadcastBtn">广播到全部</button>
+							<button type="button" class="bus-btn alt" id="BusResetStatsBtn">清空统计</button>
 						</div>
 						<div class="bus-tools">
+							<input type="text" id="BusTopicInput" placeholder="topic，默认 demo.portal.server">
+							<input type="text" id="BusTargetServerInput" placeholder="目标 server，可留空使用当前服务">
+							<input type="text" id="BusTargetHostInput" placeholder="目标 host，可留空使用当前主机">
+							<input type="text" id="BusTextInput" placeholder="可选 text payload，将自动注册共享数据">
+							<label><input type="checkbox" id="BusPersistInput"> 持久保留自动注册数据</label>
+						</div>
+						<div class="bus-tools">
+							<input type="text" id="BusJsonInput" placeholder='可选 json payload，例如 {"kind":"demo","value":1}'>
+						</div>
+						<div class="bus-tools">
+							<input type="text" id="BusDataIDInput" placeholder="data_id，可直接按 ID 发送/读取/删除">
 							<input type="text" id="BusNamespaceInput" placeholder="namespace，可留空">
 							<input type="text" id="BusTagInput" placeholder="持久注册 tag，可留空">
 							<input type="text" id="BusTTLInput" placeholder="TTL(ms)，0 表示不过期">
 							<button type="button" class="bus-btn" id="BusRegisterBtn">注册数据</button>
+							<button type="button" class="bus-btn" id="BusSetBtn">更新数据</button>
 							<button type="button" class="bus-btn" id="BusFindBtn">查找数据</button>
+							<button type="button" class="bus-btn" id="BusExistsBtn">检查存在</button>
+							<button type="button" class="bus-btn" id="BusGetBtn">查看 payload</button>
+							<button type="button" class="bus-btn" id="BusRetainBtn">Retain</button>
+							<button type="button" class="bus-btn" id="BusReleaseBtn">Release</button>
+							<button type="button" class="bus-btn" id="BusTouchBtn">续期 TTL</button>
 							<button type="button" class="bus-btn alt" id="BusRemoveBtn">移除最后 ID</button>
 							<button type="button" class="bus-btn alt" id="BusRemoveAllBtn">批量清理</button>
 						</div>
@@ -428,12 +793,18 @@
 				</div>
 				<h2 class="section-title" style="margin-top:20px;">JSON 预览</h2>
 				<pre class="code-box" id="JsonRaw">loading...</pre>
+				<h2 class="section-title" style="margin-top:20px;">原始总览状态</h2>
+				<pre class="code-box" id="DashboardRaw">loading...</pre>
 				<h2 class="section-title" style="margin-top:20px;">原始宿主状态</h2>
 				<pre class="code-box" id="StatusRaw">loading...</pre>
+				<h2 class="section-title" style="margin-top:20px;">原始健康状态</h2>
+				<pre class="code-box" id="HealthRaw">loading...</pre>
 				<h2 class="section-title" style="margin-top:20px;">Bus 状态</h2>
 				<pre class="code-box" id="BusRaw">loading...</pre>
 				<h2 class="section-title" style="margin-top:20px;">Bus Registry</h2>
 				<pre class="code-box" id="BusRegistryRaw">loading...</pre>
+				<h2 class="section-title" style="margin-top:20px;">Bus Payload</h2>
+				<pre class="code-box" id="BusPayloadRaw">loading...</pre>
 				<h2 class="section-title" style="margin-top:20px;">Bus Namespaces</h2>
 				<pre class="code-box" id="BusNamespaceRaw">loading...</pre>
 			</div>
@@ -467,32 +838,204 @@
 					obj.textContent = sText;
 				}
 			};
+			var procSetBusDataID = function(vID)
+			{
+				var obj = document.getElementById('BusDataIDInput');
+				if ( !obj ) {
+					return;
+				}
+				if ( vID === null || vID === undefined || vID === '' ) {
+					obj.value = '';
+					return;
+				}
+				obj.value = String(vID);
+			};
 			var procLoadStatus = function()
 			{
-				fetch('/__xs/status')
+				fetch('/__xs/dashboard_json')
 				.then(function(objResp){
 					return objResp.text();
 				})
 				.then(function(sText){
-					var arrLine = sText.split(/\r?\n/);
 					var tblData = {};
-					var i;
-					for ( i = 0; i < arrLine.length; i++ ) {
-						var sLine = arrLine[i];
-						var iPos = sLine.indexOf('=');
-						if ( iPos > 0 ) {
-							tblData[sLine.slice(0, iPos)] = sLine.slice(iPos + 1);
+					var tblBus = {};
+					var tblStatus = {};
+					var tblHealth = {};
+					var tblCheck = {};
+					try {
+						tblData = JSON.parse(sText || '{}') || {};
+					} catch ( objErr ) {
+						tblData = {};
+					}
+					tblBus = tblData.bus || {};
+					tblStatus = tblData.status || {};
+					tblHealth = tblData.health || {};
+					tblCheck = tblData.check_config || {};
+					procSetText('StatusServer', tblStatus.server || '-');
+					procSetText('StatusClass', tblStatus.class || '-');
+					procSetText('StatusHost', (tblStatus.default && tblStatus.default.name) ? tblStatus.default.name : ((tblStatus.default_host ? '默认主机' : '-')));
+					procSetText('StatusScript', (tblStatus.script_loaded !== undefined) ? String(tblStatus.script_loaded) : '-');
+					procSetText('StatusHealth', (tblHealth.ok !== undefined) ? String(tblHealth.ok) : '-');
+					procSetText('StatusReloadLast', tblHealth.reload_time || '-');
+					procSetText('StatusReloadAge', (tblHealth.reload_age_ms !== undefined && tblHealth.reload_age_ms >= 0) ? String(tblHealth.reload_age_ms) + ' ms' : '-');
+					procSetText('StatusReloadTotal', (tblHealth.reload_total_count !== undefined) ? String(tblHealth.reload_total_count) : '-');
+					procSetText('StatusReloadSuccess', (tblHealth.reload_success_count !== undefined) ? String(tblHealth.reload_success_count) : '-');
+					procSetText('StatusReloadFailure', (tblHealth.reload_failure_count !== undefined) ? String(tblHealth.reload_failure_count) : '-');
+					procSetText('StatusBusData', (tblData.bus && tblData.bus.data_count !== undefined) ? String(tblData.bus.data_count) : '-');
+					procSetText('StatusConfig', tblStatus.config_file || '-');
+					procSetText('StatusConfigName', tblStatus.config_name || '-');
+					procSetText('StatusConfigMTime', tblStatus.config_mtime || '-');
+					procSetText('StatusConfigSize', (tblStatus.config_size !== undefined) ? String(tblStatus.config_size) + ' B' : '-');
+					procSetText('StatusConfigCheck', (tblCheck.result !== undefined) ? String(tblCheck.result) : '-');
+					procSetText('StatusCheckLast', tblCheck.check_last_time || '-');
+					procSetText('StatusCheckAge', (tblCheck.check_last_age_ms !== undefined && tblCheck.check_last_age_ms >= 0) ? String(tblCheck.check_last_age_ms) + ' ms' : '-');
+					procSetText('StatusCheckTotal', (tblCheck.check_total_count !== undefined) ? String(tblCheck.check_total_count) : '-');
+					procSetText('StatusCheckSuccess', (tblCheck.check_success_count !== undefined) ? String(tblCheck.check_success_count) : '-');
+					procSetText('StatusCheckFailure', (tblCheck.check_failure_count !== undefined) ? String(tblCheck.check_failure_count) : '-');
+					procSetText('StatusAppPath', tblStatus.app_path || '-');
+					procSetText('StatusAppMTime', tblStatus.app_mtime || '-');
+					procSetText('StatusAppSize', (tblStatus.app_size !== undefined) ? String(tblStatus.app_size) + ' B' : '-');
+					procSetText('StatusCurrentDir', tblStatus.current_dir || '-');
+					procSetText('StatusPID', (tblStatus.pid !== undefined) ? String(tblStatus.pid) : '-');
+					procSetText('StatusUptime', (tblStatus.uptime_ms !== undefined) ? String(tblStatus.uptime_ms) + ' ms' : '-');
+					procSetText('StatusWorkers', (tblStatus.engine_workers !== undefined) ? String(tblStatus.engine_workers) : '-');
+					procSetText('StatusHttpReq', (tblStatus.http_req_count !== undefined) ? String(tblStatus.http_req_count) : '-');
+					procSetText('StatusHttp2xx', (tblStatus.http_2xx_count !== undefined) ? String(tblStatus.http_2xx_count) : '-');
+					procSetText('StatusHttp4xx', (tblStatus.http_4xx_count !== undefined) ? String(tblStatus.http_4xx_count) : '-');
+					procSetText('StatusHttp5xx', (tblStatus.http_5xx_count !== undefined) ? String(tblStatus.http_5xx_count) : '-');
+					procSetText('StatusHttpConn', (tblStatus.http_conn_current !== undefined) ? String(tblStatus.http_conn_current) : '-');
+					procSetText('StatusHttpPeak', (tblStatus.http_conn_peak !== undefined) ? String(tblStatus.http_conn_peak) : '-');
+					procSetText(
+						'StatusHttpMethods',
+						((tblStatus.http_get_count !== undefined) ? String(tblStatus.http_get_count) : '-') +
+						' / ' +
+						((tblStatus.http_post_count !== undefined) ? String(tblStatus.http_post_count) : '-')
+					);
+					procSetText('StatusHttpAvg', (tblStatus.http_time_avg_ms !== undefined) ? String(tblStatus.http_time_avg_ms) + ' ms' : '-');
+					procSetText('StatusHttpMax', (tblStatus.http_time_max_ms !== undefined) ? String(tblStatus.http_time_max_ms) + ' ms' : '-');
+					procSetText(
+						'StatusHttpLast',
+						(tblStatus.http_last_method || '-') +
+						' ' +
+						((tblStatus.http_last_status !== undefined) ? String(tblStatus.http_last_status) : '-') +
+						' @ ' +
+						(tblStatus.http_last_time || '-')
+					);
+					procSetText('StatusHttpLastAge', (tblStatus.http_last_age_ms !== undefined && tblStatus.http_last_age_ms >= 0) ? String(tblStatus.http_last_age_ms) + ' ms' : '-');
+					procSetText('StatusHttpLastPath', tblStatus.http_last_target || tblStatus.http_last_path || '-');
+					procSetText(
+						'StatusHttpAppLast',
+						(tblStatus.http_last_app_method || '-') +
+						' ' +
+						((tblStatus.http_last_app_status !== undefined) ? String(tblStatus.http_last_app_status) : '-') +
+						' @ ' +
+						(tblStatus.http_last_app_time || '-')
+					);
+					procSetText('StatusHttpAppLastAge', (tblStatus.http_last_app_age_ms !== undefined && tblStatus.http_last_app_age_ms >= 0) ? String(tblStatus.http_last_app_age_ms) + ' ms' : '-');
+					procSetText('StatusHttpAppLastPath', tblStatus.http_last_app_target || tblStatus.http_last_app_path || '-');
+					procSetText('StatusWsLimit', (tblStatus.ws_message_limit !== undefined) ? String(tblStatus.ws_message_limit) + ' B' : '-');
+					procSetText('StatusWsConn', (tblStatus.ws_conn_current !== undefined) ? String(tblStatus.ws_conn_current) : '-');
+					procSetText('StatusWsPeak', (tblStatus.ws_conn_peak !== undefined) ? String(tblStatus.ws_conn_peak) : '-');
+					procSetText(
+						'StatusWsOpenClose',
+						((tblStatus.ws_open_count !== undefined) ? String(tblStatus.ws_open_count) : '-') +
+						' / ' +
+						((tblStatus.ws_close_count !== undefined) ? String(tblStatus.ws_close_count) : '-')
+					);
+					procSetText(
+						'StatusWsTextBinary',
+						((tblStatus.ws_text_count !== undefined) ? String(tblStatus.ws_text_count) : '-') +
+						' / ' +
+						((tblStatus.ws_binary_count !== undefined) ? String(tblStatus.ws_binary_count) : '-')
+					);
+					procSetText(
+						'StatusWsPingPong',
+						((tblStatus.ws_ping_count !== undefined) ? String(tblStatus.ws_ping_count) : '-') +
+						' / ' +
+						((tblStatus.ws_pong_count !== undefined) ? String(tblStatus.ws_pong_count) : '-')
+					);
+					procSetText('StatusWsError', (tblStatus.ws_error_count !== undefined) ? String(tblStatus.ws_error_count) : '-');
+					procSetText('StatusBusQueued', (tblBus.total_queued !== undefined) ? String(tblBus.total_queued) : '-');
+					procSetText('StatusBusDelivered', (tblBus.total_delivered !== undefined) ? String(tblBus.total_delivered) : '-');
+					procSetText('StatusBusDropped', (tblBus.total_dropped !== undefined) ? String(tblBus.total_dropped) : '-');
+					procSetText('StatusBusQueueTime', tblBus.last_queue_time_text || ((tblBus.last_queue_time !== undefined && tblBus.last_queue_time > 0) ? String(tblBus.last_queue_time) : '-'));
+					procSetText('StatusBusDispatchTime', tblBus.last_dispatch_time_text || ((tblBus.last_dispatch_time !== undefined && tblBus.last_dispatch_time > 0) ? String(tblBus.last_dispatch_time) : '-'));
+					procSetText('StatusServerCount', (tblStatus.runtime_server_count !== undefined) ? String(tblStatus.runtime_server_count) : '-');
+					procSetText('StatusBuild', tblStatus.build || '-');
+					procSetText('StatusCompiler', tblStatus.compiler || '-');
+					procSetText('StatusPlatform', ((tblStatus.platform || '-') + ' / ' + (tblStatus.arch || '-')));
+					procSetText('StatusManageApi', (tblStatus.manage_api === true) ? 'enabled' : 'disabled');
+					procSetText('StatusMemDebug', (tblStatus.mem_debug === true) ? 'enabled' : 'disabled');
+					procSetText(
+						'StatusTls',
+						(tblStatus.tls === true)
+							? ('enabled' + ((tblStatus.bind_port_tls !== undefined && tblStatus.bind_port_tls > 0) ? (' :' + String(tblStatus.bind_port_tls)) : ''))
+							: 'disabled'
+					);
+					procSetText(
+						'StatusListen',
+						(tblStatus.addr || '-') +
+						((tblStatus.tls === true && tblStatus.addr_tls) ? (' | TLS ' + tblStatus.addr_tls) : '')
+					);
+					if ( tblStatus.config_file ) {
+						var objCheckFile = document.getElementById('CheckConfigFileInput');
+						if ( objCheckFile && !objCheckFile.value ) {
+							objCheckFile.value = tblStatus.config_file;
 						}
 					}
-					procSetText('StatusServer', tblData.server || '-');
-					procSetText('StatusClass', tblData.class || '-');
-					procSetText('StatusHost', tblData['default.name'] || '-');
-					procSetText('StatusScript', tblData['default.script_loaded'] || '-');
-					procSetText('StatusRaw', sText || '');
+					procSetText(
+						'CheckConfigResult',
+						'result=' + String(tblCheck.result) +
+						' | file=' + (tblCheck.file || '(none)') +
+						' | base=' + (tblCheck.base || '(none)') +
+						' | server_count=' + String(tblCheck.server_count) +
+						' | total=' + String(tblCheck.check_total_count) +
+						' | success_count=' + String(tblCheck.check_success_count) +
+						' | failure_count=' + String(tblCheck.check_failure_count) +
+						' | last_time=' + (tblCheck.check_last_time || '(none)') +
+						' | last_age_ms=' + String((tblCheck.check_last_age_ms !== undefined) ? tblCheck.check_last_age_ms : -1) +
+						' | message=' + (tblCheck.message || '(none)')
+					);
+					procSetText('CheckConfigRaw', JSON.stringify(tblCheck || {}, null, 2));
+					procSetText('DashboardRaw', sText || '');
+					procSetText('StatusRaw', JSON.stringify(tblStatus || {}, null, 2));
+					procSetText('HealthRaw', JSON.stringify(tblHealth || {}, null, 2));
 				})
 				.catch(function(objErr){
+					procSetText('StatusConfigCheck', 'error');
+					procSetText('StatusReloadLast', 'error');
+					procSetText('StatusReloadAge', 'error');
+					procSetText('StatusReloadTotal', 'error');
+					procSetText('StatusReloadSuccess', 'error');
+					procSetText('StatusReloadFailure', 'error');
+					procSetText('StatusCheckLast', 'error');
+					procSetText('StatusCheckAge', 'error');
+					procSetText('StatusCheckTotal', 'error');
+					procSetText('StatusCheckSuccess', 'error');
+					procSetText('StatusCheckFailure', 'error');
+					procSetText('StatusHttpLast', 'error');
+					procSetText('StatusHttpLastAge', 'error');
+					procSetText('StatusHttpLastPath', 'error');
+					procSetText('StatusHttpAppLast', 'error');
+					procSetText('StatusHttpAppLastAge', 'error');
+					procSetText('StatusHttpAppLastPath', 'error');
+					procSetText('StatusWsLimit', 'error');
+					procSetText('StatusWsConn', 'error');
+					procSetText('StatusWsPeak', 'error');
+					procSetText('StatusWsOpenClose', 'error');
+					procSetText('StatusWsTextBinary', 'error');
+					procSetText('StatusWsPingPong', 'error');
+					procSetText('StatusWsError', 'error');
+					procSetText('DashboardRaw', String(objErr));
 					procSetText('StatusRaw', String(objErr));
+					procSetText('HealthRaw', String(objErr));
+					procSetText('CheckConfigResult', String(objErr));
+					procSetText('CheckConfigRaw', String(objErr));
 				});
+			};
+			var procLoadHealth = function()
+			{
+				return;
 			};
 			var procLoadJson = function()
 			{
@@ -509,7 +1052,7 @@
 			};
 			var procLoadBus = function()
 			{
-				fetch('/bus/status')
+				fetch('/__xs/bus/status')
 				.then(function(objResp){
 					return objResp.text();
 				})
@@ -524,7 +1067,7 @@
 			{
 				var objNamespace = document.getElementById('BusNamespaceInput');
 				var objTag = document.getElementById('BusTagInput');
-				var sURL = '/bus/registry';
+				var sURL = '/__xs/bus/registry';
 				var arrQuery = [];
 				
 				if ( objNamespace && objNamespace.value ) {
@@ -550,7 +1093,7 @@
 			};
 			var procLoadBusNamespaces = function()
 			{
-				fetch('/bus/namespaces')
+				fetch('/__xs/bus/namespaces')
 				.then(function(objResp){
 					return objResp.text();
 				})
@@ -561,11 +1104,96 @@
 					procSetText('BusNamespaceRaw', String(objErr));
 				});
 			};
+			var procResetBusStats = function()
+			{
+				procSetText('BusSendResult', '正在清空 bus 统计...');
+				fetch('/__xs/bus/reset')
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sResp){
+					procSetText('BusSendResult', sResp || '');
+					window.setTimeout(function(){
+						procLoadBus();
+						procLoadBusRegistry();
+						procLoadBusPayload();
+						procLoadBusNamespaces();
+					}, 300);
+				})
+				.catch(function(objErr){
+					procSetText('BusSendResult', String(objErr));
+				});
+			};
+			var procRefreshPortal = function(bReloadTable)
+			{
+				procLoadStatus();
+				procLoadJson();
+				procLoadBus();
+				procLoadBusRegistry();
+				procLoadBusPayload();
+				procLoadBusNamespaces();
+				procLoadReloadStatus();
+				if ( bReloadTable ) {
+					table.reloadData('DataList', {
+						scrollPos: 'fixed'
+					});
+				}
+			};
+			var procLoadBusPayload = function()
+			{
+				var objDataID = document.getElementById('BusDataIDInput');
+				var objNamespace = document.getElementById('BusNamespaceInput');
+				var objTag = document.getElementById('BusTagInput');
+				var sRegistry = document.getElementById('BusRegistryRaw').textContent || '';
+				var sURL = '/__xs/bus/get';
+				var arrQuery = [];
+				var tblData;
+				var arrItems;
+				var iDataID;
+
+				if ( objDataID && objDataID.value ) {
+					arrQuery.push('id=' + encodeURIComponent(objDataID.value));
+				}
+				if ( objNamespace && objNamespace.value ) {
+					arrQuery.push('namespace=' + encodeURIComponent(objNamespace.value));
+				}
+				if ( objTag && objTag.value ) {
+					arrQuery.push('tag=' + encodeURIComponent(objTag.value));
+				}
+				if ( arrQuery.length > 0 && !(objDataID && objDataID.value) ) {
+					sURL = '/__xs/bus/values';
+				}
+				if ( arrQuery.length === 0 ) {
+					try {
+						tblData = JSON.parse(sRegistry);
+						arrItems = tblData.items || [];
+						if ( arrItems.length > 0 && arrItems[arrItems.length - 1].id ) {
+							iDataID = arrItems[arrItems.length - 1].id;
+							arrQuery.push('id=' + encodeURIComponent(String(iDataID)));
+						}
+					} catch (objErr) {
+					}
+				}
+				if ( arrQuery.length > 0 ) {
+					sURL += '?' + arrQuery.join('&');
+				}
+
+				fetch(sURL)
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sText){
+					procSetText('BusPayloadRaw', sText || '');
+				})
+				.catch(function(objErr){
+					procSetText('BusPayloadRaw', String(objErr));
+				});
+			};
 			var procDoReload = function()
 			{
 				var objBtn = document.getElementById('ReloadBtn');
 				var objForce = document.getElementById('ReloadForce');
-				var sURL = '/__xs/reload';
+				var sURL = '/__xs/reload_json';
 				
 				if ( objForce && objForce.checked ) {
 					sURL += '?force=true';
@@ -581,15 +1209,21 @@
 					return objResp.text();
 				})
 				.then(function(sText){
-					procSetText('ReloadResult', sText || '');
-					procLoadStatus();
-					procLoadJson();
-					procLoadBus();
-					procLoadBusRegistry();
-					procLoadBusNamespaces();
-					table.reloadData('DataList', {
-						scrollPos: 'fixed'
-					});
+					var tblData = {};
+					var sSummary;
+					try {
+						tblData = JSON.parse(sText || '{}') || {};
+					} catch ( objErr ) {
+						tblData = {};
+					}
+					sSummary = 'result=' + String(tblData.result) +
+						' | message=' + (tblData.message || '(none)') +
+						' | server=' + (tblData.server || '(none)') +
+						' | host=' + (tblData.host || '(none)') +
+						' | force=' + String(tblData.force) +
+						' | code=' + String(tblData.code);
+					procSetText('ReloadResult', sSummary);
+					procRefreshPortal(TRUE);
 				})
 				.catch(function(objErr){
 					procSetText('ReloadResult', String(objErr));
@@ -601,9 +1235,247 @@
 					}
 				});
 			};
+			var procLoadReloadStatus = function()
+			{
+				fetch('/__xs/reload_status_json')
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sText){
+					var tblData = {};
+					var sSummary;
+					try {
+						tblData = JSON.parse(sText || '{}') || {};
+					} catch ( objErr ) {
+						tblData = {};
+					}
+					sSummary = 'busy=' + String(tblData.busy) +
+						' | has_result=' + String(tblData.has_result) +
+						' | success=' + String(tblData.success) +
+						' | server=' + (tblData.server || '(all)') +
+						' | host=' + (tblData.host || '(all)') +
+						' | message=' + (tblData.message || '(none)') +
+						' | reload_time=' + (tblData.reload_time || '(none)') +
+						' | reload_age_ms=' + String(tblData.reload_age_ms) +
+						' | total=' + String(tblData.reload_total_count) +
+						' | success_count=' + String(tblData.reload_success_count) +
+						' | failure_count=' + String(tblData.reload_failure_count);
+					procSetText('ReloadConfigResult', sSummary);
+					procSetText('ReloadConfigRaw', sText || '');
+				})
+				.catch(function(objErr){
+					procSetText('ReloadConfigResult', String(objErr));
+					procSetText('ReloadConfigRaw', String(objErr));
+				});
+			};
+			var procClearReloadStatus = function()
+			{
+				fetch('/__xs/reload_clear')
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sText){
+					procSetText('ReloadConfigResult', sText || '');
+					procSetText('ReloadConfigRaw', sText || '');
+					window.setTimeout(procLoadReloadStatus, 200);
+				})
+				.catch(function(objErr){
+					procSetText('ReloadConfigResult', String(objErr));
+					procSetText('ReloadConfigRaw', String(objErr));
+				});
+			};
+			var procResetReloadStats = function()
+			{
+				fetch('/__xs/reload_reset')
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sText){
+					procSetText('ReloadConfigResult', sText || '');
+					procSetText('ReloadConfigRaw', sText || '');
+					window.setTimeout(procLoadReloadStatus, 200);
+				})
+				.catch(function(objErr){
+					procSetText('ReloadConfigResult', String(objErr));
+					procSetText('ReloadConfigRaw', String(objErr));
+				});
+			};
+			var procDoCheckConfig = function()
+			{
+				var objBtn = document.getElementById('CheckConfigBtn');
+				var objFile = document.getElementById('CheckConfigFileInput');
+				var arrQuery = [];
+				var sURL = '/__xs/check_config_json';
+
+				if ( objFile && objFile.value ) {
+					arrQuery.push('file=' + encodeURIComponent(objFile.value));
+				}
+				if ( arrQuery.length > 0 ) {
+					sURL += '?' + arrQuery.join('&');
+				}
+				if ( objBtn ) {
+					objBtn.disabled = true;
+					objBtn.textContent = '校验中...';
+				}
+				procSetText('CheckConfigResult', '正在校验配置...');
+				procSetText('CheckConfigRaw', '正在校验配置...');
+
+				fetch(sURL)
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sText){
+					var tblData = {};
+					var sSummary;
+					try {
+						tblData = JSON.parse(sText || '{}') || {};
+					} catch ( objErr ) {
+						tblData = {};
+					}
+					sSummary = 'result=' + String(tblData.result) +
+						' | file=' + (tblData.file || '(none)') +
+						' | base=' + (tblData.base || '(none)') +
+						' | server_count=' + String(tblData.server_count) +
+							' | total=' + String(tblData.check_total_count) +
+							' | success_count=' + String(tblData.check_success_count) +
+							' | failure_count=' + String(tblData.check_failure_count) +
+							' | last_time=' + (tblData.check_last_time || '(none)') +
+							' | last_age_ms=' + String((tblData.check_last_age_ms !== undefined) ? tblData.check_last_age_ms : -1) +
+							' | message=' + (tblData.message || '(none)');
+					procSetText('StatusConfigCheck', (tblData.result !== undefined) ? String(tblData.result) : '-');
+					procSetText('CheckConfigResult', sSummary);
+					procSetText('CheckConfigRaw', sText || '');
+				})
+				.catch(function(objErr){
+					procSetText('StatusConfigCheck', 'error');
+					procSetText('CheckConfigResult', String(objErr));
+					procSetText('CheckConfigRaw', String(objErr));
+				})
+				.finally(function(){
+					if ( objBtn ) {
+						objBtn.disabled = false;
+						objBtn.textContent = '校验配置';
+					}
+				});
+			};
+			var procClearCheckConfigStats = function()
+			{
+				fetch('/__xs/check_config_clear')
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sText){
+					procSetText('CheckConfigResult', sText || '');
+					procSetText('CheckConfigRaw', sText || '');
+					window.setTimeout(procRefreshPortal, 200);
+				})
+				.catch(function(objErr){
+					procSetText('CheckConfigResult', String(objErr));
+					procSetText('CheckConfigRaw', String(objErr));
+				});
+			};
+			var procDoReloadConfig = function()
+			{
+				var objBtn = document.getElementById('ReloadConfigBtn');
+				var objServer = document.getElementById('ReloadServerInput');
+				var objHost = document.getElementById('ReloadHostInput');
+				var arrQuery = [];
+				var sURL = '/__xs/reload_config_json';
+
+				if ( objServer && objServer.value ) {
+					arrQuery.push('server=' + encodeURIComponent(objServer.value));
+				}
+				if ( objHost && objHost.value ) {
+					arrQuery.push('host=' + encodeURIComponent(objHost.value));
+				}
+				if ( arrQuery.length > 0 ) {
+					sURL += '?' + arrQuery.join('&');
+				}
+				if ( objBtn ) {
+					objBtn.disabled = true;
+					objBtn.textContent = '提交中...';
+				}
+				procSetText('ReloadConfigResult', '正在请求配置热加载...');
+				procSetText('ReloadConfigRaw', '正在请求配置热加载...');
+
+				fetch(sURL)
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sText){
+					var tblData = {};
+					var sSummary;
+					try {
+						tblData = JSON.parse(sText || '{}') || {};
+					} catch ( objErr ) {
+						tblData = {};
+					}
+					sSummary = 'result=' + String(tblData.result) +
+						' | message=' + (tblData.message || '(none)') +
+						' | server=' + (tblData.target_server || '(all)') +
+						' | host=' + (tblData.target_host || '(all)') +
+						' | force=' + String(tblData.force);
+					procSetText('ReloadConfigResult', sSummary);
+					procSetText('ReloadConfigRaw', sText || '');
+					window.setTimeout(function(){
+						procRefreshPortal(FALSE);
+					}, 600);
+				})
+				.catch(function(objErr){
+					procSetText('ReloadConfigResult', String(objErr));
+				})
+				.finally(function(){
+					if ( objBtn ) {
+						objBtn.disabled = false;
+						objBtn.textContent = '重载配置';
+					}
+				});
+			};
 			var procDoBusSend = function(sTarget)
 			{
-				var sURL = '/bus/send?target=' + encodeURIComponent(sTarget || 'server');
+				var objDataID = document.getElementById('BusDataIDInput');
+				var objTopic = document.getElementById('BusTopicInput');
+				var objServer = document.getElementById('BusTargetServerInput');
+				var objHost = document.getElementById('BusTargetHostInput');
+				var objText = document.getElementById('BusTextInput');
+				var objJson = document.getElementById('BusJsonInput');
+				var objPersist = document.getElementById('BusPersistInput');
+				var objTTL = document.getElementById('BusTTLInput');
+				var objNamespace = document.getElementById('BusNamespaceInput');
+				var objTag = document.getElementById('BusTagInput');
+				var arrQuery = ['target=' + encodeURIComponent(sTarget || 'server')];
+				var sURL = '/__xs/bus/send';
+				var sTopic = (objTopic && objTopic.value) ? objTopic.value : ('demo.portal.' + (sTarget || 'server'));
+
+				arrQuery.push('topic=' + encodeURIComponent(sTopic));
+				if ( objServer && objServer.value ) {
+					arrQuery.push('server=' + encodeURIComponent(objServer.value));
+				}
+				if ( objHost && objHost.value ) {
+					arrQuery.push('host=' + encodeURIComponent(objHost.value));
+				}
+				if ( objDataID && objDataID.value ) {
+					arrQuery.push('data_id=' + encodeURIComponent(objDataID.value));
+				}
+				if ( objText && objText.value ) {
+					arrQuery.push('text=' + encodeURIComponent(objText.value));
+				}
+				if ( objJson && objJson.value ) {
+					arrQuery.push('json=' + encodeURIComponent(objJson.value));
+				}
+				if ( objPersist && objPersist.checked ) {
+					arrQuery.push('persist=true');
+				}
+				if ( objNamespace && objNamespace.value ) {
+					arrQuery.push('namespace=' + encodeURIComponent(objNamespace.value));
+				}
+				if ( objTag && objTag.value ) {
+					arrQuery.push('tag=' + encodeURIComponent(objTag.value));
+				}
+				if ( objTTL && objTTL.value ) {
+					arrQuery.push('ttl=' + encodeURIComponent(objTTL.value));
+				}
+				sURL += '?' + arrQuery.join('&');
 				
 				procSetText('BusSendResult', '正在投递消息...');
 				fetch(sURL)
@@ -611,9 +1483,18 @@
 					return objResp.text();
 				})
 				.then(function(sText){
+					var tblRet;
 					procSetText('BusSendResult', sText || '');
+					try {
+						tblRet = JSON.parse(sText);
+						if ( tblRet && tblRet.data_id ) {
+							procSetBusDataID(tblRet.data_id);
+						}
+					} catch (objErr) {
+					}
 					window.setTimeout(procLoadBus, 300);
 					window.setTimeout(procLoadBusRegistry, 300);
+					window.setTimeout(procLoadBusPayload, 300);
 					window.setTimeout(procLoadBusNamespaces, 300);
 				})
 				.catch(function(objErr){
@@ -622,10 +1503,11 @@
 			};
 			var procDoBusRegister = function()
 			{
+				var objDataID = document.getElementById('BusDataIDInput');
 				var objNamespace = document.getElementById('BusNamespaceInput');
 				var objTag = document.getElementById('BusTagInput');
 				var objTTL = document.getElementById('BusTTLInput');
-				var sURL = '/bus/register';
+				var sURL = '/__xs/bus/register';
 				var arrQuery = [];
 				
 				if ( objNamespace && objNamespace.value ) {
@@ -646,8 +1528,74 @@
 					return objResp.text();
 				})
 				.then(function(sText){
+					var tblRet;
 					procSetText('BusSendResult', sText || '');
+					try {
+						tblRet = JSON.parse(sText);
+						if ( tblRet && tblRet.data_id && objDataID ) {
+							objDataID.value = String(tblRet.data_id);
+						}
+					} catch (objErr) {
+					}
 					window.setTimeout(procLoadBusRegistry, 300);
+					window.setTimeout(procLoadBusPayload, 300);
+					window.setTimeout(procLoadBusNamespaces, 300);
+				})
+				.catch(function(objErr){
+					procSetText('BusSendResult', String(objErr));
+				});
+			};
+			var procDoBusSet = function()
+			{
+				var objDataID = document.getElementById('BusDataIDInput');
+				var objNamespace = document.getElementById('BusNamespaceInput');
+				var objTag = document.getElementById('BusTagInput');
+				var objTTL = document.getElementById('BusTTLInput');
+				var objText = document.getElementById('BusTextInput');
+				var objJson = document.getElementById('BusJsonInput');
+				var arrQuery = [];
+				var sURL = '/__xs/bus/set';
+
+				if ( objDataID && objDataID.value ) {
+					arrQuery.push('id=' + encodeURIComponent(objDataID.value));
+				}
+				if ( objNamespace && objNamespace.value ) {
+					arrQuery.push('namespace=' + encodeURIComponent(objNamespace.value));
+				}
+				if ( objTag && objTag.value ) {
+					arrQuery.push('tag=' + encodeURIComponent(objTag.value));
+				}
+				if ( objTTL && objTTL.value !== '' ) {
+					arrQuery.push('ttl=' + encodeURIComponent(objTTL.value));
+				}
+				if ( objText && objText.value ) {
+					arrQuery.push('text=' + encodeURIComponent(objText.value));
+				}
+				if ( objJson && objJson.value ) {
+					arrQuery.push('json=' + encodeURIComponent(objJson.value));
+				}
+				if ( arrQuery.length === 0 || (!((objText && objText.value) || (objJson && objJson.value))) ) {
+					procSetText('BusSendResult', '请先提供 data_id 或 namespace/tag，并填写 text 或 json payload。');
+					return;
+				}
+				sURL += '?' + arrQuery.join('&');
+				procSetText('BusSendResult', '正在更新共享数据...');
+				fetch(sURL)
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sText){
+					var tblRet;
+					procSetText('BusSendResult', sText || '');
+					try {
+						tblRet = JSON.parse(sText);
+						if ( tblRet && tblRet.data_id ) {
+							procSetBusDataID(tblRet.data_id);
+						}
+					} catch ( objErr ) {
+					}
+					window.setTimeout(procLoadBusRegistry, 300);
+					window.setTimeout(procLoadBusPayload, 300);
 					window.setTimeout(procLoadBusNamespaces, 300);
 				})
 				.catch(function(objErr){
@@ -656,9 +1604,10 @@
 			};
 			var procDoBusFind = function()
 			{
+				var objDataID = document.getElementById('BusDataIDInput');
 				var objNamespace = document.getElementById('BusNamespaceInput');
 				var objTag = document.getElementById('BusTagInput');
-				var sURL = '/bus/find';
+				var sURL = '/__xs/bus/find';
 				var arrQuery = [];
 				
 				if ( objNamespace && objNamespace.value ) {
@@ -676,8 +1625,172 @@
 					return objResp.text();
 				})
 				.then(function(sText){
+					var tblRet;
 					procSetText('BusSendResult', sText || '');
+					try {
+						tblRet = JSON.parse(sText);
+						if ( tblRet && tblRet.data_id && objDataID ) {
+							objDataID.value = String(tblRet.data_id);
+						}
+					} catch (objErr) {
+					}
 					window.setTimeout(procLoadBusRegistry, 300);
+					window.setTimeout(procLoadBusPayload, 300);
+					window.setTimeout(procLoadBusNamespaces, 300);
+				})
+				.catch(function(objErr){
+					procSetText('BusSendResult', String(objErr));
+				});
+			};
+			var procDoBusExists = function()
+			{
+				var objDataID = document.getElementById('BusDataIDInput');
+				var objNamespace = document.getElementById('BusNamespaceInput');
+				var objTag = document.getElementById('BusTagInput');
+				var sURL = '/__xs/bus/exists';
+				var arrQuery = [];
+
+				if ( objDataID && objDataID.value ) {
+					arrQuery.push('id=' + encodeURIComponent(objDataID.value));
+				}
+				if ( objNamespace && objNamespace.value ) {
+					arrQuery.push('namespace=' + encodeURIComponent(objNamespace.value));
+				}
+				if ( objTag && objTag.value ) {
+					arrQuery.push('tag=' + encodeURIComponent(objTag.value));
+				}
+				if ( arrQuery.length > 0 ) {
+					sURL += '?' + arrQuery.join('&');
+				}
+				procSetText('BusSendResult', '正在检查共享数据是否存在...');
+				fetch(sURL)
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sText){
+					var tblRet;
+					procSetText('BusSendResult', sText || '');
+					try {
+						tblRet = JSON.parse(sText);
+						if ( tblRet && tblRet.data_id ) {
+							procSetBusDataID(tblRet.data_id);
+						}
+					} catch ( objErr ) {
+					}
+				})
+				.catch(function(objErr){
+					procSetText('BusSendResult', String(objErr));
+				});
+			};
+			var procDoBusGet = function()
+			{
+				procSetText('BusSendResult', '正在读取共享数据 payload...');
+				procLoadBusPayload();
+			};
+			var procDoBusRetain = function()
+			{
+				var objDataID = document.getElementById('BusDataIDInput');
+				var objNamespace = document.getElementById('BusNamespaceInput');
+				var objTag = document.getElementById('BusTagInput');
+				var iDataID = objDataID ? parseInt(objDataID.value, 10) || 0 : 0;
+				var arrQuery = [];
+
+				if ( iDataID > 0 ) {
+					arrQuery.push('id=' + encodeURIComponent(String(iDataID)));
+				}
+				if ( objNamespace && objNamespace.value ) {
+					arrQuery.push('namespace=' + encodeURIComponent(objNamespace.value));
+				}
+				if ( objTag && objTag.value ) {
+					arrQuery.push('tag=' + encodeURIComponent(objTag.value));
+				}
+				if ( arrQuery.length === 0 ) {
+					procSetText('BusSendResult', '请先输入 data_id，或填写 namespace/tag。');
+					return;
+				}
+				procSetText('BusSendResult', '正在 retain 共享数据...');
+				fetch('/__xs/bus/retain?' + arrQuery.join('&'))
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sResp){
+					procSetText('BusSendResult', sResp || '');
+					window.setTimeout(procLoadBusRegistry, 300);
+					window.setTimeout(procLoadBusPayload, 300);
+				})
+				.catch(function(objErr){
+					procSetText('BusSendResult', String(objErr));
+				});
+			};
+			var procDoBusRelease = function()
+			{
+				var objDataID = document.getElementById('BusDataIDInput');
+				var objNamespace = document.getElementById('BusNamespaceInput');
+				var objTag = document.getElementById('BusTagInput');
+				var iDataID = objDataID ? parseInt(objDataID.value, 10) || 0 : 0;
+				var arrQuery = [];
+
+				if ( iDataID > 0 ) {
+					arrQuery.push('id=' + encodeURIComponent(String(iDataID)));
+				}
+				if ( objNamespace && objNamespace.value ) {
+					arrQuery.push('namespace=' + encodeURIComponent(objNamespace.value));
+				}
+				if ( objTag && objTag.value ) {
+					arrQuery.push('tag=' + encodeURIComponent(objTag.value));
+				}
+				if ( arrQuery.length === 0 ) {
+					procSetText('BusSendResult', '请先输入 data_id，或填写 namespace/tag。');
+					return;
+				}
+				procSetText('BusSendResult', '正在 release 共享数据...');
+				fetch('/__xs/bus/release?' + arrQuery.join('&'))
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sResp){
+					procSetText('BusSendResult', sResp || '');
+					window.setTimeout(procLoadBusRegistry, 300);
+					window.setTimeout(procLoadBusPayload, 300);
+					window.setTimeout(procLoadBusNamespaces, 300);
+				})
+				.catch(function(objErr){
+					procSetText('BusSendResult', String(objErr));
+				});
+			};
+			var procDoBusTouch = function()
+			{
+				var objDataID = document.getElementById('BusDataIDInput');
+				var objNamespace = document.getElementById('BusNamespaceInput');
+				var objTag = document.getElementById('BusTagInput');
+				var objTTL = document.getElementById('BusTTLInput');
+				var iDataID = objDataID ? parseInt(objDataID.value, 10) || 0 : 0;
+				var sTTL = objTTL ? objTTL.value : '';
+				var arrQuery = [];
+
+				if ( iDataID > 0 ) {
+					arrQuery.push('id=' + encodeURIComponent(String(iDataID)));
+				}
+				if ( objNamespace && objNamespace.value ) {
+					arrQuery.push('namespace=' + encodeURIComponent(objNamespace.value));
+				}
+				if ( objTag && objTag.value ) {
+					arrQuery.push('tag=' + encodeURIComponent(objTag.value));
+				}
+				if ( arrQuery.length === 0 ) {
+					procSetText('BusSendResult', '请先输入 data_id，或填写 namespace/tag。');
+					return;
+				}
+				arrQuery.push('ttl=' + encodeURIComponent(sTTL || '0'));
+				procSetText('BusSendResult', '正在更新共享数据 TTL ...');
+				fetch('/__xs/bus/touch?' + arrQuery.join('&'))
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sResp){
+					procSetText('BusSendResult', sResp || '');
+					window.setTimeout(procLoadBusRegistry, 300);
+					window.setTimeout(procLoadBusPayload, 300);
 					window.setTimeout(procLoadBusNamespaces, 300);
 				})
 				.catch(function(objErr){
@@ -686,6 +1799,7 @@
 			};
 			var procDoBusRemove = function()
 			{
+				var objDataIDInput = document.getElementById('BusDataIDInput');
 				var objNamespace = document.getElementById('BusNamespaceInput');
 				var objTag = document.getElementById('BusTagInput');
 				var sText = document.getElementById('BusRegistryRaw').textContent || '';
@@ -693,8 +1807,32 @@
 				var arrItems;
 				var iDataID;
 				
+				if ( objDataIDInput && objDataIDInput.value ) {
+					iDataID = parseInt(objDataIDInput.value, 10) || 0;
+					if ( iDataID <= 0 ) {
+						procSetText('BusSendResult', 'data_id 不是有效整数。');
+						return;
+					}
+					procSetText('BusSendResult', '正在移除共享数据 #' + iDataID + ' ...');
+					fetch('/__xs/bus/remove?id=' + encodeURIComponent(String(iDataID)))
+					.then(function(objResp){
+						return objResp.text();
+					})
+					.then(function(sResp){
+						procSetText('BusSendResult', sResp || '');
+						procSetBusDataID('');
+						window.setTimeout(procLoadBusRegistry, 300);
+						window.setTimeout(procLoadBusPayload, 300);
+						window.setTimeout(procLoadBusNamespaces, 300);
+					})
+					.catch(function(objErr){
+						procSetText('BusSendResult', String(objErr));
+					});
+					return;
+				}
+
 				if ( ((objNamespace && objNamespace.value) || (objTag && objTag.value)) ) {
-					var sURL = '/bus/remove';
+					var sURL = '/__xs/bus/remove';
 					var arrQuery = [];
 					
 					if ( objNamespace && objNamespace.value ) {
@@ -714,6 +1852,7 @@
 					.then(function(sResp){
 						procSetText('BusSendResult', sResp || '');
 						window.setTimeout(procLoadBusRegistry, 300);
+						window.setTimeout(procLoadBusPayload, 300);
 						window.setTimeout(procLoadBusNamespaces, 300);
 					})
 					.catch(function(objErr){
@@ -735,13 +1874,15 @@
 				}
 				iDataID = arrItems[arrItems.length - 1].id;
 				procSetText('BusSendResult', '正在移除共享数据 #' + iDataID + ' ...');
-				fetch('/bus/remove?id=' + encodeURIComponent(String(iDataID)))
+				fetch('/__xs/bus/remove?id=' + encodeURIComponent(String(iDataID)))
 				.then(function(objResp){
 					return objResp.text();
 				})
 				.then(function(sResp){
 					procSetText('BusSendResult', sResp || '');
+					procSetBusDataID('');
 					window.setTimeout(procLoadBusRegistry, 300);
+					window.setTimeout(procLoadBusPayload, 300);
 					window.setTimeout(procLoadBusNamespaces, 300);
 				})
 				.catch(function(objErr){
@@ -752,7 +1893,7 @@
 			{
 				var objNamespace = document.getElementById('BusNamespaceInput');
 				var objTag = document.getElementById('BusTagInput');
-				var sURL = '/bus/remove?all=true';
+				var sURL = '/__xs/bus/remove?all=true';
 				var arrQuery = ['all=true'];
 				
 				if ( objNamespace && objNamespace.value ) {
@@ -761,7 +1902,7 @@
 				if ( objTag && objTag.value ) {
 					arrQuery.push('tag=' + encodeURIComponent(objTag.value));
 				}
-				sURL = '/bus/remove?' + arrQuery.join('&');
+				sURL = '/__xs/bus/remove?' + arrQuery.join('&');
 				procSetText('BusSendResult', '正在批量清理共享数据...');
 				fetch(sURL)
 				.then(function(objResp){
@@ -769,7 +1910,9 @@
 				})
 				.then(function(sResp){
 					procSetText('BusSendResult', sResp || '');
+					procSetBusDataID('');
 					window.setTimeout(procLoadBusRegistry, 300);
+					window.setTimeout(procLoadBusPayload, 300);
 				})
 				.catch(function(objErr){
 					procSetText('BusSendResult', String(objErr));
@@ -806,11 +1949,7 @@
 				]],
 				done: function(res){
 					procSetText('CapCount', String(res.count || 0));
-					procLoadStatus();
-					procLoadJson();
-					procLoadBus();
-					procLoadBusRegistry();
-					procLoadBusNamespaces();
+					procRefreshPortal(FALSE);
 				},
 				error: function(res, msg){
 					console.log(res, msg);
@@ -833,7 +1972,7 @@
 								table.reloadData('DataList', {
 									scrollPos: 'fixed'
 								});
-								procLoadStatus();
+								procRefreshPortal(FALSE);
 							}
 						});
 					break;
@@ -877,7 +2016,7 @@
 						table.reloadData('DataList', {
 							scrollPos: 'fixed'
 						});
-						procLoadStatus();
+						procRefreshPortal(FALSE);
 					break;
 				}
 			});
@@ -922,6 +2061,12 @@
 			});
 			
 			document.getElementById('ReloadBtn').addEventListener('click', procDoReload);
+			document.getElementById('ReloadConfigBtn').addEventListener('click', procDoReloadConfig);
+			document.getElementById('CheckConfigBtn').addEventListener('click', procDoCheckConfig);
+			document.getElementById('CheckConfigClearBtn').addEventListener('click', procClearCheckConfigStats);
+			document.getElementById('ReloadStatusBtn').addEventListener('click', procLoadReloadStatus);
+			document.getElementById('ReloadClearBtn').addEventListener('click', procClearReloadStatus);
+			document.getElementById('ReloadResetBtn').addEventListener('click', procResetReloadStats);
 			document.getElementById('BusSendServerBtn').addEventListener('click', function(){
 				procDoBusSend('server');
 			});
@@ -932,14 +2077,17 @@
 				procDoBusSend('broadcast');
 			});
 			document.getElementById('BusRegisterBtn').addEventListener('click', procDoBusRegister);
+			document.getElementById('BusSetBtn').addEventListener('click', procDoBusSet);
 			document.getElementById('BusFindBtn').addEventListener('click', procDoBusFind);
+			document.getElementById('BusExistsBtn').addEventListener('click', procDoBusExists);
+			document.getElementById('BusGetBtn').addEventListener('click', procDoBusGet);
+			document.getElementById('BusRetainBtn').addEventListener('click', procDoBusRetain);
+			document.getElementById('BusReleaseBtn').addEventListener('click', procDoBusRelease);
+			document.getElementById('BusTouchBtn').addEventListener('click', procDoBusTouch);
 			document.getElementById('BusRemoveBtn').addEventListener('click', procDoBusRemove);
 			document.getElementById('BusRemoveAllBtn').addEventListener('click', procDoBusRemoveAll);
-			procLoadStatus();
-			procLoadJson();
-			procLoadBus();
-			procLoadBusRegistry();
-			procLoadBusNamespaces();
+			document.getElementById('BusResetStatsBtn').addEventListener('click', procResetBusStats);
+			procRefreshPortal(FALSE);
 		});
 	</script>
 </body>

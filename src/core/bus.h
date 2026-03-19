@@ -20,16 +20,26 @@ typedef struct {
 
 typedef struct {
 	xmutex pLock;
-	xlist pDataList;
-	xlist pRefList;
-	xlist pNamespaceList;
-	xlist pTagList;
-	xlist pCreateList;
-	xlist pExpireList;
+	xarray arrDataItems;
 	xarray arrMessageQueue;
 	int64 iNextDataID;
 	int64 iNextMsgID;
+	int64 iTotalQueued;
+	int64 iTotalDelivered;
+	int64 iTotalDropped;
+	int64 tLastQueued;
+	int64 tLastDispatch;
 } XS_Bus;
+
+typedef struct {
+	int64 iID;
+	xvalue objValue;
+	int64 iRefCount;
+	char* sNamespace;
+	char* sTag;
+	int64 tCreate;
+	int64 tExpire;
+} XS_BusDataItem;
 
 static XS_Bus g_objXsBus = { 0 };
 static int32 g_iXsBusLastErrorCode = 0;
@@ -79,6 +89,20 @@ static inline char* XS_BusCopyText(const char* sText)
 	return (char*)xrtCopyStr((str)sText, 0);
 }
 
+static inline int64 XS_BusTTLToSeconds(int64 iTTL)
+{
+	int64 iTTLSecond = 0;
+
+	if ( iTTL > 0 ) {
+		iTTLSecond = (iTTL + 999) / 1000;
+		if ( iTTLSecond <= 0 ) {
+			iTTLSecond = 1;
+		}
+	}
+
+	return iTTLSecond;
+}
+
 static inline bool XS_BusIsReservedNamespace(const char* sNamespace)
 {
 	if ( sNamespace == NULL || sNamespace[0] == '\0' ) {
@@ -96,6 +120,67 @@ static inline bool XS_BusIsReservedNamespace(const char* sNamespace)
 }
 
 static bool XS_BusPublishValue(xvalue objVal);
+static inline void XS_BusSweepExpiredData(void);
+static inline int64 XS_BusDataFindFirst(const char* sNamespace, const char* sTag);
+static inline bool XS_BusDataSetTTL(int64 iID, int64 iTTL);
+
+static inline XS_BusDataItem* XS_BusFindDataItemByID_NoLock(int64 iID)
+{
+	uint32 i;
+
+	if ( iID <= 0 || g_objXsBus.arrDataItems == NULL ) {
+		return NULL;
+	}
+
+	for ( i = 1; i <= g_objXsBus.arrDataItems->Count; i++ ) {
+		XS_BusDataItem* objItem = xrtArrayGet_Inline(g_objXsBus.arrDataItems, i);
+
+		if ( objItem && objItem->iID == iID ) {
+			return objItem;
+		}
+	}
+
+	return NULL;
+}
+
+static inline bool XS_BusMatchDataItem(const XS_BusDataItem* objItem, const char* sNamespace, const char* sTag)
+{
+	if ( objItem == NULL || objItem->iID <= 0 || objItem->objValue == NULL ) {
+		return FALSE;
+	}
+
+	if ( sNamespace && sNamespace[0] != '\0' ) {
+		if ( objItem->sNamespace == NULL || strcmp(objItem->sNamespace, sNamespace) != 0 ) {
+			return FALSE;
+		}
+	}
+
+	if ( sTag && sTag[0] != '\0' ) {
+		if ( objItem->sTag == NULL || strcmp(objItem->sTag, sTag) != 0 ) {
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
+static inline void XS_BusFreeDataItem(XS_BusDataItem* objItem)
+{
+	if ( objItem == NULL ) {
+		return;
+	}
+
+	if ( objItem->sNamespace ) {
+		xrtFree(objItem->sNamespace);
+	}
+	if ( objItem->sTag ) {
+		xrtFree(objItem->sTag);
+	}
+	if ( objItem->objValue ) {
+		xvoUnref(objItem->objValue);
+	}
+	memset(objItem, 0, sizeof(XS_BusDataItem));
+}
 
 static bool XS_BusPublishListProc(int64 iKey, xvalue* ppVal, bool* pbOk)
 {
@@ -206,29 +291,30 @@ static inline bool XS_BusInit(void)
 	memset(&g_objXsBus, 0, sizeof(g_objXsBus));
 	XS_BusClearLastError();
 	g_objXsBus.pLock = xrtMutexCreate();
-	g_objXsBus.pDataList = xrtListCreate(sizeof(ptr), XRT_OBJMODE_SHARED);
-	g_objXsBus.pRefList = xrtListCreate(sizeof(int64), XRT_OBJMODE_SHARED);
-	g_objXsBus.pNamespaceList = xrtListCreate(sizeof(ptr), XRT_OBJMODE_SHARED);
-	g_objXsBus.pTagList = xrtListCreate(sizeof(ptr), XRT_OBJMODE_SHARED);
-	g_objXsBus.pCreateList = xrtListCreate(sizeof(int64), XRT_OBJMODE_SHARED);
-	g_objXsBus.pExpireList = xrtListCreate(sizeof(int64), XRT_OBJMODE_SHARED);
+	g_objXsBus.arrDataItems = xrtArrayCreate(sizeof(XS_BusDataItem), XRT_OBJMODE_SHARED);
 	g_objXsBus.arrMessageQueue = xrtArrayCreate(sizeof(XS_Message), XRT_OBJMODE_SHARED);
 	g_objXsBus.iNextDataID = 1;
 	g_objXsBus.iNextMsgID = 1;
 	
-	if ( g_objXsBus.pLock == NULL || g_objXsBus.pDataList == NULL || g_objXsBus.pRefList == NULL || g_objXsBus.pNamespaceList == NULL || g_objXsBus.pTagList == NULL || g_objXsBus.pCreateList == NULL || g_objXsBus.pExpireList == NULL || g_objXsBus.arrMessageQueue == NULL ) {
+	if ( g_objXsBus.pLock == NULL || g_objXsBus.arrDataItems == NULL || g_objXsBus.arrMessageQueue == NULL ) {
 		return FALSE;
 	}
 	
-	xrtOwnerActivateShared(&g_objXsBus.pDataList->Owner);
-	xrtOwnerActivateShared(&g_objXsBus.pRefList->Owner);
-	xrtOwnerActivateShared(&g_objXsBus.pNamespaceList->Owner);
-	xrtOwnerActivateShared(&g_objXsBus.pTagList->Owner);
-	xrtOwnerActivateShared(&g_objXsBus.pCreateList->Owner);
-	xrtOwnerActivateShared(&g_objXsBus.pExpireList->Owner);
+	xrtOwnerActivateShared(&g_objXsBus.arrDataItems->Owner);
 	xrtOwnerActivateShared(&g_objXsBus.arrMessageQueue->Owner);
 	
 	return TRUE;
+}
+
+static inline void XS_BusClearStats(void)
+{
+	xrtMutexLock(g_objXsBus.pLock);
+	g_objXsBus.iTotalQueued = 0;
+	g_objXsBus.iTotalDelivered = 0;
+	g_objXsBus.iTotalDropped = 0;
+	g_objXsBus.tLastQueued = 0;
+	g_objXsBus.tLastDispatch = 0;
+	xrtMutexUnlock(g_objXsBus.pLock);
 }
 
 static bool XS_BusFreeDataProc(int64 iKey, ptr pVal, ptr pArg)
@@ -278,26 +364,12 @@ static inline void XS_BusUnit(void)
 		}
 		xrtArrayDestroy(g_objXsBus.arrMessageQueue);
 	}
-	if ( g_objXsBus.pDataList ) {
-		xrtListWalk(g_objXsBus.pDataList, XS_BusFreeDataProc, NULL);
-		xrtListDestroy(g_objXsBus.pDataList);
-	}
-	if ( g_objXsBus.pRefList ) {
-		xrtListDestroy(g_objXsBus.pRefList);
-	}
-	if ( g_objXsBus.pNamespaceList ) {
-		xrtListWalk(g_objXsBus.pNamespaceList, XS_BusFreeNamespaceProc, NULL);
-		xrtListDestroy(g_objXsBus.pNamespaceList);
-	}
-	if ( g_objXsBus.pTagList ) {
-		xrtListWalk(g_objXsBus.pTagList, XS_BusFreeTagProc, NULL);
-		xrtListDestroy(g_objXsBus.pTagList);
-	}
-	if ( g_objXsBus.pCreateList ) {
-		xrtListDestroy(g_objXsBus.pCreateList);
-	}
-	if ( g_objXsBus.pExpireList ) {
-		xrtListDestroy(g_objXsBus.pExpireList);
+	if ( g_objXsBus.arrDataItems ) {
+		for ( i = 1; i <= g_objXsBus.arrDataItems->Count; i++ ) {
+			XS_BusDataItem* objItem = xrtArrayGet_Inline(g_objXsBus.arrDataItems, i);
+			XS_BusFreeDataItem(objItem);
+		}
+		xrtArrayDestroy(g_objXsBus.arrDataItems);
 	}
 	if ( g_objXsBus.pLock ) {
 		xrtMutexDestroy(g_objXsBus.pLock);
@@ -310,11 +382,9 @@ static inline int64 XS_BusDataRegisterEx(xvalue objValue, const char* sNamespace
 {
 	int64 iID;
 	xvalue objStore;
-	int64* pTime;
-	int64* pExpire;
 	int64 iTTLSecond = 0;
-	char** ppNamespace;
-	char** ppTag;
+	uint32 iPos;
+	XS_BusDataItem* objItem;
 	
 	XS_BusClearLastError();
 	
@@ -329,12 +399,7 @@ static inline int64 XS_BusDataRegisterEx(xvalue objValue, const char* sNamespace
 		return 0;
 	}
 	
-	if ( iTTL > 0 ) {
-		iTTLSecond = (iTTL + 999) / 1000;
-		if ( iTTLSecond <= 0 ) {
-			iTTLSecond = 1;
-		}
-	}
+	iTTLSecond = XS_BusTTLToSeconds(iTTL);
 	
 	objStore = xvoDeepCopy(objValue);
 	if ( objStore == NULL ) {
@@ -355,7 +420,8 @@ static inline int64 XS_BusDataRegisterEx(xvalue objValue, const char* sNamespace
 	
 	xrtMutexLock(g_objXsBus.pLock);
 	iID = g_objXsBus.iNextDataID++;
-	if ( !xrtListSetPtr(g_objXsBus.pDataList, iID, objStore, NULL) ) {
+	iPos = xrtArrayAppend(g_objXsBus.arrDataItems, 1);
+	if ( iPos == 0 ) {
 		XS_BusSetLastError(XS_BUS_ERR_DATA_SLOT, "data slot create error");
 		XS_LogWarn(
 			"bus register failed: data slot create error: id=%lld type=%d err=%s",
@@ -367,68 +433,15 @@ static inline int64 XS_BusDataRegisterEx(xvalue objValue, const char* sNamespace
 		xvoUnref(objStore);
 		return 0;
 	}
-	{
-		int64* pRef = xrtListSet(g_objXsBus.pRefList, iID, NULL);
-		if ( pRef == NULL ) {
-			XS_BusSetLastError(XS_BUS_ERR_REF_SLOT, "ref slot create error");
-			XS_LogWarn(
-				"bus register failed: ref slot create error: id=%lld err=%s",
-				(long long)iID,
-				(const char*)(xrtGetError() ? xrtGetError() : (str)"(null)")
-			);
-			(void)xrtListRemovePtr(g_objXsBus.pDataList, iID);
-			xrtMutexUnlock(g_objXsBus.pLock);
-			xvoUnref(objStore);
-			return 0;
-		}
-		*pRef = 1;
-	}
-	pTime = (int64*)xrtListSet(g_objXsBus.pCreateList, iID, NULL);
-	if ( pTime == NULL ) {
-		XS_BusSetLastError(XS_BUS_ERR_CREATE_SLOT, "create slot error");
-		(void)xrtListRemove(g_objXsBus.pRefList, iID);
-		(void)xrtListRemovePtr(g_objXsBus.pDataList, iID);
-		xrtMutexUnlock(g_objXsBus.pLock);
-		xvoUnref(objStore);
-		return 0;
-	}
-	*pTime = xrtNow();
-	ppNamespace = (char**)xrtListSet(g_objXsBus.pNamespaceList, iID, NULL);
-	if ( ppNamespace == NULL ) {
-		XS_BusSetLastError(XS_BUS_ERR_NAMESPACE_SLOT, "namespace slot error");
-		(void)xrtListRemove(g_objXsBus.pCreateList, iID);
-		(void)xrtListRemove(g_objXsBus.pRefList, iID);
-		(void)xrtListRemovePtr(g_objXsBus.pDataList, iID);
-		xrtMutexUnlock(g_objXsBus.pLock);
-		xvoUnref(objStore);
-		return 0;
-	}
-	ppTag = (char**)xrtListSet(g_objXsBus.pTagList, iID, NULL);
-	if ( ppTag == NULL ) {
-		XS_BusSetLastError(XS_BUS_ERR_TAG_SLOT, "tag slot error");
-		(void)xrtListRemovePtr(g_objXsBus.pNamespaceList, iID);
-		(void)xrtListRemove(g_objXsBus.pCreateList, iID);
-		(void)xrtListRemove(g_objXsBus.pRefList, iID);
-		(void)xrtListRemovePtr(g_objXsBus.pDataList, iID);
-		xrtMutexUnlock(g_objXsBus.pLock);
-		xvoUnref(objStore);
-		return 0;
-	}
-	pExpire = (int64*)xrtListSet(g_objXsBus.pExpireList, iID, NULL);
-	if ( pExpire == NULL ) {
-		XS_BusSetLastError(XS_BUS_ERR_EXPIRE_SLOT, "expire slot error");
-		(void)xrtListRemovePtr(g_objXsBus.pTagList, iID);
-		(void)xrtListRemovePtr(g_objXsBus.pNamespaceList, iID);
-		(void)xrtListRemove(g_objXsBus.pCreateList, iID);
-		(void)xrtListRemove(g_objXsBus.pRefList, iID);
-		(void)xrtListRemovePtr(g_objXsBus.pDataList, iID);
-		xrtMutexUnlock(g_objXsBus.pLock);
-		xvoUnref(objStore);
-		return 0;
-	}
-	*ppNamespace = XS_BusCopyText(sNamespace);
-	*ppTag = XS_BusCopyText(sTag);
-	*pExpire = (iTTLSecond > 0) ? (xrtNow() + iTTLSecond) : 0;
+	objItem = xrtArrayGet_Inline(g_objXsBus.arrDataItems, iPos);
+	memset(objItem, 0, sizeof(XS_BusDataItem));
+	objItem->iID = iID;
+	objItem->objValue = objStore;
+	objItem->iRefCount = 1;
+	objItem->tCreate = xrtNow();
+	objItem->tExpire = (iTTLSecond > 0) ? (objItem->tCreate + iTTLSecond) : 0;
+	objItem->sNamespace = XS_BusCopyText(sNamespace);
+	objItem->sTag = XS_BusCopyText(sTag);
 	XS_BusClearLastError();
 	XS_LogInfo("bus data registered: id=%lld type=%d", (long long)iID, xvoType(objStore));
 	xrtMutexUnlock(g_objXsBus.pLock);
@@ -442,141 +455,351 @@ static inline int64 XS_BusDataRegister(xvalue objValue)
 
 static inline xvalue XS_BusDataGet(int64 iID)
 {
-	xvalue objRet;
+	xvalue objRet = NULL;
+	XS_BusDataItem* objItem;
 	
 	if ( iID <= 0 ) {
 		return NULL;
 	}
 	
 	xrtMutexLock(g_objXsBus.pLock);
-	objRet = (xvalue)xrtListGetPtr(g_objXsBus.pDataList, iID);
+	objItem = XS_BusFindDataItemByID_NoLock(iID);
+	if ( objItem ) {
+		objRet = objItem->objValue;
+	}
 	xrtMutexUnlock(g_objXsBus.pLock);
 	return objRet;
 }
 
+static inline xvalue XS_BusBuildDataValue(int64 iID)
+{
+	xvalue objRet = NULL;
+	XS_BusDataItem* objItem;
+	xvalue objDataCopy = NULL;
+
+	if ( iID <= 0 ) {
+		return NULL;
+	}
+
+	XS_BusSweepExpiredData();
+
+	xrtMutexLock(g_objXsBus.pLock);
+	objItem = XS_BusFindDataItemByID_NoLock(iID);
+	if ( objItem && objItem->objValue ) {
+		objDataCopy = xvoDeepCopy(objItem->objValue);
+		if ( objDataCopy ) {
+			objRet = xvoCreateTable();
+			xvoTableSetInt(objRet, "id", 2, objItem->iID);
+			xvoTableSetInt(objRet, "type", 4, xvoType(objItem->objValue));
+			xvoTableSetInt(objRet, "ref_count", 9, objItem->iRefCount);
+			xvoTableSetInt(objRet, "create_time", 11, objItem->tCreate);
+			xvoTableSetInt(objRet, "expire_time", 11, objItem->tExpire);
+			xvoTableSetText(objRet, "namespace", 9, objItem->sNamespace ? objItem->sNamespace : "", 0, FALSE);
+			xvoTableSetText(objRet, "tag", 3, objItem->sTag ? objItem->sTag : "", 0, FALSE);
+			xvoTableSetValue(objRet, "data", 4, objDataCopy, TRUE);
+		}
+	}
+	xrtMutexUnlock(g_objXsBus.pLock);
+
+	return objRet;
+}
+
+static inline int64 XS_BusDataResolveID(const char* sNamespace, const char* sTag, int64 iID)
+{
+	if ( iID > 0 ) {
+		return iID;
+	}
+
+	if ( ((sNamespace && sNamespace[0] != '\0')) || ((sTag && sTag[0] != '\0')) ) {
+		return XS_BusDataFindFirst(sNamespace, sTag);
+	}
+
+	return 0;
+}
+
+static inline char* XS_BusBuildDataJson(int64 iID)
+{
+	xvalue objData = XS_BusBuildDataValue(iID);
+	char* sRet;
+
+	if ( objData == NULL ) {
+		return NULL;
+	}
+
+	sRet = xrtStringifyJSON(objData, FALSE, NULL);
+	xvoUnref(objData);
+	return sRet;
+}
+
+typedef struct {
+	const char* sNamespace;
+	const char* sTag;
+	xvalue objItems;
+	int64 iCount;
+} XS_BusDataFilterContext;
+
+static bool XS_BusBuildDataFilterProc(const XS_BusDataItem* objItem, XS_BusDataFilterContext* objCtx)
+{
+	xvalue objDataCopy;
+	xvalue objRow;
+
+	if ( objCtx == NULL || objCtx->objItems == NULL || objItem == NULL || objItem->objValue == NULL ) {
+		return FALSE;
+	}
+	if ( !XS_BusMatchDataItem(objItem, objCtx->sNamespace, objCtx->sTag) ) {
+		return FALSE;
+	}
+
+	objDataCopy = xvoDeepCopy(objItem->objValue);
+	if ( objDataCopy == NULL ) {
+		return FALSE;
+	}
+
+	objRow = xvoCreateTable();
+	xvoTableSetInt(objRow, "id", 2, objItem->iID);
+	xvoTableSetInt(objRow, "type", 4, xvoType(objItem->objValue));
+	xvoTableSetInt(objRow, "ref_count", 9, objItem->iRefCount);
+	xvoTableSetInt(objRow, "create_time", 11, objItem->tCreate);
+	xvoTableSetInt(objRow, "expire_time", 11, objItem->tExpire);
+	xvoTableSetText(objRow, "namespace", 9, objItem->sNamespace ? objItem->sNamespace : "", 0, FALSE);
+	xvoTableSetText(objRow, "tag", 3, objItem->sTag ? objItem->sTag : "", 0, FALSE);
+	xvoTableSetValue(objRow, "data", 4, objDataCopy, TRUE);
+	xvoArrayAppendValue(objCtx->objItems, objRow, TRUE);
+	objCtx->iCount++;
+	return FALSE;
+}
+
+static inline xvalue XS_BusBuildDataListValueEx(const char* sNamespace, const char* sTag)
+{
+	xvalue objRet = xvoCreateTable();
+	xvalue objItems = xvoCreateArray();
+	XS_BusDataFilterContext objCtx;
+
+	memset(&objCtx, 0, sizeof(objCtx));
+	objCtx.sNamespace = sNamespace;
+	objCtx.sTag = sTag;
+	objCtx.objItems = objItems;
+
+	XS_BusSweepExpiredData();
+
+	xrtMutexLock(g_objXsBus.pLock);
+	xvoTableSetInt(objRet, "queue_count", 11, g_objXsBus.arrMessageQueue ? g_objXsBus.arrMessageQueue->Count : 0);
+	xvoTableSetInt(objRet, "data_count", 10, g_objXsBus.arrDataItems ? g_objXsBus.arrDataItems->Count : 0);
+	xvoTableSetInt(objRet, "next_data_id", 12, g_objXsBus.iNextDataID);
+	xvoTableSetInt(objRet, "next_msg_id", 11, g_objXsBus.iNextMsgID);
+	xvoTableSetText(objRet, "namespace", 9, (ptr)(sNamespace ? sNamespace : ""), 0, FALSE);
+	xvoTableSetText(objRet, "tag", 3, (ptr)(sTag ? sTag : ""), 0, FALSE);
+	if ( g_objXsBus.arrDataItems ) {
+		uint32 i;
+
+		for ( i = 1; i <= g_objXsBus.arrDataItems->Count; i++ ) {
+			XS_BusDataItem* objItem = xrtArrayGet_Inline(g_objXsBus.arrDataItems, i);
+			(void)XS_BusBuildDataFilterProc(objItem, &objCtx);
+		}
+	}
+	xrtMutexUnlock(g_objXsBus.pLock);
+
+	xvoTableSetInt(objRet, "match_count", 11, objCtx.iCount);
+	xvoTableSetValue(objRet, "items", 5, objItems, TRUE);
+	return objRet;
+}
+
+static inline char* XS_BusBuildDataListJsonEx(const char* sNamespace, const char* sTag)
+{
+	xvalue objStatus = XS_BusBuildDataListValueEx(sNamespace, sTag);
+	char* sRet = NULL;
+
+	if ( objStatus == NULL ) {
+		return NULL;
+	}
+
+	sRet = xrtStringifyJSON(objStatus, FALSE, NULL);
+	xvoUnref(objStatus);
+	return sRet;
+}
+
 static inline bool XS_BusDataRetain(int64 iID)
 {
-	int64* pRef;
-	xvalue objVal;
+	XS_BusDataItem* objItem;
 	
 	if ( iID <= 0 ) {
 		return FALSE;
 	}
 	
 	xrtMutexLock(g_objXsBus.pLock);
-	objVal = (xvalue)xrtListGetPtr(g_objXsBus.pDataList, iID);
-	pRef = (int64*)xrtListGet(g_objXsBus.pRefList, iID);
-	if ( objVal == NULL || pRef == NULL ) {
+	objItem = XS_BusFindDataItemByID_NoLock(iID);
+	if ( objItem == NULL || objItem->objValue == NULL ) {
 		xrtMutexUnlock(g_objXsBus.pLock);
 		return FALSE;
 	}
-	(*pRef)++;
+	objItem->iRefCount++;
 	xrtMutexUnlock(g_objXsBus.pLock);
 	return TRUE;
+}
+
+static inline bool XS_BusDataTouchTTL(int64 iID, int64 iTTL)
+{
+	if ( iTTL <= 0 ) {
+		return FALSE;
+	}
+
+	return XS_BusDataSetTTL(iID, iTTL);
+}
+
+static inline bool XS_BusDataSetTTL(int64 iID, int64 iTTL)
+{
+	XS_BusDataItem* objItem;
+	int64 iTTLSecond;
+
+	if ( iID <= 0 ) {
+		return FALSE;
+	}
+
+	iTTLSecond = XS_BusTTLToSeconds(iTTL);
+
+	xrtMutexLock(g_objXsBus.pLock);
+	objItem = XS_BusFindDataItemByID_NoLock(iID);
+	if ( objItem == NULL || objItem->objValue == NULL ) {
+		xrtMutexUnlock(g_objXsBus.pLock);
+		return FALSE;
+	}
+	objItem->tExpire = (iTTLSecond > 0) ? (xrtNow() + iTTLSecond) : 0;
+	xrtMutexUnlock(g_objXsBus.pLock);
+	return TRUE;
+}
+
+static inline bool XS_BusDataSetValue(int64 iID, xvalue objValue)
+{
+	XS_BusDataItem* objItem;
+	xvalue objStore;
+	xvalue objOld;
+
+	if ( iID <= 0 || objValue == NULL ) {
+		return FALSE;
+	}
+
+	objStore = xvoDeepCopy(objValue);
+	if ( objStore == NULL ) {
+		return FALSE;
+	}
+	if ( !XS_BusPublishValue(objStore) ) {
+		xvoUnref(objStore);
+		return FALSE;
+	}
+
+	xrtMutexLock(g_objXsBus.pLock);
+	objItem = XS_BusFindDataItemByID_NoLock(iID);
+	if ( objItem == NULL || objItem->objValue == NULL ) {
+		xrtMutexUnlock(g_objXsBus.pLock);
+		xvoUnref(objStore);
+		return FALSE;
+	}
+	objOld = objItem->objValue;
+	objItem->objValue = objStore;
+	xrtMutexUnlock(g_objXsBus.pLock);
+
+	if ( objOld ) {
+		xvoUnref(objOld);
+	}
+	return TRUE;
+}
+
+
+static inline int64 XS_BusDataGetExpireTime(int64 iID)
+{
+	int64 tExpire = 0;
+	XS_BusDataItem* objItem;
+
+	if ( iID <= 0 ) {
+		return 0;
+	}
+
+	xrtMutexLock(g_objXsBus.pLock);
+	objItem = XS_BusFindDataItemByID_NoLock(iID);
+	if ( objItem && objItem->objValue ) {
+		tExpire = objItem->tExpire;
+	}
+	xrtMutexUnlock(g_objXsBus.pLock);
+	return tExpire;
 }
 
 static inline bool XS_BusDataRelease(int64 iID)
 {
-	int64* pRef;
-	xvalue objVal;
+	uint32 i;
+	XS_BusDataItem objItem;
 	
 	if ( iID <= 0 ) {
 		return FALSE;
 	}
 	
 	xrtMutexLock(g_objXsBus.pLock);
-	objVal = (xvalue)xrtListGetPtr(g_objXsBus.pDataList, iID);
-	pRef = (int64*)xrtListGet(g_objXsBus.pRefList, iID);
-	if ( objVal == NULL || pRef == NULL ) {
-		xrtMutexUnlock(g_objXsBus.pLock);
-		return FALSE;
-	}
-	
-	if ( *pRef <= 1 ) {
-		char* sNamespace = NULL;
-		char* sTag = NULL;
-		
-		sNamespace = (char*)xrtListRemovePtr(g_objXsBus.pNamespaceList, iID);
-		sTag = (char*)xrtListRemovePtr(g_objXsBus.pTagList, iID);
-		(void)xrtListRemove(g_objXsBus.pExpireList, iID);
-		(void)xrtListRemove(g_objXsBus.pCreateList, iID);
-		(void)xrtListRemove(g_objXsBus.pRefList, iID);
-		(void)xrtListRemovePtr(g_objXsBus.pDataList, iID);
-		xrtMutexUnlock(g_objXsBus.pLock);
-		if ( sTag ) {
-			xrtFree(sTag);
+	for ( i = 1; i <= g_objXsBus.arrDataItems->Count; i++ ) {
+		XS_BusDataItem* pItem = xrtArrayGet_Inline(g_objXsBus.arrDataItems, i);
+
+		if ( pItem && pItem->iID == iID && pItem->objValue ) {
+			if ( pItem->iRefCount > 1 ) {
+				pItem->iRefCount--;
+				xrtMutexUnlock(g_objXsBus.pLock);
+				return TRUE;
+			}
+
+			memcpy(&objItem, pItem, sizeof(XS_BusDataItem));
+			memset(pItem, 0, sizeof(XS_BusDataItem));
+			(void)xrtArrayRemove(g_objXsBus.arrDataItems, i, 1);
+			xrtMutexUnlock(g_objXsBus.pLock);
+			XS_BusFreeDataItem(&objItem);
+			return TRUE;
 		}
-		if ( sNamespace ) {
-			xrtFree(sNamespace);
-		}
-		xvoUnref(objVal);
-		return TRUE;
 	}
-	
-	(*pRef)--;
 	xrtMutexUnlock(g_objXsBus.pLock);
-	return TRUE;
+	return FALSE;
 }
 
 static inline bool XS_BusDataRemove(int64 iID)
 {
+	uint32 i;
+	XS_BusDataItem objItem;
+
 	if ( iID <= 0 ) {
 		return FALSE;
 	}
-	
+
+	memset(&objItem, 0, sizeof(objItem));
+
 	xrtMutexLock(g_objXsBus.pLock);
-	{
-		char* sNamespace = (char*)xrtListRemovePtr(g_objXsBus.pNamespaceList, iID);
-		if ( sNamespace ) {
-			xrtFree(sNamespace);
-		}
-	}
-	{
-		char* sTag = (char*)xrtListRemovePtr(g_objXsBus.pTagList, iID);
-		if ( sTag ) {
-			xrtFree(sTag);
-		}
-	}
-	(void)xrtListRemove(g_objXsBus.pExpireList, iID);
-	(void)xrtListRemove(g_objXsBus.pCreateList, iID);
-	(void)xrtListRemove(g_objXsBus.pRefList, iID);
-	{
-		xvalue objVal = (xvalue)xrtListRemovePtr(g_objXsBus.pDataList, iID);
-		if ( objVal ) {
-			xvoUnref(objVal);
+	for ( i = 1; i <= g_objXsBus.arrDataItems->Count; i++ ) {
+		XS_BusDataItem* pItem = xrtArrayGet_Inline(g_objXsBus.arrDataItems, i);
+
+		if ( pItem && pItem->iID == iID && pItem->objValue ) {
+			memcpy(&objItem, pItem, sizeof(XS_BusDataItem));
+			memset(pItem, 0, sizeof(XS_BusDataItem));
+			(void)xrtArrayRemove(g_objXsBus.arrDataItems, i, 1);
+			xrtMutexUnlock(g_objXsBus.pLock);
+			XS_BusFreeDataItem(&objItem);
+			return TRUE;
 		}
 	}
 	xrtMutexUnlock(g_objXsBus.pLock);
-	return TRUE;
+	return FALSE;
 }
 
-static bool XS_BusBuildStatusProc(int64 iKey, ptr pVal, xvalue objArr)
+static bool XS_BusBuildStatusProc(const XS_BusDataItem* objData, xvalue objArr)
 {
 	xvalue objItem;
-	int64* pRef;
-	int64* pCreate;
-	int64* pExpire;
-	char* sNamespace;
-	char* sTag;
 	
-	if ( objArr == NULL || pVal == NULL ) {
+	if ( objArr == NULL || objData == NULL || objData->objValue == NULL ) {
 		return FALSE;
 	}
 	
 	objItem = xvoCreateTable();
-	pRef = (int64*)xrtListGet(g_objXsBus.pRefList, iKey);
-	pCreate = (int64*)xrtListGet(g_objXsBus.pCreateList, iKey);
-	pExpire = (int64*)xrtListGet(g_objXsBus.pExpireList, iKey);
-	sNamespace = (char*)xrtListGetPtr(g_objXsBus.pNamespaceList, iKey);
-	sTag = (char*)xrtListGetPtr(g_objXsBus.pTagList, iKey);
 	
-	xvoTableSetInt(objItem, "id", 2, iKey);
-	xvoTableSetInt(objItem, "type", 4, xvoType((xvalue)pVal));
-	xvoTableSetInt(objItem, "ref_count", 9, pRef ? *pRef : 0);
-	xvoTableSetInt(objItem, "create_time", 11, pCreate ? *pCreate : 0);
-	xvoTableSetInt(objItem, "expire_time", 11, pExpire ? *pExpire : 0);
-	xvoTableSetText(objItem, "namespace", 9, sNamespace ? sNamespace : "", 0, FALSE);
-	xvoTableSetText(objItem, "tag", 3, sTag ? sTag : "", 0, FALSE);
+	xvoTableSetInt(objItem, "id", 2, objData->iID);
+	xvoTableSetInt(objItem, "type", 4, xvoType(objData->objValue));
+	xvoTableSetInt(objItem, "ref_count", 9, objData->iRefCount);
+	xvoTableSetInt(objItem, "create_time", 11, objData->tCreate);
+	xvoTableSetInt(objItem, "expire_time", 11, objData->tExpire);
+	xvoTableSetText(objItem, "namespace", 9, objData->sNamespace ? objData->sNamespace : "", 0, FALSE);
+	xvoTableSetText(objItem, "tag", 3, objData->sTag ? objData->sTag : "", 0, FALSE);
 	xvoArrayAppendValue(objArr, objItem, TRUE);
 	return FALSE;
 }
@@ -599,18 +822,14 @@ typedef struct {
 	int64 iCount;
 } XS_BusNamespaceStatsContext;
 
-static bool XS_BusSweepCollectProc(int64 iKey, ptr pVal, XS_BusSweepContext* objCtx)
+static bool XS_BusSweepCollectProc(const XS_BusDataItem* objItem, XS_BusSweepContext* objCtx)
 {
-	int64* pExpire;
-	(void)pVal;
-	
 	if ( objCtx == NULL || objCtx->iCount >= 256 ) {
 		return FALSE;
 	}
 	
-	pExpire = (int64*)xrtListGet(g_objXsBus.pExpireList, iKey);
-	if ( pExpire && *pExpire > 0 && *pExpire <= objCtx->tNow ) {
-		objCtx->arrID[objCtx->iCount++] = iKey;
+	if ( objItem && objItem->iID > 0 && objItem->objValue && objItem->tExpire > 0 && objItem->tExpire <= objCtx->tNow ) {
+		objCtx->arrID[objCtx->iCount++] = objItem->iID;
 	}
 	return FALSE;
 }
@@ -624,14 +843,38 @@ static inline void XS_BusSweepExpiredData(void)
 	objCtx.tNow = xrtNow();
 	
 	xrtMutexLock(g_objXsBus.pLock);
-	if ( g_objXsBus.pDataList ) {
-		xrtListWalk(g_objXsBus.pDataList, (List_EachProc)XS_BusSweepCollectProc, &objCtx);
+	if ( g_objXsBus.arrDataItems ) {
+		for ( i = 1; i <= g_objXsBus.arrDataItems->Count; i++ ) {
+			XS_BusDataItem* objItem = xrtArrayGet_Inline(g_objXsBus.arrDataItems, i);
+			(void)XS_BusSweepCollectProc(objItem, &objCtx);
+		}
 	}
 	xrtMutexUnlock(g_objXsBus.pLock);
 	
 	for ( i = 0; i < objCtx.iCount; i++ ) {
 		XS_LogInfo("bus data expired: id=%lld", (long long)objCtx.arrID[i]);
 		XS_BusDataRemove(objCtx.arrID[i]);
+	}
+}
+
+static inline void XS_BusSetTimeFields(xvalue objRet, int64 tQueue, int64 tDispatch)
+{
+	char* sQueueTime;
+	char* sDispatchTime;
+
+	if ( objRet == NULL ) {
+		return;
+	}
+
+	sQueueTime = (tQueue > 0) ? xrtTimeToStr(tQueue, XRT_TIME_FORMAT_DATETIME) : NULL;
+	sDispatchTime = (tDispatch > 0) ? xrtTimeToStr(tDispatch, XRT_TIME_FORMAT_DATETIME) : NULL;
+	xvoTableSetText(objRet, "last_queue_time_text", 20, (ptr)(sQueueTime ? sQueueTime : ""), 0, FALSE);
+	xvoTableSetText(objRet, "last_dispatch_time_text", 23, (ptr)(sDispatchTime ? sDispatchTime : ""), 0, FALSE);
+	if ( sQueueTime ) {
+		xrtFree(sQueueTime);
+	}
+	if ( sDispatchTime ) {
+		xrtFree(sDispatchTime);
 	}
 }
 
@@ -644,42 +887,39 @@ static inline xvalue XS_BusBuildStatusValue(void)
 	
 	xrtMutexLock(g_objXsBus.pLock);
 	xvoTableSetInt(objRet, "queue_count", 11, g_objXsBus.arrMessageQueue ? g_objXsBus.arrMessageQueue->Count : 0);
-	xvoTableSetInt(objRet, "data_count", 10, g_objXsBus.pDataList ? xrtListCount(g_objXsBus.pDataList) : 0);
+	xvoTableSetInt(objRet, "data_count", 10, g_objXsBus.arrDataItems ? g_objXsBus.arrDataItems->Count : 0);
 	xvoTableSetInt(objRet, "next_data_id", 12, g_objXsBus.iNextDataID);
 	xvoTableSetInt(objRet, "next_msg_id", 11, g_objXsBus.iNextMsgID);
-	if ( g_objXsBus.pDataList ) {
-		xrtListWalk(g_objXsBus.pDataList, (List_EachProc)XS_BusBuildStatusProc, objItems);
+	xvoTableSetInt(objRet, "total_queued", 12, g_objXsBus.iTotalQueued);
+	xvoTableSetInt(objRet, "total_delivered", 15, g_objXsBus.iTotalDelivered);
+	xvoTableSetInt(objRet, "total_dropped", 13, g_objXsBus.iTotalDropped);
+	xvoTableSetInt(objRet, "last_queue_time", 15, g_objXsBus.tLastQueued);
+	xvoTableSetInt(objRet, "last_dispatch_time", 18, g_objXsBus.tLastDispatch);
+	XS_BusSetTimeFields(objRet, g_objXsBus.tLastQueued, g_objXsBus.tLastDispatch);
+	if ( g_objXsBus.arrDataItems ) {
+		uint32 i;
+
+		for ( i = 1; i <= g_objXsBus.arrDataItems->Count; i++ ) {
+			XS_BusDataItem* objItem = xrtArrayGet_Inline(g_objXsBus.arrDataItems, i);
+			(void)XS_BusBuildStatusProc(objItem, objItems);
+		}
 	}
 	xrtMutexUnlock(g_objXsBus.pLock);
 	xvoTableSetValue(objRet, "items", 5, objItems, TRUE);
 	return objRet;
 }
 
-static bool XS_BusBuildStatusFilterProc(int64 iKey, ptr pVal, XS_BusFilterContext* objCtx)
+static bool XS_BusBuildStatusFilterProc(const XS_BusDataItem* objItem, XS_BusFilterContext* objCtx)
 {
-	const char* sItemNamespace;
-	const char* sItemTag;
-	
-	if ( objCtx == NULL || objCtx->objItems == NULL || pVal == NULL ) {
+	if ( objCtx == NULL || objCtx->objItems == NULL || objItem == NULL || objItem->objValue == NULL ) {
+		return FALSE;
+	}
+	if ( !XS_BusMatchDataItem(objItem, objCtx->sNamespace, objCtx->sTag) ) {
 		return FALSE;
 	}
 	
-	sItemNamespace = (const char*)xrtListGetPtr(g_objXsBus.pNamespaceList, iKey);
-	sItemTag = (const char*)xrtListGetPtr(g_objXsBus.pTagList, iKey);
-	
-	if ( objCtx->sNamespace && objCtx->sNamespace[0] != '\0' ) {
-		if ( sItemNamespace == NULL || strcmp(sItemNamespace, objCtx->sNamespace) != 0 ) {
-			return FALSE;
-		}
-	}
-	if ( objCtx->sTag && objCtx->sTag[0] != '\0' ) {
-		if ( sItemTag == NULL || strcmp(sItemTag, objCtx->sTag) != 0 ) {
-			return FALSE;
-		}
-	}
-	
 	objCtx->iCount++;
-	return XS_BusBuildStatusProc(iKey, pVal, objCtx->objItems);
+	return XS_BusBuildStatusProc(objItem, objCtx->objItems);
 }
 
 static inline xvalue XS_BusBuildStatusValueEx(const char* sNamespace, const char* sTag)
@@ -697,13 +937,24 @@ static inline xvalue XS_BusBuildStatusValueEx(const char* sNamespace, const char
 	
 	xrtMutexLock(g_objXsBus.pLock);
 	xvoTableSetInt(objRet, "queue_count", 11, g_objXsBus.arrMessageQueue ? g_objXsBus.arrMessageQueue->Count : 0);
-	xvoTableSetInt(objRet, "data_count", 10, g_objXsBus.pDataList ? xrtListCount(g_objXsBus.pDataList) : 0);
+	xvoTableSetInt(objRet, "data_count", 10, g_objXsBus.arrDataItems ? g_objXsBus.arrDataItems->Count : 0);
 	xvoTableSetInt(objRet, "next_data_id", 12, g_objXsBus.iNextDataID);
 	xvoTableSetInt(objRet, "next_msg_id", 11, g_objXsBus.iNextMsgID);
+	xvoTableSetInt(objRet, "total_queued", 12, g_objXsBus.iTotalQueued);
+	xvoTableSetInt(objRet, "total_delivered", 15, g_objXsBus.iTotalDelivered);
+	xvoTableSetInt(objRet, "total_dropped", 13, g_objXsBus.iTotalDropped);
+	xvoTableSetInt(objRet, "last_queue_time", 15, g_objXsBus.tLastQueued);
+	xvoTableSetInt(objRet, "last_dispatch_time", 18, g_objXsBus.tLastDispatch);
+	XS_BusSetTimeFields(objRet, g_objXsBus.tLastQueued, g_objXsBus.tLastDispatch);
 	xvoTableSetText(objRet, "namespace", 9, (ptr)(sNamespace ? sNamespace : ""), 0, FALSE);
 	xvoTableSetText(objRet, "tag", 3, (ptr)(sTag ? sTag : ""), 0, FALSE);
-	if ( g_objXsBus.pDataList ) {
-		xrtListWalk(g_objXsBus.pDataList, (List_EachProc)XS_BusBuildStatusFilterProc, &objCtx);
+	if ( g_objXsBus.arrDataItems ) {
+		uint32 i;
+
+		for ( i = 1; i <= g_objXsBus.arrDataItems->Count; i++ ) {
+			XS_BusDataItem* objItem = xrtArrayGet_Inline(g_objXsBus.arrDataItems, i);
+			(void)XS_BusBuildStatusFilterProc(objItem, &objCtx);
+		}
 	}
 	xrtMutexUnlock(g_objXsBus.pLock);
 	
@@ -740,20 +991,18 @@ static inline char* XS_BusBuildStatusJsonEx(const char* sNamespace, const char* 
 	return sRet;
 }
 
-static bool XS_BusBuildNamespaceStatsProc(int64 iKey, ptr pVal, XS_BusNamespaceStatsContext* objCtx)
+static bool XS_BusBuildNamespaceStatsProc(const XS_BusDataItem* objData, XS_BusNamespaceStatsContext* objCtx)
 {
 	const char* sNamespace;
 	uint32 i;
 	xvalue objItem;
 	int64 iNamespaceCount;
-	(void)iKey;
-	(void)pVal;
 	
-	if ( objCtx == NULL || objCtx->objItems == NULL ) {
+	if ( objCtx == NULL || objCtx->objItems == NULL || objData == NULL || objData->objValue == NULL ) {
 		return FALSE;
 	}
 	
-	sNamespace = (const char*)xrtListGetPtr(g_objXsBus.pNamespaceList, iKey);
+	sNamespace = objData->sNamespace;
 	if ( sNamespace == NULL || sNamespace[0] == '\0' ) {
 		sNamespace = "(default)";
 	}
@@ -795,9 +1044,20 @@ static inline xvalue XS_BusBuildNamespaceStatsValue(void)
 	
 	xrtMutexLock(g_objXsBus.pLock);
 	xvoTableSetInt(objRet, "queue_count", 11, g_objXsBus.arrMessageQueue ? g_objXsBus.arrMessageQueue->Count : 0);
-	xvoTableSetInt(objRet, "data_count", 10, g_objXsBus.pDataList ? xrtListCount(g_objXsBus.pDataList) : 0);
-	if ( g_objXsBus.pDataList ) {
-		xrtListWalk(g_objXsBus.pDataList, (List_EachProc)XS_BusBuildNamespaceStatsProc, &objCtx);
+	xvoTableSetInt(objRet, "data_count", 10, g_objXsBus.arrDataItems ? g_objXsBus.arrDataItems->Count : 0);
+	xvoTableSetInt(objRet, "total_queued", 12, g_objXsBus.iTotalQueued);
+	xvoTableSetInt(objRet, "total_delivered", 15, g_objXsBus.iTotalDelivered);
+	xvoTableSetInt(objRet, "total_dropped", 13, g_objXsBus.iTotalDropped);
+	xvoTableSetInt(objRet, "last_queue_time", 15, g_objXsBus.tLastQueued);
+	xvoTableSetInt(objRet, "last_dispatch_time", 18, g_objXsBus.tLastDispatch);
+	XS_BusSetTimeFields(objRet, g_objXsBus.tLastQueued, g_objXsBus.tLastDispatch);
+	if ( g_objXsBus.arrDataItems ) {
+		uint32 i;
+
+		for ( i = 1; i <= g_objXsBus.arrDataItems->Count; i++ ) {
+			XS_BusDataItem* objItem = xrtArrayGet_Inline(g_objXsBus.arrDataItems, i);
+			(void)XS_BusBuildNamespaceStatsProc(objItem, &objCtx);
+		}
 	}
 	xrtMutexUnlock(g_objXsBus.pLock);
 	
@@ -822,34 +1082,16 @@ static inline char* XS_BusBuildNamespaceStatsJson(void)
 
 static inline int64 XS_BusDataFindFirst(const char* sNamespace, const char* sTag)
 {
-	int64 iID;
+	uint32 i;
 	
 	xrtMutexLock(g_objXsBus.pLock);
-	for ( iID = 1; iID < g_objXsBus.iNextDataID; iID++ ) {
-		xvalue objVal = (xvalue)xrtListGetPtr(g_objXsBus.pDataList, iID);
-		const char* sItemNamespace;
-		const char* sItemTag;
-		
-		if ( objVal == NULL ) {
-			continue;
+	for ( i = 1; i <= g_objXsBus.arrDataItems->Count; i++ ) {
+		XS_BusDataItem* objItem = xrtArrayGet_Inline(g_objXsBus.arrDataItems, i);
+
+		if ( XS_BusMatchDataItem(objItem, sNamespace, sTag) ) {
+			xrtMutexUnlock(g_objXsBus.pLock);
+			return objItem->iID;
 		}
-		
-		sItemNamespace = (const char*)xrtListGetPtr(g_objXsBus.pNamespaceList, iID);
-		sItemTag = (const char*)xrtListGetPtr(g_objXsBus.pTagList, iID);
-		
-		if ( sNamespace && sNamespace[0] != '\0' ) {
-			if ( sItemNamespace == NULL || strcmp(sItemNamespace, sNamespace) != 0 ) {
-				continue;
-			}
-		}
-		if ( sTag && sTag[0] != '\0' ) {
-			if ( sItemTag == NULL || strcmp(sItemTag, sTag) != 0 ) {
-				continue;
-			}
-		}
-		
-		xrtMutexUnlock(g_objXsBus.pLock);
-		return iID;
 	}
 	xrtMutexUnlock(g_objXsBus.pLock);
 	return 0;
@@ -858,47 +1100,31 @@ static inline int64 XS_BusDataFindFirst(const char* sNamespace, const char* sTag
 static inline int64 XS_BusDataRemoveByQuery(const char* sNamespace, const char* sTag, int32 iLimit)
 {
 	int64 arrID[256];
-	int64 iID;
 	int64 iRemoved = 0;
 	uint32 iCount = 0;
+	uint32 i;
 	
 	if ( iLimit <= 0 || iLimit > 256 ) {
 		iLimit = 256;
 	}
 	
 	xrtMutexLock(g_objXsBus.pLock);
-	for ( iID = 1; iID < g_objXsBus.iNextDataID; iID++ ) {
-		xvalue objVal = (xvalue)xrtListGetPtr(g_objXsBus.pDataList, iID);
-		const char* sItemNamespace;
-		const char* sItemTag;
-		
-		if ( objVal == NULL ) {
+	for ( i = 1; i <= g_objXsBus.arrDataItems->Count; i++ ) {
+		XS_BusDataItem* objItem = xrtArrayGet_Inline(g_objXsBus.arrDataItems, i);
+
+		if ( !XS_BusMatchDataItem(objItem, sNamespace, sTag) ) {
 			continue;
 		}
-		
-		sItemNamespace = (const char*)xrtListGetPtr(g_objXsBus.pNamespaceList, iID);
-		sItemTag = (const char*)xrtListGetPtr(g_objXsBus.pTagList, iID);
-		
-		if ( sNamespace && sNamespace[0] != '\0' ) {
-			if ( sItemNamespace == NULL || strcmp(sItemNamespace, sNamespace) != 0 ) {
-				continue;
-			}
-		}
-		if ( sTag && sTag[0] != '\0' ) {
-			if ( sItemTag == NULL || strcmp(sItemTag, sTag) != 0 ) {
-				continue;
-			}
-		}
-		
-		arrID[iCount++] = iID;
+
+		arrID[iCount++] = objItem->iID;
 		if ( iCount >= (uint32)iLimit ) {
 			break;
 		}
 	}
 	xrtMutexUnlock(g_objXsBus.pLock);
 	
-	for ( iID = 0; iID < (int64)iCount; iID++ ) {
-		if ( XS_BusDataRemove(arrID[iID]) ) {
+	for ( i = 0; i < iCount; i++ ) {
+		if ( XS_BusDataRemove(arrID[i]) ) {
 			iRemoved++;
 		}
 	}
@@ -934,6 +1160,8 @@ static inline bool XS_BusQueueMessage(XS_MessageTarget iTargetType, const char* 
 		xvoAddRef(objArgs);
 		objMsg->objArgs = objArgs;
 	}
+	g_objXsBus.iTotalQueued++;
+	g_objXsBus.tLastQueued = objMsg->tPost;
 	xrtMutexUnlock(g_objXsBus.pLock);
 	return TRUE;
 }
@@ -1052,6 +1280,10 @@ static inline void XS_BusDispatchMessages(xarray arrServers)
 		}
 		
 		if ( !bHandled ) {
+			xrtMutexLock(g_objXsBus.pLock);
+			g_objXsBus.iTotalDropped++;
+			g_objXsBus.tLastDispatch = xrtNow();
+			xrtMutexUnlock(g_objXsBus.pLock);
 			XS_LogWarn(
 				"message dropped: topic=%s server=%s host=%s data=%lld",
 				objMsg.sTopic ? objMsg.sTopic : "(null)",
@@ -1059,6 +1291,11 @@ static inline void XS_BusDispatchMessages(xarray arrServers)
 				objMsg.sHost ? objMsg.sHost : "(null)",
 				(long long)objMsg.iDataID
 			);
+		} else {
+			xrtMutexLock(g_objXsBus.pLock);
+			g_objXsBus.iTotalDelivered++;
+			g_objXsBus.tLastDispatch = xrtNow();
+			xrtMutexUnlock(g_objXsBus.pLock);
 		}
 		
 		if ( objMsg.iDataID > 0 ) {

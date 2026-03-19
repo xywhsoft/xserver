@@ -21,6 +21,10 @@ typedef struct {
 	bool Busy;
 	bool Success;
 	bool HasResult;
+	xtime LastTime;
+	int64 iTotalCount;
+	int64 iSuccessCount;
+	int64 iFailureCount;
 	char sServerName[128];
 	char sHostName[128];
 	char sMessage[256];
@@ -114,10 +118,22 @@ static inline bool XS_TakeConfigReloadRequest(XS_ConfigReloadRequest* pReq)
 
 static inline void XS_SetConfigReloadStatus(bool bSuccess, const XS_ConfigReloadRequest* pReq, const char* sMessage)
 {
+	int64 iTotalCount;
+	int64 iSuccessCount;
+	int64 iFailureCount;
+
+	iTotalCount = g_tXsConfigReloadStatus.iTotalCount;
+	iSuccessCount = g_tXsConfigReloadStatus.iSuccessCount;
+	iFailureCount = g_tXsConfigReloadStatus.iFailureCount;
+
 	memset(&g_tXsConfigReloadStatus, 0, sizeof(g_tXsConfigReloadStatus));
 	g_tXsConfigReloadStatus.Busy = FALSE;
 	g_tXsConfigReloadStatus.Success = bSuccess;
 	g_tXsConfigReloadStatus.HasResult = TRUE;
+	g_tXsConfigReloadStatus.LastTime = xrtNow();
+	g_tXsConfigReloadStatus.iTotalCount = iTotalCount + 1;
+	g_tXsConfigReloadStatus.iSuccessCount = iSuccessCount + (bSuccess ? 1 : 0);
+	g_tXsConfigReloadStatus.iFailureCount = iFailureCount + (bSuccess ? 0 : 1);
 	if ( pReq ) {
 		if ( pReq->sServerName[0] ) {
 			strncpy(g_tXsConfigReloadStatus.sServerName, pReq->sServerName, sizeof(g_tXsConfigReloadStatus.sServerName) - 1);
@@ -164,6 +180,46 @@ static inline const char* XS_ConfigReloadStatusHost(void)
 static inline const char* XS_ConfigReloadStatusMessage(void)
 {
 	return g_tXsConfigReloadStatus.sMessage[0] ? g_tXsConfigReloadStatus.sMessage : "(none)";
+}
+
+static inline xtime XS_ConfigReloadStatusTime(void)
+{
+	return g_tXsConfigReloadStatus.LastTime;
+}
+
+static inline int64 XS_ConfigReloadStatusTotalCount(void)
+{
+	return g_tXsConfigReloadStatus.iTotalCount;
+}
+
+static inline int64 XS_ConfigReloadStatusSuccessCount(void)
+{
+	return g_tXsConfigReloadStatus.iSuccessCount;
+}
+
+static inline int64 XS_ConfigReloadStatusFailureCount(void)
+{
+	return g_tXsConfigReloadStatus.iFailureCount;
+}
+
+static inline void XS_ClearConfigReloadStatus(void)
+{
+	int64 iTotalCount;
+	int64 iSuccessCount;
+	int64 iFailureCount;
+
+	iTotalCount = g_tXsConfigReloadStatus.iTotalCount;
+	iSuccessCount = g_tXsConfigReloadStatus.iSuccessCount;
+	iFailureCount = g_tXsConfigReloadStatus.iFailureCount;
+	memset(&g_tXsConfigReloadStatus, 0, sizeof(g_tXsConfigReloadStatus));
+	g_tXsConfigReloadStatus.iTotalCount = iTotalCount;
+	g_tXsConfigReloadStatus.iSuccessCount = iSuccessCount;
+	g_tXsConfigReloadStatus.iFailureCount = iFailureCount;
+}
+
+static inline void XS_ResetConfigReloadStats(void)
+{
+	memset(&g_tXsConfigReloadStatus, 0, sizeof(g_tXsConfigReloadStatus));
 }
 
 static inline bool XS_ReloadHostScript(XS_ServerConfig* objServer, XS_HostConfig* objHost);

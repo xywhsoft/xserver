@@ -37,6 +37,8 @@ static inline void XS_ResetHostScriptState(XS_HostConfig* objHost)
 	objHost->procWsOpen = NULL;
 	objHost->procWsText = NULL;
 	objHost->procWsBinary = NULL;
+	objHost->procWsPing = NULL;
+	objHost->procWsPong = NULL;
 	objHost->procWsClose = NULL;
 	objHost->procSetGlobalData = NULL;
 }
@@ -284,6 +286,8 @@ static inline void XS_AttachHostScriptState(XS_ServerConfig* objServer, XS_HostC
 	objHost->procWsOpen = (XS_ScriptWsOpenProc)tcc_get_symbol(s, "WsOpenProc");
 	objHost->procWsText = (XS_ScriptWsTextProc)tcc_get_symbol(s, "WsTextProc");
 	objHost->procWsBinary = (XS_ScriptWsBinaryProc)tcc_get_symbol(s, "WsBinaryProc");
+	objHost->procWsPing = (XS_ScriptWsPingProc)tcc_get_symbol(s, "WsPingProc");
+	objHost->procWsPong = (XS_ScriptWsPongProc)tcc_get_symbol(s, "WsPongProc");
 	objHost->procWsClose = (XS_ScriptWsCloseProc)tcc_get_symbol(s, "WsCloseProc");
 	objHost->procSetGlobalData = (XS_ScriptSetGlobalDataProc)tcc_get_symbol(s, "XS_SetGlobalDate");
 	

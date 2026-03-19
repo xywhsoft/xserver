@@ -319,6 +319,7 @@ static inline bool XS_LoadServerConfig(xvalue objTable, const char* sBaseDir, XS
 		{"param", XVO_DT_TEXT, FALSE},
 		{"backlog", XVO_DT_INT, FALSE},
 		{"recv_limit", XVO_DT_INT, FALSE},
+		{"ws_message_limit", XVO_DT_INT, FALSE},
 		{"path_limit", XVO_DT_INT, FALSE},
 		{"header_limit", XVO_DT_INT, FALSE},
 		{"body_limit", XVO_DT_INT, FALSE},
@@ -362,6 +363,7 @@ static inline bool XS_LoadServerConfig(xvalue objTable, const char* sBaseDir, XS
 	if ( !XS_RequireFieldType(objTable, "param", 5, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "backlog", 7, XVO_DT_INT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "recv_limit", 10, XVO_DT_INT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldType(objTable, "ws_message_limit", 16, XVO_DT_INT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "path_limit", 10, XVO_DT_INT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "header_limit", 12, XVO_DT_INT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "body_limit", 10, XVO_DT_INT, sScope, FALSE) ) return FALSE;
@@ -406,6 +408,15 @@ static inline bool XS_LoadServerConfig(xvalue objTable, const char* sBaseDir, XS
 			return FALSE;
 		}
 		objServer->RecvLimit = (uint32)iRecvLimit;
+	}
+	objVal = xvoTableGetValue(objTable, "ws_message_limit", 16);
+	if ( objVal && objVal->Type != XVO_DT_NULL ) {
+		int64 iWsMessageLimit = xvoTableGetInt(objTable, "ws_message_limit", 16);
+		if ( iWsMessageLimit <= 0 || iWsMessageLimit > (int64)UINT32_MAX ) {
+			XS_ReportError("%s field out of range: ws_message_limit", sScope);
+			return FALSE;
+		}
+		objServer->WsMessageLimit = (uint32)iWsMessageLimit;
 	}
 	objServer->WsProtocol = XS_CopyText(xvoTableGetText(objTable, "ws_protocol", 11));
 	objServer->EnableTLS = xvoTableGetBool(objTable, "tls", 3);

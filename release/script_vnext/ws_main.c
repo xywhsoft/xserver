@@ -44,6 +44,42 @@ void WsOpenProc(XS_ServerObject objServer, XS_HostObject objHost, void* pConn)
 	xsLog(sText);
 }
 
+void WsPingProc(XS_ServerObject objServer, XS_HostObject objHost, void* pConn, const void* pData, size_t iLen)
+{
+	char sText[256];
+	(void)pConn;
+
+	snprintf(
+		sText,
+		sizeof(sText),
+		"ws ping server=%s host=%s bytes=%u payload=%.*s",
+		xsServerName(objServer),
+		xsHostName(objHost),
+		(unsigned)iLen,
+		(int)iLen,
+		pData ? (const char*)pData : ""
+	);
+	xsLog(sText);
+}
+
+void WsPongProc(XS_ServerObject objServer, XS_HostObject objHost, void* pConn, const void* pData, size_t iLen)
+{
+	char sText[256];
+	(void)pConn;
+
+	snprintf(
+		sText,
+		sizeof(sText),
+		"ws pong server=%s host=%s bytes=%u payload=%.*s",
+		xsServerName(objServer),
+		xsHostName(objHost),
+		(unsigned)iLen,
+		(int)iLen,
+		pData ? (const char*)pData : ""
+	);
+	xsLog(sText);
+}
+
 bool WsTextProc(XS_ServerObject objServer, XS_HostObject objHost, void* pConn, const char* pData, size_t iLen)
 {
 	char sBuf[512];

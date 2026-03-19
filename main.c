@@ -19,6 +19,49 @@
 #include "src/core/config.h"
 #include "src/core/bus.h"
 
+static char* g_sXsConfigFile = NULL;
+static bool g_bXsConfigFileOwned = FALSE;
+static xtime g_tXsStartTime = 0;
+static double g_fXsStartTick = 0.0;
+static uint32 g_iXsEngineWorkers = 0;
+static uint32 g_iXsRuntimeServerCount = 0;
+static volatile int64 g_iXsHttpReqCount = 0;
+static volatile int64 g_iXsHttpResp2xxCount = 0;
+static volatile int64 g_iXsHttpResp3xxCount = 0;
+static volatile int64 g_iXsHttpResp4xxCount = 0;
+static volatile int64 g_iXsHttpResp5xxCount = 0;
+static volatile int64 g_iXsHttpConnCurrent = 0;
+static volatile int64 g_iXsHttpConnPeak = 0;
+static volatile int64 g_iXsHttpMethodGetCount = 0;
+static volatile int64 g_iXsHttpMethodPostCount = 0;
+static volatile int64 g_iXsHttpMethodHeadCount = 0;
+static volatile int64 g_iXsHttpMethodOtherCount = 0;
+static volatile int64 g_iXsHttpLastMethodType = 0;
+static volatile int64 g_iXsHttpLastAppMethodType = 0;
+static volatile int64 g_iXsHttpTimeTotalMS = 0;
+static volatile int64 g_iXsHttpTimeMaxMS = 0;
+static volatile int64 g_iXsHttpLastStatusCode = 0;
+static volatile int64 g_iXsHttpLastAppStatusCode = 0;
+static xtime g_tXsHttpLastRequestTime = 0;
+static xtime g_tXsHttpLastAppRequestTime = 0;
+static char g_sXsHttpLastPath[1024] = {0};
+static char g_sXsHttpLastTarget[2048] = {0};
+static char g_sXsHttpLastAppPath[1024] = {0};
+static char g_sXsHttpLastAppTarget[2048] = {0};
+static volatile int64 g_iXsWsConnCurrent = 0;
+static volatile int64 g_iXsWsConnPeak = 0;
+static volatile int64 g_iXsWsOpenCount = 0;
+static volatile int64 g_iXsWsCloseCount = 0;
+static volatile int64 g_iXsWsTextCount = 0;
+static volatile int64 g_iXsWsBinaryCount = 0;
+static volatile int64 g_iXsWsPingCount = 0;
+static volatile int64 g_iXsWsPongCount = 0;
+static volatile int64 g_iXsWsErrorCount = 0;
+static volatile int64 g_iXsCheckConfigTotalCount = 0;
+static volatile int64 g_iXsCheckConfigSuccessCount = 0;
+static volatile int64 g_iXsCheckConfigFailureCount = 0;
+static xtime g_tXsCheckConfigLastTime = 0;
+
 static inline bool XS_RequestConfigReloadEx(const char* sServerName, const char* sHostName, bool bForce);
 static inline XS_HostConfig* XS_FindServerHostByName(XS_ServerConfig* objServer, const char* sHostName);
 static inline int XS_ReloadServerHostScript(XS_ServerConfig* objServer, XS_HostConfig* objHost, bool bForce);
@@ -30,6 +73,12 @@ static inline bool XS_ConfigReloadStatusSuccess(void);
 static inline const char* XS_ConfigReloadStatusServer(void);
 static inline const char* XS_ConfigReloadStatusHost(void);
 static inline const char* XS_ConfigReloadStatusMessage(void);
+static inline xtime XS_ConfigReloadStatusTime(void);
+static inline int64 XS_ConfigReloadStatusTotalCount(void);
+static inline int64 XS_ConfigReloadStatusSuccessCount(void);
+static inline int64 XS_ConfigReloadStatusFailureCount(void);
+static inline void XS_ClearConfigReloadStatus(void);
+static inline void XS_ResetConfigReloadStats(void);
 
 // vNext 脚本层
 #include "src/script/tcc_host.h"
@@ -47,6 +96,20 @@ static inline const char* XS_ConfigReloadStatusMessage(void);
 // vNext 运行时
 #include "src/core/runtime.h"
 #include "src/core/reload.h"
+
+static inline void XS_UpdateRuntimeStats(XS_Runtime* objRuntime)
+{
+	if ( objRuntime && objRuntime->pEngine ) {
+		g_iXsEngineWorkers = xrtNetEngineGetWorkerCount(objRuntime->pEngine);
+	} else {
+		g_iXsEngineWorkers = 0;
+	}
+	if ( objRuntime && objRuntime->Servers ) {
+		g_iXsRuntimeServerCount = objRuntime->Servers->Count;
+	} else {
+		g_iXsRuntimeServerCount = 0;
+	}
+}
 
 
 
@@ -408,6 +471,7 @@ static bool XS_PerformConfigReload(XS_Config* objCfg, XS_Runtime* objRuntime, co
 	XS_FreeConfig(objCfg);
 	*objCfg = objCfgNew;
 	*objRuntime = objRuntimeNew;
+	XS_UpdateRuntimeStats(objRuntime);
 	XS_LogInfo("config reload success");
 	XS_SetConfigReloadStatus(TRUE, pReq, "config reload success");
 	return TRUE;
@@ -435,6 +499,8 @@ int main(int argc, char** argv)
 	
 	xrtInit();
 	xCore.OnError = OnError;
+	g_tXsStartTime = xrtNow();
+	g_fXsStartTick = xrtTimer();
 	
 	XS_ResetErrors();
 	
@@ -461,6 +527,14 @@ int main(int argc, char** argv)
 	
 	XS_LogInfo("XServer vNext bootstrap");
 	XS_LogInfo("loading config : %s", sOptFile);
+	if ( g_sXsConfigFile && g_bXsConfigFileOwned ) {
+		xrtFree(g_sXsConfigFile);
+	}
+	g_sXsConfigFile = XS_NormalizePath(xCore.AppPath, sOptFile);
+	g_bXsConfigFileOwned = (g_sXsConfigFile != NULL);
+	if ( !g_bXsConfigFileOwned ) {
+		g_sXsConfigFile = sOptFile;
+	}
 	
 	if ( !XS_BusInit() ) {
 		XS_LogError("bus init failed");
@@ -486,6 +560,7 @@ int main(int argc, char** argv)
 		iExitCode = 2;
 		goto ExitConfig;
 	}
+	XS_UpdateRuntimeStats(&objRuntime);
 	
 	XS_RuntimePrint(&objRuntime);
 	
@@ -531,6 +606,12 @@ ExitConfig:
 	XS_FreeConfig(&objCfg);
 ExitMain:
 	XS_BusUnit();
+	g_iXsEngineWorkers = 0;
+	if ( g_sXsConfigFile && g_bXsConfigFileOwned ) {
+		xrtFree(g_sXsConfigFile);
+	}
+	g_sXsConfigFile = NULL;
+	g_bXsConfigFileOwned = FALSE;
 	if ( bUseDefaultConfig && sOptFile ) {
 		xrtFree(sOptFile);
 	}
