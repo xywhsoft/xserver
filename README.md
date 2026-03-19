@@ -297,6 +297,9 @@ WebSocket 脚本 API 额外提供：
 - `GET /__xs/http_metrics`
 - `GET /__xs/http_metrics_json`
 - `GET /__xs/http_metrics_clear`
+- `GET /__xs/ws_metrics`
+- `GET /__xs/ws_metrics_json`
+- `GET /__xs/ws_metrics_clear`
 - `GET /__xs/dashboard`
 - `GET /__xs/dashboard_json`
 - `GET /__xs/check_config`
