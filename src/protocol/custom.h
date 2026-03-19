@@ -55,6 +55,11 @@ static void XS_CustomOnOpen(ptr pOwner, xnetstream* pStream)
 {
 	XS_ServerConfig* objServer = (XS_ServerConfig*)pOwner;
 	
+	g_iXsCustomOpenCount++;
+	g_iXsCustomConnCurrent++;
+	if ( g_iXsCustomConnCurrent > g_iXsCustomConnPeak ) {
+		g_iXsCustomConnPeak = g_iXsCustomConnCurrent;
+	}
 	XS_LogInfo(
 		"custom open: server=%s stream=%p script_open=%s script_data=%s",
 		objServer && objServer->Name ? objServer->Name : "(null)"
@@ -84,6 +89,20 @@ static void XS_CustomOnRecv(ptr pOwner, xnetstream* pStream, xnetchain* pChain)
 		XS_LogInfo("custom recv ignored: empty chain");
 		return;
 	}
+
+	if ( (objServer) && (objServer->RecvLimit > 0) && ((uint32)iLen > objServer->RecvLimit) ) {
+		g_iXsCustomInvalidCount++;
+		XS_LogWarn(
+			"custom recv limit exceeded: server=%s stream=%p bytes=%u limit=%u",
+			objServer->Name ? objServer->Name : "(null)",
+			(void*)pStream,
+			(unsigned)iLen,
+			(unsigned)objServer->RecvLimit
+		);
+		xrtNetChainClear(pChain);
+		xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
+		return;
+	}
 	
 	XS_LogInfo(
 		"custom recv: server=%s stream=%p bytes=%u script_data=%s",
@@ -102,6 +121,19 @@ static void XS_CustomOnRecv(ptr pOwner, xnetstream* pStream, xnetchain* pChain)
 	
 	(void)xrtNetChainPeek(pChain, pBuf, iLen);
 	xrtNetChainConsume(pChain, iLen);
+	g_iXsCustomRecvCount++;
+	g_iXsCustomRecvBytes += (int64)iLen;
+	g_tXsCustomLastTime = xrtNow();
+	if ( iLen > 0 ) {
+		size_t iCopy = iLen;
+		if ( iCopy >= sizeof(g_sXsCustomLastText) ) {
+			iCopy = sizeof(g_sXsCustomLastText) - 1;
+		}
+		memcpy(g_sXsCustomLastText, pBuf, iCopy);
+		g_sXsCustomLastText[iCopy] = '\0';
+	} else {
+		g_sXsCustomLastText[0] = '\0';
+	}
 	
 	if ( objServer && objServer->procStreamData ) {
 		bHandled = objServer->procStreamData(objServer, pStream, pBuf, iLen);
@@ -110,6 +142,8 @@ static void XS_CustomOnRecv(ptr pOwner, xnetstream* pStream, xnetchain* pChain)
 	if ( !bHandled ) {
 		XS_LogInfo("custom recv fallback echo: bytes=%u", (unsigned)iLen);
 		(void)xrtNetStreamSend(pStream, pBuf, iLen);
+		g_iXsCustomSendCount++;
+		g_iXsCustomSendBytes += (int64)iLen;
 	} else {
 		XS_LogInfo("custom recv handled by script: bytes=%u", (unsigned)iLen);
 	}
@@ -121,6 +155,12 @@ static void XS_CustomOnClose(ptr pOwner, xnetstream* pStream, xnet_result iReaso
 {
 	XS_ServerConfig* objServer = (XS_ServerConfig*)pOwner;
 	
+	g_iXsCustomCloseCount++;
+	g_iXsCustomLastCloseReason = (int64)iReason;
+	g_iXsCustomConnCurrent--;
+	if ( g_iXsCustomConnCurrent < 0 ) {
+		g_iXsCustomConnCurrent = 0;
+	}
 	XS_LogInfo(
 		"custom close: server=%s reason=%d",
 		objServer && objServer->Name ? objServer->Name : "(null)",
@@ -129,7 +169,6 @@ static void XS_CustomOnClose(ptr pOwner, xnetstream* pStream, xnet_result iReaso
 	if ( objServer && objServer->procStreamClose ) {
 		objServer->procStreamClose(objServer, pStream, (int)iReason);
 	}
-	xrtNetStreamDestroy(pStream);
 }
 
 static void XS_CustomOnError(ptr pOwner, xnetstream* pStream, int iSysErr)
@@ -137,6 +176,9 @@ static void XS_CustomOnError(ptr pOwner, xnetstream* pStream, int iSysErr)
 	XS_ServerConfig* objServer = (XS_ServerConfig*)pOwner;
 	(void)pStream;
 	
+	g_iXsCustomErrorCount++;
+	g_iXsCustomLastErrorCode = (int64)iSysErr;
+	g_tXsCustomLastErrorTime = xrtNow();
 	XS_LogWarn(
 		"custom error: server=%s sys=%d",
 		objServer && objServer->Name ? objServer->Name : "(null)",

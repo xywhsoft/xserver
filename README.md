@@ -300,6 +300,15 @@ WebSocket 脚本 API 额外提供：
 - `GET /__xs/ws_metrics`
 - `GET /__xs/ws_metrics_json`
 - `GET /__xs/ws_metrics_clear`
+- `GET /__xs/xtp_metrics`
+- `GET /__xs/xtp_metrics_json`
+- `GET /__xs/xtp_metrics_clear`
+- `GET /__xs/udp_metrics`
+- `GET /__xs/udp_metrics_json`
+- `GET /__xs/udp_metrics_clear`
+- `GET /__xs/custom_metrics`
+- `GET /__xs/custom_metrics_json`
+- `GET /__xs/custom_metrics_clear`
 - `GET /__xs/dashboard`
 - `GET /__xs/dashboard_json`
 - `GET /__xs/check_config`
@@ -358,7 +367,19 @@ WebSocket 脚本 API 额外提供：
 
 `GET /__xs/bus/reset` 可清空上述 bus 累计统计，不影响当前注册表中的共享数据。
 首页 `index.html` 也已经切到这些正式管理接口，并补上了配置热加载与结果查询入口；bus 区现在支持显式输入 `data_id`，也支持仅通过 `namespace/tag` 来查找、读取、续期 TTL 和删除共享数据。
-`__xs/status_json`、`__xs/health_json`、`__xs/dashboard` / `__xs/dashboard_json` 当前还会返回运行中的 `bind_ip / bind_port / tls / bind_ip_tls / bind_port_tls / addr_tls / ws_protocol / ws_message_limit / ws_conn_current / ws_conn_peak / ws_open_count / ws_close_count / ws_text_count / ws_binary_count / ws_ping_count / ws_pong_count / ws_error_count / tls_cert_file / tls_key_file / tls_ca_file / current_dir / app_file / app_mtime / app_size / app_path / build / compiler / platform / arch / mem_debug / pid / start_time / uptime_ms / engine_workers / runtime_server_count / manage_api / config_name / config_mtime / config_size / http_req_count / http_2xx_count / http_3xx_count / http_4xx_count / http_5xx_count / http_conn_current / http_conn_peak / http_get_count / http_post_count / http_head_count / http_other_count / http_time_total_ms / http_time_max_ms / http_time_avg_ms / http_last_method / http_last_status / http_last_path / http_last_target / http_last_time / http_last_age_ms / http_last_app_method / http_last_app_status / http_last_app_path / http_last_app_target / http_last_app_time / http_last_app_age_ms`，便于排障时直接定位当前进程、工作目录、运行目录、监听地址、TLS 监听、WebSocket 子协议、WebSocket 消息上限、WebSocket 连接与消息计数、TLS 证书路径、当前程序文件与配置文件的更新时间和大小、构建变体、编译器、目标平台架构、内存调试状态、持续运行时长、运行中的服务数量、工作线程规模、HTTP 请求规模、方法分布、当前连接、峰值连接、最近一次任意请求，以及最近一次非 `__xs/*` 业务请求的方法、路径、状态与处理耗时，以及管理面是否启用。
+`__xs/ws_metrics`、`__xs/ws_metrics_json` 当前还会额外返回 `ws_last_error_code / ws_last_frame_type / ws_last_bytes / ws_last_text / ws_last_time / ws_last_age_ms / ws_last_error_time / ws_last_error_age_ms`，便于直接看到最近一次 WebSocket 文本、二进制或 ping/pong 事件的类型、内容摘要、最近一次错误现场与时间上下文。
+
+`__xs/status_json`、`__xs/health_json`、`__xs/dashboard` / `__xs/dashboard_json` 当前还会返回运行中的 `bind_ip / bind_port / tls / bind_ip_tls / bind_port_tls / addr_tls / ws_protocol / ws_message_limit / ws_conn_current / ws_conn_peak / ws_open_count / ws_close_count / ws_text_count / ws_binary_count / ws_ping_count / ws_pong_count / ws_error_count / ws_last_error_code / ws_last_frame_type / ws_last_bytes / ws_last_text / ws_last_time / ws_last_age_ms / ws_last_error_time / ws_last_error_age_ms / tls_cert_file / tls_key_file / tls_ca_file / current_dir / app_file / app_mtime / app_size / app_path / build / compiler / platform / arch / mem_debug / pid / start_time / uptime_ms / engine_workers / runtime_server_count / manage_api / config_name / config_mtime / config_size / http_req_count / http_2xx_count / http_3xx_count / http_4xx_count / http_5xx_count / http_conn_current / http_conn_peak / http_get_count / http_post_count / http_head_count / http_other_count / http_time_total_ms / http_time_max_ms / http_time_avg_ms / http_last_method / http_last_status / http_last_path / http_last_target / http_last_time / http_last_age_ms / http_last_app_method / http_last_app_status / http_last_app_path / http_last_app_target / http_last_app_time / http_last_app_age_ms`，便于排障时直接定位当前进程、工作目录、运行目录、监听地址、TLS 监听、WebSocket 子协议、WebSocket 消息上限、WebSocket 连接与消息计数、最近一次 WebSocket 帧上下文、最近一次 WebSocket 错误现场、TLS 证书路径、当前程序文件与配置文件的更新时间和大小、构建变体、编译器、目标平台架构、内存调试状态、持续运行时长、运行中的服务数量、工作线程规模、HTTP 请求规模、方法分布、当前连接、峰值连接、最近一次任意请求，以及最近一次非 `__xs/*` 业务请求的方法、路径、状态与处理耗时，以及管理面是否启用。
+
+`__xs/status_json`、`__xs/dashboard_json` 当前还会额外返回 `xtp_conn_current / xtp_conn_peak / xtp_open_count / xtp_close_count / xtp_error_count / xtp_invalid_count / xtp_msg_count / xtp_req_count / xtp_resp_count / xtp_push_count / xtp_event_count / xtp_send_count / xtp_recv_bytes / xtp_send_bytes / xtp_last_msg_type / xtp_last_status / xtp_last_msg_id / xtp_last_cmd / xtp_last_time / xtp_last_age_ms / xtp_last_invalid_reason / xtp_last_invalid_time / xtp_last_invalid_age_ms`，便于观察 `xtp / xtps` 的连接、坏包数量、消息类型分布、最近一包上下文、最近一次坏包原因与收发字节统计。
+
+`__xs/status_json`、`__xs/dashboard_json` 当前还会额外返回 `udp_recv_count / udp_send_count / udp_error_count / udp_last_error_code / udp_recv_bytes / udp_send_bytes / udp_last_from / udp_last_text / udp_last_time / udp_last_age_ms / udp_last_error_time / udp_last_error_age_ms`，便于观察 `udp` 的收发包数、字节数、错误数、最近一包上下文以及最近一次错误现场。
+
+`__xs/custom_metrics`、`__xs/custom_metrics_json` 当前还会额外返回 `custom_invalid_count / custom_last_close_reason / custom_last_error_code / custom_last_error_time / custom_last_error_age_ms`，便于区分脚本层坏包、传输层错误以及最近一次断开现场。
+
+`__xs/status_json`、`__xs/dashboard_json` 当前还会额外返回 `custom_conn_current / custom_conn_peak / custom_open_count / custom_close_count / custom_error_count / custom_invalid_count / custom_last_close_reason / custom_last_error_code / custom_last_error_time / custom_last_error_age_ms / custom_recv_count / custom_send_count / custom_recv_bytes / custom_send_bytes / custom_last_text / custom_last_time / custom_last_age_ms`，便于观察 `custom / tcp` 的连接、收发、错误、最近一次断开原因和最近一次收包上下文。
+
+`__xs/dashboard` 文本版现在也会直接输出 `ws / xtp / udp / custom` 的关键运行态字段，便于终端排障时不切 JSON 也能看到协议侧的连接、收发、最近一包与错误现场。
 
 `__xs/reload_status_json`、`__xs/health_json`、`__xs/dashboard_json` 当前还会返回 `reload_total_count / reload_success_count / reload_failure_count`，便于区分最近一次结果和累计重载结果。
 

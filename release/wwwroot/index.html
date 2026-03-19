@@ -555,6 +555,90 @@
 						<div class="status-value" id="StatusWsError">-</div>
 					</div>
 					<div class="status-item">
+						<div class="status-label">WS Error Age</div>
+						<div class="status-value" id="StatusWsErrorAge">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">WS Last</div>
+						<div class="status-value" id="StatusWsLast">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">WS Last Age</div>
+						<div class="status-value" id="StatusWsLastAge">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">XTP Conn</div>
+						<div class="status-value" id="StatusXtpConn">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">XTP Msg</div>
+						<div class="status-value" id="StatusXtpMsg">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">XTP Req / Resp</div>
+						<div class="status-value" id="StatusXtpReqResp">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">XTP Invalid</div>
+						<div class="status-value" id="StatusXtpInvalid">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">XTP Last</div>
+						<div class="status-value" id="StatusXtpLast">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">XTP Invalid Reason</div>
+						<div class="status-value" id="StatusXtpInvalidReason">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">XTP Invalid Age</div>
+						<div class="status-value" id="StatusXtpInvalidAge">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">UDP Recv / Send</div>
+						<div class="status-value" id="StatusUdpPackets">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">UDP Bytes</div>
+						<div class="status-value" id="StatusUdpBytes">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">UDP Last From</div>
+						<div class="status-value" id="StatusUdpFrom">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">UDP Last Age</div>
+						<div class="status-value" id="StatusUdpAge">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">UDP Error</div>
+						<div class="status-value" id="StatusUdpError">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">TCP Conn</div>
+						<div class="status-value" id="StatusCustomConn">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">TCP Recv / Send</div>
+						<div class="status-value" id="StatusCustomPackets">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">TCP Invalid</div>
+						<div class="status-value" id="StatusCustomInvalid">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">TCP Error</div>
+						<div class="status-value" id="StatusCustomError">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">TCP Bytes</div>
+						<div class="status-value" id="StatusCustomBytes">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">TCP Last Age</div>
+						<div class="status-value" id="StatusCustomAge">-</div>
+					</div>
+					<div class="status-item">
 						<div class="status-label">Bus Queued</div>
 						<div class="status-value" id="StatusBusQueued">-</div>
 					</div>
@@ -679,6 +763,30 @@
 						<a class="demo-link" href="/__xs/ws_metrics_clear" target="_blank">
 							<div class="demo-link-title">清空 WS 指标</div>
 							<div class="demo-link-desc">将 WebSocket 计数归零，便于压测窗口或故障复盘重新采样。</div>
+						</a>
+						<a class="demo-link" href="/__xs/xtp_metrics_json" target="_blank">
+							<div class="demo-link-title">XTP 指标 JSON</div>
+							<div class="demo-link-desc">查看 XTP 连接、消息类型分布、最近一包上下文与收发字节统计。</div>
+						</a>
+						<a class="demo-link" href="/__xs/xtp_metrics_clear" target="_blank">
+							<div class="demo-link-title">清空 XTP 指标</div>
+							<div class="demo-link-desc">将 XTP 计数归零，便于协议压测窗口和故障复盘重新采样。</div>
+						</a>
+						<a class="demo-link" href="/__xs/udp_metrics_json" target="_blank">
+							<div class="demo-link-title">UDP 指标 JSON</div>
+							<div class="demo-link-desc">查看 UDP 收发包数、字节数、错误数和最近一包上下文。</div>
+						</a>
+						<a class="demo-link" href="/__xs/udp_metrics_clear" target="_blank">
+							<div class="demo-link-title">清空 UDP 指标</div>
+							<div class="demo-link-desc">将 UDP 计数归零，便于 UDP 压测窗口和故障复盘重新采样。</div>
+						</a>
+						<a class="demo-link" href="/__xs/custom_metrics_json" target="_blank">
+							<div class="demo-link-title">Custom/TCP 指标 JSON</div>
+							<div class="demo-link-desc">查看 custom/tcp 连接、收发、错误和最近一次收包上下文。</div>
+						</a>
+						<a class="demo-link" href="/__xs/custom_metrics_clear" target="_blank">
+							<div class="demo-link-title">清空 Custom/TCP 指标</div>
+							<div class="demo-link-desc">将 custom/tcp 计数归零，便于 TCP 压测窗口和故障复盘重新采样。</div>
 						</a>
 						<a class="demo-link" href="/__xs/dashboard" target="_blank">
 							<div class="demo-link-title">总览文本</div>
@@ -954,7 +1062,88 @@
 						' / ' +
 						((tblStatus.ws_pong_count !== undefined) ? String(tblStatus.ws_pong_count) : '-')
 					);
-					procSetText('StatusWsError', (tblStatus.ws_error_count !== undefined) ? String(tblStatus.ws_error_count) : '-');
+					procSetText(
+						'StatusWsError',
+						((tblStatus.ws_error_count !== undefined) ? String(tblStatus.ws_error_count) : '-') +
+						' / ' +
+						((tblStatus.ws_last_error_code !== undefined) ? String(tblStatus.ws_last_error_code) : '-')
+					);
+					procSetText(
+						'StatusWsLast',
+						(tblStatus.ws_last_frame_type ? tblStatus.ws_last_frame_type : '-') +
+						' / ' +
+						((tblStatus.ws_last_bytes !== undefined) ? String(tblStatus.ws_last_bytes) : '-')
+					);
+					procSetText('StatusWsErrorAge', (tblStatus.ws_last_error_age_ms !== undefined && tblStatus.ws_last_error_age_ms >= 0) ? String(tblStatus.ws_last_error_age_ms) + ' ms' : '-');
+					procSetText('StatusWsLastAge', (tblStatus.ws_last_age_ms !== undefined && tblStatus.ws_last_age_ms >= 0) ? String(tblStatus.ws_last_age_ms) + ' ms' : '-');
+					procSetText(
+						'StatusXtpConn',
+						((tblStatus.xtp_conn_current !== undefined) ? String(tblStatus.xtp_conn_current) : '-') +
+						' / ' +
+						((tblStatus.xtp_conn_peak !== undefined) ? String(tblStatus.xtp_conn_peak) : '-')
+					);
+					procSetText('StatusXtpMsg', (tblStatus.xtp_msg_count !== undefined) ? String(tblStatus.xtp_msg_count) : '-');
+					procSetText(
+						'StatusXtpReqResp',
+						((tblStatus.xtp_req_count !== undefined) ? String(tblStatus.xtp_req_count) : '-') +
+						' / ' +
+						((tblStatus.xtp_resp_count !== undefined) ? String(tblStatus.xtp_resp_count) : '-')
+					);
+					procSetText('StatusXtpInvalid', (tblStatus.xtp_invalid_count !== undefined) ? String(tblStatus.xtp_invalid_count) : '-');
+					procSetText(
+						'StatusXtpLast',
+						(tblStatus.xtp_last_msg_type ? tblStatus.xtp_last_msg_type : '-') +
+						' / ' +
+						(tblStatus.xtp_last_cmd ? tblStatus.xtp_last_cmd : '-')
+					);
+					procSetText('StatusXtpInvalidReason', tblStatus.xtp_last_invalid_reason || '-');
+					procSetText('StatusXtpInvalidAge', (tblStatus.xtp_last_invalid_age_ms !== undefined && tblStatus.xtp_last_invalid_age_ms >= 0) ? String(tblStatus.xtp_last_invalid_age_ms) + ' ms' : '-');
+					procSetText(
+						'StatusUdpPackets',
+						((tblStatus.udp_recv_count !== undefined) ? String(tblStatus.udp_recv_count) : '-') +
+						' / ' +
+						((tblStatus.udp_send_count !== undefined) ? String(tblStatus.udp_send_count) : '-')
+					);
+					procSetText(
+						'StatusUdpBytes',
+						((tblStatus.udp_recv_bytes !== undefined) ? String(tblStatus.udp_recv_bytes) : '-') +
+						' / ' +
+						((tblStatus.udp_send_bytes !== undefined) ? String(tblStatus.udp_send_bytes) : '-')
+					);
+					procSetText('StatusUdpFrom', tblStatus.udp_last_from || '-');
+					procSetText('StatusUdpAge', (tblStatus.udp_last_age_ms !== undefined && tblStatus.udp_last_age_ms >= 0) ? String(tblStatus.udp_last_age_ms) + ' ms' : '-');
+					procSetText(
+						'StatusUdpError',
+						((tblStatus.udp_error_count !== undefined) ? String(tblStatus.udp_error_count) : '-') +
+						' / ' +
+						((tblStatus.udp_last_error_code !== undefined) ? String(tblStatus.udp_last_error_code) : '-')
+					);
+					procSetText(
+						'StatusCustomConn',
+						((tblStatus.custom_conn_current !== undefined) ? String(tblStatus.custom_conn_current) : '-') +
+						' / ' +
+						((tblStatus.custom_conn_peak !== undefined) ? String(tblStatus.custom_conn_peak) : '-')
+					);
+					procSetText(
+						'StatusCustomPackets',
+						((tblStatus.custom_recv_count !== undefined) ? String(tblStatus.custom_recv_count) : '-') +
+						' / ' +
+						((tblStatus.custom_send_count !== undefined) ? String(tblStatus.custom_send_count) : '-')
+					);
+					procSetText('StatusCustomInvalid', (tblStatus.custom_invalid_count !== undefined) ? String(tblStatus.custom_invalid_count) : '-');
+					procSetText(
+						'StatusCustomError',
+						((tblStatus.custom_error_count !== undefined) ? String(tblStatus.custom_error_count) : '-') +
+						' / ' +
+						((tblStatus.custom_last_error_code !== undefined) ? String(tblStatus.custom_last_error_code) : '-')
+					);
+					procSetText(
+						'StatusCustomBytes',
+						((tblStatus.custom_recv_bytes !== undefined) ? String(tblStatus.custom_recv_bytes) : '-') +
+						' / ' +
+						((tblStatus.custom_send_bytes !== undefined) ? String(tblStatus.custom_send_bytes) : '-')
+					);
+					procSetText('StatusCustomAge', (tblStatus.custom_last_age_ms !== undefined && tblStatus.custom_last_age_ms >= 0) ? String(tblStatus.custom_last_age_ms) + ' ms' : '-');
 					procSetText('StatusBusQueued', (tblBus.total_queued !== undefined) ? String(tblBus.total_queued) : '-');
 					procSetText('StatusBusDelivered', (tblBus.total_delivered !== undefined) ? String(tblBus.total_delivered) : '-');
 					procSetText('StatusBusDropped', (tblBus.total_dropped !== undefined) ? String(tblBus.total_dropped) : '-');
@@ -1026,6 +1215,25 @@
 					procSetText('StatusWsTextBinary', 'error');
 					procSetText('StatusWsPingPong', 'error');
 					procSetText('StatusWsError', 'error');
+					procSetText('StatusWsErrorAge', 'error');
+					procSetText('StatusWsLast', 'error');
+					procSetText('StatusWsLastAge', 'error');
+					procSetText('StatusXtpConn', 'error');
+					procSetText('StatusXtpMsg', 'error');
+					procSetText('StatusXtpReqResp', 'error');
+					procSetText('StatusXtpInvalid', 'error');
+					procSetText('StatusXtpLast', 'error');
+					procSetText('StatusXtpInvalidReason', 'error');
+					procSetText('StatusXtpInvalidAge', 'error');
+					procSetText('StatusUdpPackets', 'error');
+					procSetText('StatusUdpBytes', 'error');
+					procSetText('StatusUdpFrom', 'error');
+					procSetText('StatusUdpAge', 'error');
+					procSetText('StatusUdpError', 'error');
+					procSetText('StatusCustomConn', 'error');
+					procSetText('StatusCustomPackets', 'error');
+					procSetText('StatusCustomBytes', 'error');
+					procSetText('StatusCustomAge', 'error');
 					procSetText('DashboardRaw', String(objErr));
 					procSetText('StatusRaw', String(objErr));
 					procSetText('HealthRaw', String(objErr));

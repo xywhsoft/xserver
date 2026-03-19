@@ -6,11 +6,22 @@ typedef struct {
 	XS_ServerConfig* pServer;
 } XS_UdpHandle;
 
+static inline int64 XS_UdpMetricGet(const volatile int64* pValue)
+{
+	return XS_HttpMetricGet(pValue);
+}
+
+static inline int64 XS_UdpMetricAdd(volatile int64* pValue, int64 iValue)
+{
+	return XS_HttpMetricAdd(pValue, iValue);
+}
+
 static void XS_UdpOnRecv(ptr pOwner, xdgramsock* pSock, const xnetaddr* pFrom, xnetchain* pChain)
 {
 	XS_ServerConfig* objServer = (XS_ServerConfig*)pOwner;
 	size_t iLen;
 	char* pBuf;
+	const char* sFrom;
 	bool bHandled = FALSE;
 	
 	if ( pChain == NULL ) {
@@ -30,11 +41,31 @@ static void XS_UdpOnRecv(ptr pOwner, xdgramsock* pSock, const xnetaddr* pFrom, x
 	
 	(void)xrtNetChainPeek(pChain, pBuf, iLen);
 	xrtNetChainConsume(pChain, iLen);
+	XS_UdpMetricAdd(&g_iXsUdpRecvCount, 1);
+	XS_UdpMetricAdd(&g_iXsUdpRecvBytes, (int64)iLen);
+	g_tXsUdpLastTime = xrtNow();
+	sFrom = pFrom ? xrtNetAddrToStr(pFrom) : NULL;
+	if ( sFrom ) {
+		strncpy(g_sXsUdpLastFrom, sFrom, sizeof(g_sXsUdpLastFrom) - 1);
+		g_sXsUdpLastFrom[sizeof(g_sXsUdpLastFrom) - 1] = '\0';
+	} else {
+		g_sXsUdpLastFrom[0] = '\0';
+	}
+	if ( iLen > 0 ) {
+		size_t iCopy = iLen;
+		if ( iCopy >= sizeof(g_sXsUdpLastText) ) {
+			iCopy = sizeof(g_sXsUdpLastText) - 1;
+		}
+		memcpy(g_sXsUdpLastText, pBuf, iCopy);
+		g_sXsUdpLastText[iCopy] = '\0';
+	} else {
+		g_sXsUdpLastText[0] = '\0';
+	}
 	
 	XS_LogInfo(
 		"udp recv: server=%s from=%s bytes=%u script_dgram=%s",
 		objServer && objServer->Name ? objServer->Name : "(null)",
-		pFrom ? xrtNetAddrToStr(pFrom) : "(null)",
+		sFrom ? sFrom : "(null)",
 		(unsigned)iLen,
 		(objServer && objServer->procDgramRecv) ? "true" : "false"
 	);
@@ -42,9 +73,11 @@ static void XS_UdpOnRecv(ptr pOwner, xdgramsock* pSock, const xnetaddr* pFrom, x
 	if ( objServer && objServer->procDgramRecv ) {
 		bHandled = objServer->procDgramRecv(objServer, pSock, pFrom, pBuf, iLen);
 	}
-	
+
 	if ( !bHandled && pFrom ) {
 		(void)xrtNetDgramSendTo(pSock, pFrom, pBuf, iLen);
+		XS_UdpMetricAdd(&g_iXsUdpSendCount, 1);
+		XS_UdpMetricAdd(&g_iXsUdpSendBytes, (int64)iLen);
 	}
 	
 	xrtFree(pBuf);
@@ -55,6 +88,9 @@ static void XS_UdpOnError(ptr pOwner, xdgramsock* pSock, int iSysErr)
 	XS_ServerConfig* objServer = (XS_ServerConfig*)pOwner;
 	(void)pSock;
 	
+	XS_UdpMetricAdd(&g_iXsUdpErrorCount, 1);
+	g_iXsUdpLastErrorCode = (int64)iSysErr;
+	g_tXsUdpLastErrorTime = xrtNow();
 	XS_LogWarn(
 		"udp error: server=%s sys=%d",
 		objServer && objServer->Name ? objServer->Name : "(null)",

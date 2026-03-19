@@ -361,7 +361,14 @@ static inline int XS_ScriptWsClose(void* pConn, uint16 iCode, const char* sReaso
 
 static inline int XS_ScriptStreamSend(void* pStream, const void* pData, size_t iLen)
 {
-	return xrtNetStreamSend((xnetstream*)pStream, pData, iLen) == XRT_NET_OK ? 1 : 0;
+	int iRet;
+
+	iRet = xrtNetStreamSend((xnetstream*)pStream, pData, iLen) == XRT_NET_OK ? 1 : 0;
+	if ( iRet ) {
+		g_iXsCustomSendCount++;
+		g_iXsCustomSendBytes += (int64)iLen;
+	}
+	return iRet;
 }
 
 static inline int XS_ScriptStreamClose(void* pStream, unsigned iFlags)
@@ -583,6 +590,7 @@ static inline int XS_ScriptXtpFindParamView(const void* pMsg, const char* sKey, 
 static inline int XS_ScriptDgramSendTo(void* pSock, const char* sIP, unsigned short iPort, const void* pData, size_t iLen)
 {
 	xnetaddr tAddr;
+	int iRet;
 	
 	if ( pSock == NULL || sIP == NULL || sIP[0] == '\0' || iPort == 0 ) {
 		return 0;
@@ -591,16 +599,28 @@ static inline int XS_ScriptDgramSendTo(void* pSock, const char* sIP, unsigned sh
 		return 0;
 	}
 	
-	return xrtNetDgramSendTo((xdgramsock*)pSock, &tAddr, pData, iLen) == XRT_NET_OK ? 1 : 0;
+	iRet = xrtNetDgramSendTo((xdgramsock*)pSock, &tAddr, pData, iLen) == XRT_NET_OK ? 1 : 0;
+	if ( iRet ) {
+		g_iXsUdpSendCount++;
+		g_iXsUdpSendBytes += (int64)iLen;
+	}
+	return iRet;
 }
 
 static inline int XS_ScriptDgramReply(void* pSock, const void* pFromAddr, const void* pData, size_t iLen)
 {
+	int iRet;
+
 	if ( pSock == NULL || pFromAddr == NULL ) {
 		return 0;
 	}
 	
-	return xrtNetDgramSendTo((xdgramsock*)pSock, (const xnetaddr*)pFromAddr, pData, iLen) == XRT_NET_OK ? 1 : 0;
+	iRet = xrtNetDgramSendTo((xdgramsock*)pSock, (const xnetaddr*)pFromAddr, pData, iLen) == XRT_NET_OK ? 1 : 0;
+	if ( iRet ) {
+		g_iXsUdpSendCount++;
+		g_iXsUdpSendBytes += (int64)iLen;
+	}
+	return iRet;
 }
 
 static inline const char* XS_ScriptAddrText(const void* pAddr)

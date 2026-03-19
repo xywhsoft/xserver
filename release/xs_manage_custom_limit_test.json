@@ -1,0 +1,40 @@
+[
+	{
+		"enabled": true,
+		"class": "http",
+		"name": "test Manage HTTP Server",
+		"desc": "vNext manage interface custom limit test",
+		"param": "manage",
+		"backlog": 128,
+		"recv_limit": 1048576,
+		"path_limit": 200,
+		"header_limit": 32,
+		"body_limit": 262144,
+		"ip": "0.0.0.0",
+		"port": 8085,
+		"debug": true,
+		"host_default": {
+			"enabled": true,
+			"name": "默认主机",
+			"debug": true,
+			"path": "wwwroot",
+			"devlang": "c",
+			"devfile": "script_vnext/main.c"
+		},
+		"hosts": []
+	},
+	{
+		"enabled": true,
+		"class": "custom",
+		"name": "test Custom Server",
+		"desc": "vNext custom invalid metrics demo",
+		"backlog": 128,
+		"recv_limit": 64,
+		"ip": "0.0.0.0",
+		"port": 9098,
+		"debug": true,
+		"path": "script_vnext",
+		"devlang": "c",
+		"devfile": "script_vnext/custom_main.c"
+	}
+]

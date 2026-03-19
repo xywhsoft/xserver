@@ -16,6 +16,81 @@ static inline void XS_WsMetricUpdateMax(volatile int64* pValue, int64 iValue)
 	XS_HttpMetricUpdateMax(pValue, iValue);
 }
 
+static inline const char* XS_WsLastFrameTypeName(void)
+{
+	switch ( XS_WsMetricGet(&g_iXsWsLastFrameType) ) {
+		case 1: return "text";
+		case 2: return "binary";
+		case 3: return "ping";
+		case 4: return "pong";
+		default: return "";
+	}
+}
+
+static inline char* XS_WsLastTimeText(void)
+{
+	xtime tLast = g_tXsWsLastTime;
+	
+	if ( tLast <= 0 ) {
+		return NULL;
+	}
+	
+	return xrtTimeToStr(tLast, XRT_TIME_FORMAT_DATETIME);
+}
+
+static inline int64 XS_WsLastAgeMS(void)
+{
+	xtime tLast = g_tXsWsLastTime;
+	
+	if ( tLast <= 0 ) {
+		return -1;
+	}
+	
+	return (int64)(xrtNow() - tLast) * 1000;
+}
+
+static inline char* XS_WsLastErrorTimeText(void)
+{
+	xtime tLast = g_tXsWsLastErrorTime;
+
+	if ( tLast <= 0 ) {
+		return NULL;
+	}
+
+	return xrtTimeToStr(tLast, XRT_TIME_FORMAT_DATETIME);
+}
+
+static inline int64 XS_WsLastErrorAgeMS(void)
+{
+	xtime tLast = g_tXsWsLastErrorTime;
+
+	if ( tLast <= 0 ) {
+		return -1;
+	}
+
+	return (int64)(xrtNow() - tLast) * 1000;
+}
+
+static inline void XS_WsRecordLastFrame(int64 iType, const void* pData, size_t iLen)
+{
+	size_t iCopy;
+	
+	g_iXsWsLastFrameType = iType;
+	g_iXsWsLastBytes = (int64)iLen;
+	g_tXsWsLastTime = xrtNow();
+	if ( pData == NULL || iLen == 0 ) {
+		g_sXsWsLastText[0] = '\0';
+		return;
+	}
+	
+	iCopy = iLen;
+	if ( iCopy >= sizeof(g_sXsWsLastText) ) {
+		iCopy = sizeof(g_sXsWsLastText) - 1;
+	}
+	memcpy(g_sXsWsLastText, pData, iCopy);
+	g_sXsWsLastText[iCopy] = '\0';
+}
+
 static inline XS_HostConfig* XS_WsResolveHost(XS_ServerConfig* objServer)
 {
 	uint32 i;
@@ -66,6 +141,7 @@ static void XS_WsOnText(ptr pOwner, xwsserver* pServer, xwsconn* pConn, const ch
 	(void)pServer;
 
 	XS_WsMetricAdd(&g_iXsWsTextCount, 1);
+	XS_WsRecordLastFrame(1, pData, iLen);
 	
 	if ( objHost && objHost->procWsText ) {
 		bHandled = objHost->procWsText(objServer, objHost, pConn, pData, iLen);
@@ -84,6 +160,7 @@ static void XS_WsOnBinary(ptr pOwner, xwsserver* pServer, xwsconn* pConn, const 
 	(void)pServer;
 
 	XS_WsMetricAdd(&g_iXsWsBinaryCount, 1);
+	XS_WsRecordLastFrame(2, pData, iLen);
 	
 	if ( objHost && objHost->procWsBinary ) {
 		bHandled = objHost->procWsBinary(objServer, objHost, pConn, pData, iLen);
@@ -101,6 +178,7 @@ static void XS_WsOnPing(ptr pOwner, xwsserver* pServer, xwsconn* pConn, const vo
 	(void)pServer;
 
 	XS_WsMetricAdd(&g_iXsWsPingCount, 1);
+	XS_WsRecordLastFrame(3, pData, iLen);
 
 	XS_LogInfo(
 		"ws ping: server=%s host=%s bytes=%u",
@@ -121,6 +199,7 @@ static void XS_WsOnPong(ptr pOwner, xwsserver* pServer, xwsconn* pConn, const vo
 	(void)pServer;
 
 	XS_WsMetricAdd(&g_iXsWsPongCount, 1);
+	XS_WsRecordLastFrame(4, pData, iLen);
 
 	XS_LogInfo(
 		"ws pong: server=%s host=%s bytes=%u",
@@ -164,6 +243,8 @@ static void XS_WsOnError(ptr pOwner, xwsserver* pServer, xwsconn* pConn, int iSy
 	(void)pConn;
 
 	XS_WsMetricAdd(&g_iXsWsErrorCount, 1);
+	g_iXsWsLastErrorCode = (int64)iSysErr;
+	g_tXsWsLastErrorTime = xrtNow();
 	
 	XS_LogWarn(
 		"ws error: server=%s sys=%d",

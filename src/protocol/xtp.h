@@ -58,6 +58,33 @@ typedef struct {
 	volatile bool bStopAccept;
 } XS_XtpHandle;
 
+static inline int64 XS_XtpMetricGet(const volatile int64* pValue)
+{
+	return XS_HttpMetricGet(pValue);
+}
+
+static inline int64 XS_XtpMetricAdd(volatile int64* pValue, int64 iValue)
+{
+	return XS_HttpMetricAdd(pValue, iValue);
+}
+
+static inline void XS_XtpMetricUpdateMax(volatile int64* pValue, int64 iValue)
+{
+	XS_HttpMetricUpdateMax(pValue, iValue);
+}
+
+static inline void XS_XtpRecordInvalid(const char* sReason)
+{
+	XS_XtpMetricAdd(&g_iXsXtpInvalidCount, 1);
+	g_tXsXtpLastInvalidTime = xrtNow();
+	if ( sReason && sReason[0] ) {
+		strncpy(g_sXsXtpLastInvalidReason, sReason, sizeof(g_sXsXtpLastInvalidReason) - 1);
+		g_sXsXtpLastInvalidReason[sizeof(g_sXsXtpLastInvalidReason) - 1] = '\0';
+	} else {
+		g_sXsXtpLastInvalidReason[0] = '\0';
+	}
+}
+
 
 
 static inline void XS_XtpFreeMessage(XTP_Message* pMsg)
@@ -124,6 +151,7 @@ static inline bool XS_XtpEnsureBuffer(XS_XtpConnContext* objCtx, size_t iNeed)
 static inline bool XS_XtpAppendChain(XS_XtpConnContext* objCtx, xnetchain* pChain)
 {
 	size_t iBytes;
+	size_t iNeed;
 	
 	if ( objCtx == NULL || pChain == NULL ) {
 		return FALSE;
@@ -133,14 +161,67 @@ static inline bool XS_XtpAppendChain(XS_XtpConnContext* objCtx, xnetchain* pChai
 	if ( iBytes == 0 ) {
 		return TRUE;
 	}
-	if ( !XS_XtpEnsureBuffer(objCtx, objCtx->iRecvLen + iBytes) ) {
+	iNeed = objCtx->iRecvLen + iBytes;
+	if ( objCtx->pServer && objCtx->pServer->RecvLimit > 0u && iNeed > (size_t)objCtx->pServer->RecvLimit ) {
+		XS_LogWarn(
+			"xtp recv limit exceeded: server=%s recv_limit=%u need=%u",
+			objCtx->pServer->Name ? objCtx->pServer->Name : "(null)",
+			(unsigned)objCtx->pServer->RecvLimit,
+			(unsigned)iNeed
+		);
+		return FALSE;
+	}
+	if ( !XS_XtpEnsureBuffer(objCtx, iNeed) ) {
 		return FALSE;
 	}
 	
 	(void)xrtNetChainPeek(pChain, objCtx->pRecvBuf + objCtx->iRecvLen, iBytes);
 	xrtNetChainConsume(pChain, iBytes);
 	objCtx->iRecvLen += iBytes;
+	XS_XtpMetricAdd(&g_iXsXtpRecvBytes, (int64)iBytes);
 	return TRUE;
+}
+
+static inline bool XS_XtpPacketHeaderInvalid(const XS_XtpConnContext* objCtx)
+{
+	XTP_PackHeader tHeader;
+	size_t iNeedBytes;
+	uint16 i;
+	const XTP_ParamInfo* pInfo;
+	uint32 iRecvLimit;
+	
+	if ( objCtx == NULL || objCtx->iRecvLen < sizeof(XTP_PackHeader) ) {
+		return FALSE;
+	}
+	
+	memcpy(&tHeader, objCtx->pRecvBuf, sizeof(XTP_PackHeader));
+	if ( memcmp(tHeader.HeadInfo, "xtp\2", 4) != 0 ) {
+		return TRUE;
+	}
+	if ( tHeader.PackSize < sizeof(XTP_PackHeader) ) {
+		return TRUE;
+	}
+	iRecvLimit = (objCtx->pServer && objCtx->pServer->RecvLimit > 0u) ? objCtx->pServer->RecvLimit : 0u;
+	if ( iRecvLimit > 0u && tHeader.PackSize > iRecvLimit ) {
+		return TRUE;
+	}
+	if ( objCtx->iRecvLen < sizeof(XTP_PackHeader) + ((size_t)tHeader.ParamCount * sizeof(XTP_ParamInfo)) ) {
+		return FALSE;
+	}
+	
+	iNeedBytes = sizeof(XTP_PackHeader) + ((size_t)tHeader.ParamCount * sizeof(XTP_ParamInfo)) + (size_t)tHeader.CmdSize + (size_t)tHeader.BodySize;
+	for ( i = 0; i < tHeader.ParamCount; i++ ) {
+		pInfo = (const XTP_ParamInfo*)(objCtx->pRecvBuf + sizeof(XTP_PackHeader) + ((size_t)i * sizeof(XTP_ParamInfo)));
+		iNeedBytes += (size_t)pInfo->KeySize + (size_t)pInfo->ValSize;
+		if ( iRecvLimit > 0u && iNeedBytes > iRecvLimit ) {
+			return TRUE;
+		}
+	}
+	if ( objCtx->iRecvLen >= (size_t)tHeader.PackSize && iNeedBytes != (size_t)tHeader.PackSize ) {
+		return TRUE;
+	}
+	
+	return FALSE;
 }
 
 static inline void XS_XtpConsume(XS_XtpConnContext* objCtx, size_t iBytes)
@@ -241,6 +322,7 @@ static inline bool XS_XtpParseMessage(XS_XtpConnContext* objCtx, XTP_Message* pM
 	
 	memcpy(&tHeader, objCtx->pRecvBuf, sizeof(XTP_PackHeader));
 	if ( memcmp(tHeader.HeadInfo, "xtp\2", 4) != 0 ) {
+		XS_XtpRecordInvalid("invalid header");
 		XS_LogWarn(
 			"xtp invalid header: server=%s stream=%p",
 			objCtx->pServer && objCtx->pServer->Name ? objCtx->pServer->Name : "(null)",
@@ -249,7 +331,17 @@ static inline bool XS_XtpParseMessage(XS_XtpConnContext* objCtx, XTP_Message* pM
 		return FALSE;
 	}
 	if ( tHeader.PackSize < sizeof(XTP_PackHeader) ) {
+		XS_XtpRecordInvalid("invalid size");
 		XS_LogWarn("xtp invalid size: pack=%u", (unsigned)tHeader.PackSize);
+		return FALSE;
+	}
+	if ( objCtx->pServer && objCtx->pServer->RecvLimit > 0u && tHeader.PackSize > objCtx->pServer->RecvLimit ) {
+		XS_XtpRecordInvalid("pack limit exceeded");
+		XS_LogWarn(
+			"xtp pack limit exceeded: pack=%u recv_limit=%u",
+			(unsigned)tHeader.PackSize,
+			(unsigned)objCtx->pServer->RecvLimit
+		);
 		return FALSE;
 	}
 	
@@ -259,6 +351,7 @@ static inline bool XS_XtpParseMessage(XS_XtpConnContext* objCtx, XTP_Message* pM
 		iNeedBytes += (size_t)pInfo->KeySize + (size_t)pInfo->ValSize;
 	}
 	if ( iNeedBytes != (size_t)tHeader.PackSize ) {
+		XS_XtpRecordInvalid("size mismatch");
 		XS_LogWarn("xtp size mismatch: pack=%u need=%u", (unsigned)tHeader.PackSize, (unsigned)iNeedBytes);
 		return FALSE;
 	}
@@ -291,6 +384,7 @@ static inline bool XS_XtpParseMessage(XS_XtpConnContext* objCtx, XTP_Message* pM
 		iPos += (size_t)pParamInfo[i].KeySize + (size_t)pParamInfo[i].ValSize;
 		if ( iPos > (size_t)tHeader.PackSize ) {
 			XS_XtpFreeMessage(pMsg);
+			XS_XtpRecordInvalid("param overflow");
 			XS_LogWarn("xtp param overflow: index=%u", (unsigned)i);
 			return FALSE;
 		}
@@ -298,6 +392,7 @@ static inline bool XS_XtpParseMessage(XS_XtpConnContext* objCtx, XTP_Message* pM
 	
 	if ( iPos + (size_t)tHeader.BodySize != (size_t)tHeader.PackSize ) {
 		XS_XtpFreeMessage(pMsg);
+		XS_XtpRecordInvalid("body overflow");
 		XS_LogWarn("xtp body overflow");
 		return FALSE;
 	}
@@ -477,6 +572,10 @@ static inline int XS_XtpSendEx(
 	}
 	
 	i = xrtNetStreamSend((xnetstream*)pStream, pSendBuf, iPackSize) == XRT_NET_OK ? TRUE : FALSE;
+	if ( i ) {
+		XS_XtpMetricAdd(&g_iXsXtpSendCount, 1);
+		XS_XtpMetricAdd(&g_iXsXtpSendBytes, (int64)iPackSize);
+	}
 	xrtFree(pSendBuf);
 	if ( pParamInfo ) {
 		xrtFree(pParamInfo);
@@ -644,10 +743,11 @@ static bool XS_XtpOnAccept(ptr pOwner, xnetlistener* pListener, xnetstream* pStr
 	if ( objCtx == NULL ) {
 		return FALSE;
 	}
-	
+
 	objCtx->pServer = objServer;
 	objCtx->pStream = pStream;
 	xrtNetStreamSetUserData(pStream, objCtx);
+	XS_XtpMetricUpdateMax(&g_iXsXtpConnPeak, XS_XtpMetricAdd(&g_iXsXtpConnCurrent, 1));
 	return TRUE;
 }
 
@@ -657,6 +757,7 @@ static void XS_XtpOnOpen(ptr pOwner, xnetstream* pStream)
 	XS_ServerConfig* objServer = objCtx ? objCtx->pServer : NULL;
 	(void)pStream;
 	
+	XS_XtpMetricAdd(&g_iXsXtpOpenCount, 1);
 	if ( objServer && objServer->procStreamOpen ) {
 		objServer->procStreamOpen(objServer, objCtx ? objCtx->pStream : pStream);
 	}
@@ -683,7 +784,7 @@ static void XS_XtpOnRecv(ptr pOwner, xnetstream* pStream, xnetchain* pChain)
 		
 		memset(&tMsg, 0, sizeof(tMsg));
 		if ( !XS_XtpParseMessage(objCtx, &tMsg, &iPackBytes) ) {
-			if ( objCtx->iRecvLen >= sizeof(XTP_PackHeader) && memcmp(objCtx->pRecvBuf, "xtp\2", 4) != 0 ) {
+			if ( XS_XtpPacketHeaderInvalid(objCtx) ) {
 				xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 			}
 			break;
@@ -691,6 +792,30 @@ static void XS_XtpOnRecv(ptr pOwner, xnetstream* pStream, xnetchain* pChain)
 		
 		if ( objServer && objServer->procXtpMessage ) {
 			bHandled = objServer->procXtpMessage(objServer, pStream, &tMsg);
+		}
+		XS_XtpMetricAdd(&g_iXsXtpMsgCount, 1);
+		g_iXsXtpLastMsgType = (int64)tMsg.MsgType;
+		g_iXsXtpLastStatus = (int64)tMsg.Status;
+		g_iXsXtpLastMsgID = (int64)tMsg.MsgID;
+		g_tXsXtpLastTime = xrtNow();
+		if ( tMsg.MsgType == XTP_MSG_REQUEST ) {
+			XS_XtpMetricAdd(&g_iXsXtpReqCount, 1);
+		} else if ( tMsg.MsgType == XTP_MSG_RESPONSE ) {
+			XS_XtpMetricAdd(&g_iXsXtpRespCount, 1);
+		} else if ( tMsg.MsgType == XTP_MSG_PUSH ) {
+			XS_XtpMetricAdd(&g_iXsXtpPushCount, 1);
+		} else if ( tMsg.MsgType == XTP_MSG_EVENT ) {
+			XS_XtpMetricAdd(&g_iXsXtpEventCount, 1);
+		}
+		if ( tMsg.pCmd && tMsg.CmdSize > 0 ) {
+			size_t iCmdCopy = (size_t)tMsg.CmdSize;
+			if ( iCmdCopy >= sizeof(g_sXsXtpLastCmd) ) {
+				iCmdCopy = sizeof(g_sXsXtpLastCmd) - 1;
+			}
+			memcpy(g_sXsXtpLastCmd, tMsg.pCmd, iCmdCopy);
+			g_sXsXtpLastCmd[iCmdCopy] = '\0';
+		} else {
+			g_sXsXtpLastCmd[0] = '\0';
 		}
 		
 		XS_LogInfo(
@@ -735,6 +860,10 @@ static void XS_XtpOnClose(ptr pOwner, xnetstream* pStream, xnet_result iReason)
 	XS_XtpConnContext* objCtx = (XS_XtpConnContext*)pOwner;
 	XS_ServerConfig* objServer = objCtx ? objCtx->pServer : NULL;
 	
+	XS_XtpMetricAdd(&g_iXsXtpCloseCount, 1);
+	if ( XS_XtpMetricAdd(&g_iXsXtpConnCurrent, -1) < 0 ) {
+		XS_XtpMetricAdd(&g_iXsXtpConnCurrent, -XS_XtpMetricGet(&g_iXsXtpConnCurrent));
+	}
 	if ( objServer && objServer->procStreamClose ) {
 		objServer->procStreamClose(objServer, pStream, (int)iReason);
 	}
@@ -750,6 +879,9 @@ static void XS_XtpOnError(ptr pOwner, xnetstream* pStream, int iSysErr)
 	XS_ServerConfig* objServer = objCtx ? objCtx->pServer : NULL;
 	(void)pStream;
 	
+	XS_XtpMetricAdd(&g_iXsXtpErrorCount, 1);
+	g_iXsXtpLastErrorCode = (int64)iSysErr;
+	g_tXsXtpLastErrorTime = xrtNow();
 	XS_LogWarn(
 		"xtp error: server=%s sys=%d",
 		objServer && objServer->Name ? objServer->Name : "(null)",
