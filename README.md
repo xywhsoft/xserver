@@ -228,6 +228,8 @@ void ServiceUnit(XS_ServerObject objServer, XS_HostObject objHost)
 - 脚本入口：`release/script_vnext/ws_main.c`
 - `ws_protocol` 可用于要求客户端协商指定子协议；当前 demo 使用 `xs-demo`
 - `ws_message_limit` 可用于单独限制单条 WebSocket 消息的聚合大小；当前 demo 使用 `262144`
+- `idle_timeout` 现已支持 `ws/wss`，示例配置默认使用 `3000ms`
+- `conn_limit` 现已支持 `http/ws/wss/custom/tcp/xtp/xtps`，`0` 表示不限制；当活动连接数超过上限时，宿主会主动关闭后续超额连接
 - 未带正确子协议的客户端握手会被拒绝，带 `xs-demo` 的客户端可以正常连接
 - `wss` demo 使用 `release/tls/xtps_cert.pem` 和 `release/tls/xtps_key.pem`
 - `release/wwwroot/ws.html` 现已支持一键切换 `ws://127.0.0.1:8081/` 与 `wss://127.0.0.1:8444/`
@@ -303,18 +305,29 @@ WebSocket 脚本 API 额外提供：
 - `GET /__xs/http_metrics`
 - `GET /__xs/http_metrics_json`
 - `GET /__xs/http_metrics_clear`
+
+`http` 服务器现在也支持 `idle_timeout` 配置，超时空闲连接会被宿主主动关闭；`__xs/http_metrics`、`__xs/http_metrics_json` 会额外返回 `http_idle_close_count / http_last_idle_close_time / http_last_idle_close_age_ms`，用于区分空闲清理与正常业务请求。
+
+`http/ws/wss/custom/tcp/xtp/xtps` 现在也支持 `conn_limit` 配置，超过上限时宿主会主动关闭超额连接；当前 `__xs/status / __xs/status_json / __xs/dashboard / __xs/dashboard_json` 已会返回 `conn_limit`，便于直接核对治理配置是否生效。与此同时，协议级 metrics 也开始区分 `conn_limit` 关闭现场：`__xs/http_metrics_json` 返回 `http_conn_limit_close_count / http_last_conn_limit_close_time / http_last_conn_limit_close_age_ms`，`__xs/ws_metrics_json` 返回 `ws_conn_limit_close_count / ws_last_conn_limit_close_time / ws_last_conn_limit_close_age_ms`，`__xs/xtp_metrics_json` 返回 `xtp_conn_limit_close_count / xtp_last_conn_limit_close_time / xtp_last_conn_limit_close_age_ms`，`__xs/custom_metrics_json` 返回 `custom_conn_limit_close_count / custom_last_conn_limit_close_time / custom_last_conn_limit_close_age_ms`。
+
 - `GET /__xs/ws_metrics`
 - `GET /__xs/ws_metrics_json`
 - `GET /__xs/ws_metrics_clear`
+
+`ws/wss` 服务器现在也支持 `idle_timeout` 配置，超时空闲连接会被宿主主动关闭；`__xs/ws_metrics`、`__xs/ws_metrics_json` 会额外返回 `ws_idle_close_count / ws_last_idle_close_time / ws_last_idle_close_age_ms`，用于区分空闲清理与真实协议错误。
 - `GET /__xs/xtp_metrics`
 - `GET /__xs/xtp_metrics_json`
 - `GET /__xs/xtp_metrics_clear`
+
+`xtp/xtps` 服务器现在支持 `idle_timeout` 配置，超时空闲连接会被宿主主动关闭；`__xs/xtp_metrics`、`__xs/xtp_metrics_json` 会额外返回 `xtp_idle_close_count / xtp_last_idle_close_time / xtp_last_idle_close_age_ms`，用于区分空闲清理与真实传输错误。
 - `GET /__xs/udp_metrics`
 - `GET /__xs/udp_metrics_json`
 - `GET /__xs/udp_metrics_clear`
 - `GET /__xs/custom_metrics`
 - `GET /__xs/custom_metrics_json`
 - `GET /__xs/custom_metrics_clear`
+
+`custom/tcp` 服务器同样支持 `idle_timeout` 配置；`__xs/custom_metrics`、`__xs/custom_metrics_json` 会额外返回 `custom_idle_close_count / custom_last_idle_close_time / custom_last_idle_close_age_ms`，用于观察空闲清理行为。
 - `GET /__xs/dashboard`
 - `GET /__xs/dashboard_json`
 - `GET /__xs/check_config`
@@ -373,7 +386,7 @@ WebSocket 脚本 API 额外提供：
 
 `GET /__xs/bus/reset` 可清空上述 bus 累计统计，不影响当前注册表中的共享数据。
 首页 `index.html` 也已经切到这些正式管理接口，并补上了配置热加载与结果查询入口；bus 区现在支持显式输入 `data_id`，也支持仅通过 `namespace/tag` 来查找、读取、续期 TTL 和删除共享数据。
-`__xs/ws_metrics`、`__xs/ws_metrics_json` 当前还会额外返回 `ws_last_error_code / ws_last_close_reason / ws_last_close_time / ws_last_close_age_ms / ws_last_frame_type / ws_last_remote / ws_last_bytes / ws_last_text / ws_last_time / ws_last_age_ms / ws_last_error_time / ws_last_error_age_ms`，便于直接看到最近一次 WebSocket 文本、二进制或 ping/pong 事件的类型、对端地址、内容摘要、最近一次关闭原因与时间、最近一次错误现场与时间上下文。
+`__xs/ws_metrics`、`__xs/ws_metrics_json` 当前还会额外返回 `ws_last_error_code / ws_last_close_reason / ws_last_close_time / ws_last_close_age_ms / ws_idle_close_count / ws_last_idle_close_time / ws_last_idle_close_age_ms / ws_last_frame_type / ws_last_remote / ws_last_bytes / ws_last_text / ws_last_time / ws_last_age_ms / ws_last_error_time / ws_last_error_age_ms`，便于直接看到最近一次 WebSocket 文本、二进制或 ping/pong 事件的类型、对端地址、内容摘要、最近一次关闭原因与时间、空闲清理现场以及最近一次错误现场与时间上下文。
 
 `__xs/status_json`、`__xs/health_json`、`__xs/dashboard` / `__xs/dashboard_json` 当前还会返回运行中的 `bind_ip / bind_port / tls / bind_ip_tls / bind_port_tls / addr_tls / ws_protocol / ws_message_limit / ws_conn_current / ws_conn_peak / ws_open_count / ws_close_count / ws_text_count / ws_binary_count / ws_ping_count / ws_pong_count / ws_error_count / ws_last_error_code / ws_last_close_reason / ws_last_frame_type / ws_last_remote / ws_last_bytes / ws_last_text / ws_last_time / ws_last_age_ms / ws_last_error_time / ws_last_error_age_ms / tls_cert_file / tls_key_file / tls_ca_file / current_dir / app_file / app_mtime / app_size / app_path / build / compiler / platform / arch / mem_debug / pid / start_time / uptime_ms / engine_workers / runtime_server_count / manage_api / config_name / config_mtime / config_size / http_req_count / http_2xx_count / http_3xx_count / http_4xx_count / http_5xx_count / http_conn_current / http_conn_peak / http_get_count / http_post_count / http_head_count / http_other_count / http_time_total_ms / http_time_max_ms / http_time_avg_ms / http_last_method / http_last_status / http_last_path / http_last_target / http_last_remote / http_last_time / http_last_age_ms / http_last_app_method / http_last_app_status / http_last_app_path / http_last_app_target / http_last_app_remote / http_last_app_time / http_last_app_age_ms`，便于排障时直接定位当前进程、工作目录、运行目录、监听地址、TLS 监听、WebSocket 子协议、WebSocket 消息上限、WebSocket 连接与消息计数、最近一次 WebSocket 帧上下文、最近一次 WebSocket 对端地址、最近一次 WebSocket 关闭原因、最近一次 WebSocket 错误现场、TLS 证书路径、当前程序文件与配置文件的更新时间和大小、构建变体、编译器、目标平台架构、内存调试状态、持续运行时长、运行中的服务数量、工作线程规模、HTTP 请求规模、方法分布、当前连接、峰值连接、最近一次任意请求，以及最近一次非 `__xs/*` 业务请求的方法、路径、对端地址、状态与处理耗时，以及管理面是否启用。
 
@@ -516,6 +529,71 @@ xserver/
 - `http_last_real_ip / http_last_app_real_ip`
 - `http_last_connection / http_last_app_connection`
 - `http_last_cache_control / http_last_app_cache_control`
+
+## 未完成任务
+
+以下事项截至 `2026-03-20` 仍未最终完成，后续应优先按此清单继续：
+
+1. 协议层生产化治理继续收口
+- 当前 `idle_timeout / conn_limit` 已在 `http / ws / xtp / custom` 上完成真实回归。
+- 仍需继续补：
+	- 更统一的限流策略
+	- 更系统的异常连接清理
+	- 更完整的请求拒绝统计
+	- 各协议更一致的治理规则
+
+2. 配置热加载做最终差异化重建
+- 当前已支持：
+	- 全量 reload
+	- 按 `server` reload
+	- `http / ws` 的 host 原位 reload
+	- 失败回滚
+- 仍需继续补 listener / object 级别的最小替换策略，减少不必要重建。
+
+3. Bus / 全局共享数据机制做最终治理
+- 当前注册、查找、更新、retain/release、ttl、namespace、send/broadcast、`__xs/bus/*` 已可用。
+- 仍需继续补：
+	- 配额 / 上限
+	- 更严格的 namespace 治理
+	- 自动清理策略
+	- 更偏生产化的宿主管理规则
+
+4. XTP 高层 API 最终定版
+- 当前已完成：
+	- `xtp v2 / xtps`
+	- 同步客户端
+	- one-shot call
+	- request object
+	- `body / result / error / meta / summary / value / json`
+- 仍需继续补或决定：
+	- 最终保留哪些 API
+	- 是否补异步 pending request
+	- 是否补持久客户端对象体系
+
+5. 旧业务脚本迁移继续推进
+- `release/script_vnext` 的 demo 主线已较完整。
+- 旧 `release/script` 那批业务脚本还未系统迁完。
+
+6. 长稳 / 压测 / 内存调试验证
+- 仍未系统完成：
+	- 压测基线
+	- 长时间稳定性验证
+	- `xsdbg` 下的内存调试闭环
+
+7. 文档最终发布版整理
+- README 和设计稿已持续同步。
+- 但仍需最后做一轮统一整理，收成正式交付版本。
+
+## 建议续做顺序
+
+建议下一个上下文优先按下面顺序继续：
+
+1. 协议层生产化治理
+2. XTP 接口定版
+3. 配置热加载差异化重建
+4. Bus 治理补齐
+5. 长稳 / 压测 / 内存调试
+6. 文档最终整理
 
 ## 依赖项
 

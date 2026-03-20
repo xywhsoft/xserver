@@ -3,7 +3,7 @@
 		"enabled": true,
 		"class": "http",
 		"name": "test Manage HTTP Server",
-		"desc": "vNext manage interface xtp test",
+		"desc": "vNext manage interface custom conn limit test",
 		"param": "manage",
 		"backlog": 128,
 		"recv_limit": 1048576,
@@ -11,7 +11,7 @@
 		"header_limit": 32,
 		"body_limit": 262144,
 		"ip": "0.0.0.0",
-		"port": 8085,
+		"port": 18087,
 		"debug": true,
 		"host_default": {
 			"enabled": true,
@@ -25,17 +25,17 @@
 	},
 	{
 		"enabled": true,
-		"class": "xtp",
-		"name": "test XTP Server",
-		"desc": "vNext xtp metrics demo",
+		"class": "custom",
+		"name": "test Custom ConnLimit Server",
+		"desc": "vNext custom conn limit demo",
 		"backlog": 128,
 		"recv_limit": 1048576,
-		"idle_timeout": 3000,
+		"conn_limit": 1,
 		"ip": "0.0.0.0",
-		"port": 9096,
+		"port": 19098,
 		"debug": true,
 		"path": "script_vnext",
 		"devlang": "c",
-		"devfile": "script_vnext/xtp_main.c"
+		"devfile": "script_vnext/custom_main.c"
 	}
 ]

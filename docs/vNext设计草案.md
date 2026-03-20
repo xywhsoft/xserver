@@ -354,7 +354,8 @@ TCC 仍然作为全功能 C 语言脚本宿主，不做权限限制。
 - `WsPongProc`
 - `WsCloseProc`
 - `ws` server 现已支持 `ws_protocol`，可要求客户端协商固定子协议
-- `ws` server 现已支持 `ws_message_limit`，可单独限制单条消息聚合后的最大大小
+- `ws` server 现已支持 `ws_message_limit`，可单独限制单条消息聚合后的最大大小；`ws/wss` 也已支持 `idle_timeout`
+- `http/ws/wss/custom/tcp/xtp/xtps` 现已支持统一 `conn_limit`，超过上限时宿主会主动关闭超额连接，管理面会同步暴露 `conn_limit`；同时协议级 metrics 也开始区分“超额连接关闭”现场，分别暴露 `*_conn_limit_close_count / *_last_conn_limit_close_time / *_last_conn_limit_close_age_ms`
 - 当 `ws_protocol` 已配置时，未协商正确子协议的握手请求会直接拒绝
 - `ws` 现已支持 `tls + port_tls` 的 `wss` 运行模式
 
@@ -564,11 +565,11 @@ TCC 仍然作为全功能 C 语言脚本宿主，不做权限限制。
 - `__xs/reload_clear` 已提供最近一次配置热加载结果的显式清空入口
 - `__xs/health_json` 已提供宿主 + reload + bus 的轻量健康摘要，适合监控与探测
 - `__xs/dashboard_json` 已提供 status / health / reload / bus 的结构化总览，便于首页与外部工具减少多次请求
-- `__xs/http_metrics` / `__xs/http_metrics_json` / `__xs/http_metrics_clear` 已提供 HTTP 请求计数、响应分布与清零入口，便于压测窗口、故障复盘与运维观察
-- `__xs/ws_metrics` / `__xs/ws_metrics_json` / `__xs/ws_metrics_clear` 已提供 WebSocket 连接、消息、ping/pong、错误计数、最近一次帧类型/字节数/文本摘要/时间上下文、最近一次关闭原因与时间、最近一次错误现场与清零入口，便于 WebSocket 压测窗口与故障复盘
-- `__xs/xtp_metrics` / `__xs/xtp_metrics_json` / `__xs/xtp_metrics_clear` 已提供 XTP 连接、坏包计数、消息类型分布、最近一包对端地址、长度与上下文、最近一次坏包原因/时间、最近一次系统错误现场与收发字节统计及清零入口，便于 XTP/XTPS 压测窗口与故障复盘
+- `http` 当前也支持 `idle_timeout`，超时空闲连接会被宿主主动关闭；`__xs/http_metrics` / `__xs/http_metrics_json` / `__xs/http_metrics_clear` 已提供 HTTP 请求计数、响应分布、空闲关闭计数/时间与清零入口，便于压测窗口、故障复盘与运维观察
+- `ws/wss` 当前也支持 `idle_timeout`，超时空闲连接会被宿主主动关闭；`__xs/ws_metrics` / `__xs/ws_metrics_json` / `__xs/ws_metrics_clear` 已提供 WebSocket 连接、消息、ping/pong、错误计数、空闲关闭计数/时间、最近一次帧类型/字节数/文本摘要/时间上下文、最近一次关闭原因与时间、最近一次错误现场与清零入口，便于 WebSocket 压测窗口与故障复盘
+- `xtp/xtps` 当前已支持 `idle_timeout`，超时空闲连接会被宿主主动关闭；`__xs/xtp_metrics` / `__xs/xtp_metrics_json` / `__xs/xtp_metrics_clear` 已提供 XTP 连接、坏包计数、消息类型分布、最近一包对端地址、长度与上下文、最近一次坏包原因/时间、最近一次系统错误现场、空闲关闭计数/时间与收发字节统计及清零入口，便于 XTP/XTPS 压测窗口与故障复盘
 - `__xs/udp_metrics` / `__xs/udp_metrics_json` / `__xs/udp_metrics_clear` 已提供 UDP 收发包数、字节数、最近一包长度、最近一包上下文与最近一次错误现场及清零入口，便于 UDP 压测窗口与故障复盘
-- `__xs/custom_metrics` / `__xs/custom_metrics_json` / `__xs/custom_metrics_clear` 已提供 custom/tcp 连接、收发、错误、坏包计数、最近一次对端地址、最近一次无效输入原因与时间、最近一次断开原因、最近一次系统错误、最近一包长度及最近一次收包上下文与清零入口，便于 TCP 压测窗口与故障复盘
+- `custom/tcp` 当前也支持 `idle_timeout`，超时空闲连接会被宿主主动关闭；`__xs/custom_metrics` / `__xs/custom_metrics_json` / `__xs/custom_metrics_clear` 已提供 custom/tcp 连接、收发、错误、坏包计数、最近一次对端地址、最近一次无效输入原因与时间、最近一次断开原因、最近一次系统错误、最近一包长度、空闲关闭计数/时间及最近一次收包上下文与清零入口，便于 TCP 压测窗口与故障复盘
 - `__xs/dashboard` 文本版当前也会直接输出 `ws / xtp / udp / custom` 的关键运行态字段，便于终端排障时不切 JSON 也能看到协议侧连接、收发、错误与最近一包上下文
 - `__xs/status_json`、`__xs/health_json`、`__xs/dashboard` / `__xs/dashboard_json` 当前额外输出 `bind_ip / bind_port / tls / bind_ip_tls / bind_port_tls / addr_tls / ws_protocol / ws_message_limit / ws_conn_current / ws_conn_peak / ws_open_count / ws_close_count / ws_text_count / ws_binary_count / ws_ping_count / ws_pong_count / ws_error_count / ws_last_error_code / ws_last_close_reason / ws_last_frame_type / ws_last_remote / ws_last_bytes / ws_last_text / ws_last_time / ws_last_age_ms / ws_last_error_time / ws_last_error_age_ms / xtp_conn_current / xtp_conn_peak / xtp_open_count / xtp_close_count / xtp_error_count / xtp_invalid_count / xtp_msg_count / xtp_req_count / xtp_resp_count / xtp_push_count / xtp_event_count / xtp_send_count / xtp_recv_bytes / xtp_send_bytes / xtp_last_msg_type / xtp_last_status / xtp_last_msg_id / xtp_last_flags / xtp_last_param_count / xtp_last_body_size / xtp_last_remote / xtp_last_cmd / xtp_last_time / xtp_last_age_ms / xtp_last_invalid_reason / xtp_last_invalid_time / xtp_last_invalid_age_ms / xtp_last_error_code / xtp_last_error_time / xtp_last_error_age_ms / custom_conn_current / custom_conn_peak / custom_open_count / custom_close_count / custom_error_count / custom_invalid_count / custom_last_invalid_reason / custom_last_invalid_time / custom_last_invalid_age_ms / custom_last_close_reason / custom_last_error_code / custom_last_error_time / custom_last_error_age_ms / custom_recv_count / custom_send_count / custom_recv_bytes / custom_send_bytes / custom_last_remote / custom_last_text / custom_last_time / custom_last_age_ms / tls_cert_file / tls_key_file / tls_ca_file / current_dir / app_file / app_mtime / app_size / app_path / build / compiler / platform / arch / mem_debug / pid / start_time / uptime_ms / engine_workers / runtime_server_count / manage_api / config_name / config_mtime / config_size / http_req_count / http_2xx_count / http_3xx_count / http_4xx_count / http_5xx_count / http_conn_current / http_conn_peak / http_get_count / http_post_count / http_head_count / http_other_count / http_time_total_ms / http_time_max_ms / http_time_avg_ms / http_last_method / http_last_status / http_last_path / http_last_target / http_last_version / http_last_remote / http_last_time / http_last_age_ms / http_last_app_method / http_last_app_status / http_last_app_path / http_last_app_target / http_last_app_version / http_last_app_remote / http_last_app_time / http_last_app_age_ms`，便于定位实际监听地址、TLS 监听、WebSocket 子协议、WebSocket 消息上限、WebSocket 连接与消息计数、最近一次 WebSocket 帧上下文、最近一次 WebSocket 对端地址、最近一次 WebSocket 关闭原因、最近一次 WebSocket 错误现场、XTP 最近一包的 flags、参数数量、body 大小、对端地址与坏包/系统错误现场、TCP 最近一次对端地址、无效输入与传输错误现场、TLS 证书路径、当前工作目录、程序文件与配置文件更新时间和大小、运行进程、目录、构建变体、编译器、目标平台架构、内存调试状态、持续运行时间、运行中的服务数量、工作线程规模、HTTP 请求规模、方法分布、当前连接、峰值连接、最近一次任意请求，以及最近一次非 `__xs/*` 业务请求的方法、路径、协议版本、对端地址、状态与处理耗时，以及管理面启用状态
 - `__xs/reload_status_json`、`__xs/health_json`、`__xs/dashboard_json` 当前额外输出 `reload_total_count / reload_success_count / reload_failure_count`，用于区分最近一次结果与累计重载统计
@@ -826,3 +827,123 @@ XServer vNext 的核心方向已经明确：
 - `http_last_app_real_ip`
 - `http_last_app_connection`
 - `http_last_app_cache_control`
+
+
+
+## 20. 交接清单
+
+以下事项截至 `2026-03-20` 仍未最终完成，后续上下文应以此作为继续实现的主清单。
+
+### 20.1 协议层生产化治理
+
+当前已完成：
+
+- `idle_timeout` 已在 `http / ws / xtp / custom` 上落地并做过真实回归
+- `conn_limit` 已在 `http / ws / xtp / custom` 上落地并做过真实回归
+- 管理面和首页已经能看到 `idle close / conn limit close` 计数与时间
+
+仍需继续补：
+
+- 更统一的限流策略
+- 更系统的异常连接清理
+- 更完整的请求拒绝统计
+- 各协议更一致的治理规则
+
+
+
+### 20.2 配置热加载最终化
+
+当前已完成：
+
+- 全量 reload
+- 按 `server` reload
+- `http / ws` 的 host 原位 reload
+- 失败回滚
+
+仍需继续补：
+
+- listener / object 级别的最小替换策略
+- 更优的差异化重建流程
+
+
+
+### 20.3 Bus / 全局共享数据治理
+
+当前已完成：
+
+- 注册 / 查找 / 更新 / 删除
+- retain / release
+- ttl
+- namespace
+- send / broadcast
+- `__xs/bus/*` 宿主管理面
+
+仍需继续补：
+
+- 配额 / 上限
+- 更严格的 namespace 治理
+- 自动清理策略
+- 更偏生产化的宿主管理规则
+
+
+
+### 20.4 XTP 高层 API 定版
+
+当前已完成：
+
+- `xtp v2 / xtps`
+- 同步客户端
+- one-shot call
+- request object
+- `body / result / error / meta / summary / value / json`
+
+仍需继续补或决定：
+
+- 最终保留哪些 API
+- 是否补异步 pending request
+- 是否补持久客户端对象体系
+
+
+
+### 20.5 旧业务脚本迁移
+
+当前已完成：
+
+- `release/script_vnext` demo 主线已较完整
+
+仍需继续补：
+
+- 旧 `release/script` 业务脚本系统迁移
+- `xs_vnext.h / xs_vnext_full.h` 进一步收口
+
+
+
+### 20.6 最终验证
+
+仍未系统完成：
+
+- 压测基线
+- 长时间稳定性验证
+- `xsdbg` 下的内存调试闭环
+
+
+
+### 20.7 文档最终整理
+
+仍需继续补：
+
+- README 最终交付版整理
+- 设计稿与实现状态的最终统一
+
+
+
+### 20.8 建议续做顺序
+
+建议下一个上下文按下面顺序继续：
+
+1. 协议层生产化治理
+2. XTP 接口定版
+3. 配置热加载差异化重建
+4. Bus 治理补齐
+5. 长稳 / 压测 / 内存调试
+6. 文档最终整理

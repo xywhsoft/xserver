@@ -65,10 +65,30 @@ static inline void XS_CustomUntrackConn(XS_CustomHandle* objHandle, XS_CustomCon
 	xrtMutexUnlock(objHandle->pConnLock);
 }
 
+static inline int64 XS_CustomTrackedConnCount(XS_CustomHandle* objHandle)
+{
+	int64 iCount;
+
+	if ( objHandle == NULL || objHandle->pConnLock == NULL || objHandle->arrConn == NULL ) {
+		return 0;
+	}
+
+	xrtMutexLock(objHandle->pConnLock);
+	iCount = (int64)objHandle->arrConn->Count;
+	xrtMutexUnlock(objHandle->pConnLock);
+	return iCount;
+}
+
 static inline void XS_CustomRecordIdleClose(void)
 {
 	g_iXsCustomIdleCloseCount++;
 	g_tXsCustomLastIdleCloseTime = xrtNow();
+}
+
+static inline void XS_CustomRecordConnLimitClose(void)
+{
+	g_iXsCustomConnLimitCloseCount++;
+	g_tXsCustomLastConnLimitCloseTime = xrtNow();
 }
 
 static uint32 XS_CustomIdleThread(ptr pArg)
@@ -213,6 +233,7 @@ static void XS_CustomOnOpen(ptr pOwner, xnetstream* pStream)
 {
 	XS_CustomConnContext* objCtx = (XS_CustomConnContext*)pOwner;
 	XS_ServerConfig* objServer = objCtx ? objCtx->pServer : NULL;
+	XS_CustomHandle* objHandle = objServer ? (XS_CustomHandle*)objServer->pHandle : NULL;
 	
 	g_iXsCustomOpenCount++;
 	g_iXsCustomConnCurrent++;
@@ -220,6 +241,20 @@ static void XS_CustomOnOpen(ptr pOwner, xnetstream* pStream)
 		g_iXsCustomConnPeak = g_iXsCustomConnCurrent;
 	}
 	XS_CustomTouch(objCtx);
+	if ( objServer && objServer->ConnLimit > 0u && XS_CustomTrackedConnCount(objHandle) > (int64)objServer->ConnLimit ) {
+		if ( objCtx ) {
+			objCtx->bClosing = TRUE;
+		}
+		XS_CustomRecordConnLimitClose();
+		XS_LogWarn(
+			"custom conn limit exceeded: server=%s current=%lld limit=%u",
+			objServer->Name ? objServer->Name : "(null)",
+			(long long)XS_CustomTrackedConnCount(objHandle),
+			(unsigned)objServer->ConnLimit
+		);
+		xrtNetStreamClose(pStream, 0u);
+		return;
+	}
 	XS_LogInfo(
 		"custom open: server=%s stream=%p script_open=%s script_data=%s",
 		objServer && objServer->Name ? objServer->Name : "(null)"
@@ -345,8 +380,14 @@ static void XS_CustomOnClose(ptr pOwner, xnetstream* pStream, xnet_result iReaso
 static void XS_CustomOnError(ptr pOwner, xnetstream* pStream, int iSysErr)
 {
 	XS_CustomConnContext* objCtx = (XS_CustomConnContext*)pOwner;
+	if ( objCtx == NULL && pStream != NULL ) {
+		objCtx = (XS_CustomConnContext*)xrtNetStreamGetUserData(pStream);
+	}
 	XS_ServerConfig* objServer = objCtx ? objCtx->pServer : NULL;
-	(void)pStream;
+
+	if ( objCtx && objCtx->bClosing ) {
+		return;
+	}
 	
 	g_iXsCustomErrorCount++;
 	g_iXsCustomLastErrorCode = (int64)iSysErr;
@@ -415,7 +456,7 @@ static inline bool XS_CustomInitServer(xnetengine* pEngine, XS_ServerConfig* obj
 	}
 
 	objHandle->pConnLock = xrtMutexCreate();
-	objHandle->arrConn = xrtArrayCreate(sizeof(XS_CustomConnContext*), XRT_OBJMODE_LOCAL);
+	objHandle->arrConn = xrtArrayCreate(sizeof(XS_CustomConnContext*), XRT_OBJMODE_SHARED);
 	if ( objHandle->pConnLock == NULL || objHandle->arrConn == NULL ) {
 		if ( objHandle->arrConn ) {
 			xrtArrayDestroy(objHandle->arrConn);

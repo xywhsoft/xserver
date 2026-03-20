@@ -3,7 +3,7 @@
 		"enabled": true,
 		"class": "http",
 		"name": "test Manage HTTP Server",
-		"desc": "vNext manage interface xtp test",
+		"desc": "vNext http idle timeout manage interface test",
 		"param": "manage",
 		"backlog": 128,
 		"recv_limit": 1048576,
@@ -11,7 +11,7 @@
 		"header_limit": 32,
 		"body_limit": 262144,
 		"ip": "0.0.0.0",
-		"port": 8085,
+		"port": 8185,
 		"debug": true,
 		"host_default": {
 			"enabled": true,
@@ -25,17 +25,26 @@
 	},
 	{
 		"enabled": true,
-		"class": "xtp",
-		"name": "test XTP Server",
-		"desc": "vNext xtp metrics demo",
+		"class": "http",
+		"name": "test HTTP Idle Server",
+		"desc": "vNext http idle timeout test",
 		"backlog": 128,
 		"recv_limit": 1048576,
-		"idle_timeout": 3000,
+		"path_limit": 200,
+		"header_limit": 32,
+		"body_limit": 262144,
+		"idle_timeout": 1000,
 		"ip": "0.0.0.0",
-		"port": 9096,
+		"port": 8186,
 		"debug": true,
-		"path": "script_vnext",
-		"devlang": "c",
-		"devfile": "script_vnext/xtp_main.c"
+		"host_default": {
+			"enabled": true,
+			"name": "默认主机",
+			"path": "wwwroot",
+			"devlang": "c",
+			"devfile": "script_vnext/main.c",
+			"debug": true
+		},
+		"hosts": []
 	}
 ]

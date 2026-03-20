@@ -318,6 +318,7 @@ static inline bool XS_LoadServerConfig(xvalue objTable, const char* sBaseDir, XS
 		{"desc", XVO_DT_TEXT, FALSE},
 		{"param", XVO_DT_TEXT, FALSE},
 		{"backlog", XVO_DT_INT, FALSE},
+		{"conn_limit", XVO_DT_INT, FALSE},
 		{"recv_limit", XVO_DT_INT, FALSE},
 		{"idle_timeout", XVO_DT_INT, FALSE},
 		{"ws_message_limit", XVO_DT_INT, FALSE},
@@ -363,6 +364,7 @@ static inline bool XS_LoadServerConfig(xvalue objTable, const char* sBaseDir, XS
 	if ( !XS_RequireFieldType(objTable, "desc", 4, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "param", 5, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "backlog", 7, XVO_DT_INT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldType(objTable, "conn_limit", 10, XVO_DT_INT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "recv_limit", 10, XVO_DT_INT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "idle_timeout", 12, XVO_DT_INT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "ws_message_limit", 16, XVO_DT_INT, sScope, FALSE) ) return FALSE;
@@ -401,6 +403,15 @@ static inline bool XS_LoadServerConfig(xvalue objTable, const char* sBaseDir, XS
 			return FALSE;
 		}
 		objServer->Backlog = (uint32)iBacklog;
+	}
+	objVal = xvoTableGetValue(objTable, "conn_limit", 10);
+	if ( objVal && objVal->Type != XVO_DT_NULL ) {
+		int64 iConnLimit = xvoTableGetInt(objTable, "conn_limit", 10);
+		if ( iConnLimit < 0 || iConnLimit > (int64)UINT32_MAX ) {
+			XS_ReportError("%s field out of range: conn_limit", sScope);
+			return FALSE;
+		}
+		objServer->ConnLimit = (uint32)iConnLimit;
 	}
 	objVal = xvoTableGetValue(objTable, "recv_limit", 10);
 	if ( objVal && objVal->Type != XVO_DT_NULL ) {

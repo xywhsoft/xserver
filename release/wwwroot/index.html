@@ -723,6 +723,46 @@
 						<div class="status-value" id="StatusWsLastAge">-</div>
 					</div>
 					<div class="status-item">
+						<div class="status-label">WS Idle Close</div>
+						<div class="status-value" id="StatusWsIdleClose">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">WS Idle Age</div>
+						<div class="status-value" id="StatusWsIdleAge">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Server Idle Timeout</div>
+						<div class="status-value" id="StatusIdleTimeout">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Server Conn Limit</div>
+						<div class="status-value" id="StatusConnLimit">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">HTTP Limit Close</div>
+						<div class="status-value" id="StatusHttpLimitClose">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">WS Limit Close</div>
+						<div class="status-value" id="StatusWsLimitClose">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">XTP Limit Close</div>
+						<div class="status-value" id="StatusXtpLimitClose">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">TCP Limit Close</div>
+						<div class="status-value" id="StatusCustomLimitClose">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">HTTP Idle Close</div>
+						<div class="status-value" id="StatusHttpIdleClose">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">HTTP Idle Age</div>
+						<div class="status-value" id="StatusHttpIdleAge">-</div>
+					</div>
+					<div class="status-item">
 						<div class="status-label">XTP Conn</div>
 						<div class="status-value" id="StatusXtpConn">-</div>
 					</div>
@@ -1308,6 +1348,36 @@
 					);
 					procSetText('StatusWsErrorAge', (tblStatus.ws_last_error_age_ms !== undefined && tblStatus.ws_last_error_age_ms >= 0) ? String(tblStatus.ws_last_error_age_ms) + ' ms' : '-');
 					procSetText('StatusWsLastAge', (tblStatus.ws_last_age_ms !== undefined && tblStatus.ws_last_age_ms >= 0) ? String(tblStatus.ws_last_age_ms) + ' ms' : '-');
+					procSetText('StatusWsIdleClose', (tblStatus.ws_idle_close_count !== undefined) ? String(tblStatus.ws_idle_close_count) : '-');
+					procSetText('StatusWsIdleAge', (tblStatus.ws_last_idle_close_age_ms !== undefined && tblStatus.ws_last_idle_close_age_ms >= 0) ? String(tblStatus.ws_last_idle_close_age_ms) + ' ms' : '-');
+					procSetText('StatusIdleTimeout', (tblStatus.idle_timeout !== undefined) ? String(tblStatus.idle_timeout) + ' ms' : '-');
+					procSetText('StatusConnLimit', (tblStatus.conn_limit !== undefined && tblStatus.conn_limit > 0) ? String(tblStatus.conn_limit) : 'unlimited');
+					procSetText(
+						'StatusHttpLimitClose',
+						((tblStatus.http_conn_limit_close_count !== undefined) ? String(tblStatus.http_conn_limit_close_count) : '-') +
+						' / ' +
+						((tblStatus.http_last_conn_limit_close_age_ms !== undefined && tblStatus.http_last_conn_limit_close_age_ms >= 0) ? String(tblStatus.http_last_conn_limit_close_age_ms) + ' ms' : '-')
+					);
+					procSetText(
+						'StatusWsLimitClose',
+						((tblStatus.ws_conn_limit_close_count !== undefined) ? String(tblStatus.ws_conn_limit_close_count) : '-') +
+						' / ' +
+						((tblStatus.ws_last_conn_limit_close_age_ms !== undefined && tblStatus.ws_last_conn_limit_close_age_ms >= 0) ? String(tblStatus.ws_last_conn_limit_close_age_ms) + ' ms' : '-')
+					);
+					procSetText(
+						'StatusXtpLimitClose',
+						((tblStatus.xtp_conn_limit_close_count !== undefined) ? String(tblStatus.xtp_conn_limit_close_count) : '-') +
+						' / ' +
+						((tblStatus.xtp_last_conn_limit_close_age_ms !== undefined && tblStatus.xtp_last_conn_limit_close_age_ms >= 0) ? String(tblStatus.xtp_last_conn_limit_close_age_ms) + ' ms' : '-')
+					);
+					procSetText(
+						'StatusCustomLimitClose',
+						((tblStatus.custom_conn_limit_close_count !== undefined) ? String(tblStatus.custom_conn_limit_close_count) : '-') +
+						' / ' +
+						((tblStatus.custom_last_conn_limit_close_age_ms !== undefined && tblStatus.custom_last_conn_limit_close_age_ms >= 0) ? String(tblStatus.custom_last_conn_limit_close_age_ms) + ' ms' : '-')
+					);
+					procSetText('StatusHttpIdleClose', (tblStatus.http_idle_close_count !== undefined) ? String(tblStatus.http_idle_close_count) : '-');
+					procSetText('StatusHttpIdleAge', (tblStatus.http_last_idle_close_age_ms !== undefined && tblStatus.http_last_idle_close_age_ms >= 0) ? String(tblStatus.http_last_idle_close_age_ms) + ' ms' : '-');
 					procSetText(
 						'StatusXtpConn',
 						((tblStatus.xtp_conn_current !== undefined) ? String(tblStatus.xtp_conn_current) : '-') +
@@ -1515,6 +1585,16 @@
 					procSetText('StatusWsCloseAge', 'error');
 					procSetText('StatusWsLast', 'error');
 					procSetText('StatusWsLastAge', 'error');
+					procSetText('StatusWsIdleClose', 'error');
+					procSetText('StatusWsIdleAge', 'error');
+					procSetText('StatusIdleTimeout', 'error');
+					procSetText('StatusConnLimit', 'error');
+					procSetText('StatusHttpLimitClose', 'error');
+					procSetText('StatusWsLimitClose', 'error');
+					procSetText('StatusXtpLimitClose', 'error');
+					procSetText('StatusCustomLimitClose', 'error');
+					procSetText('StatusHttpIdleClose', 'error');
+					procSetText('StatusHttpIdleAge', 'error');
 					procSetText('StatusXtpConn', 'error');
 					procSetText('StatusXtpMsg', 'error');
 					procSetText('StatusXtpReqResp', 'error');

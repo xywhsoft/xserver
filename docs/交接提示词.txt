@@ -1,0 +1,68 @@
+你现在在继续维护 D:\git\xserver 项目，请先不要重复梳理历史，直接按下面要求接手。
+
+一、先读这些文件
+1. D:\git\xserver\AGENTS.md
+2. D:\git\xserver\README.md
+重点看：`## 未完成任务`、`## 建议续做顺序`
+3. D:\git\xserver\docs\vNext设计草案.md
+重点看：`## 20. 交接清单`
+
+二、必须遵守的规则
+1. 全程使用中文回复，并且每次回复开头先说“爸爸”。
+2. 代码缩进统一使用 tab，不要用空格缩进。
+3. C 代码修改时遵守当前项目风格，不要随意引入新依赖。
+4. 使用 apply_patch 改文件。
+5. 项目路径固定在 D:\git\xserver。
+
+三、当前已经确认完成的重要事项
+1. `src/script/import_c` 目录已经收口，只保留：
+	- `import_all.h`
+	- `import_libtcc.h`
+	- `import_sqlite.h`
+	- `import_xrt.h`
+	- `import_xs.h`
+2. `xCore` 不能直接导给 TCC，必须继续走 `XS_SetGlobalDate(...)` 注入。
+3. 不要把 `printf/snprintf` 这类 C 标准库函数注册给 TCC。
+4. `import_xrt.h` 的方向已经收正：
+	- 只导真实函数
+	- 不导全局数据
+	- 不再通过 `XS_Script*` 包装伪装成 xrt 原函数
+5. `idle_timeout` 已经在 `http / ws / xtp / custom` 上落地并做过真实回归。
+6. `conn_limit` 已经在 `http / ws / xtp / custom` 上落地并做过真实回归。
+7. `custom` 已改成按当前 handle 的连接表计数，不再用全局连接数判限。
+8. `xtp` 高层同步 API、one-shot、request object、value/json/body/result/error/meta 这一层已经基本成型。
+9. 未完成任务已经写进文档，不需要重新整理。
+
+四、最近一轮已经真实验证过的点
+1. HTTP `conn_limit` 真实触发成功，`http_conn_limit_close_count=1`
+2. WS `conn_limit` 真实触发成功，`ws_conn_limit_close_count=1`
+3. XTP `conn_limit` 真实触发成功，`xtp_conn_limit_close_count=1`
+4. Custom/TCP `conn_limit` 真实触发成功，`custom_conn_limit_close_count=1`
+
+五、当前优先继续做的事情
+1. 协议层生产化治理继续收口
+重点是：
+	- 更统一的限流策略
+	- 更系统的异常连接清理
+	- 更完整的请求拒绝统计
+	- 各协议更一致的治理规则
+2. XTP 高层 API 最终定版
+重点是：
+	- 最终保留哪些接口
+	- 是否补异步 pending request
+	- 是否补持久客户端对象体系
+3. 配置热加载差异化重建
+重点是：
+	- listener / object 级最小替换
+	- 更优的差异化重建流程
+4. Bus / 全局共享数据治理补齐
+重点是：
+	- 配额 / 上限
+	- namespace 治理
+	- 自动清理策略
+	- 更偏生产化的宿主管理规则
+5. 长稳 / 压测 / 内存调试验证
+6. 文档最终整理
+
+六、建议你接手后的第一步
+先读文档里的未完成任务清单，然后直接从“协议层生产化治理继续收口”开始实现，不要再重复修 import_c、xCore 导出、stdio 注册这些已经收正的问题。

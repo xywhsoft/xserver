@@ -30,6 +30,7 @@
 		"desc": "vNext custom metrics demo",
 		"backlog": 128,
 		"recv_limit": 1048576,
+		"idle_timeout": 3000,
 		"ip": "0.0.0.0",
 		"port": 9098,
 		"debug": true,
