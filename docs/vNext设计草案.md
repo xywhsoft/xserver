@@ -282,7 +282,18 @@ TCC 仍然作为全功能 C 语言脚本宿主，不做权限限制。
 - `xsXtpClientCallSimpleMeta`
 - `xsXtpClientCallSimpleMetaJson`
 - `xsXtpClientCallSimpleValue`
+- `xsXtpClientCallSimpleParamsValue`
 - `xsXtpClientCallSimpleBodyValue`
+- `xsXtpRequestCreate / xsXtpRequestFree`
+- `xsXtpRequestSetCmd / xsXtpRequestSetParamsValue / xsXtpRequestSetParamText / xsXtpRequestSetParamInt / xsXtpRequestSetParamBool`
+- `xsXtpRequestSetBodyText / xsXtpRequestSetBodyJson / xsXtpRequestSetBodyValue`
+- `xsXtpClientDoRequest / xsXtpClientCallRequest`
+- `xsXtpClientCallRequestValue / xsXtpClientCallRequestParamsValue / xsXtpClientCallRequestBodyValue`
+- `xsXtpClientCallRequestBody / xsXtpClientCallRequestResult / xsXtpClientCallRequestError`
+- `xsXtpClientCallRequestMeta / xsXtpClientCallRequestMetaJson`
+- `xsXtpClientCallRequestResultJson / xsXtpClientCallRequestErrorJson`
+- `xsXtpClientCallRequestOK / xsXtpClientCallRequestStatus / xsXtpClientCallRequestCmd`
+- `xsXtpClientCallRequestSummary / xsXtpClientCallRequestSummaryJson`
 - `xsXtpClientCallTableText`
 - `xsXtpClientCallTableJson`
 - `xsXtpClientCallTableValue`
@@ -308,6 +319,7 @@ TCC 仍然作为全功能 C 语言脚本宿主，不做权限限制。
 - `xsXtpMetaText`
 - `xsXtpMetaJson`
 - `xsXtpValue`
+- `xsXtpParamsValue`
 - `xsXtpBodyValue`
 - `xsXtpErrorValue`
 - `xsXtpSummaryText`

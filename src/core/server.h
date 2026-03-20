@@ -26,6 +26,7 @@ typedef struct XS_ServerConfig {
 	char* Param;
 	uint32 Backlog;
 	uint32 RecvLimit;
+	uint32 IdleTimeout;
 	uint32 WsMessageLimit;
 	uint32 PathLimit;
 	uint32 HeaderLimit;
@@ -98,6 +99,7 @@ static inline void XS_InitServerConfig(XS_ServerConfig* objServer)
 	objServer->Enabled = TRUE;
 	objServer->Backlog = 128u;
 	objServer->RecvLimit = 1024u * 1024u;
+	objServer->IdleTimeout = 0u;
 	objServer->WsMessageLimit = 256u * 1024u;
 	objServer->PathLimit = 200u;
 	objServer->HeaderLimit = XHTTPD_MAX_HEADERS;

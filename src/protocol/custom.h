@@ -2,11 +2,126 @@
 #define XS_PROTOCOL_CUSTOM_H
 
 typedef struct {
+	XS_ServerConfig* pServer;
+	xnetstream* pStream;
+	int64 iLastActiveMS;
+	volatile bool bClosing;
+} XS_CustomConnContext;
+
+typedef struct {
 	xnetlistener* pListener;
 	XS_ServerConfig* pServer;
 	xthread hAcceptThread;
+	xthread hIdleThread;
 	volatile bool bStopAccept;
+	xmutex pConnLock;
+	xarray arrConn;
 } XS_CustomHandle;
+
+static inline void XS_CustomTouch(XS_CustomConnContext* objCtx)
+{
+	if ( objCtx == NULL ) {
+		return;
+	}
+
+	objCtx->iLastActiveMS = XS_XtpNowMS();
+}
+
+static inline void XS_CustomTrackConn(XS_CustomHandle* objHandle, XS_CustomConnContext* objCtx)
+{
+	XS_CustomConnContext** ppSlot;
+	uint32 iPos;
+
+	if ( objHandle == NULL || objHandle->pConnLock == NULL || objHandle->arrConn == NULL || objCtx == NULL ) {
+		return;
+	}
+
+	xrtMutexLock(objHandle->pConnLock);
+	iPos = xrtArrayAppend(objHandle->arrConn, 1);
+	ppSlot = (XS_CustomConnContext**)xrtArrayGet(objHandle->arrConn, iPos);
+	if ( ppSlot ) {
+		*ppSlot = objCtx;
+	}
+	xrtMutexUnlock(objHandle->pConnLock);
+}
+
+static inline void XS_CustomUntrackConn(XS_CustomHandle* objHandle, XS_CustomConnContext* objCtx)
+{
+	uint32 i;
+
+	if ( objHandle == NULL || objHandle->pConnLock == NULL || objHandle->arrConn == NULL || objCtx == NULL ) {
+		return;
+	}
+
+	xrtMutexLock(objHandle->pConnLock);
+	for ( i = 1; i <= objHandle->arrConn->Count; i++ ) {
+		XS_CustomConnContext** ppItem = (XS_CustomConnContext**)xrtArrayGet(objHandle->arrConn, i);
+
+		if ( ppItem && *ppItem == objCtx ) {
+			xrtArrayRemove(objHandle->arrConn, i, 1);
+			break;
+		}
+	}
+	xrtMutexUnlock(objHandle->pConnLock);
+}
+
+static inline void XS_CustomRecordIdleClose(void)
+{
+	g_iXsCustomIdleCloseCount++;
+	g_tXsCustomLastIdleCloseTime = xrtNow();
+}
+
+static uint32 XS_CustomIdleThread(ptr pArg)
+{
+	XS_CustomHandle* objHandle = (XS_CustomHandle*)pArg;
+
+	while ( objHandle && !objHandle->bStopAccept ) {
+		XS_ServerConfig* objServer = objHandle->pServer;
+		uint32 iIdleTimeout = objServer ? objServer->IdleTimeout : 0u;
+
+		if ( iIdleTimeout > 0u && objHandle->pConnLock && objHandle->arrConn ) {
+			int64 iNowMS = XS_XtpNowMS();
+			xarray arrClose = xrtArrayCreate(sizeof(xnetstream*), XRT_OBJMODE_LOCAL);
+			uint32 i;
+
+			xrtMutexLock(objHandle->pConnLock);
+			for ( i = 1; i <= objHandle->arrConn->Count; i++ ) {
+				XS_CustomConnContext** ppItem = (XS_CustomConnContext**)xrtArrayGet(objHandle->arrConn, i);
+				XS_CustomConnContext* objCtx = (ppItem ? *ppItem : NULL);
+
+				if ( objCtx == NULL || objCtx->pStream == NULL || objCtx->bClosing ) {
+					continue;
+				}
+				if ( (objCtx->iLastActiveMS > 0) && ((iNowMS - objCtx->iLastActiveMS) >= (int64)iIdleTimeout) ) {
+					xnetstream** ppClose;
+					uint32 iPos;
+
+					objCtx->bClosing = TRUE;
+					iPos = xrtArrayAppend(arrClose, 1);
+					ppClose = (xnetstream**)xrtArrayGet(arrClose, iPos);
+					if ( ppClose ) {
+						*ppClose = objCtx->pStream;
+					}
+				}
+			}
+			xrtMutexUnlock(objHandle->pConnLock);
+
+			for ( i = 1; i <= arrClose->Count; i++ ) {
+				xnetstream** ppClose = (xnetstream**)xrtArrayGet(arrClose, i);
+
+				if ( ppClose && *ppClose ) {
+					XS_CustomRecordIdleClose();
+					xrtNetStreamClose(*ppClose, 0u);
+				}
+			}
+			xrtArrayDestroy(arrClose);
+		}
+
+		xrtSleep(500);
+	}
+
+	return 0;
+}
 
 static inline void XS_CustomRecordInvalid(const char* sReason)
 {
@@ -76,21 +191,35 @@ static uint32 XS_CustomAcceptThread(ptr pArg)
 static bool XS_CustomOnAccept(ptr pOwner, xnetlistener* pListener, xnetstream* pStream)
 {
 	XS_ServerConfig* objServer = (XS_ServerConfig*)pOwner;
+	XS_CustomHandle* objHandle;
+	XS_CustomConnContext* objCtx;
 	(void)pListener;
-	
-	xrtNetStreamSetUserData(pStream, objServer);
+
+	objHandle = objServer ? (XS_CustomHandle*)objServer->pHandle : NULL;
+	objCtx = (XS_CustomConnContext*)xrtCalloc(1, sizeof(XS_CustomConnContext));
+	if ( objCtx == NULL ) {
+		return FALSE;
+	}
+
+	objCtx->pServer = objServer;
+	objCtx->pStream = pStream;
+	XS_CustomTouch(objCtx);
+	xrtNetStreamSetUserData(pStream, objCtx);
+	XS_CustomTrackConn(objHandle, objCtx);
 	return TRUE;
 }
 
 static void XS_CustomOnOpen(ptr pOwner, xnetstream* pStream)
 {
-	XS_ServerConfig* objServer = (XS_ServerConfig*)pOwner;
+	XS_CustomConnContext* objCtx = (XS_CustomConnContext*)pOwner;
+	XS_ServerConfig* objServer = objCtx ? objCtx->pServer : NULL;
 	
 	g_iXsCustomOpenCount++;
 	g_iXsCustomConnCurrent++;
 	if ( g_iXsCustomConnCurrent > g_iXsCustomConnPeak ) {
 		g_iXsCustomConnPeak = g_iXsCustomConnCurrent;
 	}
+	XS_CustomTouch(objCtx);
 	XS_LogInfo(
 		"custom open: server=%s stream=%p script_open=%s script_data=%s",
 		objServer && objServer->Name ? objServer->Name : "(null)"
@@ -106,7 +235,8 @@ static void XS_CustomOnOpen(ptr pOwner, xnetstream* pStream)
 
 static void XS_CustomOnRecv(ptr pOwner, xnetstream* pStream, xnetchain* pChain)
 {
-	XS_ServerConfig* objServer = (XS_ServerConfig*)pOwner;
+	XS_CustomConnContext* objCtx = (XS_CustomConnContext*)pOwner;
+	XS_ServerConfig* objServer = objCtx ? objCtx->pServer : NULL;
 	size_t iLen;
 	char* pBuf;
 	bool bHandled = FALSE;
@@ -156,6 +286,7 @@ static void XS_CustomOnRecv(ptr pOwner, xnetstream* pStream, xnetchain* pChain)
 	g_iXsCustomRecvBytes += (int64)iLen;
 	g_iXsCustomLastBytes = (int64)iLen;
 	g_tXsCustomLastTime = xrtNow();
+	XS_CustomTouch(objCtx);
 	XS_CustomRecordRemote(pStream);
 	if ( iLen > 0 ) {
 		size_t iCopy = iLen;
@@ -186,7 +317,9 @@ static void XS_CustomOnRecv(ptr pOwner, xnetstream* pStream, xnetchain* pChain)
 
 static void XS_CustomOnClose(ptr pOwner, xnetstream* pStream, xnet_result iReason)
 {
-	XS_ServerConfig* objServer = (XS_ServerConfig*)pOwner;
+	XS_CustomConnContext* objCtx = (XS_CustomConnContext*)pOwner;
+	XS_ServerConfig* objServer = objCtx ? objCtx->pServer : NULL;
+	XS_CustomHandle* objHandle = objServer ? (XS_CustomHandle*)objServer->pHandle : NULL;
 	
 	g_iXsCustomCloseCount++;
 	g_iXsCustomLastCloseReason = (int64)iReason;
@@ -202,11 +335,17 @@ static void XS_CustomOnClose(ptr pOwner, xnetstream* pStream, xnet_result iReaso
 	if ( objServer && objServer->procStreamClose ) {
 		objServer->procStreamClose(objServer, pStream, (int)iReason);
 	}
+	XS_CustomUntrackConn(objHandle, objCtx);
+	xrtNetStreamSetUserData(pStream, NULL);
+	if ( objCtx ) {
+		xrtFree(objCtx);
+	}
 }
 
 static void XS_CustomOnError(ptr pOwner, xnetstream* pStream, int iSysErr)
 {
-	XS_ServerConfig* objServer = (XS_ServerConfig*)pOwner;
+	XS_CustomConnContext* objCtx = (XS_CustomConnContext*)pOwner;
+	XS_ServerConfig* objServer = objCtx ? objCtx->pServer : NULL;
 	(void)pStream;
 	
 	g_iXsCustomErrorCount++;
@@ -274,6 +413,21 @@ static inline bool XS_CustomInitServer(xnetengine* pEngine, XS_ServerConfig* obj
 		XS_ReportError("custom init failed: create listener");
 		return FALSE;
 	}
+
+	objHandle->pConnLock = xrtMutexCreate();
+	objHandle->arrConn = xrtArrayCreate(sizeof(XS_CustomConnContext*), XRT_OBJMODE_LOCAL);
+	if ( objHandle->pConnLock == NULL || objHandle->arrConn == NULL ) {
+		if ( objHandle->arrConn ) {
+			xrtArrayDestroy(objHandle->arrConn);
+		}
+		if ( objHandle->pConnLock ) {
+			xrtMutexDestroy(objHandle->pConnLock);
+		}
+		xrtNetListenerDestroy(objHandle->pListener);
+		xrtFree(objHandle);
+		XS_ReportError("custom init failed: alloc conn tracker");
+		return FALSE;
+	}
 	
 	objHandle->pServer = objServer;
 	objServer->pHandle = objHandle;
@@ -310,6 +464,16 @@ static inline bool XS_CustomStartServer(XS_ServerConfig* objServer)
 		xrtNetListenerStop(objHandle->pListener);
 		return FALSE;
 	}
+	objHandle->hIdleThread = xrtThreadCreate(XS_CustomIdleThread, objHandle, 0);
+	if ( objHandle->hIdleThread == NULL ) {
+		XS_ReportError("custom start failed: create idle thread error");
+		objHandle->bStopAccept = TRUE;
+		xrtThreadWait(objHandle->hAcceptThread);
+		xrtThreadDestroy(objHandle->hAcceptThread);
+		objHandle->hAcceptThread = NULL;
+		xrtNetListenerStop(objHandle->pListener);
+		return FALSE;
+	}
 	
 	XS_LogInfo(
 		"custom start: server=%s addr=%s",
@@ -338,8 +502,19 @@ static inline void XS_CustomStopServer(XS_ServerConfig* objServer)
 			xrtThreadDestroy(objHandle->hAcceptThread);
 			objHandle->hAcceptThread = NULL;
 		}
+		if ( objHandle->hIdleThread ) {
+			xrtThreadWait(objHandle->hIdleThread);
+			xrtThreadDestroy(objHandle->hIdleThread);
+			objHandle->hIdleThread = NULL;
+		}
 		if ( objHandle->pListener ) {
 			xrtNetListenerDestroy(objHandle->pListener);
+		}
+		if ( objHandle->arrConn ) {
+			xrtArrayDestroy(objHandle->arrConn);
+		}
+		if ( objHandle->pConnLock ) {
+			xrtMutexDestroy(objHandle->pConnLock);
 		}
 		xrtFree(objHandle);
 		objServer->pHandle = NULL;

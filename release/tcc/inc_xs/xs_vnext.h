@@ -88,6 +88,7 @@ char* xsXtpParamDup(const void* pMsg, const char* sKey, const char* sDefault);
 int64_t xsXtpParamInt(const void* pMsg, const char* sKey, int64_t iDefault);
 int xsXtpParamBool(const void* pMsg, const char* sKey, int bDefault);
 char* xsXtpBodyDup(const void* pMsg, const char* sDefault);
+xvalue xsXtpParamsValue(const void* pMsg);
 int xsXtpReplyText(void* pStream, const void* pReqMsg, int iStatus, const char* sCmd, unsigned iParamCount, const char** arrParam, const char** arrValue, const char* sText);
 int xsXtpReplyJson(void* pStream, const void* pReqMsg, int iStatus, const char* sCmd, unsigned iParamCount, const char** arrParam, const char** arrValue, const char* sJson);
 int xsXtpReplyOKText(void* pStream, const void* pReqMsg, const char* sCmd, const char* sText);
@@ -137,6 +138,44 @@ xvalue xsXtpClientCallSimpleValue(
 	const char* sCmd,
 	unsigned iTimeoutMs
 );
+
+xvalue xsXtpClientCallSimpleParamsValue(
+	const char* sHost,
+	unsigned iPort,
+	unsigned iRecvLimit,
+	unsigned iConnectTimeoutMs,
+	uint64_t iMsgID,
+	const char* sCmd,
+	unsigned iTimeoutMs
+);
+
+void* xsXtpRequestCreate(const char* sCmd);
+void xsXtpRequestFree(void* pReq);
+int xsXtpRequestSetCmd(void* pReq, const char* sCmd);
+int xsXtpRequestSetParamsValue(void* pReq, xvalue objParams);
+int xsXtpRequestSetParamText(void* pReq, const char* sKey, const char* sValue);
+int xsXtpRequestSetParamInt(void* pReq, const char* sKey, int64_t iValue);
+int xsXtpRequestSetParamBool(void* pReq, const char* sKey, int bValue);
+int xsXtpRequestSetBodyText(void* pReq, const char* sText);
+int xsXtpRequestSetBodyJson(void* pReq, const char* sJson);
+int xsXtpRequestSetBodyValue(void* pReq, xvalue objBody);
+void* xsXtpClientDoRequest(void* pClient, uint64_t iMsgID, void* pReq, unsigned iTimeoutMs);
+void* xsXtpClientCallRequest(const char* sHost, unsigned iPort, unsigned iRecvLimit, unsigned iConnectTimeoutMs, uint64_t iMsgID, void* pReq, unsigned iTimeoutMs);
+xvalue xsXtpClientCallRequestValue(const char* sHost, unsigned iPort, unsigned iRecvLimit, unsigned iConnectTimeoutMs, uint64_t iMsgID, void* pReq, unsigned iTimeoutMs);
+xvalue xsXtpClientCallRequestParamsValue(const char* sHost, unsigned iPort, unsigned iRecvLimit, unsigned iConnectTimeoutMs, uint64_t iMsgID, void* pReq, unsigned iTimeoutMs);
+xvalue xsXtpClientCallRequestBodyValue(const char* sHost, unsigned iPort, unsigned iRecvLimit, unsigned iConnectTimeoutMs, uint64_t iMsgID, void* pReq, unsigned iTimeoutMs);
+char* xsXtpClientCallRequestBody(const char* sHost, unsigned iPort, unsigned iRecvLimit, unsigned iConnectTimeoutMs, uint64_t iMsgID, void* pReq, unsigned iTimeoutMs, const char* sDefault);
+char* xsXtpClientCallRequestResult(const char* sHost, unsigned iPort, unsigned iRecvLimit, unsigned iConnectTimeoutMs, uint64_t iMsgID, void* pReq, unsigned iTimeoutMs, const char* sDefault);
+char* xsXtpClientCallRequestError(const char* sHost, unsigned iPort, unsigned iRecvLimit, unsigned iConnectTimeoutMs, uint64_t iMsgID, void* pReq, unsigned iTimeoutMs, const char* sDefault);
+char* xsXtpClientCallRequestMeta(const char* sHost, unsigned iPort, unsigned iRecvLimit, unsigned iConnectTimeoutMs, uint64_t iMsgID, void* pReq, unsigned iTimeoutMs);
+char* xsXtpClientCallRequestMetaJson(const char* sHost, unsigned iPort, unsigned iRecvLimit, unsigned iConnectTimeoutMs, uint64_t iMsgID, void* pReq, unsigned iTimeoutMs);
+char* xsXtpClientCallRequestResultJson(const char* sHost, unsigned iPort, unsigned iRecvLimit, unsigned iConnectTimeoutMs, uint64_t iMsgID, void* pReq, unsigned iTimeoutMs);
+char* xsXtpClientCallRequestErrorJson(const char* sHost, unsigned iPort, unsigned iRecvLimit, unsigned iConnectTimeoutMs, uint64_t iMsgID, void* pReq, unsigned iTimeoutMs, const char* sDefault);
+int xsXtpClientCallRequestOK(const char* sHost, unsigned iPort, unsigned iRecvLimit, unsigned iConnectTimeoutMs, uint64_t iMsgID, void* pReq, unsigned iTimeoutMs);
+int xsXtpClientCallRequestStatus(const char* sHost, unsigned iPort, unsigned iRecvLimit, unsigned iConnectTimeoutMs, uint64_t iMsgID, void* pReq, unsigned iTimeoutMs, int iDefault);
+char* xsXtpClientCallRequestCmd(const char* sHost, unsigned iPort, unsigned iRecvLimit, unsigned iConnectTimeoutMs, uint64_t iMsgID, void* pReq, unsigned iTimeoutMs, const char* sDefault);
+char* xsXtpClientCallRequestSummary(const char* sHost, unsigned iPort, unsigned iRecvLimit, unsigned iConnectTimeoutMs, uint64_t iMsgID, void* pReq, unsigned iTimeoutMs);
+char* xsXtpClientCallRequestSummaryJson(const char* sHost, unsigned iPort, unsigned iRecvLimit, unsigned iConnectTimeoutMs, uint64_t iMsgID, void* pReq, unsigned iTimeoutMs);
 
 int xsXtpBuildParamArrays(xvalue objParams, const char*** ppParam, const char*** ppValue, unsigned* piCount);
 void xsXtpFreeParamArrays(char** arrParam, char** arrValue, unsigned iCount);

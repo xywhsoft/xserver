@@ -47,6 +47,9 @@ typedef struct {
 	char* pRecvBuf;
 	size_t iRecvLen;
 	size_t iRecvCap;
+	int64 iLastActiveMS;
+	volatile bool bClosing;
+	ptr pTracker;
 } XS_XtpConnContext;
 
 typedef struct {
@@ -61,7 +64,10 @@ typedef struct {
 	XS_ServerConfig* pServer;
 	xthread hAcceptThread;
 	xthread hAcceptThreadTLS;
+	xthread hIdleThread;
 	volatile bool bStopAccept;
+	xmutex pConnLock;
+	xarray arrConn;
 } XS_XtpHandle;
 
 static _Thread_local int g_iXsXtpClientLastErrorCode = 0;
@@ -128,6 +134,59 @@ static inline int XS_XtpClientLastErrorCode(void)
 static inline const char* XS_XtpClientLastError(void)
 {
 	return g_sXsXtpClientLastError;
+}
+
+static inline void XS_XtpTouch(XS_XtpConnContext* objCtx)
+{
+	if ( objCtx == NULL ) {
+		return;
+	}
+
+	objCtx->iLastActiveMS = XS_XtpNowMS();
+}
+
+static inline void XS_XtpTrackConn(XS_XtpHandle* objHandle, XS_XtpConnContext* objCtx)
+{
+	XS_XtpConnContext** ppSlot;
+	uint32 iPos;
+
+	if ( objHandle == NULL || objHandle->pConnLock == NULL || objHandle->arrConn == NULL || objCtx == NULL ) {
+		return;
+	}
+
+	xrtMutexLock(objHandle->pConnLock);
+	iPos = xrtArrayAppend(objHandle->arrConn, 1);
+	ppSlot = (XS_XtpConnContext**)xrtArrayGet(objHandle->arrConn, iPos);
+	if ( ppSlot ) {
+		*ppSlot = objCtx;
+	}
+	xrtMutexUnlock(objHandle->pConnLock);
+}
+
+static inline void XS_XtpUntrackConn(XS_XtpHandle* objHandle, XS_XtpConnContext* objCtx)
+{
+	uint32 i;
+
+	if ( objHandle == NULL || objHandle->pConnLock == NULL || objHandle->arrConn == NULL || objCtx == NULL ) {
+		return;
+	}
+
+	xrtMutexLock(objHandle->pConnLock);
+	for ( i = 1; i <= objHandle->arrConn->Count; i++ ) {
+		XS_XtpConnContext** ppItem = (XS_XtpConnContext**)xrtArrayGet(objHandle->arrConn, i);
+
+		if ( ppItem && *ppItem == objCtx ) {
+			xrtArrayRemove(objHandle->arrConn, i, 1);
+			break;
+		}
+	}
+	xrtMutexUnlock(objHandle->pConnLock);
+}
+
+static inline void XS_XtpRecordIdleClose(void)
+{
+	g_iXsXtpIdleCloseCount++;
+	g_tXsXtpLastIdleCloseTime = xrtNow();
 }
 
 static inline int64 XS_XtpMetricGet(const volatile int64* pValue)
@@ -971,6 +1030,28 @@ static inline xvalue XS_XtpClientCallSimpleValue(
 	}
 
 	objRet = XS_XtpValue(objResp);
+	XS_XtpMessageDestroy(objResp);
+	return objRet;
+}
+
+static inline xvalue XS_XtpClientCallSimpleParamsValue(
+	const char* sHost,
+	uint16 iPort,
+	uint32 iRecvLimit,
+	uint32 iConnectTimeoutMs,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iTimeoutMs
+)
+{
+	XTP_MessageObject objResp = (XTP_MessageObject)XS_XtpClientCallSimple(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, sCmd, iTimeoutMs);
+	xvalue objRet;
+
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+
+	objRet = XS_XtpParamsValue(objResp);
 	XS_XtpMessageDestroy(objResp);
 	return objRet;
 }
@@ -2742,9 +2823,62 @@ static uint32 XS_XtpAcceptThreadTLS(ptr pArg)
 	return 0;
 }
 
+static uint32 XS_XtpIdleThread(ptr pArg)
+{
+	XS_XtpHandle* objHandle = (XS_XtpHandle*)pArg;
+
+	while ( objHandle && !objHandle->bStopAccept ) {
+		XS_ServerConfig* objServer = objHandle->pServer;
+		uint32 iIdleTimeout = objServer ? objServer->IdleTimeout : 0u;
+
+		if ( iIdleTimeout > 0u && objHandle->pConnLock && objHandle->arrConn ) {
+			int64 iNowMS = XS_XtpNowMS();
+			xarray arrClose = xrtArrayCreate(sizeof(xnetstream*), XRT_OBJMODE_LOCAL);
+			uint32 i;
+
+			xrtMutexLock(objHandle->pConnLock);
+			for ( i = 1; i <= objHandle->arrConn->Count; i++ ) {
+				XS_XtpConnContext** ppItem = (XS_XtpConnContext**)xrtArrayGet(objHandle->arrConn, i);
+				XS_XtpConnContext* objCtx = ppItem ? *ppItem : NULL;
+
+				if ( objCtx == NULL || objCtx->pStream == NULL || objCtx->bClosing ) {
+					continue;
+				}
+				if ( (objCtx->iLastActiveMS > 0) && ((iNowMS - objCtx->iLastActiveMS) >= (int64)iIdleTimeout) ) {
+					xnetstream** ppClose;
+					uint32 iPos;
+
+					objCtx->bClosing = TRUE;
+					iPos = xrtArrayAppend(arrClose, 1);
+					ppClose = (xnetstream**)xrtArrayGet(arrClose, iPos);
+					if ( ppClose ) {
+						*ppClose = objCtx->pStream;
+					}
+				}
+			}
+			xrtMutexUnlock(objHandle->pConnLock);
+
+			for ( i = 1; i <= arrClose->Count; i++ ) {
+				xnetstream** ppClose = (xnetstream**)xrtArrayGet(arrClose, i);
+
+				if ( ppClose && *ppClose ) {
+					XS_XtpRecordIdleClose();
+					xrtNetStreamClose(*ppClose, 0u);
+				}
+			}
+			xrtArrayDestroy(arrClose);
+		}
+
+		xrtSleep(500);
+	}
+
+	return 0;
+}
+
 static bool XS_XtpOnAccept(ptr pOwner, xnetlistener* pListener, xnetstream* pStream)
 {
 	XS_ServerConfig* objServer = (XS_ServerConfig*)pOwner;
+	XS_XtpHandle* objHandle;
 	XS_XtpConnContext* objCtx;
 	
 	(void)pListener;
@@ -2756,7 +2890,11 @@ static bool XS_XtpOnAccept(ptr pOwner, xnetlistener* pListener, xnetstream* pStr
 
 	objCtx->pServer = objServer;
 	objCtx->pStream = pStream;
+	objHandle = objServer ? (XS_XtpHandle*)objServer->pHandle : NULL;
+	objCtx->pTracker = objHandle;
+	XS_XtpTouch(objCtx);
 	xrtNetStreamSetUserData(pStream, objCtx);
+	XS_XtpTrackConn(objHandle, objCtx);
 	XS_XtpMetricUpdateMax(&g_iXsXtpConnPeak, XS_XtpMetricAdd(&g_iXsXtpConnCurrent, 1));
 	return TRUE;
 }
@@ -2768,6 +2906,7 @@ static void XS_XtpOnOpen(ptr pOwner, xnetstream* pStream)
 	(void)pStream;
 	
 	XS_XtpMetricAdd(&g_iXsXtpOpenCount, 1);
+	XS_XtpTouch(objCtx);
 	if ( objServer && objServer->procStreamOpen ) {
 		objServer->procStreamOpen(objServer, objCtx ? objCtx->pStream : pStream);
 	}
@@ -2781,6 +2920,7 @@ static void XS_XtpOnRecv(ptr pOwner, xnetstream* pStream, xnetchain* pChain)
 	if ( objCtx == NULL || pChain == NULL ) {
 		return;
 	}
+	XS_XtpTouch(objCtx);
 	if ( !XS_XtpAppendChain(objCtx, pChain) ) {
 		XS_LogWarn("xtp recv append failed: server=%s", objServer && objServer->Name ? objServer->Name : "(null)");
 		xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
@@ -2881,6 +3021,7 @@ static void XS_XtpOnClose(ptr pOwner, xnetstream* pStream, xnet_result iReason)
 		objServer->procStreamClose(objServer, pStream, (int)iReason);
 	}
 	
+	XS_XtpUntrackConn((XS_XtpHandle*)objCtx->pTracker, objCtx);
 	xrtNetStreamSetUserData(pStream, NULL);
 	XS_XtpDestroyContext(objCtx);
 	xrtNetStreamDestroy(pStream);
@@ -2957,10 +3098,27 @@ static inline bool XS_XtpInitServer(xnetengine* pEngine, XS_ServerConfig* objSer
 		XS_ReportError("xtp init failed: create listener");
 		return FALSE;
 	}
+
+	objHandle->pConnLock = xrtMutexCreate();
+	objHandle->arrConn = xrtArrayCreate(sizeof(XS_XtpConnContext*), XRT_OBJMODE_LOCAL);
+	if ( objHandle->pConnLock == NULL || objHandle->arrConn == NULL ) {
+		if ( objHandle->arrConn ) {
+			xrtArrayDestroy(objHandle->arrConn);
+		}
+		if ( objHandle->pConnLock ) {
+			xrtMutexDestroy(objHandle->pConnLock);
+		}
+		xrtNetListenerDestroy(objHandle->pListener);
+		xrtFree(objHandle);
+		XS_ReportError("xtp init failed: alloc conn tracker");
+		return FALSE;
+	}
 	
 	if ( objServer->EnableTLS ) {
 		if ( objServer->BindPortTLS == 0 ) {
 			xrtNetListenerDestroy(objHandle->pListener);
+			xrtArrayDestroy(objHandle->arrConn);
+			xrtMutexDestroy(objHandle->pConnLock);
 			xrtFree(objHandle);
 			XS_ReportError(
 				"xtps init failed: missing port_tls enable_tls=%s ip_tls=%s addr_tls=%s",
@@ -2972,6 +3130,8 @@ static inline bool XS_XtpInitServer(xnetengine* pEngine, XS_ServerConfig* objSer
 		}
 		if ( objServer->TlsConfig.sCertFile == NULL || objServer->TlsConfig.sKeyFile == NULL ) {
 			xrtNetListenerDestroy(objHandle->pListener);
+			xrtArrayDestroy(objHandle->arrConn);
+			xrtMutexDestroy(objHandle->pConnLock);
 			xrtFree(objHandle);
 			XS_ReportError("xtps init failed: tls cert/key missing");
 			return FALSE;
@@ -2980,6 +3140,8 @@ static inline bool XS_XtpInitServer(xnetengine* pEngine, XS_ServerConfig* objSer
 		xrtNetListenConfigInit(&tCfg);
 		if ( !XS_BuildBindAddr(objServer, TRUE, &tCfg.tBindAddr) ) {
 			xrtNetListenerDestroy(objHandle->pListener);
+			xrtArrayDestroy(objHandle->arrConn);
+			xrtMutexDestroy(objHandle->pConnLock);
 			xrtFree(objHandle);
 			XS_ReportError("xtps init failed: invalid addr: %s", objServer->AddrTLS ? objServer->AddrTLS : "(null)");
 			return FALSE;
@@ -2990,6 +3152,8 @@ static inline bool XS_XtpInitServer(xnetengine* pEngine, XS_ServerConfig* objSer
 		objHandle->pListenerTLS = xrtNetListenerCreate(pEngine, &tCfg, XS_XtpListenerEvents(), XS_XtpStreamEvents(), objServer);
 		if ( objHandle->pListenerTLS == NULL ) {
 			xrtNetListenerDestroy(objHandle->pListener);
+			xrtArrayDestroy(objHandle->arrConn);
+			xrtMutexDestroy(objHandle->pConnLock);
 			xrtFree(objHandle);
 			XS_ReportError("xtps init failed: create tls listener");
 			return FALSE;
@@ -3038,10 +3202,23 @@ static inline bool XS_XtpStartServer(XS_ServerConfig* objServer)
 		xrtNetListenerStop(objHandle->pListener);
 		return FALSE;
 	}
+	objHandle->hIdleThread = xrtThreadCreate(XS_XtpIdleThread, objHandle, 0);
+	if ( objHandle->hIdleThread == NULL ) {
+		XS_ReportError("xtp start failed: create idle thread error");
+		objHandle->bStopAccept = TRUE;
+		xrtThreadWait(objHandle->hAcceptThread);
+		xrtThreadDestroy(objHandle->hAcceptThread);
+		objHandle->hAcceptThread = NULL;
+		xrtNetListenerStop(objHandle->pListener);
+		return FALSE;
+	}
 	if ( objHandle->pListenerTLS ) {
 		if ( xrtNetListenerStart(objHandle->pListenerTLS) != XRT_NET_OK ) {
 			XS_ReportError("xtps start failed: listener start error");
 			objHandle->bStopAccept = TRUE;
+			xrtThreadWait(objHandle->hIdleThread);
+			xrtThreadDestroy(objHandle->hIdleThread);
+			objHandle->hIdleThread = NULL;
 			xrtThreadWait(objHandle->hAcceptThread);
 			xrtThreadDestroy(objHandle->hAcceptThread);
 			objHandle->hAcceptThread = NULL;
@@ -3053,6 +3230,9 @@ static inline bool XS_XtpStartServer(XS_ServerConfig* objServer)
 			XS_ReportError("xtps start failed: create accept thread error");
 			xrtNetListenerStop(objHandle->pListenerTLS);
 			objHandle->bStopAccept = TRUE;
+			xrtThreadWait(objHandle->hIdleThread);
+			xrtThreadDestroy(objHandle->hIdleThread);
+			objHandle->hIdleThread = NULL;
 			xrtThreadWait(objHandle->hAcceptThread);
 			xrtThreadDestroy(objHandle->hAcceptThread);
 			objHandle->hAcceptThread = NULL;
@@ -3098,6 +3278,11 @@ static inline void XS_XtpStopServer(XS_ServerConfig* objServer)
 			xrtThreadDestroy(objHandle->hAcceptThread);
 			objHandle->hAcceptThread = NULL;
 		}
+		if ( objHandle->hIdleThread ) {
+			xrtThreadWait(objHandle->hIdleThread);
+			xrtThreadDestroy(objHandle->hIdleThread);
+			objHandle->hIdleThread = NULL;
+		}
 		if ( objHandle->hAcceptThreadTLS ) {
 			xrtThreadWait(objHandle->hAcceptThreadTLS);
 			xrtThreadDestroy(objHandle->hAcceptThreadTLS);
@@ -3108,6 +3293,12 @@ static inline void XS_XtpStopServer(XS_ServerConfig* objServer)
 		}
 		if ( objHandle->pListenerTLS ) {
 			xrtNetListenerDestroy(objHandle->pListenerTLS);
+		}
+		if ( objHandle->arrConn ) {
+			xrtArrayDestroy(objHandle->arrConn);
+		}
+		if ( objHandle->pConnLock ) {
+			xrtMutexDestroy(objHandle->pConnLock);
 		}
 		xrtFree(objHandle);
 		objServer->pHandle = NULL;

@@ -129,6 +129,7 @@ static inline const void* XS_XtpBody(const void* pMsg);
 static inline uint32 XS_XtpBodyLen(const void* pMsg);
 static inline char* XS_XtpBodyDup(const void* pMsg, const char* sDefault);
 static inline char* XS_XtpCmdDup(const void* pMsg, const char* sDefault);
+static inline xvalue XS_XtpParamsValue(const void* pMsg);
 static inline xvalue XS_XtpValue(const void* pMsg);
 static inline char* XS_XtpMetaText(const void* pMsg);
 static inline char* XS_XtpMetaJson(const void* pMsg);
@@ -188,6 +189,7 @@ static inline char* XS_XtpClientCallSimpleErrorJson(const char* sHost, uint16 iP
 static inline int32 XS_XtpClientCallSimpleStatus(const char* sHost, uint16 iPort, uint32 iRecvLimit, uint32 iConnectTimeoutMs, uint64 iMsgID, const char* sCmd, uint32 iTimeoutMs, int32 iDefault);
 static inline char* XS_XtpClientCallSimpleCmd(const char* sHost, uint16 iPort, uint32 iRecvLimit, uint32 iConnectTimeoutMs, uint64 iMsgID, const char* sCmd, uint32 iTimeoutMs, const char* sDefault);
 static inline xvalue XS_XtpClientCallSimpleValue(const char* sHost, uint16 iPort, uint32 iRecvLimit, uint32 iConnectTimeoutMs, uint64 iMsgID, const char* sCmd, uint32 iTimeoutMs);
+static inline xvalue XS_XtpClientCallSimpleParamsValue(const char* sHost, uint16 iPort, uint32 iRecvLimit, uint32 iConnectTimeoutMs, uint64 iMsgID, const char* sCmd, uint32 iTimeoutMs);
 static inline xvalue XS_XtpBodyValue(const void* pMsg);
 static inline xvalue XS_XtpErrorValue(const void* pMsg);
 static inline xvalue XS_XtpClientCallSimpleBodyValue(const char* sHost, uint16 iPort, uint32 iRecvLimit, uint32 iConnectTimeoutMs, uint64 iMsgID, const char* sCmd, uint32 iTimeoutMs);
@@ -719,6 +721,11 @@ static inline char* XS_ScriptXtpCmdDup(const void* pMsg, const char* sDefault)
 static inline xvalue XS_ScriptXtpValue(const void* pMsg)
 {
 	return XS_XtpValue(pMsg);
+}
+
+static inline xvalue XS_ScriptXtpParamsValue(const void* pMsg)
+{
+	return XS_XtpParamsValue(pMsg);
 }
 
 static inline xvalue XS_ScriptXtpBodyValue(const void* pMsg)
@@ -1292,6 +1299,19 @@ static inline xvalue XS_ScriptXtpClientCallSimpleValue(
 	return XS_XtpClientCallSimpleValue(sHost, (uint16)iPort, (uint32)iRecvLimit, (uint32)iConnectTimeoutMs, iMsgID, sCmd, (uint32)iTimeoutMs);
 }
 
+static inline xvalue XS_ScriptXtpClientCallSimpleParamsValue(
+	const char* sHost,
+	unsigned iPort,
+	unsigned iRecvLimit,
+	unsigned iConnectTimeoutMs,
+	uint64 iMsgID,
+	const char* sCmd,
+	unsigned iTimeoutMs
+)
+{
+	return XS_XtpClientCallSimpleParamsValue(sHost, (uint16)iPort, (uint32)iRecvLimit, (uint32)iConnectTimeoutMs, iMsgID, sCmd, (uint32)iTimeoutMs);
+}
+
 static inline xvalue XS_ScriptXtpClientCallSimpleBodyValue(
 	const char* sHost,
 	unsigned iPort,
@@ -1481,6 +1501,675 @@ static inline void* XS_ScriptXtpClientCallTableValue(
 		xrtFree(sJson);
 	}
 	return pRet;
+}
+
+
+typedef struct {
+	char* sCmd;
+	xvalue objParams;
+	char* sText;
+	char* sJson;
+	xvalue objBody;
+} XS_ScriptXtpRequest;
+
+static inline char* XS_ScriptDupText(const char* sText)
+{
+	size_t iLen;
+	char* sDup;
+
+	if ( sText == NULL ) {
+		return NULL;
+	}
+
+	iLen = strlen(sText);
+	sDup = (char*)xrtMalloc(iLen + 1u);
+	if ( sDup == NULL ) {
+		return NULL;
+	}
+
+	memcpy(sDup, sText, iLen + 1u);
+	return sDup;
+}
+
+static inline void XS_ScriptXtpRequestClearBody(XS_ScriptXtpRequest* pReq)
+{
+	if ( pReq == NULL ) {
+		return;
+	}
+
+	if ( pReq->sText ) {
+		xrtFree(pReq->sText);
+		pReq->sText = NULL;
+	}
+	if ( pReq->sJson ) {
+		xrtFree(pReq->sJson);
+		pReq->sJson = NULL;
+	}
+	if ( pReq->objBody ) {
+		xvoUnref(pReq->objBody);
+		pReq->objBody = NULL;
+	}
+}
+
+static inline xvalue XS_ScriptXtpRequestEnsureParams(XS_ScriptXtpRequest* pReq)
+{
+	if ( pReq == NULL ) {
+		return NULL;
+	}
+
+	if ( pReq->objParams == NULL ) {
+		pReq->objParams = xvoCreateTable();
+	}
+
+	return pReq->objParams;
+}
+
+static inline void* XS_ScriptXtpRequestCreate(const char* sCmd)
+{
+	XS_ScriptXtpRequest* pReq;
+
+	pReq = (XS_ScriptXtpRequest*)xrtMalloc(sizeof(XS_ScriptXtpRequest));
+	if ( pReq == NULL ) {
+		return NULL;
+	}
+
+	memset(pReq, 0, sizeof(XS_ScriptXtpRequest));
+	if ( sCmd && sCmd[0] ) {
+		pReq->sCmd = XS_ScriptDupText(sCmd);
+		if ( pReq->sCmd == NULL ) {
+			xrtFree(pReq);
+			return NULL;
+		}
+	}
+
+	return pReq;
+}
+
+static inline void XS_ScriptXtpRequestFree(void* pReqObj)
+{
+	XS_ScriptXtpRequest* pReq = (XS_ScriptXtpRequest*)pReqObj;
+
+	if ( pReq == NULL ) {
+		return;
+	}
+
+	if ( pReq->sCmd ) {
+		xrtFree(pReq->sCmd);
+	}
+	if ( pReq->objParams ) {
+		xvoUnref(pReq->objParams);
+	}
+	XS_ScriptXtpRequestClearBody(pReq);
+	xrtFree(pReq);
+}
+
+static inline int XS_ScriptXtpRequestSetCmd(void* pReqObj, const char* sCmd)
+{
+	XS_ScriptXtpRequest* pReq = (XS_ScriptXtpRequest*)pReqObj;
+	char* sDup;
+
+	if ( pReq == NULL ) {
+		return 0;
+	}
+
+	sDup = ( sCmd && sCmd[0] ) ? XS_ScriptDupText(sCmd) : NULL;
+	if ( sCmd && sCmd[0] && (sDup == NULL) ) {
+		return 0;
+	}
+
+	if ( pReq->sCmd ) {
+		xrtFree(pReq->sCmd);
+	}
+	pReq->sCmd = sDup;
+	return 1;
+}
+
+static inline int XS_ScriptXtpRequestSetParamsValue(void* pReqObj, xvalue objParams)
+{
+	XS_ScriptXtpRequest* pReq = (XS_ScriptXtpRequest*)pReqObj;
+
+	if ( pReq == NULL ) {
+		return 0;
+	}
+
+	if ( pReq->objParams ) {
+		xvoUnref(pReq->objParams);
+		pReq->objParams = NULL;
+	}
+	if ( objParams ) {
+		xvoAddRef(objParams);
+		pReq->objParams = objParams;
+	}
+
+	return 1;
+}
+
+static inline int XS_ScriptXtpRequestSetParamText(void* pReqObj, const char* sKey, const char* sValue)
+{
+	xvalue objParams;
+
+	if ( sKey == NULL || sKey[0] == '\0' ) {
+		return 0;
+	}
+
+	objParams = XS_ScriptXtpRequestEnsureParams((XS_ScriptXtpRequest*)pReqObj);
+	if ( objParams == NULL ) {
+		return 0;
+	}
+
+	xvoTableSetText(objParams, (str)sKey, 0, (ptr)(sValue ? sValue : ""), 0, FALSE);
+	return 1;
+}
+
+static inline int XS_ScriptXtpRequestSetParamInt(void* pReqObj, const char* sKey, int64 iValue)
+{
+	xvalue objParams;
+
+	if ( sKey == NULL || sKey[0] == '\0' ) {
+		return 0;
+	}
+
+	objParams = XS_ScriptXtpRequestEnsureParams((XS_ScriptXtpRequest*)pReqObj);
+	if ( objParams == NULL ) {
+		return 0;
+	}
+
+	xvoTableSetInt(objParams, (str)sKey, 0, iValue);
+	return 1;
+}
+
+static inline int XS_ScriptXtpRequestSetParamBool(void* pReqObj, const char* sKey, int bValue)
+{
+	xvalue objParams;
+
+	if ( sKey == NULL || sKey[0] == '\0' ) {
+		return 0;
+	}
+
+	objParams = XS_ScriptXtpRequestEnsureParams((XS_ScriptXtpRequest*)pReqObj);
+	if ( objParams == NULL ) {
+		return 0;
+	}
+
+	xvoTableSetBool(objParams, (str)sKey, 0, bValue ? TRUE : FALSE);
+	return 1;
+}
+
+static inline int XS_ScriptXtpRequestSetBodyText(void* pReqObj, const char* sText)
+{
+	XS_ScriptXtpRequest* pReq = (XS_ScriptXtpRequest*)pReqObj;
+
+	if ( pReq == NULL ) {
+		return 0;
+	}
+
+	XS_ScriptXtpRequestClearBody(pReq);
+	if ( sText && sText[0] ) {
+		pReq->sText = XS_ScriptDupText(sText);
+		if ( pReq->sText == NULL ) {
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
+static inline int XS_ScriptXtpRequestSetBodyJson(void* pReqObj, const char* sJson)
+{
+	XS_ScriptXtpRequest* pReq = (XS_ScriptXtpRequest*)pReqObj;
+
+	if ( pReq == NULL ) {
+		return 0;
+	}
+
+	XS_ScriptXtpRequestClearBody(pReq);
+	if ( sJson && sJson[0] ) {
+		pReq->sJson = XS_ScriptDupText(sJson);
+		if ( pReq->sJson == NULL ) {
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
+static inline int XS_ScriptXtpRequestSetBodyValue(void* pReqObj, xvalue objBody)
+{
+	XS_ScriptXtpRequest* pReq = (XS_ScriptXtpRequest*)pReqObj;
+
+	if ( pReq == NULL ) {
+		return 0;
+	}
+
+	XS_ScriptXtpRequestClearBody(pReq);
+	if ( objBody ) {
+		xvoAddRef(objBody);
+		pReq->objBody = objBody;
+	}
+
+	return 1;
+}
+
+static inline void* XS_ScriptXtpClientDoRequest(void* pClient, uint64 iMsgID, void* pReqObj, unsigned iTimeoutMs)
+{
+	XS_ScriptXtpRequest* pReq = (XS_ScriptXtpRequest*)pReqObj;
+	const char** arrParam = NULL;
+	const char** arrValue = NULL;
+	unsigned iCount = 0;
+	void* pRet = NULL;
+	char* sJson = NULL;
+
+	if ( pClient == NULL || pReq == NULL || pReq->sCmd == NULL || pReq->sCmd[0] == '\0' ) {
+		return NULL;
+	}
+
+	if ( !XS_ScriptXtpBuildParamArrays(pReq->objParams, &arrParam, &arrValue, &iCount) ) {
+		return NULL;
+	}
+
+	if ( pReq->objBody ) {
+		sJson = xrtStringifyJSON(pReq->objBody, FALSE, NULL);
+		if ( sJson == NULL ) {
+			XS_ScriptXtpFreeParamArrays((char**)arrParam, (char**)arrValue, iCount);
+			return NULL;
+		}
+		pRet = XS_XtpClientDoJson(pClient, iMsgID, pReq->sCmd, iCount, arrParam, arrValue, sJson, (uint32)iTimeoutMs);
+		xrtFree(sJson);
+	} else if ( pReq->sJson ) {
+		pRet = XS_XtpClientDoJson(pClient, iMsgID, pReq->sCmd, iCount, arrParam, arrValue, pReq->sJson, (uint32)iTimeoutMs);
+	} else if ( pReq->sText ) {
+		pRet = XS_XtpClientDoText(pClient, iMsgID, pReq->sCmd, iCount, arrParam, arrValue, pReq->sText, (uint32)iTimeoutMs);
+	} else if ( iCount > 0 ) {
+		pRet = XS_XtpClientDo(pClient, iMsgID, pReq->sCmd, iCount, arrParam, arrValue, NULL, 0, (uint32)iTimeoutMs);
+	} else {
+		pRet = XS_XtpClientDoSimple(pClient, iMsgID, pReq->sCmd, (uint32)iTimeoutMs);
+	}
+
+	XS_ScriptXtpFreeParamArrays((char**)arrParam, (char**)arrValue, iCount);
+	return pRet;
+}
+
+static inline void* XS_ScriptXtpClientCallRequest(
+	const char* sHost,
+	unsigned iPort,
+	unsigned iRecvLimit,
+	unsigned iConnectTimeoutMs,
+	uint64 iMsgID,
+	void* pReqObj,
+	unsigned iTimeoutMs
+)
+{
+	XS_ScriptXtpRequest* pReq = (XS_ScriptXtpRequest*)pReqObj;
+
+	if ( pReq == NULL || pReq->sCmd == NULL || pReq->sCmd[0] == '\0' ) {
+		return NULL;
+	}
+
+	if ( pReq->objBody ) {
+		return XS_ScriptXtpClientCallTableValue(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, pReq->sCmd, pReq->objParams, pReq->objBody, iTimeoutMs);
+	}
+	if ( pReq->sJson ) {
+		return XS_ScriptXtpClientCallTableJson(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, pReq->sCmd, pReq->objParams, pReq->sJson, iTimeoutMs);
+	}
+	if ( pReq->sText ) {
+		return XS_ScriptXtpClientCallTableText(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, pReq->sCmd, pReq->objParams, pReq->sText, iTimeoutMs);
+	}
+	if ( pReq->objParams ) {
+		return XS_ScriptXtpClientCallTableText(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, pReq->sCmd, pReq->objParams, "", iTimeoutMs);
+	}
+
+	return XS_XtpClientCallSimple(sHost, (uint16)iPort, (uint32)iRecvLimit, (uint32)iConnectTimeoutMs, iMsgID, pReq->sCmd, (uint32)iTimeoutMs);
+}
+
+static inline xvalue XS_ScriptXtpClientCallRequestValue(
+	const char* sHost,
+	unsigned iPort,
+	unsigned iRecvLimit,
+	unsigned iConnectTimeoutMs,
+	uint64 iMsgID,
+	void* pReqObj,
+	unsigned iTimeoutMs
+)
+{
+	XTP_MessageObject objResp;
+	xvalue objRet;
+
+	objResp = (XTP_MessageObject)XS_ScriptXtpClientCallRequest(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, pReqObj, iTimeoutMs);
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+
+	objRet = XS_XtpValue(objResp);
+	XS_XtpMessageDestroy(objResp);
+	return objRet;
+}
+
+static inline xvalue XS_ScriptXtpClientCallRequestParamsValue(
+	const char* sHost,
+	unsigned iPort,
+	unsigned iRecvLimit,
+	unsigned iConnectTimeoutMs,
+	uint64 iMsgID,
+	void* pReqObj,
+	unsigned iTimeoutMs
+)
+{
+	XTP_MessageObject objResp;
+	xvalue objRet;
+
+	objResp = (XTP_MessageObject)XS_ScriptXtpClientCallRequest(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, pReqObj, iTimeoutMs);
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+
+	objRet = XS_XtpParamsValue(objResp);
+	XS_XtpMessageDestroy(objResp);
+	return objRet;
+}
+
+static inline xvalue XS_ScriptXtpClientCallRequestBodyValue(
+	const char* sHost,
+	unsigned iPort,
+	unsigned iRecvLimit,
+	unsigned iConnectTimeoutMs,
+	uint64 iMsgID,
+	void* pReqObj,
+	unsigned iTimeoutMs
+)
+{
+	XTP_MessageObject objResp;
+	xvalue objRet;
+
+	objResp = (XTP_MessageObject)XS_ScriptXtpClientCallRequest(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, pReqObj, iTimeoutMs);
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+
+	objRet = XS_XtpBodyValue(objResp);
+	XS_XtpMessageDestroy(objResp);
+	return objRet;
+}
+
+static inline char* XS_ScriptXtpClientCallRequestBody(
+	const char* sHost,
+	unsigned iPort,
+	unsigned iRecvLimit,
+	unsigned iConnectTimeoutMs,
+	uint64 iMsgID,
+	void* pReqObj,
+	unsigned iTimeoutMs,
+	const char* sDefault
+)
+{
+	XTP_MessageObject objResp;
+	char* sRet;
+
+	objResp = (XTP_MessageObject)XS_ScriptXtpClientCallRequest(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, pReqObj, iTimeoutMs);
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+
+	sRet = XS_XtpBodyDup(objResp, sDefault);
+	XS_XtpMessageDestroy(objResp);
+	return sRet;
+}
+
+static inline char* XS_ScriptXtpClientCallRequestSummary(
+	const char* sHost,
+	unsigned iPort,
+	unsigned iRecvLimit,
+	unsigned iConnectTimeoutMs,
+	uint64 iMsgID,
+	void* pReqObj,
+	unsigned iTimeoutMs
+)
+{
+	XTP_MessageObject objResp;
+	char* sRet;
+
+	objResp = (XTP_MessageObject)XS_ScriptXtpClientCallRequest(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, pReqObj, iTimeoutMs);
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+
+	sRet = XS_XtpSummaryText(objResp);
+	XS_XtpMessageDestroy(objResp);
+	return sRet;
+}
+
+static inline char* XS_ScriptXtpClientCallRequestSummaryJson(
+	const char* sHost,
+	unsigned iPort,
+	unsigned iRecvLimit,
+	unsigned iConnectTimeoutMs,
+	uint64 iMsgID,
+	void* pReqObj,
+	unsigned iTimeoutMs
+)
+{
+	XTP_MessageObject objResp;
+	char* sRet;
+
+	objResp = (XTP_MessageObject)XS_ScriptXtpClientCallRequest(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, pReqObj, iTimeoutMs);
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+
+	sRet = XS_XtpSummaryJson(objResp);
+	XS_XtpMessageDestroy(objResp);
+	return sRet;
+}
+
+static inline char* XS_ScriptXtpClientCallRequestResult(
+	const char* sHost,
+	unsigned iPort,
+	unsigned iRecvLimit,
+	unsigned iConnectTimeoutMs,
+	uint64 iMsgID,
+	void* pReqObj,
+	unsigned iTimeoutMs,
+	const char* sDefault
+)
+{
+	XTP_MessageObject objResp;
+	char* sRet;
+
+	objResp = (XTP_MessageObject)XS_ScriptXtpClientCallRequest(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, pReqObj, iTimeoutMs);
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+
+	sRet = XS_XtpParamDup(objResp, "result", sDefault);
+	XS_XtpMessageDestroy(objResp);
+	return sRet;
+}
+
+static inline char* XS_ScriptXtpClientCallRequestError(
+	const char* sHost,
+	unsigned iPort,
+	unsigned iRecvLimit,
+	unsigned iConnectTimeoutMs,
+	uint64 iMsgID,
+	void* pReqObj,
+	unsigned iTimeoutMs,
+	const char* sDefault
+)
+{
+	XTP_MessageObject objResp;
+	char* sRet;
+
+	objResp = (XTP_MessageObject)XS_ScriptXtpClientCallRequest(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, pReqObj, iTimeoutMs);
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+
+	sRet = XS_XtpErrorText(objResp, sDefault);
+	XS_XtpMessageDestroy(objResp);
+	return sRet;
+}
+
+static inline char* XS_ScriptXtpClientCallRequestMeta(
+	const char* sHost,
+	unsigned iPort,
+	unsigned iRecvLimit,
+	unsigned iConnectTimeoutMs,
+	uint64 iMsgID,
+	void* pReqObj,
+	unsigned iTimeoutMs
+)
+{
+	XTP_MessageObject objResp;
+	char* sRet;
+
+	objResp = (XTP_MessageObject)XS_ScriptXtpClientCallRequest(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, pReqObj, iTimeoutMs);
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+
+	sRet = XS_XtpMetaText(objResp);
+	XS_XtpMessageDestroy(objResp);
+	return sRet;
+}
+
+static inline char* XS_ScriptXtpClientCallRequestMetaJson(
+	const char* sHost,
+	unsigned iPort,
+	unsigned iRecvLimit,
+	unsigned iConnectTimeoutMs,
+	uint64 iMsgID,
+	void* pReqObj,
+	unsigned iTimeoutMs
+)
+{
+	XTP_MessageObject objResp;
+	char* sRet;
+
+	objResp = (XTP_MessageObject)XS_ScriptXtpClientCallRequest(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, pReqObj, iTimeoutMs);
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+
+	sRet = XS_XtpMetaJson(objResp);
+	XS_XtpMessageDestroy(objResp);
+	return sRet;
+}
+
+static inline char* XS_ScriptXtpClientCallRequestResultJson(
+	const char* sHost,
+	unsigned iPort,
+	unsigned iRecvLimit,
+	unsigned iConnectTimeoutMs,
+	uint64 iMsgID,
+	void* pReqObj,
+	unsigned iTimeoutMs
+)
+{
+	XTP_MessageObject objResp;
+	char* sRet;
+
+	objResp = (XTP_MessageObject)XS_ScriptXtpClientCallRequest(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, pReqObj, iTimeoutMs);
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+
+	sRet = XS_XtpResultJson(objResp);
+	XS_XtpMessageDestroy(objResp);
+	return sRet;
+}
+
+static inline char* XS_ScriptXtpClientCallRequestErrorJson(
+	const char* sHost,
+	unsigned iPort,
+	unsigned iRecvLimit,
+	unsigned iConnectTimeoutMs,
+	uint64 iMsgID,
+	void* pReqObj,
+	unsigned iTimeoutMs,
+	const char* sDefault
+)
+{
+	XTP_MessageObject objResp;
+	char* sRet;
+
+	objResp = (XTP_MessageObject)XS_ScriptXtpClientCallRequest(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, pReqObj, iTimeoutMs);
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+
+	sRet = XS_XtpErrorJson(objResp, sDefault);
+	XS_XtpMessageDestroy(objResp);
+	return sRet;
+}
+
+static inline int XS_ScriptXtpClientCallRequestOK(
+	const char* sHost,
+	unsigned iPort,
+	unsigned iRecvLimit,
+	unsigned iConnectTimeoutMs,
+	uint64 iMsgID,
+	void* pReqObj,
+	unsigned iTimeoutMs
+)
+{
+	XTP_MessageObject objResp;
+	int iRet;
+
+	objResp = (XTP_MessageObject)XS_ScriptXtpClientCallRequest(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, pReqObj, iTimeoutMs);
+	if ( objResp == NULL ) {
+		return 0;
+	}
+
+	iRet = XS_XtpIsOK(objResp) ? 1 : 0;
+	XS_XtpMessageDestroy(objResp);
+	return iRet;
+}
+
+static inline int XS_ScriptXtpClientCallRequestStatus(
+	const char* sHost,
+	unsigned iPort,
+	unsigned iRecvLimit,
+	unsigned iConnectTimeoutMs,
+	uint64 iMsgID,
+	void* pReqObj,
+	unsigned iTimeoutMs,
+	int iDefault
+)
+{
+	XTP_MessageObject objResp;
+	int iRet;
+
+	objResp = (XTP_MessageObject)XS_ScriptXtpClientCallRequest(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, pReqObj, iTimeoutMs);
+	if ( objResp == NULL ) {
+		return iDefault;
+	}
+
+	iRet = (int)XS_XtpStatus(objResp);
+	XS_XtpMessageDestroy(objResp);
+	return iRet;
+}
+
+static inline char* XS_ScriptXtpClientCallRequestCmd(
+	const char* sHost,
+	unsigned iPort,
+	unsigned iRecvLimit,
+	unsigned iConnectTimeoutMs,
+	uint64 iMsgID,
+	void* pReqObj,
+	unsigned iTimeoutMs,
+	const char* sDefault
+)
+{
+	XTP_MessageObject objResp;
+	char* sRet;
+
+	objResp = (XTP_MessageObject)XS_ScriptXtpClientCallRequest(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, pReqObj, iTimeoutMs);
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+
+	sRet = XS_XtpCmdDup(objResp, sDefault);
+	XS_XtpMessageDestroy(objResp);
+	return sRet;
 }
 
 

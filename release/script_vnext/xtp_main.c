@@ -718,6 +718,52 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
+	if ( xsXtpCmdIs(objMsg, "demo.callparamsvalue") ) {
+		xvalue objVal;
+		char* sValueJson;
+
+		if ( iPort == 0 ) {
+			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
+			FREE_XTP_DUP();
+			return iWrite;
+		}
+
+		objVal = xsXtpClientCallSimpleParamsValue(
+			sHost,
+			iPort,
+			1048576u,
+			3000u,
+			(iMsgID == 0) ? 1u : (iMsgID + 1u),
+			sInnerCmd && sInnerCmd[0] ? sInnerCmd : "demo.python",
+			3000u
+		);
+		if ( objVal == NULL ) {
+			snprintf(
+				sInnerBody,
+				sizeof(sInnerBody),
+				"client call params value failed\ncode=%d\nerror=%s\n",
+				xsXtpClientLastErrorCode(),
+				xsXtpClientLastError() ? xsXtpClientLastError() : ""
+			);
+			iWrite = xsXtpReplyErrorText(pStream, objMsg, 500, "xtp.error", sInnerBody) != 0;
+			FREE_XTP_DUP();
+			return iWrite;
+		}
+
+		sValueJson = xrtStringifyJSON(objVal, FALSE, NULL);
+		xvoUnref(objVal);
+		if ( sValueJson == NULL ) {
+			iWrite = xsXtpReplyErrorText(pStream, objMsg, 500, "xtp.error", "stringify params value failed") != 0;
+			FREE_XTP_DUP();
+			return iWrite;
+		}
+
+		iWrite = xsXtpReplyOKJson(pStream, objMsg, "xtp.reply", sValueJson) != 0;
+		xrtFree(sValueJson);
+		FREE_XTP_DUP();
+		return iWrite;
+	}
+
 	if ( xsXtpCmdIs(objMsg, "demo.callbodyvalue") ) {
 		xvalue objVal;
 		char* sValueJson;
@@ -842,6 +888,300 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 
 		iWrite = xsXtpReplyOKJson(pStream, objMsg, "xtp.reply", sValueJson) != 0;
 		xrtFree(sValueJson);
+		FREE_XTP_DUP();
+		return iWrite;
+	}
+
+	if ( xsXtpCmdIs(objMsg, "demo.callrequest") ) {
+		void* pReq;
+		xvalue objParam;
+		xvalue objBody;
+		xvalue objRespVal;
+		char* sValueJson;
+
+		if ( iPort == 0 ) {
+			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
+			FREE_XTP_DUP();
+			return iWrite;
+		}
+
+		pReq = xsXtpRequestCreate(sInnerCmd && sInnerCmd[0] ? sInnerCmd : "demo.python");
+		objParam = xvoCreateTable();
+		objBody = xvoCreateTable();
+		if ( pReq == NULL || objParam == NULL || objBody == NULL ) {
+			if ( pReq ) {
+				xsXtpRequestFree(pReq);
+			}
+			if ( objParam ) {
+				xvoUnref(objParam);
+			}
+			if ( objBody ) {
+				xvoUnref(objBody);
+			}
+			iWrite = xsXtpReplyErrorText(pStream, objMsg, 500, "xtp.error", "create request failed") != 0;
+			FREE_XTP_DUP();
+			return iWrite;
+		}
+
+		xvoTableSetText(objParam, "tag", 0, (ptr)(sTag && sTag[0] ? sTag : "request"), 0, FALSE);
+		xvoTableSetInt(objParam, "seq", 0, iSeq >= 0 ? iSeq : 200);
+		xvoTableSetBool(objParam, "dry", 0, iDry ? TRUE : FALSE);
+		xsXtpRequestSetParamsValue(pReq, objParam);
+		xvoUnref(objParam);
+		xvoTableSetText(objBody, "kind", 0, (ptr)"request-body", 0, FALSE);
+		xvoTableSetText(objBody, "tag", 0, (ptr)(sTag && sTag[0] ? sTag : "request"), 0, FALSE);
+		xsXtpRequestSetBodyValue(pReq, objBody);
+		xvoUnref(objBody);
+
+		objRespVal = xsXtpClientCallRequestValue(
+			sHost,
+			iPort,
+			1048576u,
+			3000u,
+			(iMsgID == 0) ? 1u : (iMsgID + 1u),
+			pReq,
+			3000u
+		);
+		xsXtpRequestFree(pReq);
+		if ( objRespVal == NULL ) {
+			snprintf(
+				sInnerBody,
+				sizeof(sInnerBody),
+				"client call request failed\ncode=%d\nerror=%s\n",
+				xsXtpClientLastErrorCode(),
+				xsXtpClientLastError() ? xsXtpClientLastError() : ""
+			);
+			iWrite = xsXtpReplyErrorText(pStream, objMsg, 500, "xtp.error", sInnerBody) != 0;
+			FREE_XTP_DUP();
+			return iWrite;
+		}
+
+		sValueJson = xrtStringifyJSON(objRespVal, FALSE, NULL);
+		xvoUnref(objRespVal);
+		if ( sValueJson == NULL ) {
+			iWrite = xsXtpReplyErrorText(pStream, objMsg, 500, "xtp.error", "stringify request value failed") != 0;
+			FREE_XTP_DUP();
+			return iWrite;
+		}
+
+		iWrite = xsXtpReplyOKJson(pStream, objMsg, "xtp.reply", sValueJson) != 0;
+		xrtFree(sValueJson);
+		FREE_XTP_DUP();
+		return iWrite;
+	}
+
+	if ( xsXtpCmdIs(objMsg, "demo.callrequestsummaryjson") ) {
+		void* pReq;
+		xvalue objParam;
+		xvalue objBody;
+		char* sSummaryJson;
+
+		if ( iPort == 0 ) {
+			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
+			FREE_XTP_DUP();
+			return iWrite;
+		}
+
+		pReq = xsXtpRequestCreate(sInnerCmd && sInnerCmd[0] ? sInnerCmd : "demo.python");
+		objParam = xvoCreateTable();
+		objBody = xvoCreateTable();
+		if ( pReq == NULL || objParam == NULL || objBody == NULL ) {
+			if ( pReq ) {
+				xsXtpRequestFree(pReq);
+			}
+			if ( objParam ) {
+				xvoUnref(objParam);
+			}
+			if ( objBody ) {
+				xvoUnref(objBody);
+			}
+			iWrite = xsXtpReplyErrorText(pStream, objMsg, 500, "xtp.error", "create request summary failed") != 0;
+			FREE_XTP_DUP();
+			return iWrite;
+		}
+
+		xvoTableSetText(objParam, "tag", 0, (ptr)(sTag && sTag[0] ? sTag : "request-summary"), 0, FALSE);
+		xvoTableSetInt(objParam, "seq", 0, iSeq >= 0 ? iSeq : 300);
+		xvoTableSetBool(objParam, "dry", 0, iDry ? TRUE : FALSE);
+		xsXtpRequestSetParamsValue(pReq, objParam);
+		xvoUnref(objParam);
+
+		xvoTableSetText(objBody, "kind", 0, (ptr)"request-summary-body", 0, FALSE);
+		xvoTableSetText(objBody, "tag", 0, (ptr)(sTag && sTag[0] ? sTag : "request-summary"), 0, FALSE);
+		xsXtpRequestSetBodyValue(pReq, objBody);
+		xvoUnref(objBody);
+
+		sSummaryJson = xsXtpClientCallRequestSummaryJson(
+			sHost,
+			iPort,
+			1048576u,
+			3000u,
+			(iMsgID == 0) ? 1u : (iMsgID + 1u),
+			pReq,
+			3000u
+		);
+		xsXtpRequestFree(pReq);
+		if ( sSummaryJson == NULL ) {
+			snprintf(
+				sInnerBody,
+				sizeof(sInnerBody),
+				"client call request summary json failed\ncode=%d\nerror=%s\n",
+				xsXtpClientLastErrorCode(),
+				xsXtpClientLastError() ? xsXtpClientLastError() : ""
+			);
+			iWrite = xsXtpReplyErrorText(pStream, objMsg, 500, "xtp.error", sInnerBody) != 0;
+			FREE_XTP_DUP();
+			return iWrite;
+		}
+
+		iWrite = xsXtpReplyOKJson(pStream, objMsg, "xtp.reply", sSummaryJson) != 0;
+		xrtFree(sSummaryJson);
+		FREE_XTP_DUP();
+		return iWrite;
+	}
+
+	if ( xsXtpCmdIs(objMsg, "demo.callrequestresultjson") ) {
+		void* pReq;
+		xvalue objParam;
+		char* sResultJson;
+
+		if ( iPort == 0 ) {
+			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
+			FREE_XTP_DUP();
+			return iWrite;
+		}
+
+		pReq = xsXtpRequestCreate(sInnerCmd && sInnerCmd[0] ? sInnerCmd : "demo.python");
+		objParam = xvoCreateTable();
+		if ( pReq == NULL || objParam == NULL ) {
+			if ( pReq ) {
+				xsXtpRequestFree(pReq);
+			}
+			if ( objParam ) {
+				xvoUnref(objParam);
+			}
+			iWrite = xsXtpReplyErrorText(pStream, objMsg, 500, "xtp.error", "create request result failed") != 0;
+			FREE_XTP_DUP();
+			return iWrite;
+		}
+
+		xvoTableSetText(objParam, "tag", 0, (ptr)(sTag && sTag[0] ? sTag : "request-result"), 0, FALSE);
+		xsXtpRequestSetParamsValue(pReq, objParam);
+		xvoUnref(objParam);
+
+		sResultJson = xsXtpClientCallRequestResultJson(
+			sHost,
+			iPort,
+			1048576u,
+			3000u,
+			(iMsgID == 0) ? 1u : (iMsgID + 1u),
+			pReq,
+			3000u
+		);
+		xsXtpRequestFree(pReq);
+		if ( sResultJson == NULL ) {
+			snprintf(
+				sInnerBody,
+				sizeof(sInnerBody),
+				"client call request result json failed\ncode=%d\nerror=%s\n",
+				xsXtpClientLastErrorCode(),
+				xsXtpClientLastError() ? xsXtpClientLastError() : ""
+			);
+			iWrite = xsXtpReplyErrorText(pStream, objMsg, 500, "xtp.error", sInnerBody) != 0;
+			FREE_XTP_DUP();
+			return iWrite;
+		}
+
+		iWrite = xsXtpReplyOKJson(pStream, objMsg, "xtp.reply", sResultJson) != 0;
+		xrtFree(sResultJson);
+		FREE_XTP_DUP();
+		return iWrite;
+	}
+
+	if ( xsXtpCmdIs(objMsg, "demo.callrequeststatus") ) {
+		void* pReq;
+		xvalue objParam;
+		char* sCmdDup;
+		int iCallOK;
+		int iCallStatus;
+
+		if ( iPort == 0 ) {
+			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
+			FREE_XTP_DUP();
+			return iWrite;
+		}
+
+		pReq = xsXtpRequestCreate(sInnerCmd && sInnerCmd[0] ? sInnerCmd : "demo.python");
+		objParam = xvoCreateTable();
+		if ( pReq == NULL || objParam == NULL ) {
+			if ( pReq ) {
+				xsXtpRequestFree(pReq);
+			}
+			if ( objParam ) {
+				xvoUnref(objParam);
+			}
+			iWrite = xsXtpReplyErrorText(pStream, objMsg, 500, "xtp.error", "create request status failed") != 0;
+			FREE_XTP_DUP();
+			return iWrite;
+		}
+
+		xvoTableSetText(objParam, "tag", 0, (ptr)(sTag && sTag[0] ? sTag : "request-status"), 0, FALSE);
+		xsXtpRequestSetParamsValue(pReq, objParam);
+		xvoUnref(objParam);
+
+		iCallOK = xsXtpClientCallRequestOK(
+			sHost,
+			iPort,
+			1048576u,
+			3000u,
+			(iMsgID == 0) ? 1u : (iMsgID + 1u),
+			pReq,
+			3000u
+		);
+		iCallStatus = xsXtpClientCallRequestStatus(
+			sHost,
+			iPort,
+			1048576u,
+			3000u,
+			(iMsgID == 0) ? 1u : (iMsgID + 1u),
+			pReq,
+			3000u,
+			-1
+		);
+		sCmdDup = xsXtpClientCallRequestCmd(
+			sHost,
+			iPort,
+			1048576u,
+			3000u,
+			(iMsgID == 0) ? 1u : (iMsgID + 1u),
+			pReq,
+			3000u,
+			""
+		);
+		xsXtpRequestFree(pReq);
+		if ( sCmdDup == NULL ) {
+			snprintf(
+				sInnerBody,
+				sizeof(sInnerBody),
+				"client call request status failed\ncode=%d\nerror=%s\n",
+				xsXtpClientLastErrorCode(),
+				xsXtpClientLastError() ? xsXtpClientLastError() : ""
+			);
+			iWrite = xsXtpReplyErrorText(pStream, objMsg, 500, "xtp.error", sInnerBody) != 0;
+			FREE_XTP_DUP();
+			return iWrite;
+		}
+
+		snprintf(
+			sInnerBody,
+			sizeof(sInnerBody),
+			"request status ok=%s\nstatus=%d\ncmd=%s\n",
+			iCallOK ? "true" : "false",
+			iCallStatus,
+			sCmdDup
+		);
+		xrtFree(sCmdDup);
+		iWrite = xsXtpReplyOKText(pStream, objMsg, "xtp.reply", sInnerBody) != 0;
 		FREE_XTP_DUP();
 		return iWrite;
 	}

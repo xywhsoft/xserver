@@ -991,7 +991,7 @@ static inline void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xrtECDHSecp384r1SharedSecret", xrtECDHSecp384r1SharedSecret);
 	tcc_add_symbol(s, "xrtX448Keypair", xrtX448Keypair);
 	tcc_add_symbol(s, "xrtX448SharedSecret", xrtX448SharedSecret);
-
+	
 	// 添加函数 - Net / TLS / WS Client
 	tcc_add_symbol(s, "xrtNetAddrInitAny", xrtNetAddrInitAny);
 	tcc_add_symbol(s, "xrtNetAddrParse", xrtNetAddrParse);
@@ -1139,6 +1139,13 @@ static inline void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xrtWsClientSendBinary", xrtWsClientSendBinary);
 	tcc_add_symbol(s, "xrtWsClientPing", xrtWsClientPing);
 	tcc_add_symbol(s, "xrtWsClientClose", xrtWsClientClose);
+	
+	// 添加函数 - Net / TLS / WS Client
+	tcc_add_symbol(s, "xrtNetProxyAddRef", xrtNetProxyAddRef);
+	tcc_add_symbol(s, "xrtNetProxyConfigInit", xrtNetProxyConfigInit);
+	tcc_add_symbol(s, "xrtNetProxyCreate", xrtNetProxyCreate);
+	tcc_add_symbol(s, "xrtNetProxyRelease", xrtNetProxyRelease);
+	
 }
 
 
