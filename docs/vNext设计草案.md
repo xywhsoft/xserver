@@ -261,6 +261,66 @@ TCC 仍然作为全功能 C 语言脚本宿主，不做权限限制。
 - `xs_vnext.h` 提供稳定宿主便利函数
 - `xs_vnext_full.h` 额外引入 `xrt / libtcc / sqlite3` 的宿主可用头环境，用于旧脚本迁移期
 
+当前 `xtp` 脚本宿主已经提供第一版同步客户端请求/应答能力：
+
+- `xsXtpClientOpen`
+- `xsXtpClientDo`
+- `xsXtpClientDoText`
+- `xsXtpClientDoSimple`
+- `xsXtpClientDoJson`
+- `xsXtpClientCall`
+- `xsXtpClientCallText`
+- `xsXtpClientCallSimple`
+- `xsXtpClientCallJson`
+- `xsXtpClientCallSimpleBody`
+- `xsXtpClientCallTextBody`
+- `xsXtpClientCallJsonBody`
+- `xsXtpClientCallSimpleSummary`
+- `xsXtpClientCallSimpleSummaryJson`
+- `xsXtpClientCallSimpleResult`
+- `xsXtpClientCallSimpleError`
+- `xsXtpClientCallSimpleMeta`
+- `xsXtpClientCallSimpleMetaJson`
+- `xsXtpClientCallSimpleValue`
+- `xsXtpClientCallSimpleBodyValue`
+- `xsXtpClientCallTableText`
+- `xsXtpClientCallTableJson`
+- `xsXtpClientCallTableValue`
+- `xsXtpClientCallSimpleStatus`
+- `xsXtpClientCallSimpleCmd`
+- `xsXtpClientCallSimpleResultJson`
+- `xsXtpClientCallSimpleErrorJson`
+- `xsXtpMessageFree`
+- `xsXtpClientClose`
+
+这组 API 先面向“脚本内主动连接外部 XTP 服务并同步等待响应”的场景，当前已经区分为两层：
+
+- `ClientOpen + ClientDo* + MessageFree + ClientClose`
+- `ClientCall*` 一体化打开/请求/关闭
+
+同时补了：
+
+- `xsXtpIsOK`
+- `xsXtpResultText`
+- `xsXtpErrorText`
+- `xsXtpCmdDup`
+- `xsXtpBodyDup`
+- `xsXtpMetaText`
+- `xsXtpMetaJson`
+- `xsXtpValue`
+- `xsXtpBodyValue`
+- `xsXtpErrorValue`
+- `xsXtpSummaryText`
+- `xsXtpSummaryJson`
+- `xsXtpResultText`
+- `xsXtpResultJson`
+- `xsXtpResultIs`
+- `xsXtpStatusIs`
+- `xsXtpErrorText`
+- `xsXtpErrorJson`
+
+便于像 HTTP 一样先判定响应状态，再安全读取响应 `cmd/body/result/error`，或者直接走“一体化请求并取 body / summary”的快捷路径。后续再继续补更完整的 pending request / response object 体系。
+
 ### 8.3 脚本绑定粒度
 
 - `http/ws`：脚本绑定到 `Host`
@@ -271,6 +331,7 @@ TCC 仍然作为全功能 C 语言脚本宿主，不做权限限制。
 - `custom/tcp`：连接打开、收包、关闭、脚本回调
 - `udp`：datagram 收包、默认回显、脚本回调与按来源地址回复
 - `xtp`：`v2` 二进制包解析、请求/应答模型、零拷贝参数视图、脚本消息回调与回包
+	当前脚本层已提供 `xsXtpSendRequest / xsXtpSendPush / xsXtpSendEvent / xsXtpIsRequest / xsXtpIsResponse / xsXtpIsPush / xsXtpIsEvent / xsXtpCmdIs / xsXtpHasParam / xsXtpParamText / xsXtpParamDup / xsXtpParamInt / xsXtpParamBool / xsXtpReplyText / xsXtpReplyJson / xsXtpReplyOKText / xsXtpReplyErrorText / xsXtpReplyOKJson / xsXtpReplyErrorJson / xsXtpReplyMissingParam / xsXtpReplyUnsupportedCmd`
 
 第一阶段已落地的 WebSocket 宿主回调：
 

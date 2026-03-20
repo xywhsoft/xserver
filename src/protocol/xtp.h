@@ -50,6 +50,12 @@ typedef struct {
 } XS_XtpConnContext;
 
 typedef struct {
+	xsocket hSocket;
+	XS_XtpConnContext* pRecvCtx;
+	uint32 iTimeoutMs;
+} XS_XtpSyncClient;
+
+typedef struct {
 	xnetlistener* pListener;
 	xnetlistener* pListenerTLS;
 	XS_ServerConfig* pServer;
@@ -57,6 +63,72 @@ typedef struct {
 	xthread hAcceptThreadTLS;
 	volatile bool bStopAccept;
 } XS_XtpHandle;
+
+static _Thread_local int g_iXsXtpClientLastErrorCode = 0;
+static _Thread_local char g_sXsXtpClientLastError[128] = "";
+
+static inline bool XS_XtpAppendChain(XS_XtpConnContext* objCtx, xnetchain* pChain);
+static inline bool XS_XtpPacketHeaderInvalid(const XS_XtpConnContext* objCtx);
+static inline void XS_XtpConsume(XS_XtpConnContext* objCtx, size_t iBytes);
+static inline bool XS_XtpParseMessage(XS_XtpConnContext* objCtx, XTP_Message* pMsg, size_t* pPackBytes);
+static inline bool XS_XtpBuildPacket(uint16 iMsgType, uint64 iMsgID, uint16 iFlags, int32 iStatus, const char* sCmd, size_t iCmdSize, uint32 iParamCount, const char** arrParam, const char** arrValue, const void* pBody, size_t iBodySize, char** ppSendBuf, size_t* piPackSize);
+static inline bool XS_XtpIsOK(const void* pMsg);
+static inline char* XS_XtpBodyDup(const void* pMsg, const char* sDefault);
+static inline xvalue XS_XtpBodyValue(const void* pMsg);
+static inline xvalue XS_XtpErrorValue(const void* pMsg);
+static inline xvalue XS_XtpParamsValue(const void* pMsg);
+static inline xvalue XS_XtpValue(const void* pMsg);
+static inline char* XS_XtpMetaText(const void* pMsg);
+static inline char* XS_XtpMetaJson(const void* pMsg);
+static inline char* XS_XtpResultJson(const void* pMsg);
+static inline char* XS_XtpErrorJson(const void* pMsg, const char* sDefault);
+static inline char* XS_XtpSummaryJson(const void* pMsg);
+
+static inline int64 XS_XtpNowMS(void)
+{
+	#if defined(_WIN32) || defined(_WIN64)
+		return (int64)GetTickCount64();
+	#else
+		struct timespec tNow;
+
+		clock_gettime(CLOCK_MONOTONIC, &tNow);
+		return ((int64)tNow.tv_sec * 1000) + ((int64)tNow.tv_nsec / 1000000);
+	#endif
+}
+
+static inline void XS_XtpSleepMS(uint32 iMS)
+{
+	#if defined(_WIN32) || defined(_WIN64)
+		Sleep(iMS);
+	#else
+		struct timespec tReq;
+
+		tReq.tv_sec = (time_t)(iMS / 1000u);
+		tReq.tv_nsec = (long)((iMS % 1000u) * 1000000u);
+		nanosleep(&tReq, NULL);
+	#endif
+}
+
+static inline void XS_XtpClientSetLastError(int iCode, const char* sText)
+{
+	g_iXsXtpClientLastErrorCode = iCode;
+	if ( sText && sText[0] ) {
+		strncpy(g_sXsXtpClientLastError, sText, sizeof(g_sXsXtpClientLastError) - 1);
+		g_sXsXtpClientLastError[sizeof(g_sXsXtpClientLastError) - 1] = '\0';
+	} else {
+		g_sXsXtpClientLastError[0] = '\0';
+	}
+}
+
+static inline int XS_XtpClientLastErrorCode(void)
+{
+	return g_iXsXtpClientLastErrorCode;
+}
+
+static inline const char* XS_XtpClientLastError(void)
+{
+	return g_sXsXtpClientLastError;
+}
 
 static inline int64 XS_XtpMetricGet(const volatile int64* pValue)
 {
@@ -133,8 +205,969 @@ static inline void XS_XtpDestroyContext(XS_XtpConnContext* objCtx)
 	if ( objCtx->pRecvBuf ) {
 		xrtFree(objCtx->pRecvBuf);
 	}
-	
+
 	xrtFree(objCtx);
+}
+
+static inline void XS_XtpSyncClientCloseSocket(XS_XtpSyncClient* objClient)
+{
+	if ( objClient == NULL ) {
+		return;
+	}
+
+	if ( objClient->hSocket != XNET_SOCKET_INVALID ) {
+		#if defined(_WIN32) || defined(_WIN64)
+			closesocket(objClient->hSocket);
+		#else
+			close(objClient->hSocket);
+		#endif
+		objClient->hSocket = XNET_SOCKET_INVALID;
+	}
+}
+
+static inline bool XS_XtpSocketSetNonBlock(xsocket hSocket, bool bEnable)
+{
+	#if defined(_WIN32) || defined(_WIN64)
+		u_long iMode = bEnable ? 1ul : 0ul;
+
+		return ioctlsocket(hSocket, FIONBIO, &iMode) == 0;
+	#else
+		int iFlags = fcntl(hSocket, F_GETFL, 0);
+
+		if ( iFlags < 0 ) {
+			return FALSE;
+		}
+		if ( bEnable ) {
+			iFlags |= O_NONBLOCK;
+		} else {
+			iFlags &= ~O_NONBLOCK;
+		}
+		return fcntl(hSocket, F_SETFL, iFlags) == 0;
+	#endif
+}
+
+static inline void XS_XtpSocketSetTimeout(xsocket hSocket, uint32 iTimeoutMs)
+{
+	if ( hSocket == XNET_SOCKET_INVALID || iTimeoutMs == 0u ) {
+		return;
+	}
+
+	#if defined(_WIN32) || defined(_WIN64)
+		DWORD iValue = (DWORD)iTimeoutMs;
+
+		(void)setsockopt(hSocket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&iValue, (int)sizeof(iValue));
+		(void)setsockopt(hSocket, SOL_SOCKET, SO_SNDTIMEO, (const char*)&iValue, (int)sizeof(iValue));
+	#else
+		struct timeval tValue;
+
+		tValue.tv_sec = (int)(iTimeoutMs / 1000u);
+		tValue.tv_usec = (int)((iTimeoutMs % 1000u) * 1000u);
+		(void)setsockopt(hSocket, SOL_SOCKET, SO_RCVTIMEO, &tValue, (socklen_t)sizeof(tValue));
+		(void)setsockopt(hSocket, SOL_SOCKET, SO_SNDTIMEO, &tValue, (socklen_t)sizeof(tValue));
+	#endif
+}
+
+static inline bool XS_XtpSocketWaitWritable(xsocket hSocket, uint32 iTimeoutMs)
+{
+	fd_set tWriteSet;
+	struct timeval tWait;
+	int iRet;
+
+	FD_ZERO(&tWriteSet);
+	FD_SET(hSocket, &tWriteSet);
+	tWait.tv_sec = (long)(iTimeoutMs / 1000u);
+	tWait.tv_usec = (long)((iTimeoutMs % 1000u) * 1000u);
+	iRet = select((int)hSocket + 1, NULL, &tWriteSet, NULL, &tWait);
+	return iRet > 0 && FD_ISSET(hSocket, &tWriteSet);
+}
+
+static inline bool XS_XtpSocketConnect(xsocket hSocket, const struct sockaddr* pAddr, socklen_t iAddrLen, uint32 iTimeoutMs, int* piSysErr)
+{
+	int iRet;
+
+	if ( piSysErr ) {
+		*piSysErr = 0;
+	}
+	if ( !XS_XtpSocketSetNonBlock(hSocket, TRUE) ) {
+		return FALSE;
+	}
+
+	iRet = connect(hSocket, pAddr, iAddrLen);
+	if ( iRet == 0 ) {
+		(void)XS_XtpSocketSetNonBlock(hSocket, FALSE);
+		return TRUE;
+	}
+
+	#if defined(_WIN32) || defined(_WIN64)
+		if ( WSAGetLastError() != WSAEWOULDBLOCK ) {
+			if ( piSysErr ) {
+				*piSysErr = WSAGetLastError();
+			}
+			return FALSE;
+		}
+	#else
+		if ( errno != EINPROGRESS ) {
+			if ( piSysErr ) {
+				*piSysErr = errno;
+			}
+			return FALSE;
+		}
+	#endif
+
+	if ( !XS_XtpSocketWaitWritable(hSocket, iTimeoutMs) ) {
+		if ( piSysErr ) {
+			*piSysErr = -1;
+		}
+		return FALSE;
+	}
+
+	{
+		int iErr = 0;
+		socklen_t iErrLen = (socklen_t)sizeof(iErr);
+
+		if ( getsockopt(hSocket, SOL_SOCKET, SO_ERROR, (char*)&iErr, &iErrLen) != 0 || iErr != 0 ) {
+			if ( piSysErr ) {
+				*piSysErr = iErr != 0 ? iErr : -2;
+			}
+			return FALSE;
+		}
+	}
+
+	(void)XS_XtpSocketSetNonBlock(hSocket, FALSE);
+	return TRUE;
+}
+
+static inline bool XS_XtpSocketSendAll(xsocket hSocket, const char* pData, size_t iSize)
+{
+	size_t iSent = 0;
+
+	while ( iSent < iSize ) {
+		int iRet = send(hSocket, pData + iSent, (int)(iSize - iSent), 0);
+
+		if ( iRet <= 0 ) {
+			return FALSE;
+		}
+		iSent += (size_t)iRet;
+	}
+
+	return TRUE;
+}
+
+static inline bool XS_XtpSocketRecvAll(xsocket hSocket, char* pBuf, size_t iNeed)
+{
+	size_t iRead = 0;
+
+	while ( iRead < iNeed ) {
+		int iRet = recv(hSocket, pBuf + iRead, (int)(iNeed - iRead), 0);
+
+		if ( iRet <= 0 ) {
+			return FALSE;
+		}
+		iRead += (size_t)iRet;
+	}
+
+	return TRUE;
+}
+
+static inline XS_XtpSyncClient* XS_XtpSyncClientCreate(uint32 iRecvLimit)
+{
+	XS_XtpSyncClient* objClient;
+	XS_XtpConnContext* objCtx;
+
+	objClient = (XS_XtpSyncClient*)xrtMalloc(sizeof(XS_XtpSyncClient));
+	if ( objClient == NULL ) {
+		XS_XtpClientSetLastError(1, "client alloc failed");
+		return NULL;
+	}
+	memset(objClient, 0, sizeof(XS_XtpSyncClient));
+	objClient->hSocket = XNET_SOCKET_INVALID;
+
+	objCtx = (XS_XtpConnContext*)xrtMalloc(sizeof(XS_XtpConnContext));
+	if ( objCtx == NULL ) {
+		XS_XtpClientSetLastError(2, "recv context alloc failed");
+		xrtFree(objClient);
+		return NULL;
+	}
+	memset(objCtx, 0, sizeof(XS_XtpConnContext));
+	objCtx->pServer = NULL;
+
+	objClient->pRecvCtx = objCtx;
+	if ( iRecvLimit > 0u ) {
+		objCtx->iRecvCap = 0;
+	}
+
+	return objClient;
+}
+
+static inline void XS_XtpSyncClientDestroy(XS_XtpSyncClient* objClient)
+{
+	if ( objClient == NULL ) {
+		return;
+	}
+
+	XS_XtpSyncClientCloseSocket(objClient);
+	if ( objClient->pRecvCtx ) {
+		XS_XtpDestroyContext(objClient->pRecvCtx);
+	}
+
+	xrtFree(objClient);
+}
+
+static inline int XS_XtpSyncClientConnect(XS_XtpSyncClient* objClient, const char* sHost, uint16 iPort, uint32 iTimeoutMs)
+{
+	struct addrinfo tHints;
+	struct addrinfo* pRes = NULL;
+	struct addrinfo* pCur;
+	char sPort[16];
+	char sMsg[192];
+	int iSysErr = 0;
+
+	if ( objClient == NULL || sHost == NULL || sHost[0] == '\0' ) {
+		XS_XtpClientSetLastError(3, "invalid connect args");
+		return FALSE;
+	}
+
+	XS_XtpSyncClientCloseSocket(objClient);
+	memset(&tHints, 0, sizeof(tHints));
+	tHints.ai_family = AF_UNSPEC;
+	tHints.ai_socktype = SOCK_STREAM;
+	tHints.ai_protocol = IPPROTO_TCP;
+	snprintf(sPort, sizeof(sPort), "%u", (unsigned)iPort);
+	if ( getaddrinfo(sHost, sPort, &tHints, &pRes) != 0 || pRes == NULL ) {
+		XS_XtpClientSetLastError(4, "getaddrinfo failed");
+		return FALSE;
+	}
+
+	for ( pCur = pRes; pCur; pCur = pCur->ai_next ) {
+		xsocket hSocket = socket(pCur->ai_family, pCur->ai_socktype, pCur->ai_protocol);
+
+		if ( hSocket == XNET_SOCKET_INVALID ) {
+			continue;
+		}
+		if ( XS_XtpSocketConnect(hSocket, pCur->ai_addr, (socklen_t)pCur->ai_addrlen, iTimeoutMs ? iTimeoutMs : 5000u, &iSysErr) ) {
+			objClient->hSocket = hSocket;
+			objClient->iTimeoutMs = iTimeoutMs ? iTimeoutMs : 5000u;
+			XS_XtpSocketSetTimeout(objClient->hSocket, objClient->iTimeoutMs);
+			freeaddrinfo(pRes);
+			return TRUE;
+		}
+		#if defined(_WIN32) || defined(_WIN64)
+			closesocket(hSocket);
+		#else
+			close(hSocket);
+		#endif
+	}
+
+	freeaddrinfo(pRes);
+	snprintf(sMsg, sizeof(sMsg), "connect failed: %d", iSysErr);
+	XS_XtpClientSetLastError(5, sMsg);
+	return FALSE;
+}
+
+static inline int XS_XtpSyncClientRecv(XS_XtpSyncClient* objClient, XTP_Message* pMsg, uint32 iTimeoutMs)
+{
+	XTP_PackHeader tHeader;
+	size_t iPackBytes;
+	size_t iNeedBytes;
+
+	if ( objClient == NULL || objClient->hSocket == XNET_SOCKET_INVALID || objClient->pRecvCtx == NULL || pMsg == NULL ) {
+		XS_XtpClientSetLastError(6, "invalid recv args");
+		return FALSE;
+	}
+
+	memset(pMsg, 0, sizeof(XTP_Message));
+	(void)iTimeoutMs;
+	if ( !XS_XtpSocketRecvAll(objClient->hSocket, (char*)&tHeader, sizeof(tHeader)) ) {
+		XS_XtpClientSetLastError(7, "recv header failed");
+		return FALSE;
+	}
+	if ( memcmp(tHeader.HeadInfo, "xtp\2", 4) != 0 || tHeader.PackSize < sizeof(XTP_PackHeader) ) {
+		XS_XtpClientSetLastError(8, "invalid response packet");
+		return FALSE;
+	}
+
+	iNeedBytes = (size_t)tHeader.PackSize;
+	objClient->pRecvCtx->pRecvBuf = (char*)xrtRealloc(objClient->pRecvCtx->pRecvBuf, iNeedBytes);
+	if ( objClient->pRecvCtx->pRecvBuf == NULL ) {
+		objClient->pRecvCtx->iRecvCap = 0;
+		objClient->pRecvCtx->iRecvLen = 0;
+		XS_XtpClientSetLastError(9, "recv buffer alloc failed");
+		return FALSE;
+	}
+	objClient->pRecvCtx->iRecvCap = iNeedBytes;
+	objClient->pRecvCtx->iRecvLen = iNeedBytes;
+	memcpy(objClient->pRecvCtx->pRecvBuf, &tHeader, sizeof(tHeader));
+	if ( iNeedBytes > sizeof(XTP_PackHeader) ) {
+		if ( !XS_XtpSocketRecvAll(objClient->hSocket, objClient->pRecvCtx->pRecvBuf + sizeof(XTP_PackHeader), iNeedBytes - sizeof(XTP_PackHeader)) ) {
+			XS_XtpClientSetLastError(10, "recv body failed");
+			return FALSE;
+		}
+	}
+
+	if ( !XS_XtpParseMessage(objClient->pRecvCtx, pMsg, &iPackBytes) ) {
+		XS_XtpClientSetLastError(11, "parse response failed");
+		return FALSE;
+	}
+
+	XS_XtpConsume(objClient->pRecvCtx, iPackBytes);
+	return TRUE;
+}
+
+static inline int XS_XtpSyncClientDo(
+	XS_XtpSyncClient* objClient,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iParamCount,
+	const char** arrParam,
+	const char** arrValue,
+	const void* pBody,
+	size_t iBodySize,
+	uint32 iTimeoutMs,
+	XTP_Message* pResp
+)
+{
+	char* pSendBuf = NULL;
+	size_t iPackSize = 0;
+
+	if ( objClient == NULL || pResp == NULL ) {
+		XS_XtpClientSetLastError(12, "invalid do args");
+		return FALSE;
+	}
+
+	if ( !XS_XtpBuildPacket(XTP_MSG_REQUEST, iMsgID, 0, 0, sCmd, 0, iParamCount, arrParam, arrValue, pBody, iBodySize, &pSendBuf, &iPackSize) ) {
+		XS_XtpClientSetLastError(13, "build request failed");
+		return FALSE;
+	}
+
+	if ( !XS_XtpSocketSendAll(objClient->hSocket, pSendBuf, iPackSize) ) {
+		xrtFree(pSendBuf);
+		XS_XtpClientSetLastError(14, "send request failed");
+		return FALSE;
+	}
+	xrtFree(pSendBuf);
+	XS_XtpMetricAdd(&g_iXsXtpSendCount, 1);
+	XS_XtpMetricAdd(&g_iXsXtpSendBytes, (int64)iPackSize);
+
+	return XS_XtpSyncClientRecv(objClient, pResp, iTimeoutMs);
+}
+
+static inline void XS_XtpMessageDestroy(XTP_Message* pMsg)
+{
+	if ( pMsg == NULL ) {
+		return;
+	}
+
+	XS_XtpFreeMessage(pMsg);
+	xrtFree(pMsg);
+}
+
+static inline void* XS_XtpClientOpen(const char* sHost, uint16 iPort, uint32 iRecvLimit, uint32 iTimeoutMs)
+{
+	XS_XtpSyncClient* objClient;
+
+	objClient = XS_XtpSyncClientCreate(iRecvLimit);
+	if ( objClient == NULL ) {
+		return NULL;
+	}
+
+	if ( !XS_XtpSyncClientConnect(objClient, sHost, iPort, iTimeoutMs) ) {
+		XS_XtpSyncClientDestroy(objClient);
+		return NULL;
+	}
+
+	return objClient;
+}
+
+static inline void XS_XtpClientClose(void* pClient)
+{
+	XS_XtpSyncClient* objClient = (XS_XtpSyncClient*)pClient;
+
+	XS_XtpSyncClientDestroy(objClient);
+}
+
+static inline void* XS_XtpClientDo(
+	void* pClient,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iParamCount,
+	const char** arrParam,
+	const char** arrValue,
+	const void* pBody,
+	size_t iBodySize,
+	uint32 iTimeoutMs
+)
+{
+	XS_XtpSyncClient* objClient = (XS_XtpSyncClient*)pClient;
+	XTP_Message* pResp;
+
+	if ( objClient == NULL ) {
+		XS_XtpClientSetLastError(17, "client is null");
+		return NULL;
+	}
+
+	pResp = (XTP_Message*)xrtMalloc(sizeof(XTP_Message));
+	if ( pResp == NULL ) {
+		XS_XtpClientSetLastError(18, "response alloc failed");
+		return NULL;
+	}
+	memset(pResp, 0, sizeof(XTP_Message));
+
+	if ( !XS_XtpSyncClientDo(objClient, iMsgID, sCmd, iParamCount, arrParam, arrValue, pBody, iBodySize, iTimeoutMs, pResp) ) {
+		XS_XtpMessageDestroy(pResp);
+		return NULL;
+	}
+
+	return pResp;
+}
+
+static inline void* XS_XtpClientDoText(
+	void* pClient,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iParamCount,
+	const char** arrParam,
+	const char** arrValue,
+	const char* sText,
+	uint32 iTimeoutMs
+)
+{
+	return XS_XtpClientDo(
+		pClient,
+		iMsgID,
+		sCmd,
+		iParamCount,
+		arrParam,
+		arrValue,
+		sText,
+		sText ? strlen(sText) : 0u,
+		iTimeoutMs
+	);
+}
+
+static inline void* XS_XtpClientDoSimple(
+	void* pClient,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iTimeoutMs
+)
+{
+	return XS_XtpClientDo(
+		pClient,
+		iMsgID,
+		sCmd,
+		0u,
+		NULL,
+		NULL,
+		NULL,
+		0u,
+		iTimeoutMs
+	);
+}
+
+static inline void* XS_XtpClientDoJson(
+	void* pClient,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iParamCount,
+	const char** arrParam,
+	const char** arrValue,
+	const char* sJson,
+	uint32 iTimeoutMs
+)
+{
+	return XS_XtpClientDo(
+		pClient,
+		iMsgID,
+		sCmd,
+		iParamCount,
+		arrParam,
+		arrValue,
+		sJson,
+		sJson ? strlen(sJson) : 0u,
+		iTimeoutMs
+	);
+}
+
+static inline void* XS_XtpClientCall(
+	const char* sHost,
+	uint16 iPort,
+	uint32 iRecvLimit,
+	uint32 iConnectTimeoutMs,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iParamCount,
+	const char** arrParam,
+	const char** arrValue,
+	const void* pBody,
+	size_t iBodySize,
+	uint32 iTimeoutMs
+)
+{
+	void* pClient;
+	void* pResp;
+
+	pClient = XS_XtpClientOpen(sHost, iPort, iRecvLimit, iConnectTimeoutMs);
+	if ( pClient == NULL ) {
+		return NULL;
+	}
+
+	pResp = XS_XtpClientDo(pClient, iMsgID, sCmd, iParamCount, arrParam, arrValue, pBody, iBodySize, iTimeoutMs);
+	XS_XtpClientClose(pClient);
+	return pResp;
+}
+
+static inline void* XS_XtpClientCallText(
+	const char* sHost,
+	uint16 iPort,
+	uint32 iRecvLimit,
+	uint32 iConnectTimeoutMs,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iParamCount,
+	const char** arrParam,
+	const char** arrValue,
+	const char* sText,
+	uint32 iTimeoutMs
+)
+{
+	return XS_XtpClientCall(
+		sHost,
+		iPort,
+		iRecvLimit,
+		iConnectTimeoutMs,
+		iMsgID,
+		sCmd,
+		iParamCount,
+		arrParam,
+		arrValue,
+		sText,
+		sText ? strlen(sText) : 0u,
+		iTimeoutMs
+	);
+}
+
+static inline void* XS_XtpClientCallSimple(
+	const char* sHost,
+	uint16 iPort,
+	uint32 iRecvLimit,
+	uint32 iConnectTimeoutMs,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iTimeoutMs
+)
+{
+	return XS_XtpClientCall(
+		sHost,
+		iPort,
+		iRecvLimit,
+		iConnectTimeoutMs,
+		iMsgID,
+		sCmd,
+		0u,
+		NULL,
+		NULL,
+		NULL,
+		0u,
+		iTimeoutMs
+	);
+}
+
+static inline void* XS_XtpClientCallJson(
+	const char* sHost,
+	uint16 iPort,
+	uint32 iRecvLimit,
+	uint32 iConnectTimeoutMs,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iParamCount,
+	const char** arrParam,
+	const char** arrValue,
+	const char* sJson,
+	uint32 iTimeoutMs
+)
+{
+	return XS_XtpClientCall(
+		sHost,
+		iPort,
+		iRecvLimit,
+		iConnectTimeoutMs,
+		iMsgID,
+		sCmd,
+		iParamCount,
+		arrParam,
+		arrValue,
+		sJson,
+		sJson ? strlen(sJson) : 0u,
+		iTimeoutMs
+	);
+}
+
+static inline void XS_XtpClientSetResponseError(const void* pMsg, const char* sDefault)
+{
+	const XTP_MessageObject objMsg = (const XTP_MessageObject)pMsg;
+	char* sBody;
+
+	if ( objMsg == NULL ) {
+		XS_XtpClientSetLastError(19, sDefault ? sDefault : "response is null");
+		return;
+	}
+
+	sBody = XS_XtpBodyDup(objMsg, sDefault ? sDefault : "response status not ok");
+	XS_XtpClientSetLastError(objMsg->Status != 0 ? (int)objMsg->Status : 20, sBody ? sBody : (sDefault ? sDefault : "response status not ok"));
+	if ( sBody ) {
+		xrtFree(sBody);
+	}
+}
+
+static inline char* XS_XtpClientCallSimpleBody(
+	const char* sHost,
+	uint16 iPort,
+	uint32 iRecvLimit,
+	uint32 iConnectTimeoutMs,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iTimeoutMs,
+	const char* sDefault
+)
+{
+	XTP_MessageObject objResp = (XTP_MessageObject)XS_XtpClientCallSimple(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, sCmd, iTimeoutMs);
+	char* sBody;
+
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+	if ( !XS_XtpIsOK(objResp) ) {
+		XS_XtpClientSetResponseError(objResp, "response status not ok");
+		XS_XtpMessageDestroy(objResp);
+		return NULL;
+	}
+
+	sBody = XS_XtpBodyDup(objResp, sDefault);
+	XS_XtpMessageDestroy(objResp);
+	return sBody;
+}
+
+static inline char* XS_XtpClientCallTextBody(
+	const char* sHost,
+	uint16 iPort,
+	uint32 iRecvLimit,
+	uint32 iConnectTimeoutMs,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iParamCount,
+	const char** arrParam,
+	const char** arrValue,
+	const char* sText,
+	uint32 iTimeoutMs,
+	const char* sDefault
+)
+{
+	XTP_MessageObject objResp = (XTP_MessageObject)XS_XtpClientCallText(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, sCmd, iParamCount, arrParam, arrValue, sText, iTimeoutMs);
+	char* sBody;
+
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+	if ( !XS_XtpIsOK(objResp) ) {
+		XS_XtpClientSetResponseError(objResp, "response status not ok");
+		XS_XtpMessageDestroy(objResp);
+		return NULL;
+	}
+
+	sBody = XS_XtpBodyDup(objResp, sDefault);
+	XS_XtpMessageDestroy(objResp);
+	return sBody;
+}
+
+static inline char* XS_XtpClientCallJsonBody(
+	const char* sHost,
+	uint16 iPort,
+	uint32 iRecvLimit,
+	uint32 iConnectTimeoutMs,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iParamCount,
+	const char** arrParam,
+	const char** arrValue,
+	const char* sJson,
+	uint32 iTimeoutMs,
+	const char* sDefault
+)
+{
+	XTP_MessageObject objResp = (XTP_MessageObject)XS_XtpClientCallJson(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, sCmd, iParamCount, arrParam, arrValue, sJson, iTimeoutMs);
+	char* sBody;
+
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+	if ( !XS_XtpIsOK(objResp) ) {
+		XS_XtpClientSetResponseError(objResp, "response status not ok");
+		XS_XtpMessageDestroy(objResp);
+		return NULL;
+	}
+
+	sBody = XS_XtpBodyDup(objResp, sDefault);
+	XS_XtpMessageDestroy(objResp);
+	return sBody;
+}
+
+static inline char* XS_XtpClientCallSimpleSummary(
+	const char* sHost,
+	uint16 iPort,
+	uint32 iRecvLimit,
+	uint32 iConnectTimeoutMs,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iTimeoutMs
+)
+{
+	XTP_MessageObject objResp = (XTP_MessageObject)XS_XtpClientCallSimple(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, sCmd, iTimeoutMs);
+	char* sText;
+
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+	sText = XS_XtpSummaryText(objResp);
+	XS_XtpMessageDestroy(objResp);
+	return sText;
+}
+
+static inline char* XS_XtpClientCallSimpleSummaryJson(
+	const char* sHost,
+	uint16 iPort,
+	uint32 iRecvLimit,
+	uint32 iConnectTimeoutMs,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iTimeoutMs
+)
+{
+	XTP_MessageObject objResp = (XTP_MessageObject)XS_XtpClientCallSimple(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, sCmd, iTimeoutMs);
+	char* sText;
+
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+	sText = XS_XtpSummaryJson(objResp);
+	XS_XtpMessageDestroy(objResp);
+	return sText;
+}
+
+static inline xvalue XS_XtpClientCallSimpleValue(
+	const char* sHost,
+	uint16 iPort,
+	uint32 iRecvLimit,
+	uint32 iConnectTimeoutMs,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iTimeoutMs
+)
+{
+	XTP_MessageObject objResp = (XTP_MessageObject)XS_XtpClientCallSimple(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, sCmd, iTimeoutMs);
+	xvalue objRet;
+
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+
+	objRet = XS_XtpValue(objResp);
+	XS_XtpMessageDestroy(objResp);
+	return objRet;
+}
+
+static inline xvalue XS_XtpClientCallSimpleBodyValue(
+	const char* sHost,
+	uint16 iPort,
+	uint32 iRecvLimit,
+	uint32 iConnectTimeoutMs,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iTimeoutMs
+)
+{
+	XTP_MessageObject objResp = (XTP_MessageObject)XS_XtpClientCallSimple(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, sCmd, iTimeoutMs);
+	xvalue objRet;
+
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+
+	objRet = XS_XtpBodyValue(objResp);
+	XS_XtpMessageDestroy(objResp);
+	return objRet;
+}
+
+static inline char* XS_XtpClientCallSimpleResult(
+	const char* sHost,
+	uint16 iPort,
+	uint32 iRecvLimit,
+	uint32 iConnectTimeoutMs,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iTimeoutMs,
+	const char* sDefault
+)
+{
+	XTP_MessageObject objResp = (XTP_MessageObject)XS_XtpClientCallSimple(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, sCmd, iTimeoutMs);
+	char* sText;
+
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+	sText = XS_XtpParamDup(objResp, "result", sDefault);
+	XS_XtpMessageDestroy(objResp);
+	return sText;
+}
+
+static inline char* XS_XtpClientCallSimpleError(
+	const char* sHost,
+	uint16 iPort,
+	uint32 iRecvLimit,
+	uint32 iConnectTimeoutMs,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iTimeoutMs,
+	const char* sDefault
+)
+{
+	XTP_MessageObject objResp = (XTP_MessageObject)XS_XtpClientCallSimple(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, sCmd, iTimeoutMs);
+	char* sText;
+
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+	sText = XS_XtpErrorText(objResp, sDefault);
+	XS_XtpMessageDestroy(objResp);
+	return sText;
+}
+
+static inline char* XS_XtpClientCallSimpleMeta(
+	const char* sHost,
+	uint16 iPort,
+	uint32 iRecvLimit,
+	uint32 iConnectTimeoutMs,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iTimeoutMs
+)
+{
+	XTP_MessageObject objResp = (XTP_MessageObject)XS_XtpClientCallSimple(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, sCmd, iTimeoutMs);
+	char* sText;
+
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+	sText = XS_XtpMetaText(objResp);
+	XS_XtpMessageDestroy(objResp);
+	return sText;
+}
+
+static inline char* XS_XtpClientCallSimpleMetaJson(
+	const char* sHost,
+	uint16 iPort,
+	uint32 iRecvLimit,
+	uint32 iConnectTimeoutMs,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iTimeoutMs
+)
+{
+	XTP_MessageObject objResp = (XTP_MessageObject)XS_XtpClientCallSimple(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, sCmd, iTimeoutMs);
+	char* sText;
+
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+	sText = XS_XtpMetaJson(objResp);
+	XS_XtpMessageDestroy(objResp);
+	return sText;
+}
+
+static inline char* XS_XtpClientCallSimpleResultJson(
+	const char* sHost,
+	uint16 iPort,
+	uint32 iRecvLimit,
+	uint32 iConnectTimeoutMs,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iTimeoutMs
+)
+{
+	XTP_MessageObject objResp = (XTP_MessageObject)XS_XtpClientCallSimple(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, sCmd, iTimeoutMs);
+	char* sText;
+
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+	sText = XS_XtpResultJson(objResp);
+	XS_XtpMessageDestroy(objResp);
+	return sText;
+}
+
+static inline char* XS_XtpClientCallSimpleErrorJson(
+	const char* sHost,
+	uint16 iPort,
+	uint32 iRecvLimit,
+	uint32 iConnectTimeoutMs,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iTimeoutMs,
+	const char* sDefault
+)
+{
+	XTP_MessageObject objResp = (XTP_MessageObject)XS_XtpClientCallSimple(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, sCmd, iTimeoutMs);
+	char* sText;
+
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+	sText = XS_XtpErrorJson(objResp, sDefault);
+	XS_XtpMessageDestroy(objResp);
+	return sText;
+}
+
+static inline int32 XS_XtpClientCallSimpleStatus(
+	const char* sHost,
+	uint16 iPort,
+	uint32 iRecvLimit,
+	uint32 iConnectTimeoutMs,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iTimeoutMs,
+	int32 iDefault
+)
+{
+	XTP_MessageObject objResp = (XTP_MessageObject)XS_XtpClientCallSimple(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, sCmd, iTimeoutMs);
+	int32 iStatus;
+
+	if ( objResp == NULL ) {
+		return iDefault;
+	}
+	iStatus = objResp->Status;
+	XS_XtpMessageDestroy(objResp);
+	return iStatus;
+}
+
+static inline char* XS_XtpClientCallSimpleCmd(
+	const char* sHost,
+	uint16 iPort,
+	uint32 iRecvLimit,
+	uint32 iConnectTimeoutMs,
+	uint64 iMsgID,
+	const char* sCmd,
+	uint32 iTimeoutMs,
+	const char* sDefault
+)
+{
+	XTP_MessageObject objResp = (XTP_MessageObject)XS_XtpClientCallSimple(sHost, iPort, iRecvLimit, iConnectTimeoutMs, iMsgID, sCmd, iTimeoutMs);
+	char* sText;
+
+	if ( objResp == NULL ) {
+		return NULL;
+	}
+	sText = XS_XtpCmdDup(objResp, sDefault);
+	XS_XtpMessageDestroy(objResp);
+	return sText;
 }
 
 static inline bool XS_XtpEnsureBuffer(XS_XtpConnContext* objCtx, size_t iNeed)
@@ -448,6 +1481,550 @@ static inline uint16 XS_XtpMsgFlags(const void* pMsg)
 	return objMsg ? objMsg->Flags : 0;
 }
 
+static inline bool XS_XtpIsOK(const void* pMsg)
+{
+	const XTP_MessageObject objMsg = (const XTP_MessageObject)pMsg;
+
+	return objMsg && objMsg->MsgType == XTP_MSG_RESPONSE && objMsg->Status == 0;
+}
+
+static inline char* XS_XtpBodyDup(const void* pMsg, const char* sDefault)
+{
+	const XTP_MessageObject objMsg = (const XTP_MessageObject)pMsg;
+	const char* pBody;
+	uint32 iBodyLen;
+	char* sText;
+
+	if ( objMsg && objMsg->pBody && objMsg->BodySize > 0u ) {
+		pBody = objMsg->pBody;
+		iBodyLen = objMsg->BodySize;
+	} else {
+		if ( sDefault == NULL ) {
+			return NULL;
+		}
+		pBody = sDefault;
+		iBodyLen = (uint32)strlen(sDefault);
+	}
+
+	sText = (char*)xrtMalloc((size_t)iBodyLen + 1u);
+	if ( sText == NULL ) {
+		return NULL;
+	}
+	if ( iBodyLen > 0u ) {
+		memcpy(sText, pBody, iBodyLen);
+	}
+	sText[iBodyLen] = '\0';
+	return sText;
+}
+
+static inline char* XS_XtpCmdDup(const void* pMsg, const char* sDefault)
+{
+	const XTP_MessageObject objMsg = (const XTP_MessageObject)pMsg;
+	const char* pCmd;
+	uint16 iCmdLen;
+	char* sText;
+
+	if ( objMsg && objMsg->pCmd && objMsg->CmdSize > 0u ) {
+		pCmd = objMsg->pCmd;
+		iCmdLen = objMsg->CmdSize;
+	} else {
+		if ( sDefault == NULL ) {
+			return NULL;
+		}
+		pCmd = sDefault;
+		iCmdLen = (uint16)strlen(sDefault);
+	}
+
+	sText = (char*)xrtMalloc((size_t)iCmdLen + 1u);
+	if ( sText == NULL ) {
+		return NULL;
+	}
+	if ( iCmdLen > 0u ) {
+		memcpy(sText, pCmd, iCmdLen);
+	}
+	sText[iCmdLen] = '\0';
+	return sText;
+}
+
+static inline xvalue XS_XtpValue(const void* pMsg)
+{
+	const XTP_MessageObject objMsg = (const XTP_MessageObject)pMsg;
+	const char* sResult;
+	char* sError;
+	xvalue objParams;
+	xvalue objRet;
+
+	if ( objMsg == NULL ) {
+		return NULL;
+	}
+
+	objRet = xvoCreateTable();
+	if ( objRet == NULL ) {
+		return NULL;
+	}
+
+	xvoTableSetBool(objRet, "ok", 0, XS_XtpIsOK(objMsg));
+	xvoTableSetInt(objRet, "status", 0, (int64)objMsg->Status);
+	xvoTableSetInt(objRet, "msg_type", 0, (int64)objMsg->MsgType);
+	xvoTableSetInt(objRet, "msg_id", 0, (int64)objMsg->MsgID);
+	xvoTableSetInt(objRet, "flags", 0, (int64)objMsg->Flags);
+	xvoTableSetInt(objRet, "param_count", 0, (int64)objMsg->ParamCount);
+	xvoTableSetInt(objRet, "body_len", 0, (int64)objMsg->BodySize);
+	xvoTableSetText(objRet, "cmd", 0, (ptr)(objMsg->pCmd ? objMsg->pCmd : ""), objMsg->CmdSize, FALSE);
+	objParams = XS_XtpParamsValue(objMsg);
+	if ( objParams ) {
+		xvoTableSetValue(objRet, "params", 0, objParams, TRUE);
+	}
+
+	sResult = XS_XtpResultText(objMsg, "");
+	xvoTableSetText(objRet, "result", 0, (ptr)(sResult ? sResult : ""), 0, FALSE);
+	xvoTableSetText(objRet, "body", 0, (ptr)(objMsg->pBody ? objMsg->pBody : ""), objMsg->BodySize, FALSE);
+
+	if ( !XS_XtpIsOK(objMsg) ) {
+		sError = XS_XtpErrorText(objMsg, "");
+		xvoTableSetText(objRet, "error", 0, (ptr)(sError ? sError : ""), 0, FALSE);
+		if ( sError ) {
+			xrtFree(sError);
+		}
+	} else {
+		xvoTableSetText(objRet, "error", 0, (ptr)"", 0, FALSE);
+	}
+
+	return objRet;
+}
+
+static inline xvalue XS_XtpBodyValue(const void* pMsg)
+{
+	const XTP_MessageObject objMsg = (const XTP_MessageObject)pMsg;
+
+	if ( objMsg == NULL || objMsg->pBody == NULL || objMsg->BodySize == 0u ) {
+		return NULL;
+	}
+
+	return xrtParseJSON((ptr)objMsg->pBody, objMsg->BodySize);
+}
+
+static inline xvalue XS_XtpErrorValue(const void* pMsg)
+{
+	if ( pMsg == NULL || XS_XtpIsOK(pMsg) ) {
+		return NULL;
+	}
+
+	return XS_XtpBodyValue(pMsg);
+}
+
+static inline xvalue XS_XtpParamsValue(const void* pMsg)
+{
+	const XTP_MessageObject objMsg = (const XTP_MessageObject)pMsg;
+	const char* pKey;
+	const char* pVal;
+	uint16 iKeyLen;
+	uint16 iValLen;
+	uint16 i;
+	xvalue objRet;
+
+	if ( objMsg == NULL ) {
+		return NULL;
+	}
+
+	objRet = xvoCreateTable();
+	if ( objRet == NULL ) {
+		return NULL;
+	}
+
+	for ( i = 0; i < objMsg->ParamCount; i++ ) {
+		if ( !XS_XtpParamAt(objMsg, i, &pKey, &iKeyLen, &pVal, &iValLen) ) {
+			continue;
+		}
+		xvoTableSetText(objRet, (ptr)(pKey ? pKey : ""), iKeyLen, (ptr)(pVal ? pVal : ""), iValLen, FALSE);
+	}
+
+	return objRet;
+}
+
+static inline char* XS_XtpSummaryText(const void* pMsg)
+{
+	const XTP_MessageObject objMsg = (const XTP_MessageObject)pMsg;
+	const char* sResult;
+	char* sCmd;
+	char* sText;
+	int iNeed;
+
+	if ( objMsg == NULL ) {
+		sText = (char*)xrtMalloc(32);
+		if ( sText ) {
+			strcpy(sText, "response=(null)\n");
+		}
+		return sText;
+	}
+
+	sResult = XS_XtpResultText(objMsg, "");
+	sCmd = XS_XtpCmdDup(objMsg, "");
+	iNeed = snprintf(
+		NULL,
+		0,
+		"ok=%s\nstatus=%d\nmsg_type=%u\nmsg_id=%llu\ncmd=%s\nresult=%s\nbody_len=%u\n",
+		XS_XtpIsOK(objMsg) ? "true" : "false",
+		(int)objMsg->Status,
+		(unsigned)objMsg->MsgType,
+		(unsigned long long)objMsg->MsgID,
+		sCmd ? sCmd : "",
+		sResult ? sResult : "",
+		(unsigned)objMsg->BodySize
+	);
+	if ( iNeed < 0 ) {
+		if ( sCmd ) {
+			xrtFree(sCmd);
+		}
+		return NULL;
+	}
+
+	sText = (char*)xrtMalloc((size_t)iNeed + 1u);
+	if ( sText ) {
+		snprintf(
+			sText,
+			(size_t)iNeed + 1u,
+			"ok=%s\nstatus=%d\nmsg_type=%u\nmsg_id=%llu\ncmd=%s\nresult=%s\nbody_len=%u\n",
+			XS_XtpIsOK(objMsg) ? "true" : "false",
+			(int)objMsg->Status,
+			(unsigned)objMsg->MsgType,
+			(unsigned long long)objMsg->MsgID,
+			sCmd ? sCmd : "",
+			sResult ? sResult : "",
+			(unsigned)objMsg->BodySize
+		);
+	}
+	if ( sCmd ) {
+		xrtFree(sCmd);
+	}
+	return sText;
+}
+
+static inline char* XS_XtpMetaText(const void* pMsg)
+{
+	const XTP_MessageObject objMsg = (const XTP_MessageObject)pMsg;
+	const char* sResult;
+	char* sCmd;
+	char* sText;
+	int iNeed;
+
+	if ( objMsg == NULL ) {
+		sText = (char*)xrtMalloc(17);
+		if ( sText ) {
+			strcpy(sText, "response=(null)");
+		}
+		return sText;
+	}
+
+	sResult = XS_XtpResultText(objMsg, "");
+	sCmd = XS_XtpCmdDup(objMsg, "");
+	iNeed = snprintf(
+		NULL,
+		0,
+		"ok=%s status=%d cmd=%s result=%s body_len=%u",
+		XS_XtpIsOK(objMsg) ? "true" : "false",
+		(int)objMsg->Status,
+		sCmd ? sCmd : "",
+		sResult ? sResult : "",
+		(unsigned)objMsg->BodySize
+	);
+	if ( iNeed < 0 ) {
+		if ( sCmd ) {
+			xrtFree(sCmd);
+		}
+		return NULL;
+	}
+
+	sText = (char*)xrtMalloc((size_t)iNeed + 1u);
+	if ( sText ) {
+		snprintf(
+			sText,
+			(size_t)iNeed + 1u,
+			"ok=%s status=%d cmd=%s result=%s body_len=%u",
+			XS_XtpIsOK(objMsg) ? "true" : "false",
+			(int)objMsg->Status,
+			sCmd ? sCmd : "",
+			sResult ? sResult : "",
+			(unsigned)objMsg->BodySize
+		);
+	}
+	if ( sCmd ) {
+		xrtFree(sCmd);
+	}
+	return sText;
+}
+
+static inline char* XS_XtpMetaJson(const void* pMsg)
+{
+	const XTP_MessageObject objMsg = (const XTP_MessageObject)pMsg;
+	const char* sResult;
+	char* sCmd;
+	char* sText;
+	json_sax_print_hd hPrint;
+	json_print_choice_t tChoice;
+	json_string_t tKey;
+	json_string_t tVal;
+
+	if ( objMsg == NULL ) {
+		sText = (char*)xrtMalloc(18);
+		if ( sText ) {
+			strcpy(sText, "{\"response\":null}");
+		}
+		return sText;
+	}
+
+	sResult = XS_XtpResultText(objMsg, "");
+	sCmd = XS_XtpCmdDup(objMsg, "");
+	memset(&tChoice, 0, sizeof(tChoice));
+	hPrint = xrtJsonPrintStart(&tChoice);
+	if ( hPrint == NULL ) {
+		if ( sCmd ) {
+			xrtFree(sCmd);
+		}
+		return NULL;
+	}
+
+	memset(&tKey, 0, sizeof(tKey));
+	memset(&tVal, 0, sizeof(tVal));
+	xrtJsonPrintObjectStart(hPrint, NULL);
+
+	tKey.str = "ok";
+	xrtJsonUpdateStringInfo(&tKey);
+	xrtJsonPrintBool(hPrint, &tKey, XS_XtpIsOK(objMsg));
+
+	tKey.str = "status";
+	tKey.info.len = 0;
+	xrtJsonUpdateStringInfo(&tKey);
+	xrtJsonPrintInt(hPrint, &tKey, (int32)objMsg->Status);
+
+	tKey.str = "cmd";
+	tKey.info.len = 0;
+	xrtJsonUpdateStringInfo(&tKey);
+	tVal.str = sCmd ? sCmd : "";
+	memset(&tVal.info, 0, sizeof(tVal.info));
+	xrtJsonUpdateStringInfo(&tVal);
+	xrtJsonPrintString(hPrint, &tKey, &tVal);
+
+	tKey.str = "result";
+	tKey.info.len = 0;
+	xrtJsonUpdateStringInfo(&tKey);
+	tVal.str = (char*)(sResult ? sResult : "");
+	memset(&tVal.info, 0, sizeof(tVal.info));
+	xrtJsonUpdateStringInfo(&tVal);
+	xrtJsonPrintString(hPrint, &tKey, &tVal);
+
+	tKey.str = "body_len";
+	tKey.info.len = 0;
+	xrtJsonUpdateStringInfo(&tKey);
+	xrtJsonPrintInt(hPrint, &tKey, (int32)objMsg->BodySize);
+
+	xrtJsonPrintObjectFinish(hPrint);
+	sText = xrtJsonPrintFinish(hPrint, NULL, NULL);
+	if ( sCmd ) {
+		xrtFree(sCmd);
+	}
+	return sText;
+}
+
+static inline char* XS_XtpResultJson(const void* pMsg)
+{
+	const XTP_MessageObject objMsg = (const XTP_MessageObject)pMsg;
+	const char* sResult;
+	char* sText;
+	json_sax_print_hd hPrint;
+	json_print_choice_t tChoice;
+	json_string_t tKey;
+	json_string_t tVal;
+
+	if ( objMsg == NULL ) {
+		sText = (char*)xrtMalloc(18);
+		if ( sText ) {
+			strcpy(sText, "{\"response\":null}");
+		}
+		return sText;
+	}
+
+	sResult = XS_XtpResultText(objMsg, "");
+	memset(&tChoice, 0, sizeof(tChoice));
+	hPrint = xrtJsonPrintStart(&tChoice);
+	if ( hPrint == NULL ) {
+		return NULL;
+	}
+
+	memset(&tKey, 0, sizeof(tKey));
+	memset(&tVal, 0, sizeof(tVal));
+	xrtJsonPrintObjectStart(hPrint, NULL);
+
+	tKey.str = "result";
+	xrtJsonUpdateStringInfo(&tKey);
+	tVal.str = (char*)(sResult ? sResult : "");
+	xrtJsonUpdateStringInfo(&tVal);
+	xrtJsonPrintString(hPrint, &tKey, &tVal);
+
+	tKey.str = "ok";
+	tKey.info.len = 0;
+	xrtJsonUpdateStringInfo(&tKey);
+	xrtJsonPrintBool(hPrint, &tKey, XS_XtpIsOK(objMsg));
+
+	xrtJsonPrintObjectFinish(hPrint);
+	return xrtJsonPrintFinish(hPrint, NULL, NULL);
+}
+
+static inline char* XS_XtpErrorJson(const void* pMsg, const char* sDefault)
+{
+	const XTP_MessageObject objMsg = (const XTP_MessageObject)pMsg;
+	char* sErr;
+	char* sText;
+	json_sax_print_hd hPrint;
+	json_print_choice_t tChoice;
+	json_string_t tKey;
+	json_string_t tVal;
+
+	if ( objMsg == NULL ) {
+		sText = (char*)xrtMalloc(18);
+		if ( sText ) {
+			strcpy(sText, "{\"response\":null}");
+		}
+		return sText;
+	}
+
+	sErr = XS_XtpErrorText(objMsg, sDefault);
+	memset(&tChoice, 0, sizeof(tChoice));
+	hPrint = xrtJsonPrintStart(&tChoice);
+	if ( hPrint == NULL ) {
+		if ( sErr ) {
+			xrtFree(sErr);
+		}
+		return NULL;
+	}
+
+	memset(&tKey, 0, sizeof(tKey));
+	memset(&tVal, 0, sizeof(tVal));
+	xrtJsonPrintObjectStart(hPrint, NULL);
+
+	tKey.str = "ok";
+	xrtJsonUpdateStringInfo(&tKey);
+	xrtJsonPrintBool(hPrint, &tKey, FALSE);
+
+	tKey.str = "status";
+	tKey.info.len = 0;
+	xrtJsonUpdateStringInfo(&tKey);
+	xrtJsonPrintInt(hPrint, &tKey, (int32)objMsg->Status);
+
+	tKey.str = "error";
+	tKey.info.len = 0;
+	xrtJsonUpdateStringInfo(&tKey);
+	tVal.str = sErr ? sErr : "";
+	memset(&tVal.info, 0, sizeof(tVal.info));
+	xrtJsonUpdateStringInfo(&tVal);
+	xrtJsonPrintString(hPrint, &tKey, &tVal);
+
+	xrtJsonPrintObjectFinish(hPrint);
+	sText = xrtJsonPrintFinish(hPrint, NULL, NULL);
+	if ( sErr ) {
+		xrtFree(sErr);
+	}
+	return sText;
+}
+
+static inline char* XS_XtpSummaryJson(const void* pMsg)
+{
+	const XTP_MessageObject objMsg = (const XTP_MessageObject)pMsg;
+	const char* sResult;
+	char* sCmd;
+	char* sBody;
+	char* sText;
+	json_sax_print_hd hPrint;
+	json_print_choice_t tChoice;
+	json_string_t tKey;
+	json_string_t tVal;
+
+	if ( objMsg == NULL ) {
+		sText = (char*)xrtMalloc(18);
+		if ( sText ) {
+			strcpy(sText, "{\"response\":null}");
+		}
+		return sText;
+	}
+
+	sResult = XS_XtpResultText(objMsg, "");
+	sCmd = XS_XtpCmdDup(objMsg, "");
+	sBody = XS_XtpBodyDup(objMsg, "");
+	memset(&tChoice, 0, sizeof(tChoice));
+	hPrint = xrtJsonPrintStart(&tChoice);
+	if ( hPrint == NULL ) {
+		if ( sCmd ) {
+			xrtFree(sCmd);
+		}
+		if ( sBody ) {
+			xrtFree(sBody);
+		}
+		return NULL;
+	}
+
+	memset(&tKey, 0, sizeof(tKey));
+	memset(&tVal, 0, sizeof(tVal));
+	xrtJsonPrintObjectStart(hPrint, NULL);
+
+	tKey.str = "ok";
+	xrtJsonUpdateStringInfo(&tKey);
+	xrtJsonPrintBool(hPrint, &tKey, XS_XtpIsOK(objMsg));
+
+	tKey.str = "status";
+	tKey.info.len = 0;
+	xrtJsonUpdateStringInfo(&tKey);
+	xrtJsonPrintInt(hPrint, &tKey, (int32)objMsg->Status);
+
+	tKey.str = "msg_type";
+	tKey.info.len = 0;
+	xrtJsonUpdateStringInfo(&tKey);
+	xrtJsonPrintInt(hPrint, &tKey, (int32)objMsg->MsgType);
+
+	tKey.str = "msg_id";
+	tKey.info.len = 0;
+	xrtJsonUpdateStringInfo(&tKey);
+	xrtJsonPrintInt64(hPrint, &tKey, (int64)objMsg->MsgID);
+
+	tKey.str = "cmd";
+	tKey.info.len = 0;
+	xrtJsonUpdateStringInfo(&tKey);
+	tVal.str = sCmd ? sCmd : "";
+	memset(&tVal.info, 0, sizeof(tVal.info));
+	xrtJsonUpdateStringInfo(&tVal);
+	xrtJsonPrintString(hPrint, &tKey, &tVal);
+
+	tKey.str = "result";
+	tKey.info.len = 0;
+	xrtJsonUpdateStringInfo(&tKey);
+	tVal.str = (char*)(sResult ? sResult : "");
+	memset(&tVal.info, 0, sizeof(tVal.info));
+	xrtJsonUpdateStringInfo(&tVal);
+	xrtJsonPrintString(hPrint, &tKey, &tVal);
+
+	tKey.str = "body";
+	tKey.info.len = 0;
+	xrtJsonUpdateStringInfo(&tKey);
+	tVal.str = sBody ? sBody : "";
+	memset(&tVal.info, 0, sizeof(tVal.info));
+	xrtJsonUpdateStringInfo(&tVal);
+	xrtJsonPrintString(hPrint, &tKey, &tVal);
+
+	tKey.str = "body_len";
+	tKey.info.len = 0;
+	xrtJsonUpdateStringInfo(&tKey);
+	xrtJsonPrintInt(hPrint, &tKey, (int32)objMsg->BodySize);
+
+	xrtJsonPrintObjectFinish(hPrint);
+	sText = xrtJsonPrintFinish(hPrint, NULL, NULL);
+	if ( sCmd ) {
+		xrtFree(sCmd);
+	}
+	if ( sBody ) {
+		xrtFree(sBody);
+	}
+	return sText;
+}
+
 static inline const char* XS_XtpCmd(const void* pMsg)
 {
 	const XTP_MessageObject objMsg = (const XTP_MessageObject)pMsg;
@@ -484,8 +2061,196 @@ static inline bool XS_XtpNeedReply(const void* pMsg)
 	return (objMsg && objMsg->MsgType == XTP_MSG_REQUEST && objMsg->MsgID != 0) ? TRUE : FALSE;
 }
 
-static inline int XS_XtpSendEx(
-	void* pStream,
+static inline bool XS_XtpIsRequest(const void* pMsg)
+{
+	return XS_XtpMsgType(pMsg) == XTP_MSG_REQUEST ? TRUE : FALSE;
+}
+
+static inline bool XS_XtpIsResponse(const void* pMsg)
+{
+	return XS_XtpMsgType(pMsg) == XTP_MSG_RESPONSE ? TRUE : FALSE;
+}
+
+static inline bool XS_XtpIsPush(const void* pMsg)
+{
+	return XS_XtpMsgType(pMsg) == XTP_MSG_PUSH ? TRUE : FALSE;
+}
+
+static inline bool XS_XtpIsEvent(const void* pMsg)
+{
+	return XS_XtpMsgType(pMsg) == XTP_MSG_EVENT ? TRUE : FALSE;
+}
+
+static inline bool XS_XtpCmdIs(const void* pMsg, const char* sCmd)
+{
+	const XTP_MessageObject objMsg = (const XTP_MessageObject)pMsg;
+	size_t iCmdLen;
+
+	if ( objMsg == NULL || sCmd == NULL || objMsg->pCmd == NULL ) {
+		return FALSE;
+	}
+
+	iCmdLen = strlen(sCmd);
+	if ( objMsg->CmdSize != (uint16)iCmdLen ) {
+		return FALSE;
+	}
+
+	return memcmp(objMsg->pCmd, sCmd, iCmdLen) == 0 ? TRUE : FALSE;
+}
+
+static inline bool XS_XtpHasParam(const void* pMsg, const char* sKey)
+{
+	return XS_XtpFindParamView(pMsg, sKey, NULL, NULL);
+}
+
+static inline const char* XS_XtpParamText(const void* pMsg, const char* sKey, const char* sDefault)
+{
+	const char* pVal;
+	uint16 iValLen;
+	static _Thread_local char sBuf[1024];
+
+	if ( !XS_XtpFindParamView(pMsg, sKey, &pVal, &iValLen) || pVal == NULL ) {
+		return sDefault ? sDefault : "";
+	}
+
+	if ( iValLen >= sizeof(sBuf) ) {
+		iValLen = (uint16)(sizeof(sBuf) - 1);
+	}
+
+	memcpy(sBuf, pVal, iValLen);
+	sBuf[iValLen] = '\0';
+	return sBuf;
+}
+
+static inline const char* XS_XtpResultText(const void* pMsg, const char* sDefault)
+{
+	return XS_XtpParamText(pMsg, "result", sDefault);
+}
+
+static inline bool XS_XtpResultIs(const void* pMsg, const char* sResult)
+{
+	const char* sNow;
+
+	if ( sResult == NULL ) {
+		return FALSE;
+	}
+	sNow = XS_XtpResultText(pMsg, NULL);
+	if ( sNow == NULL ) {
+		return FALSE;
+	}
+
+	return strcmp(sNow, sResult) == 0 ? TRUE : FALSE;
+}
+
+static inline bool XS_XtpStatusIs(const void* pMsg, int32 iStatus)
+{
+	const XTP_MessageObject objMsg = (const XTP_MessageObject)pMsg;
+
+	if ( objMsg == NULL ) {
+		return FALSE;
+	}
+
+	return objMsg->Status == iStatus ? TRUE : FALSE;
+}
+
+static inline char* XS_XtpErrorText(const void* pMsg, const char* sDefault)
+{
+	const XTP_MessageObject objMsg = (const XTP_MessageObject)pMsg;
+
+	if ( objMsg == NULL ) {
+		if ( sDefault == NULL ) {
+			return NULL;
+		}
+		return XS_XtpBodyDup(NULL, sDefault);
+	}
+	if ( objMsg->Status == 0 ) {
+		if ( sDefault == NULL ) {
+			return NULL;
+		}
+		return XS_XtpBodyDup(NULL, sDefault);
+	}
+
+	return XS_XtpBodyDup(objMsg, sDefault ? sDefault : "response status not ok");
+}
+
+static inline char* XS_XtpParamDup(const void* pMsg, const char* sKey, const char* sDefault)
+{
+	const char* pVal;
+	uint16 iValLen;
+	char* sText;
+
+	if ( !XS_XtpFindParamView(pMsg, sKey, &pVal, &iValLen) || pVal == NULL ) {
+		if ( sDefault == NULL ) {
+			return NULL;
+		}
+		iValLen = (uint16)strlen(sDefault);
+		pVal = sDefault;
+	}
+
+	sText = (char*)xrtMalloc((size_t)iValLen + 1u);
+	if ( sText == NULL ) {
+		return NULL;
+	}
+	if ( iValLen > 0 ) {
+		memcpy(sText, pVal, iValLen);
+	}
+	sText[iValLen] = '\0';
+	return sText;
+}
+
+static inline int64 XS_XtpParamInt(const void* pMsg, const char* sKey, int64 iDefault)
+{
+	const char* pVal;
+	uint16 iValLen;
+	char sBuf[64];
+	char* pEnd;
+	long long iRet;
+
+	if ( !XS_XtpFindParamView(pMsg, sKey, &pVal, &iValLen) || pVal == NULL || iValLen == 0 ) {
+		return iDefault;
+	}
+
+	if ( iValLen >= sizeof(sBuf) ) {
+		iValLen = (uint16)(sizeof(sBuf) - 1);
+	}
+
+	memcpy(sBuf, pVal, iValLen);
+	sBuf[iValLen] = '\0';
+	iRet = strtoll(sBuf, &pEnd, 10);
+	if ( pEnd == sBuf || (pEnd && *pEnd != '\0') ) {
+		return iDefault;
+	}
+	return (int64)iRet;
+}
+
+static inline bool XS_XtpParamBool(const void* pMsg, const char* sKey, bool bDefault)
+{
+	const char* pVal;
+	uint16 iValLen;
+	char sBuf[16];
+
+	if ( !XS_XtpFindParamView(pMsg, sKey, &pVal, &iValLen) || pVal == NULL || iValLen == 0 ) {
+		return bDefault;
+	}
+
+	if ( iValLen >= sizeof(sBuf) ) {
+		iValLen = (uint16)(sizeof(sBuf) - 1);
+	}
+
+	memcpy(sBuf, pVal, iValLen);
+	sBuf[iValLen] = '\0';
+
+	if ( _stricmp(sBuf, "1") == 0 || _stricmp(sBuf, "true") == 0 || _stricmp(sBuf, "yes") == 0 || _stricmp(sBuf, "on") == 0 ) {
+		return TRUE;
+	}
+	if ( _stricmp(sBuf, "0") == 0 || _stricmp(sBuf, "false") == 0 || _stricmp(sBuf, "no") == 0 || _stricmp(sBuf, "off") == 0 ) {
+		return FALSE;
+	}
+
+	return bDefault;
+}
+
+static inline bool XS_XtpBuildPacket(
 	uint16 iMsgType,
 	uint64 iMsgID,
 	uint16 iFlags,
@@ -496,7 +2261,9 @@ static inline int XS_XtpSendEx(
 	const char** arrParam,
 	const char** arrValue,
 	const void* pBody,
-	size_t iBodySize
+	size_t iBodySize,
+	char** ppSendBuf,
+	size_t* piPackSize
 )
 {
 	size_t iPackSize;
@@ -506,9 +2273,11 @@ static inline int XS_XtpSendEx(
 	XTP_ParamInfo* pParamInfo = NULL;
 	uint32 i;
 	
-	if ( pStream == NULL || sCmd == NULL ) {
+	if ( ppSendBuf == NULL || piPackSize == NULL || sCmd == NULL ) {
 		return FALSE;
 	}
+	*ppSendBuf = NULL;
+	*piPackSize = 0u;
 	
 	if ( iCmdSize == 0 ) {
 		iCmdSize = strlen(sCmd);
@@ -591,17 +2360,48 @@ static inline int XS_XtpSendEx(
 	if ( pBody && iBodySize > 0 ) {
 		memcpy(pSendBuf + iOffset, pBody, iBodySize);
 	}
-	
-	i = xrtNetStreamSend((xnetstream*)pStream, pSendBuf, iPackSize) == XRT_NET_OK ? TRUE : FALSE;
-	if ( i ) {
+
+	*ppSendBuf = pSendBuf;
+	*piPackSize = iPackSize;
+	if ( pParamInfo ) {
+		xrtFree(pParamInfo);
+	}
+	return TRUE;
+}
+
+static inline int XS_XtpSendEx(
+	void* pStream,
+	uint16 iMsgType,
+	uint64 iMsgID,
+	uint16 iFlags,
+	int32 iStatus,
+	const char* sCmd,
+	size_t iCmdSize,
+	uint32 iParamCount,
+	const char** arrParam,
+	const char** arrValue,
+	const void* pBody,
+	size_t iBodySize
+)
+{
+	char* pSendBuf = NULL;
+	size_t iPackSize = 0;
+	int iOk;
+
+	if ( pStream == NULL ) {
+		return FALSE;
+	}
+	if ( !XS_XtpBuildPacket(iMsgType, iMsgID, iFlags, iStatus, sCmd, iCmdSize, iParamCount, arrParam, arrValue, pBody, iBodySize, &pSendBuf, &iPackSize) ) {
+		return FALSE;
+	}
+
+	iOk = xrtNetStreamSend((xnetstream*)pStream, pSendBuf, iPackSize) == XRT_NET_OK ? TRUE : FALSE;
+	if ( iOk ) {
 		XS_XtpMetricAdd(&g_iXsXtpSendCount, 1);
 		XS_XtpMetricAdd(&g_iXsXtpSendBytes, (int64)iPackSize);
 	}
 	xrtFree(pSendBuf);
-	if ( pParamInfo ) {
-		xrtFree(pParamInfo);
-	}
-	return (int)i;
+	return iOk;
 }
 
 static inline int XS_XtpSend(
@@ -629,6 +2429,49 @@ static inline int XS_XtpSend(
 		pBody,
 		iBodySize
 	);
+}
+
+static inline int XS_XtpSendRequest(
+	void* pStream,
+	uint64 iMsgID,
+	const char* sCmd,
+	size_t iCmdSize,
+	uint32 iParamCount,
+	const char** arrParam,
+	const char** arrValue,
+	const void* pBody,
+	size_t iBodySize
+)
+{
+	return XS_XtpSendEx(pStream, XTP_MSG_REQUEST, iMsgID, 0, 0, sCmd, iCmdSize, iParamCount, arrParam, arrValue, pBody, iBodySize);
+}
+
+static inline int XS_XtpSendPush(
+	void* pStream,
+	const char* sCmd,
+	size_t iCmdSize,
+	uint32 iParamCount,
+	const char** arrParam,
+	const char** arrValue,
+	const void* pBody,
+	size_t iBodySize
+)
+{
+	return XS_XtpSendEx(pStream, XTP_MSG_PUSH, 0, 0, 0, sCmd, iCmdSize, iParamCount, arrParam, arrValue, pBody, iBodySize);
+}
+
+static inline int XS_XtpSendEvent(
+	void* pStream,
+	const char* sCmd,
+	size_t iCmdSize,
+	uint32 iParamCount,
+	const char** arrParam,
+	const char** arrValue,
+	const void* pBody,
+	size_t iBodySize
+)
+{
+	return XS_XtpSendEx(pStream, XTP_MSG_EVENT, 0, 0, 0, sCmd, iCmdSize, iParamCount, arrParam, arrValue, pBody, iBodySize);
 }
 
 static inline int XS_XtpReplyEx(
@@ -665,6 +2508,152 @@ static inline int XS_XtpReplyEx(
 		pBody,
 		iBodySize
 	);
+}
+
+static inline int XS_XtpReplyText(
+	void* pStream,
+	const void* pReqMsg,
+	int32 iStatus,
+	const char* sCmd,
+	uint32 iParamCount,
+	const char** arrParam,
+	const char** arrValue,
+	const char* sText
+)
+{
+	return XS_XtpReplyEx(
+		pStream,
+		pReqMsg,
+		iStatus,
+		sCmd,
+		0,
+		iParamCount,
+		arrParam,
+		arrValue,
+		sText ? sText : "",
+		sText ? strlen(sText) : 0
+	);
+}
+
+static inline int XS_XtpReplyJson(
+	void* pStream,
+	const void* pReqMsg,
+	int32 iStatus,
+	const char* sCmd,
+	uint32 iParamCount,
+	const char** arrParam,
+	const char** arrValue,
+	const char* sJson
+)
+{
+	return XS_XtpReplyEx(
+		pStream,
+		pReqMsg,
+		iStatus,
+		sCmd,
+		0,
+		iParamCount,
+		arrParam,
+		arrValue,
+		sJson ? sJson : "{}",
+		sJson ? strlen(sJson) : 2
+	);
+}
+
+static inline int XS_XtpReplyOKText(
+	void* pStream,
+	const void* pReqMsg,
+	const char* sCmd,
+	const char* sText
+)
+{
+	const char* arrParam[1];
+	const char* arrValue[1];
+
+	arrParam[0] = "result";
+	arrValue[0] = "ok";
+	return XS_XtpReplyText(pStream, pReqMsg, 0, sCmd, 1, arrParam, arrValue, sText);
+}
+
+static inline int XS_XtpReplyErrorText(
+	void* pStream,
+	const void* pReqMsg,
+	int32 iStatus,
+	const char* sCmd,
+	const char* sText
+)
+{
+	const char* arrParam[1];
+	const char* arrValue[1];
+
+	arrParam[0] = "result";
+	arrValue[0] = "error";
+	return XS_XtpReplyText(pStream, pReqMsg, iStatus, sCmd, 1, arrParam, arrValue, sText);
+}
+
+static inline int XS_XtpReplyOKJson(
+	void* pStream,
+	const void* pReqMsg,
+	const char* sCmd,
+	const char* sJson
+)
+{
+	const char* arrParam[1];
+	const char* arrValue[1];
+
+	arrParam[0] = "result";
+	arrValue[0] = "ok";
+	return XS_XtpReplyJson(pStream, pReqMsg, 0, sCmd, 1, arrParam, arrValue, sJson);
+}
+
+static inline int XS_XtpReplyErrorJson(
+	void* pStream,
+	const void* pReqMsg,
+	int32 iStatus,
+	const char* sCmd,
+	const char* sJson
+)
+{
+	const char* arrParam[1];
+	const char* arrValue[1];
+
+	arrParam[0] = "result";
+	arrValue[0] = "error";
+	return XS_XtpReplyJson(pStream, pReqMsg, iStatus, sCmd, 1, arrParam, arrValue, sJson);
+}
+
+static inline int XS_XtpReplyMissingParam(
+	void* pStream,
+	const void* pReqMsg,
+	const char* sParam
+)
+{
+	char sJson[256];
+
+	snprintf(
+		sJson,
+		sizeof(sJson),
+		"{\"result\":\"error\",\"message\":\"missing param\",\"param\":\"%s\"}",
+		sParam ? sParam : ""
+	);
+	return XS_XtpReplyErrorJson(pStream, pReqMsg, 422, "xtp.error", sJson);
+}
+
+static inline int XS_XtpReplyUnsupportedCmd(
+	void* pStream,
+	const void* pReqMsg,
+	const char* sCmd
+)
+{
+	char sJson[256];
+
+	snprintf(
+		sJson,
+		sizeof(sJson),
+		"{\"result\":\"error\",\"message\":\"unsupported cmd\",\"cmd\":\"%s\"}",
+		sCmd ? sCmd : ""
+	);
+	return XS_XtpReplyErrorJson(pStream, pReqMsg, 400, "xtp.error", sJson);
 }
 
 static inline int XS_XtpReply(

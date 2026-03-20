@@ -186,11 +186,17 @@ void ServiceUnit(XS_ServerObject objServer, XS_HostObject objHost)
 - `xsHttpStatus / xsHttpHeader / xsHttpText / xsHttpBody / xsHttpJson`
 - `xsWsIsOpen / xsWsSendText / xsWsSendBinary / xsWsClose`
 - `xsStreamSend / xsStreamClose`
-- `xsXtpSend / xsXtpSendEx / xsXtpReply / xsXtpReplyEx`
+- `xsXtpSend / xsXtpSendRequest / xsXtpSendPush / xsXtpSendEvent / xsXtpSendEx`
+- `xsXtpReply / xsXtpReplyEx / xsXtpReplyText / xsXtpReplyJson / xsXtpReplyOKText / xsXtpReplyErrorText / xsXtpReplyOKJson / xsXtpReplyErrorJson / xsXtpReplyMissingParam / xsXtpReplyUnsupportedCmd`
 - `xsXtpMsgId / xsXtpMsgType / xsXtpMsgFlags / xsXtpStatus`
 - `xsXtpCmd / xsXtpCmdLen / xsXtpBody / xsXtpBodyLen`
 - `xsXtpParamCount / xsXtpParamKeyAt / xsXtpParamValueAt / xsXtpFindParamView`
-- `xsXtpGetParam`（便利函数，内部复制到线程局部缓冲区）
+- `xsXtpGetParam / xsXtpParamText / xsXtpResultText / xsXtpErrorText / xsXtpParamDup / xsXtpParamInt / xsXtpParamBool`（便利函数，适合脚本直接读参数和标准错误响应）
+- `xsXtpCmdDup / xsXtpBodyDup / xsXtpBodyValue / xsXtpErrorValue / xsXtpValue / xsXtpMetaText / xsXtpMetaJson / xsXtpSummaryText / xsXtpSummaryJson / xsXtpResultText / xsXtpResultJson / xsXtpResultIs / xsXtpStatusIs / xsXtpErrorText / xsXtpErrorJson`（安全复制零拷贝视图，并输出统一响应摘要、结构化 `xvalue` 结果对象，以及标准结果/状态/错误文本或 JSON，便于脚本直接处理响应对象）
+- `xsXtpIsRequest / xsXtpIsResponse / xsXtpIsPush / xsXtpIsEvent / xsXtpCmdIs / xsXtpHasParam`
+- `xsXtpClientOpen / xsXtpClientDo / xsXtpClientDoText / xsXtpClientDoSimple / xsXtpClientDoJson / xsXtpClientCall / xsXtpClientCallText / xsXtpClientCallSimple / xsXtpClientCallJson / xsXtpClientCallSimpleBody / xsXtpClientCallTextBody / xsXtpClientCallJsonBody / xsXtpClientCallSimpleBodyValue / xsXtpClientCallSimpleValue / xsXtpClientCallSimpleMeta / xsXtpClientCallSimpleMetaJson / xsXtpClientCallSimpleSummary / xsXtpClientCallSimpleSummaryJson / xsXtpClientCallSimpleResult / xsXtpClientCallSimpleResultJson / xsXtpClientCallSimpleError / xsXtpClientCallSimpleErrorJson / xsXtpClientCallSimpleStatus / xsXtpClientCallSimpleCmd / xsXtpClientCallTableText / xsXtpClientCallTableJson / xsXtpClientCallTableValue / xsXtpMessageFree / xsXtpClientClose`（第一版同步客户端请求/应答 API，已验证可访问外部 XTP 服务，并支持直接用 `xvalue table` 构造 params/body）
+- `xsXtpIsOK`（客户端响应成功判断）
+- `xsXtpBodyDup`（按需复制响应 body，避免零拷贝视图直接当 C 字符串使用）
 - `xsDgramSendTo / xsDgramReply / xsAddrText`
 - `xsReloadCurrentHost / xsReloadHostByName`
 - `xsDataRegister / xsDataGet / xsDataRetain / xsDataRelease / xsDataRemove`
