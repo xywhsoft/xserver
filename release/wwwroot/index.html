@@ -755,6 +755,50 @@
 						<div class="status-value" id="StatusCustomLimitClose">-</div>
 					</div>
 					<div class="status-item">
+						<div class="status-label">HTTP Reject</div>
+						<div class="status-value" id="StatusHttpReject">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">WS Reject</div>
+						<div class="status-value" id="StatusWsReject">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">WS Invalid</div>
+						<div class="status-value" id="StatusWsInvalid">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">WS Invalid Reason</div>
+						<div class="status-value" id="StatusWsInvalidReason">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">WS Invalid Age</div>
+						<div class="status-value" id="StatusWsInvalidAge">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">XTP Reject</div>
+						<div class="status-value" id="StatusXtpReject">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">TCP Reject</div>
+						<div class="status-value" id="StatusCustomReject">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">HTTP Cleanup</div>
+						<div class="status-value" id="StatusHttpCleanup">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">WS Cleanup</div>
+						<div class="status-value" id="StatusWsCleanup">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">XTP Cleanup</div>
+						<div class="status-value" id="StatusXtpCleanup">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">TCP Cleanup</div>
+						<div class="status-value" id="StatusCustomCleanup">-</div>
+					</div>
+					<div class="status-item">
 						<div class="status-label">HTTP Idle Close</div>
 						<div class="status-value" id="StatusHttpIdleClose">-</div>
 					</div>
@@ -1376,6 +1420,75 @@
 						' / ' +
 						((tblStatus.custom_last_conn_limit_close_age_ms !== undefined && tblStatus.custom_last_conn_limit_close_age_ms >= 0) ? String(tblStatus.custom_last_conn_limit_close_age_ms) + ' ms' : '-')
 					);
+					procSetText(
+						'StatusHttpReject',
+						((tblStatus.http_reject_count !== undefined) ? String(tblStatus.http_reject_count) : '-') +
+						' / ' +
+						((tblStatus.http_last_reject_status !== undefined) ? String(tblStatus.http_last_reject_status) : '-') +
+						' / ' +
+						(tblStatus.http_last_reject_reason || '-')
+					);
+					procSetText(
+						'StatusWsReject',
+						((tblStatus.ws_reject_count !== undefined) ? String(tblStatus.ws_reject_count) : '-') +
+						' / ' +
+						(tblStatus.ws_last_reject_reason || '-')
+					);
+					procSetText('StatusWsInvalid', (tblStatus.ws_invalid_count !== undefined) ? String(tblStatus.ws_invalid_count) : '-');
+					procSetText('StatusWsInvalidReason', tblStatus.ws_last_invalid_reason || '-');
+					procSetText('StatusWsInvalidAge', (tblStatus.ws_last_invalid_age_ms !== undefined && tblStatus.ws_last_invalid_age_ms >= 0) ? String(tblStatus.ws_last_invalid_age_ms) + ' ms' : '-');
+					procSetText(
+						'StatusXtpReject',
+						((tblStatus.xtp_reject_count !== undefined) ? String(tblStatus.xtp_reject_count) : '-') +
+						' / ' +
+						(tblStatus.xtp_last_reject_reason || '-')
+					);
+					procSetText(
+						'StatusCustomReject',
+						((tblStatus.custom_reject_count !== undefined) ? String(tblStatus.custom_reject_count) : '-') +
+						' / ' +
+						(tblStatus.custom_last_reject_reason || '-')
+					);
+					procSetText(
+						'StatusHttpCleanup',
+						((tblStatus.http_stop_cleanup_count !== undefined) ? String(tblStatus.http_stop_cleanup_count) : '-') +
+						' / ' +
+						((tblStatus.http_last_stop_cleanup_closed !== undefined) ? String(tblStatus.http_last_stop_cleanup_closed) : '-') +
+						' / ' +
+						((tblStatus.http_last_stop_cleanup_remain !== undefined) ? String(tblStatus.http_last_stop_cleanup_remain) : '-') +
+						' / ' +
+						((tblStatus.http_last_stop_cleanup_age_ms !== undefined && tblStatus.http_last_stop_cleanup_age_ms >= 0) ? String(tblStatus.http_last_stop_cleanup_age_ms) + ' ms' : '-')
+					);
+					procSetText(
+						'StatusWsCleanup',
+						((tblStatus.ws_stop_cleanup_count !== undefined) ? String(tblStatus.ws_stop_cleanup_count) : '-') +
+						' / ' +
+						((tblStatus.ws_last_stop_cleanup_closed !== undefined) ? String(tblStatus.ws_last_stop_cleanup_closed) : '-') +
+						' / ' +
+						((tblStatus.ws_last_stop_cleanup_remain !== undefined) ? String(tblStatus.ws_last_stop_cleanup_remain) : '-') +
+						' / ' +
+						((tblStatus.ws_last_stop_cleanup_age_ms !== undefined && tblStatus.ws_last_stop_cleanup_age_ms >= 0) ? String(tblStatus.ws_last_stop_cleanup_age_ms) + ' ms' : '-')
+					);
+					procSetText(
+						'StatusXtpCleanup',
+						((tblStatus.xtp_stop_cleanup_count !== undefined) ? String(tblStatus.xtp_stop_cleanup_count) : '-') +
+						' / ' +
+						((tblStatus.xtp_last_stop_cleanup_closed !== undefined) ? String(tblStatus.xtp_last_stop_cleanup_closed) : '-') +
+						' / ' +
+						((tblStatus.xtp_last_stop_cleanup_remain !== undefined) ? String(tblStatus.xtp_last_stop_cleanup_remain) : '-') +
+						' / ' +
+						((tblStatus.xtp_last_stop_cleanup_age_ms !== undefined && tblStatus.xtp_last_stop_cleanup_age_ms >= 0) ? String(tblStatus.xtp_last_stop_cleanup_age_ms) + ' ms' : '-')
+					);
+					procSetText(
+						'StatusCustomCleanup',
+						((tblStatus.custom_stop_cleanup_count !== undefined) ? String(tblStatus.custom_stop_cleanup_count) : '-') +
+						' / ' +
+						((tblStatus.custom_last_stop_cleanup_closed !== undefined) ? String(tblStatus.custom_last_stop_cleanup_closed) : '-') +
+						' / ' +
+						((tblStatus.custom_last_stop_cleanup_remain !== undefined) ? String(tblStatus.custom_last_stop_cleanup_remain) : '-') +
+						' / ' +
+						((tblStatus.custom_last_stop_cleanup_age_ms !== undefined && tblStatus.custom_last_stop_cleanup_age_ms >= 0) ? String(tblStatus.custom_last_stop_cleanup_age_ms) + ' ms' : '-')
+					);
 					procSetText('StatusHttpIdleClose', (tblStatus.http_idle_close_count !== undefined) ? String(tblStatus.http_idle_close_count) : '-');
 					procSetText('StatusHttpIdleAge', (tblStatus.http_last_idle_close_age_ms !== undefined && tblStatus.http_last_idle_close_age_ms >= 0) ? String(tblStatus.http_last_idle_close_age_ms) + ' ms' : '-');
 					procSetText(
@@ -1593,19 +1706,30 @@
 					procSetText('StatusWsLimitClose', 'error');
 					procSetText('StatusXtpLimitClose', 'error');
 					procSetText('StatusCustomLimitClose', 'error');
+					procSetText('StatusHttpReject', 'error');
+					procSetText('StatusWsReject', 'error');
+					procSetText('StatusWsInvalid', 'error');
+					procSetText('StatusWsInvalidReason', 'error');
+					procSetText('StatusWsInvalidAge', 'error');
+					procSetText('StatusXtpReject', 'error');
+					procSetText('StatusCustomReject', 'error');
+					procSetText('StatusHttpCleanup', 'error');
+					procSetText('StatusWsCleanup', 'error');
+					procSetText('StatusXtpCleanup', 'error');
+					procSetText('StatusCustomCleanup', 'error');
 					procSetText('StatusHttpIdleClose', 'error');
 					procSetText('StatusHttpIdleAge', 'error');
 					procSetText('StatusXtpConn', 'error');
 					procSetText('StatusXtpMsg', 'error');
 					procSetText('StatusXtpReqResp', 'error');
-	procSetText('StatusXtpInvalid', 'error');
+					procSetText('StatusXtpInvalid', 'error');
 					procSetText('StatusXtpLast', 'error');
 					procSetText('StatusXtpShape', 'error');
 					procSetText('StatusXtpInvalidReason', 'error');
-	procSetText('StatusXtpInvalidAge', 'error');
-	procSetText('StatusXtpError', 'error');
-	procSetText('StatusXtpErrorAge', 'error');
-	procSetText('StatusXtpLastBytes', 'error');
+					procSetText('StatusXtpInvalidAge', 'error');
+					procSetText('StatusXtpError', 'error');
+					procSetText('StatusXtpErrorAge', 'error');
+					procSetText('StatusXtpLastBytes', 'error');
 					procSetText('StatusUdpPackets', 'error');
 					procSetText('StatusUdpBytes', 'error');
 					procSetText('StatusUdpFrom', 'error');

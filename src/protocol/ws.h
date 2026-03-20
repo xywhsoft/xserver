@@ -4,8 +4,11 @@
 typedef struct {
 	XS_ServerConfig* pServer;
 	xwsconn* pConn;
+	xnetstream* pStream;
 	int64 iLastActiveMS;
 	volatile bool bClosing;
+	char sServerName[128];
+	char sHostName[128];
 	ptr pTracker;
 } XS_WsConnContext;
 
@@ -14,11 +17,13 @@ typedef struct {
 	XS_ServerConfig* pOwner;
 	xthread hIdleThread;
 	volatile bool bStopThread;
+	volatile bool bStopping;
 	xmutex pConnLock;
 	xarray arrConn;
 } XS_WsHandle;
 
 static inline XS_HostConfig* XS_WsResolveHost(XS_ServerConfig* objServer);
+static inline void XS_WsRecordClose(xnet_result iReason);
 
 static inline int64 XS_WsMetricAdd(volatile int64* pValue, int64 iDelta)
 {
@@ -155,6 +160,20 @@ static inline void XS_WsTouch(XS_WsConnContext* objCtx)
 	objCtx->iLastActiveMS = XS_WsNowMS();
 }
 
+static inline void XS_WsCopyContextName(char* sDst, size_t iDstSize, const char* sValue)
+{
+	if ( sDst == NULL || iDstSize == 0 ) {
+		return;
+	}
+
+	if ( sValue && sValue[0] ) {
+		strncpy(sDst, sValue, iDstSize - 1);
+		sDst[iDstSize - 1] = '\0';
+	} else {
+		sDst[0] = '\0';
+	}
+}
+
 static inline void XS_WsTrackConn(XS_WsHandle* objHandle, XS_WsConnContext* objCtx)
 {
 	XS_WsConnContext** ppSlot;
@@ -207,6 +226,196 @@ static inline int64 XS_WsTrackedConnCount(XS_WsHandle* objHandle)
 	return iCount;
 }
 
+static inline int64 XS_WsCloseTrackedConns(XS_WsHandle* objHandle)
+{
+	xarray arrClose;
+	int64 iCloseCount;
+	uint32 i;
+
+	if ( objHandle == NULL || objHandle->pConnLock == NULL || objHandle->arrConn == NULL ) {
+		return 0;
+	}
+
+	arrClose = xrtArrayCreate(sizeof(xnetstream*), XRT_OBJMODE_LOCAL);
+	if ( arrClose == NULL ) {
+		return 0;
+	}
+
+	iCloseCount = 0;
+	xrtMutexLock(objHandle->pConnLock);
+	for ( i = 1; i <= objHandle->arrConn->Count; i++ ) {
+		XS_WsConnContext** ppItem = (XS_WsConnContext**)xrtArrayGet(objHandle->arrConn, i);
+		XS_WsConnContext* objCtx = ppItem ? *ppItem : NULL;
+		xnetstream* pStream = objCtx ? objCtx->pStream : NULL;
+		xnetstream** ppClose;
+		uint32 iPos;
+
+		if ( objCtx == NULL || pStream == NULL ) {
+			continue;
+		}
+
+		objCtx->bClosing = TRUE;
+		iPos = xrtArrayAppend(arrClose, 1);
+		ppClose = (xnetstream**)xrtArrayGet(arrClose, iPos);
+		if ( ppClose ) {
+			*ppClose = pStream;
+			iCloseCount++;
+		}
+	}
+	xrtMutexUnlock(objHandle->pConnLock);
+
+	for ( i = 1; i <= arrClose->Count; i++ ) {
+		xnetstream** ppClose = (xnetstream**)xrtArrayGet(arrClose, i);
+
+		if ( ppClose && *ppClose ) {
+			xrtNetStreamClose(*ppClose, 0u);
+		}
+	}
+	xrtArrayDestroy(arrClose);
+	return iCloseCount;
+}
+
+static inline void XS_WsAbortTrackedConns(XS_WsHandle* objHandle)
+{
+	xarray arrClose;
+	uint32 i;
+
+	if ( objHandle == NULL || objHandle->pConnLock == NULL || objHandle->arrConn == NULL ) {
+		return;
+	}
+
+	arrClose = xrtArrayCreate(sizeof(xnetstream*), XRT_OBJMODE_LOCAL);
+	if ( arrClose == NULL ) {
+		return;
+	}
+
+	xrtMutexLock(objHandle->pConnLock);
+	for ( i = 1; i <= objHandle->arrConn->Count; i++ ) {
+		XS_WsConnContext** ppItem = (XS_WsConnContext**)xrtArrayGet(objHandle->arrConn, i);
+		XS_WsConnContext* objCtx = ppItem ? *ppItem : NULL;
+		xnetstream* pStream = objCtx ? objCtx->pStream : NULL;
+		xnetstream** ppClose;
+		uint32 iPos;
+
+		if ( objCtx == NULL || pStream == NULL ) {
+			continue;
+		}
+
+		objCtx->bClosing = TRUE;
+		iPos = xrtArrayAppend(arrClose, 1);
+		ppClose = (xnetstream**)xrtArrayGet(arrClose, iPos);
+		if ( ppClose ) {
+			*ppClose = pStream;
+		}
+	}
+	xrtMutexUnlock(objHandle->pConnLock);
+
+	for ( i = 1; i <= arrClose->Count; i++ ) {
+		xnetstream** ppClose = (xnetstream**)xrtArrayGet(arrClose, i);
+
+		if ( ppClose && *ppClose ) {
+			xrtNetStreamClose(*ppClose, XNET_CLOSE_F_ABORT);
+		}
+	}
+	xrtArrayDestroy(arrClose);
+}
+
+static inline void XS_WsDetachTrackedConns(XS_WsHandle* objHandle)
+{
+	uint32 i;
+
+	if ( objHandle == NULL || objHandle->pConnLock == NULL || objHandle->arrConn == NULL ) {
+		return;
+	}
+
+	xrtMutexLock(objHandle->pConnLock);
+	for ( i = 1; i <= objHandle->arrConn->Count; i++ ) {
+		XS_WsConnContext** ppItem = (XS_WsConnContext**)xrtArrayGet(objHandle->arrConn, i);
+		XS_WsConnContext* objCtx = ppItem ? *ppItem : NULL;
+
+		if ( objCtx == NULL ) {
+			continue;
+		}
+
+		objCtx->pTracker = NULL;
+		objCtx->pServer = NULL;
+	}
+	xrtMutexUnlock(objHandle->pConnLock);
+}
+
+static inline int64 XS_WsFinalizeTrackedConns(XS_WsHandle* objHandle)
+{
+	xarray arrFinalize;
+	int64 iFinalizeCount;
+	uint32 i;
+
+	if ( objHandle == NULL || objHandle->pConnLock == NULL || objHandle->arrConn == NULL ) {
+		return 0;
+	}
+
+	arrFinalize = xrtArrayCreate(sizeof(XS_WsConnContext*), XRT_OBJMODE_LOCAL);
+	if ( arrFinalize == NULL ) {
+		return 0;
+	}
+
+	iFinalizeCount = 0;
+	xrtMutexLock(objHandle->pConnLock);
+	for ( i = 1; i <= objHandle->arrConn->Count; i++ ) {
+		XS_WsConnContext** ppItem = (XS_WsConnContext**)xrtArrayGet(objHandle->arrConn, i);
+		XS_WsConnContext* objCtx = ppItem ? *ppItem : NULL;
+		XS_WsConnContext** ppFinalize;
+		uint32 iPos;
+
+		if ( objCtx == NULL ) {
+			continue;
+		}
+
+		iPos = xrtArrayAppend(arrFinalize, 1);
+		ppFinalize = (XS_WsConnContext**)xrtArrayGet(arrFinalize, iPos);
+		if ( ppFinalize ) {
+			*ppFinalize = objCtx;
+			iFinalizeCount++;
+		}
+	}
+	xrtArrayClear(objHandle->arrConn);
+	xrtMutexUnlock(objHandle->pConnLock);
+
+	for ( i = 1; i <= arrFinalize->Count; i++ ) {
+		XS_WsConnContext** ppFinalize = (XS_WsConnContext**)xrtArrayGet(arrFinalize, i);
+		XS_WsConnContext* objCtx = ppFinalize ? *ppFinalize : NULL;
+
+		if ( objCtx == NULL ) {
+			continue;
+		}
+
+		if ( objCtx->pStream ) {
+			xrtNetStreamSetUserData(objCtx->pStream, NULL);
+			objCtx->pStream = NULL;
+		}
+		objCtx->pConn = NULL;
+		objCtx->pServer = NULL;
+		objCtx->pTracker = NULL;
+		XS_WsRecordClose((xnet_result)XWS_CLOSE_GOING_AWAY);
+		xrtFree(objCtx);
+	}
+	xrtArrayDestroy(arrFinalize);
+	return iFinalizeCount;
+}
+
+static inline int64 XS_WsWaitTrackedConnDrain(XS_WsHandle* objHandle, uint32 iTimeoutMS)
+{
+	uint32 iWaitedMS = 0;
+	int64 iRemain = XS_WsTrackedConnCount(objHandle);
+
+	while ( iRemain > 0 && iWaitedMS < iTimeoutMS ) {
+		XS_WsSleepMS(20);
+		iWaitedMS += 20;
+		iRemain = XS_WsTrackedConnCount(objHandle);
+	}
+
+	return iRemain;
+}
+
 static inline void XS_WsRecordIdleClose(void)
 {
 	g_iXsWsIdleCloseCount++;
@@ -217,6 +426,42 @@ static inline void XS_WsRecordConnLimitClose(void)
 {
 	g_iXsWsConnLimitCloseCount++;
 	g_tXsWsLastConnLimitCloseTime = xrtNow();
+	XS_WsRecordRejectEvent("conn_limit");
+}
+
+static inline void XS_WsRecordInvalid(const char* sReason)
+{
+	XS_WsMetricAdd(&g_iXsWsInvalidCount, 1);
+	g_tXsWsLastInvalidTime = xrtNow();
+	XS_WsRecordRejectEvent(sReason);
+	if ( sReason && sReason[0] ) {
+		strncpy(g_sXsWsLastInvalidReason, sReason, sizeof(g_sXsWsLastInvalidReason) - 1);
+		g_sXsWsLastInvalidReason[sizeof(g_sXsWsLastInvalidReason) - 1] = '\0';
+	} else {
+		g_sXsWsLastInvalidReason[0] = '\0';
+	}
+}
+
+static inline const char* XS_WsInvalidCloseReasonText(xnet_result iReason)
+{
+	switch ( (uint32)iReason ) {
+		case XWS_CLOSE_TOO_BIG:
+			return "message limit exceeded";
+		case XWS_CLOSE_PROTOCOL:
+			return "protocol violation";
+		default:
+			return NULL;
+	}
+}
+
+static inline const char* XS_WsInvalidErrorReasonText(int iSysErr)
+{
+	switch ( iSysErr ) {
+		case -31:
+			return "invalid handshake";
+		default:
+			return NULL;
+	}
 }
 
 static inline void XS_WsRecordClose(xnet_result iReason)
@@ -247,7 +492,7 @@ static uint32 XS_WsIdleThread(ptr pArg)
 				XS_WsConnContext** ppItem = (XS_WsConnContext**)xrtArrayGet(objHandle->arrConn, i);
 				XS_WsConnContext* objCtx = ppItem ? *ppItem : NULL;
 
-				if ( objCtx == NULL || objCtx->pConn == NULL || objCtx->bClosing ) {
+				if ( objCtx == NULL || objCtx->pStream == NULL || objCtx->bClosing ) {
 					continue;
 				}
 				if ( (objCtx->iLastActiveMS > 0) && ((iNowMS - objCtx->iLastActiveMS) >= (int64)iIdleTimeout) ) {
@@ -278,7 +523,7 @@ static uint32 XS_WsIdleThread(ptr pArg)
 				objServer = objCtx->pServer;
 				objHost = XS_WsResolveHost(objServer);
 				pConn = objCtx->pConn;
-				pStream = (pConn && pConn->pStream) ? pConn->pStream : NULL;
+				pStream = objCtx->pStream;
 				XS_WsRecordClose((xnet_result)XWS_CLOSE_NORMAL);
 				XS_WsRecordIdleClose();
 				XS_LogInfo(
@@ -376,11 +621,23 @@ static void XS_WsOnOpen(ptr pOwner, xwsserver* pServer, xwsconn* pConn)
 	XS_WsConnContext* objCtx = NULL;
 	(void)pServer;
 
+	if ( objHandle && objHandle->bStopping ) {
+		XS_WsRecordRemote(pConn);
+		XS_WsRecordRejectEvent("server_stopping");
+		if ( pConn && pConn->pStream ) {
+			xrtNetStreamClose(pConn->pStream, XNET_CLOSE_F_ABORT);
+		}
+		return;
+	}
+
 	if ( pConn && pConn->pStream ) {
 		objCtx = (XS_WsConnContext*)xrtCalloc(1, sizeof(XS_WsConnContext));
 		if ( objCtx ) {
 			objCtx->pServer = objServer;
 			objCtx->pConn = pConn;
+			objCtx->pStream = pConn->pStream;
+			XS_WsCopyContextName(objCtx->sServerName, sizeof(objCtx->sServerName), objServer ? objServer->Name : NULL);
+			XS_WsCopyContextName(objCtx->sHostName, sizeof(objCtx->sHostName), objHost && objHost->Name ? objHost->Name : "(default)");
 			objCtx->pTracker = objHandle;
 			XS_WsTouch(objCtx);
 			xrtNetStreamSetUserData(pConn->pStream, objCtx);
@@ -389,6 +646,7 @@ static void XS_WsOnOpen(ptr pOwner, xwsserver* pServer, xwsconn* pConn)
 	}
 	XS_WsMetricAdd(&g_iXsWsOpenCount, 1);
 	XS_WsMetricUpdateMax(&g_iXsWsConnPeak, XS_WsMetricAdd(&g_iXsWsConnCurrent, 1));
+	XS_WsRecordRemote(pConn);
 	if ( objServer && objServer->ConnLimit > 0u && XS_WsTrackedConnCount(objHandle) > (int64)objServer->ConnLimit ) {
 		if ( objCtx ) {
 			objCtx->bClosing = TRUE;
@@ -405,7 +663,6 @@ static void XS_WsOnOpen(ptr pOwner, xwsserver* pServer, xwsconn* pConn)
 		}
 		return;
 	}
-	XS_WsRecordRemote(pConn);
 	
 	XS_LogInfo(
 		"ws open: server=%s host=%s",
@@ -513,10 +770,28 @@ static void XS_WsOnPong(ptr pOwner, xwsserver* pServer, xwsconn* pConn, const vo
 static void XS_WsOnClose(ptr pOwner, xwsserver* pServer, xwsconn* pConn, xnet_result iReason)
 {
 	XS_ServerConfig* objServer = (XS_ServerConfig*)pOwner;
-	XS_HostConfig* objHost = XS_WsResolveHost(objServer);
 	XS_WsConnContext* objCtx = XS_WsGetConnContext(pConn);
+	XS_WsHandle* objHandle = objCtx ? (XS_WsHandle*)objCtx->pTracker : (objServer ? (XS_WsHandle*)objServer->pHandle : NULL);
+	XS_HostConfig* objHost = NULL;
+	const char* sServerName = (objCtx && objCtx->sServerName[0]) ? objCtx->sServerName : (objServer && objServer->Name ? objServer->Name : "(null)");
+	const char* sHostName = (objCtx && objCtx->sHostName[0]) ? objCtx->sHostName : "(default)";
+	const char* sInvalidReason = XS_WsInvalidCloseReasonText(iReason);
+	bool bSuppressCloseCallback = FALSE;
 	(void)pServer;
 
+	if ( objHandle && objHandle->bStopping ) {
+		bSuppressCloseCallback = TRUE;
+	}
+	if ( objCtx && objCtx->pTracker == NULL ) {
+		bSuppressCloseCallback = TRUE;
+	}
+	if ( !bSuppressCloseCallback ) {
+		objHost = XS_WsResolveHost(objServer);
+	}
+	if ( sInvalidReason ) {
+		XS_WsRecordRemote(pConn);
+		XS_WsRecordInvalid(sInvalidReason);
+	}
 	if ( objCtx == NULL ) {
 		return;
 	}
@@ -526,19 +801,20 @@ static void XS_WsOnClose(ptr pOwner, xwsserver* pServer, xwsconn* pConn, xnet_re
 	
 	XS_LogInfo(
 		"ws close: server=%s host=%s reason=%d",
-		objServer && objServer->Name ? objServer->Name : "(null)",
-		objHost && objHost->Name ? objHost->Name : "(default)",
+		sServerName,
+		objHost && objHost->Name ? objHost->Name : sHostName,
 		(int)iReason
 	);
 	
-	if ( objHost && objHost->procWsClose ) {
+	if ( !bSuppressCloseCallback && objHost && objHost->procWsClose ) {
 		objHost->procWsClose(objServer, objHost, pConn, (int)iReason);
 	}
 
 	if ( objCtx ) {
 		XS_WsUntrackConn((XS_WsHandle*)objCtx->pTracker, objCtx);
-		if ( pConn && pConn->pStream ) {
-			xrtNetStreamSetUserData(pConn->pStream, NULL);
+		if ( objCtx->pStream ) {
+			xrtNetStreamSetUserData(objCtx->pStream, NULL);
+			objCtx->pStream = NULL;
 		}
 		xrtFree(objCtx);
 	}
@@ -548,8 +824,15 @@ static void XS_WsOnError(ptr pOwner, xwsserver* pServer, xwsconn* pConn, int iSy
 {
 	XS_ServerConfig* objServer = (XS_ServerConfig*)pOwner;
 	XS_WsConnContext* objCtx = XS_WsGetConnContext(pConn);
+	const char* sServerName = (objCtx && objCtx->sServerName[0]) ? objCtx->sServerName : (objServer && objServer->Name ? objServer->Name : "(null)");
+	const char* sInvalidReason = XS_WsInvalidErrorReasonText(iSysErr);
 	(void)pServer;
 
+	if ( sInvalidReason ) {
+		XS_WsRecordRemote(pConn);
+		XS_WsRecordInvalid(sInvalidReason);
+		return;
+	}
 	if ( objCtx == NULL ) {
 		return;
 	}
@@ -565,7 +848,7 @@ static void XS_WsOnError(ptr pOwner, xwsserver* pServer, xwsconn* pConn, int iSy
 	
 	XS_LogWarn(
 		"ws error: server=%s sys=%d",
-		objServer && objServer->Name ? objServer->Name : "(null)",
+		sServerName,
 		iSysErr
 	);
 }
@@ -696,6 +979,8 @@ static inline void XS_WsStopServer(XS_ServerConfig* objServer)
 {
 	XS_WsHandle* objHandle;
 	xwsserver* pServer;
+	int64 iClosedConn;
+	int64 iRemainConn;
 	
 	if ( objServer == NULL ) {
 		return;
@@ -704,6 +989,7 @@ static inline void XS_WsStopServer(XS_ServerConfig* objServer)
 	objHandle = (XS_WsHandle*)objServer->pHandle;
 	pServer = objHandle ? objHandle->pServer : NULL;
 	if ( objHandle ) {
+		objHandle->bStopping = TRUE;
 		objHandle->bStopThread = TRUE;
 		if ( objHandle->hIdleThread ) {
 			xrtThreadWait(objHandle->hIdleThread);
@@ -711,8 +997,30 @@ static inline void XS_WsStopServer(XS_ServerConfig* objServer)
 			objHandle->hIdleThread = NULL;
 		}
 	}
+	iClosedConn = XS_WsCloseTrackedConns(objHandle);
+	iRemainConn = XS_WsWaitTrackedConnDrain(objHandle, 500u);
+	if ( iRemainConn > 0 ) {
+		XS_WsAbortTrackedConns(objHandle);
+		iRemainConn = XS_WsWaitTrackedConnDrain(objHandle, 1000u);
+	}
+	if ( iRemainConn > 0 ) {
+		XS_WsFinalizeTrackedConns(objHandle);
+		iRemainConn = XS_WsTrackedConnCount(objHandle);
+	}
+	if ( pServer && pServer->pListener ) {
+		xrtNetListenerStop(pServer->pListener);
+	}
+	if ( iClosedConn > 0 || iRemainConn > 0 ) {
+		XS_WsRecordStopCleanup(iClosedConn, iRemainConn);
+		XS_LogInfo(
+			"ws stop cleanup: server=%s closed=%lld remain=%lld",
+			objServer->Name ? objServer->Name : "(null)",
+			(long long)iClosedConn,
+			(long long)iRemainConn
+		);
+	}
 	if ( pServer ) {
-		xrtWsServerStop(pServer);
+		XS_WsDetachTrackedConns(objHandle);
 		xrtWsServerDestroy(pServer);
 	}
 	if ( objHandle ) {

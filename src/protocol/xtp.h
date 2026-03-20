@@ -197,6 +197,68 @@ static inline int64 XS_XtpTrackedConnCount(XS_XtpHandle* objHandle)
 	return iCount;
 }
 
+static inline int64 XS_XtpCloseTrackedConns(XS_XtpHandle* objHandle)
+{
+	xarray arrClose;
+	int64 iCloseCount;
+	uint32 i;
+
+	if ( objHandle == NULL || objHandle->pConnLock == NULL || objHandle->arrConn == NULL ) {
+		return 0;
+	}
+
+	arrClose = xrtArrayCreate(sizeof(xnetstream*), XRT_OBJMODE_LOCAL);
+	if ( arrClose == NULL ) {
+		return 0;
+	}
+
+	iCloseCount = 0;
+	xrtMutexLock(objHandle->pConnLock);
+	for ( i = 1; i <= objHandle->arrConn->Count; i++ ) {
+		XS_XtpConnContext** ppItem = (XS_XtpConnContext**)xrtArrayGet(objHandle->arrConn, i);
+		XS_XtpConnContext* objCtx = ppItem ? *ppItem : NULL;
+		xnetstream** ppClose;
+		uint32 iPos;
+
+		if ( objCtx == NULL || objCtx->pStream == NULL ) {
+			continue;
+		}
+
+		objCtx->bClosing = TRUE;
+		iPos = xrtArrayAppend(arrClose, 1);
+		ppClose = (xnetstream**)xrtArrayGet(arrClose, iPos);
+		if ( ppClose ) {
+			*ppClose = objCtx->pStream;
+			iCloseCount++;
+		}
+	}
+	xrtMutexUnlock(objHandle->pConnLock);
+
+	for ( i = 1; i <= arrClose->Count; i++ ) {
+		xnetstream** ppClose = (xnetstream**)xrtArrayGet(arrClose, i);
+
+		if ( ppClose && *ppClose ) {
+			xrtNetStreamClose(*ppClose, 0u);
+		}
+	}
+	xrtArrayDestroy(arrClose);
+	return iCloseCount;
+}
+
+static inline int64 XS_XtpWaitTrackedConnDrain(XS_XtpHandle* objHandle, uint32 iTimeoutMS)
+{
+	uint32 iWaitedMS = 0;
+	int64 iRemain = XS_XtpTrackedConnCount(objHandle);
+
+	while ( iRemain > 0 && iWaitedMS < iTimeoutMS ) {
+		XS_XtpSleepMS(20);
+		iWaitedMS += 20;
+		iRemain = XS_XtpTrackedConnCount(objHandle);
+	}
+
+	return iRemain;
+}
+
 static inline void XS_XtpRecordIdleClose(void)
 {
 	g_iXsXtpIdleCloseCount++;
@@ -207,6 +269,7 @@ static inline void XS_XtpRecordConnLimitClose(void)
 {
 	g_iXsXtpConnLimitCloseCount++;
 	g_tXsXtpLastConnLimitCloseTime = xrtNow();
+	XS_XtpRecordRejectEvent("conn_limit");
 }
 
 static inline int64 XS_XtpMetricGet(const volatile int64* pValue)
@@ -228,6 +291,7 @@ static inline void XS_XtpRecordInvalid(const char* sReason)
 {
 	XS_XtpMetricAdd(&g_iXsXtpInvalidCount, 1);
 	g_tXsXtpLastInvalidTime = xrtNow();
+	XS_XtpRecordRejectEvent(sReason);
 	if ( sReason && sReason[0] ) {
 		strncpy(g_sXsXtpLastInvalidReason, sReason, sizeof(g_sXsXtpLastInvalidReason) - 1);
 		g_sXsXtpLastInvalidReason[sizeof(g_sXsXtpLastInvalidReason) - 1] = '\0';
@@ -1309,6 +1373,7 @@ static inline bool XS_XtpAppendChain(XS_XtpConnContext* objCtx, xnetchain* pChai
 	if ( objCtx == NULL || pChain == NULL ) {
 		return FALSE;
 	}
+	XS_XtpRecordRemote(objCtx->pStream);
 	
 	iBytes = xrtNetChainBytes(pChain);
 	if ( iBytes == 0 ) {
@@ -1316,6 +1381,7 @@ static inline bool XS_XtpAppendChain(XS_XtpConnContext* objCtx, xnetchain* pChai
 	}
 	iNeed = objCtx->iRecvLen + iBytes;
 	if ( objCtx->pServer && objCtx->pServer->RecvLimit > 0u && iNeed > (size_t)objCtx->pServer->RecvLimit ) {
+		XS_XtpRecordInvalid("recv limit exceeded");
 		XS_LogWarn(
 			"xtp recv limit exceeded: server=%s recv_limit=%u need=%u",
 			objCtx->pServer->Name ? objCtx->pServer->Name : "(null)",
@@ -1469,6 +1535,7 @@ static inline bool XS_XtpParseMessage(XS_XtpConnContext* objCtx, XTP_Message* pM
 	if ( objCtx == NULL || pMsg == NULL || pPackBytes == NULL ) {
 		return FALSE;
 	}
+	XS_XtpRecordRemote(objCtx->pStream);
 	if ( objCtx->iRecvLen < sizeof(XTP_PackHeader) ) {
 		return FALSE;
 	}
@@ -2927,6 +2994,7 @@ static void XS_XtpOnOpen(ptr pOwner, xnetstream* pStream)
 	
 	XS_XtpMetricAdd(&g_iXsXtpOpenCount, 1);
 	XS_XtpTouch(objCtx);
+	XS_XtpRecordRemote(objCtx ? objCtx->pStream : pStream);
 	if ( objServer && objServer->ConnLimit > 0u && XS_XtpTrackedConnCount((XS_XtpHandle*)objCtx->pTracker) > (int64)objServer->ConnLimit ) {
 		if ( objCtx ) {
 			objCtx->bClosing = TRUE;
@@ -2957,6 +3025,7 @@ static void XS_XtpOnRecv(ptr pOwner, xnetstream* pStream, xnetchain* pChain)
 	XS_XtpTouch(objCtx);
 	if ( !XS_XtpAppendChain(objCtx, pChain) ) {
 		XS_LogWarn("xtp recv append failed: server=%s", objServer && objServer->Name ? objServer->Name : "(null)");
+		objCtx->bClosing = TRUE;
 		xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 		return;
 	}
@@ -2969,6 +3038,7 @@ static void XS_XtpOnRecv(ptr pOwner, xnetstream* pStream, xnetchain* pChain)
 		memset(&tMsg, 0, sizeof(tMsg));
 		if ( !XS_XtpParseMessage(objCtx, &tMsg, &iPackBytes) ) {
 			if ( XS_XtpPacketHeaderInvalid(objCtx) ) {
+				objCtx->bClosing = TRUE;
 				xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 			}
 			break;
@@ -3304,6 +3374,8 @@ static inline bool XS_XtpStartServer(XS_ServerConfig* objServer)
 static inline void XS_XtpStopServer(XS_ServerConfig* objServer)
 {
 	XS_XtpHandle* objHandle;
+	int64 iClosedConn;
+	int64 iRemainConn;
 	
 	if ( objServer == NULL ) {
 		return;
@@ -3332,6 +3404,17 @@ static inline void XS_XtpStopServer(XS_ServerConfig* objServer)
 			xrtThreadWait(objHandle->hAcceptThreadTLS);
 			xrtThreadDestroy(objHandle->hAcceptThreadTLS);
 			objHandle->hAcceptThreadTLS = NULL;
+		}
+		iClosedConn = XS_XtpCloseTrackedConns(objHandle);
+		iRemainConn = XS_XtpWaitTrackedConnDrain(objHandle, 500u);
+		if ( iClosedConn > 0 || iRemainConn > 0 ) {
+			XS_XtpRecordStopCleanup(iClosedConn, iRemainConn);
+			XS_LogInfo(
+				"xtp stop cleanup: server=%s closed=%lld remain=%lld",
+				objServer->Name ? objServer->Name : "(null)",
+				(long long)iClosedConn,
+				(long long)iRemainConn
+			);
 		}
 		if ( objHandle->pListener ) {
 			xrtNetListenerDestroy(objHandle->pListener);

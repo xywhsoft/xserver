@@ -79,6 +79,68 @@ static inline int64 XS_CustomTrackedConnCount(XS_CustomHandle* objHandle)
 	return iCount;
 }
 
+static inline int64 XS_CustomCloseTrackedConns(XS_CustomHandle* objHandle)
+{
+	xarray arrClose;
+	int64 iCloseCount;
+	uint32 i;
+
+	if ( objHandle == NULL || objHandle->pConnLock == NULL || objHandle->arrConn == NULL ) {
+		return 0;
+	}
+
+	arrClose = xrtArrayCreate(sizeof(xnetstream*), XRT_OBJMODE_LOCAL);
+	if ( arrClose == NULL ) {
+		return 0;
+	}
+
+	iCloseCount = 0;
+	xrtMutexLock(objHandle->pConnLock);
+	for ( i = 1; i <= objHandle->arrConn->Count; i++ ) {
+		XS_CustomConnContext** ppItem = (XS_CustomConnContext**)xrtArrayGet(objHandle->arrConn, i);
+		XS_CustomConnContext* objCtx = ppItem ? *ppItem : NULL;
+		xnetstream** ppClose;
+		uint32 iPos;
+
+		if ( objCtx == NULL || objCtx->pStream == NULL ) {
+			continue;
+		}
+
+		objCtx->bClosing = TRUE;
+		iPos = xrtArrayAppend(arrClose, 1);
+		ppClose = (xnetstream**)xrtArrayGet(arrClose, iPos);
+		if ( ppClose ) {
+			*ppClose = objCtx->pStream;
+			iCloseCount++;
+		}
+	}
+	xrtMutexUnlock(objHandle->pConnLock);
+
+	for ( i = 1; i <= arrClose->Count; i++ ) {
+		xnetstream** ppClose = (xnetstream**)xrtArrayGet(arrClose, i);
+
+		if ( ppClose && *ppClose ) {
+			xrtNetStreamClose(*ppClose, 0u);
+		}
+	}
+	xrtArrayDestroy(arrClose);
+	return iCloseCount;
+}
+
+static inline int64 XS_CustomWaitTrackedConnDrain(XS_CustomHandle* objHandle, uint32 iTimeoutMS)
+{
+	uint32 iWaitedMS = 0;
+	int64 iRemain = XS_CustomTrackedConnCount(objHandle);
+
+	while ( iRemain > 0 && iWaitedMS < iTimeoutMS ) {
+		xrtSleep(20);
+		iWaitedMS += 20;
+		iRemain = XS_CustomTrackedConnCount(objHandle);
+	}
+
+	return iRemain;
+}
+
 static inline void XS_CustomRecordIdleClose(void)
 {
 	g_iXsCustomIdleCloseCount++;
@@ -89,6 +151,7 @@ static inline void XS_CustomRecordConnLimitClose(void)
 {
 	g_iXsCustomConnLimitCloseCount++;
 	g_tXsCustomLastConnLimitCloseTime = xrtNow();
+	XS_CustomRecordRejectEvent("conn_limit");
 }
 
 static uint32 XS_CustomIdleThread(ptr pArg)
@@ -147,6 +210,7 @@ static inline void XS_CustomRecordInvalid(const char* sReason)
 {
 	g_iXsCustomInvalidCount++;
 	g_tXsCustomLastInvalidTime = xrtNow();
+	XS_CustomRecordRejectEvent(sReason);
 	if ( sReason ) {
 		strncpy(g_sXsCustomLastInvalidReason, sReason, sizeof(g_sXsCustomLastInvalidReason) - 1);
 		g_sXsCustomLastInvalidReason[sizeof(g_sXsCustomLastInvalidReason) - 1] = '\0';
@@ -241,6 +305,7 @@ static void XS_CustomOnOpen(ptr pOwner, xnetstream* pStream)
 		g_iXsCustomConnPeak = g_iXsCustomConnCurrent;
 	}
 	XS_CustomTouch(objCtx);
+	XS_CustomRecordRemote(pStream);
 	if ( objServer && objServer->ConnLimit > 0u && XS_CustomTrackedConnCount(objHandle) > (int64)objServer->ConnLimit ) {
 		if ( objCtx ) {
 			objCtx->bClosing = TRUE;
@@ -287,6 +352,7 @@ static void XS_CustomOnRecv(ptr pOwner, xnetstream* pStream, xnetchain* pChain)
 	}
 
 	if ( (objServer) && (objServer->RecvLimit > 0) && ((uint32)iLen > objServer->RecvLimit) ) {
+		XS_CustomRecordRemote(pStream);
 		XS_CustomRecordInvalid("recv limit exceeded");
 		XS_LogWarn(
 			"custom recv limit exceeded: server=%s stream=%p bytes=%u limit=%u",
@@ -296,6 +362,9 @@ static void XS_CustomOnRecv(ptr pOwner, xnetstream* pStream, xnetchain* pChain)
 			(unsigned)objServer->RecvLimit
 		);
 		xrtNetChainClear(pChain);
+		if ( objCtx ) {
+			objCtx->bClosing = TRUE;
+		}
 		xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 		return;
 	}
@@ -527,6 +596,8 @@ static inline bool XS_CustomStartServer(XS_ServerConfig* objServer)
 static inline void XS_CustomStopServer(XS_ServerConfig* objServer)
 {
 	XS_CustomHandle* objHandle;
+	int64 iClosedConn;
+	int64 iRemainConn;
 	
 	if ( objServer == NULL ) {
 		return;
@@ -547,6 +618,17 @@ static inline void XS_CustomStopServer(XS_ServerConfig* objServer)
 			xrtThreadWait(objHandle->hIdleThread);
 			xrtThreadDestroy(objHandle->hIdleThread);
 			objHandle->hIdleThread = NULL;
+		}
+		iClosedConn = XS_CustomCloseTrackedConns(objHandle);
+		iRemainConn = XS_CustomWaitTrackedConnDrain(objHandle, 500u);
+		if ( iClosedConn > 0 || iRemainConn > 0 ) {
+			XS_CustomRecordStopCleanup(iClosedConn, iRemainConn);
+			XS_LogInfo(
+				"custom stop cleanup: server=%s closed=%lld remain=%lld",
+				objServer->Name ? objServer->Name : "(null)",
+				(long long)iClosedConn,
+				(long long)iRemainConn
+			);
 		}
 		if ( objHandle->pListener ) {
 			xrtNetListenerDestroy(objHandle->pListener);
