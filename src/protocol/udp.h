@@ -43,6 +43,7 @@ static void XS_UdpOnRecv(ptr pOwner, xdgramsock* pSock, const xnetaddr* pFrom, x
 	xrtNetChainConsume(pChain, iLen);
 	XS_UdpMetricAdd(&g_iXsUdpRecvCount, 1);
 	XS_UdpMetricAdd(&g_iXsUdpRecvBytes, (int64)iLen);
+	g_iXsUdpLastBytes = (int64)iLen;
 	g_tXsUdpLastTime = xrtNow();
 	sFrom = pFrom ? xrtNetAddrToStr(pFrom) : NULL;
 	if ( sFrom ) {

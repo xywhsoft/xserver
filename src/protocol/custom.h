@@ -8,6 +8,37 @@ typedef struct {
 	volatile bool bStopAccept;
 } XS_CustomHandle;
 
+static inline void XS_CustomRecordInvalid(const char* sReason)
+{
+	g_iXsCustomInvalidCount++;
+	g_tXsCustomLastInvalidTime = xrtNow();
+	if ( sReason ) {
+		strncpy(g_sXsCustomLastInvalidReason, sReason, sizeof(g_sXsCustomLastInvalidReason) - 1);
+		g_sXsCustomLastInvalidReason[sizeof(g_sXsCustomLastInvalidReason) - 1] = '\0';
+	} else {
+		g_sXsCustomLastInvalidReason[0] = '\0';
+	}
+}
+
+static inline void XS_CustomRecordRemote(xnetstream* pStream)
+{
+	const xnetaddr* pAddr;
+	const char* sAddr;
+
+	if ( pStream == NULL ) {
+		return;
+	}
+
+	pAddr = xrtNetStreamRemoteAddr(pStream);
+	sAddr = pAddr ? xrtNetAddrToStr(pAddr) : NULL;
+	if ( sAddr && sAddr[0] ) {
+		strncpy(g_sXsCustomLastRemote, sAddr, sizeof(g_sXsCustomLastRemote) - 1);
+		g_sXsCustomLastRemote[sizeof(g_sXsCustomLastRemote) - 1] = '\0';
+	} else {
+		g_sXsCustomLastRemote[0] = '\0';
+	}
+}
+
 static uint32 XS_CustomAcceptThread(ptr pArg)
 {
 	XS_CustomHandle* objHandle = (XS_CustomHandle*)pArg;
@@ -91,7 +122,7 @@ static void XS_CustomOnRecv(ptr pOwner, xnetstream* pStream, xnetchain* pChain)
 	}
 
 	if ( (objServer) && (objServer->RecvLimit > 0) && ((uint32)iLen > objServer->RecvLimit) ) {
-		g_iXsCustomInvalidCount++;
+		XS_CustomRecordInvalid("recv limit exceeded");
 		XS_LogWarn(
 			"custom recv limit exceeded: server=%s stream=%p bytes=%u limit=%u",
 			objServer->Name ? objServer->Name : "(null)",
@@ -123,7 +154,9 @@ static void XS_CustomOnRecv(ptr pOwner, xnetstream* pStream, xnetchain* pChain)
 	xrtNetChainConsume(pChain, iLen);
 	g_iXsCustomRecvCount++;
 	g_iXsCustomRecvBytes += (int64)iLen;
+	g_iXsCustomLastBytes = (int64)iLen;
 	g_tXsCustomLastTime = xrtNow();
+	XS_CustomRecordRemote(pStream);
 	if ( iLen > 0 ) {
 		size_t iCopy = iLen;
 		if ( iCopy >= sizeof(g_sXsCustomLastText) ) {

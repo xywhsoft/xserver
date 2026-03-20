@@ -85,6 +85,25 @@ static inline void XS_XtpRecordInvalid(const char* sReason)
 	}
 }
 
+static inline void XS_XtpRecordRemote(xnetstream* pStream)
+{
+	const xnetaddr* pAddr;
+	const char* sAddr;
+
+	if ( pStream == NULL ) {
+		return;
+	}
+
+	pAddr = xrtNetStreamRemoteAddr(pStream);
+	sAddr = pAddr ? xrtNetAddrToStr(pAddr) : NULL;
+	if ( sAddr && sAddr[0] ) {
+		strncpy(g_sXsXtpLastRemote, sAddr, sizeof(g_sXsXtpLastRemote) - 1);
+		g_sXsXtpLastRemote[sizeof(g_sXsXtpLastRemote) - 1] = '\0';
+	} else {
+		g_sXsXtpLastRemote[0] = '\0';
+	}
+}
+
 
 
 static inline void XS_XtpFreeMessage(XTP_Message* pMsg)
@@ -399,6 +418,8 @@ static inline bool XS_XtpParseMessage(XS_XtpConnContext* objCtx, XTP_Message* pM
 	
 	pMsg->pBody = pPackBuf + iPos;
 	pMsg->BodySize = tHeader.BodySize;
+	g_iXsXtpLastBytes = (int64)tHeader.PackSize;
+	XS_XtpRecordRemote(objCtx->pStream);
 	*pPackBytes = (size_t)tHeader.PackSize;
 	return TRUE;
 }
@@ -797,6 +818,9 @@ static void XS_XtpOnRecv(ptr pOwner, xnetstream* pStream, xnetchain* pChain)
 		g_iXsXtpLastMsgType = (int64)tMsg.MsgType;
 		g_iXsXtpLastStatus = (int64)tMsg.Status;
 		g_iXsXtpLastMsgID = (int64)tMsg.MsgID;
+		g_iXsXtpLastFlags = (int64)tMsg.Flags;
+		g_iXsXtpLastParamCount = (int64)tMsg.ParamCount;
+		g_iXsXtpLastBodySize = (int64)tMsg.BodySize;
 		g_tXsXtpLastTime = xrtNow();
 		if ( tMsg.MsgType == XTP_MSG_REQUEST ) {
 			XS_XtpMetricAdd(&g_iXsXtpReqCount, 1);

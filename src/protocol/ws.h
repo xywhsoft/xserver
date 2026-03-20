@@ -71,6 +71,48 @@ static inline int64 XS_WsLastErrorAgeMS(void)
 	return (int64)(xrtNow() - tLast) * 1000;
 }
 
+static inline char* XS_WsLastCloseTimeText(void)
+{
+	xtime tLast = g_tXsWsLastCloseTime;
+
+	if ( tLast <= 0 ) {
+		return NULL;
+	}
+
+	return xrtTimeToStr(tLast, XRT_TIME_FORMAT_DATETIME);
+}
+
+static inline int64 XS_WsLastCloseAgeMS(void)
+{
+	xtime tLast = g_tXsWsLastCloseTime;
+
+	if ( tLast <= 0 ) {
+		return -1;
+	}
+
+	return (int64)(xrtNow() - tLast) * 1000;
+}
+
+static inline void XS_WsRecordRemote(xwsconn* pConn)
+{
+	const xnetaddr* pAddr;
+	const char* sAddr;
+
+	if ( pConn == NULL || pConn->pStream == NULL ) {
+		g_sXsWsLastRemote[0] = '\0';
+		return;
+	}
+
+	pAddr = xrtNetStreamRemoteAddr(pConn->pStream);
+	sAddr = pAddr ? xrtNetAddrToStr(pAddr) : NULL;
+	if ( sAddr == NULL || sAddr[0] == '\0' ) {
+		g_sXsWsLastRemote[0] = '\0';
+		return;
+	}
+
+	snprintf(g_sXsWsLastRemote, sizeof(g_sXsWsLastRemote), "%s", sAddr);
+}
+
 static inline void XS_WsRecordLastFrame(int64 iType, const void* pData, size_t iLen)
 {
 	size_t iCopy;
@@ -121,6 +163,7 @@ static void XS_WsOnOpen(ptr pOwner, xwsserver* pServer, xwsconn* pConn)
 
 	XS_WsMetricAdd(&g_iXsWsOpenCount, 1);
 	XS_WsMetricUpdateMax(&g_iXsWsConnPeak, XS_WsMetricAdd(&g_iXsWsConnCurrent, 1));
+	XS_WsRecordRemote(pConn);
 	
 	XS_LogInfo(
 		"ws open: server=%s host=%s",
@@ -141,6 +184,7 @@ static void XS_WsOnText(ptr pOwner, xwsserver* pServer, xwsconn* pConn, const ch
 	(void)pServer;
 
 	XS_WsMetricAdd(&g_iXsWsTextCount, 1);
+	XS_WsRecordRemote(pConn);
 	XS_WsRecordLastFrame(1, pData, iLen);
 	
 	if ( objHost && objHost->procWsText ) {
@@ -160,6 +204,7 @@ static void XS_WsOnBinary(ptr pOwner, xwsserver* pServer, xwsconn* pConn, const 
 	(void)pServer;
 
 	XS_WsMetricAdd(&g_iXsWsBinaryCount, 1);
+	XS_WsRecordRemote(pConn);
 	XS_WsRecordLastFrame(2, pData, iLen);
 	
 	if ( objHost && objHost->procWsBinary ) {
@@ -178,6 +223,7 @@ static void XS_WsOnPing(ptr pOwner, xwsserver* pServer, xwsconn* pConn, const vo
 	(void)pServer;
 
 	XS_WsMetricAdd(&g_iXsWsPingCount, 1);
+	XS_WsRecordRemote(pConn);
 	XS_WsRecordLastFrame(3, pData, iLen);
 
 	XS_LogInfo(
@@ -199,6 +245,7 @@ static void XS_WsOnPong(ptr pOwner, xwsserver* pServer, xwsconn* pConn, const vo
 	(void)pServer;
 
 	XS_WsMetricAdd(&g_iXsWsPongCount, 1);
+	XS_WsRecordRemote(pConn);
 	XS_WsRecordLastFrame(4, pData, iLen);
 
 	XS_LogInfo(
@@ -220,6 +267,9 @@ static void XS_WsOnClose(ptr pOwner, xwsserver* pServer, xwsconn* pConn, xnet_re
 	(void)pServer;
 
 	XS_WsMetricAdd(&g_iXsWsCloseCount, 1);
+	XS_WsRecordRemote(pConn);
+	g_iXsWsLastCloseReason = (int64)iReason;
+	g_tXsWsLastCloseTime = xrtNow();
 	if ( XS_WsMetricAdd(&g_iXsWsConnCurrent, -1) < 0 ) {
 		XS_WsMetricAdd(&g_iXsWsConnCurrent, -XS_WsMetricGet(&g_iXsWsConnCurrent));
 	}
