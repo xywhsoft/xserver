@@ -1,6 +1,10 @@
 #include <xs_vnext_full.h>
 #include <string.h>
 
+#ifndef XTP_MSG_RESPONSE
+	#define XTP_MSG_RESPONSE	2u
+#endif
+
 static unsigned short procParsePort(const char* sAddr)
 {
 	const char* sPos;
@@ -73,6 +77,126 @@ static unsigned short procParseRequestPort(XTP_MessageObject objMsg, int* piStat
 	return (unsigned short)iPort;
 }
 
+static char* procDupText(const char* sText)
+{
+	size_t iLen;
+	char* sDup;
+
+	if ( sText == NULL ) {
+		return NULL;
+	}
+
+	iLen = strlen(sText);
+	sDup = (char*)xrtMalloc(iLen + 1u);
+	if ( sDup == NULL ) {
+		return NULL;
+	}
+
+	memcpy(sDup, sText, iLen + 1u);
+	return sDup;
+}
+
+typedef struct
+{
+	void* pStream;
+	xfuture* pCloseFuture;
+	uint64_t iMsgID;
+	unsigned short iPort;
+	char* sTag;
+} XTP_CallSelfTask;
+
+static uint32 procCallSelfThread(ptr pParam)
+{
+	XTP_CallSelfTask* pTask;
+	XTP_MessageObject objResp;
+	const char* arrInnerParam[3];
+	const char* arrInnerValue[3];
+	char* sRespBody;
+	char sBody[512];
+	const char* sCmd;
+	int iStatus;
+
+	pTask = (XTP_CallSelfTask*)pParam;
+	if ( pTask == NULL ) {
+		return 0;
+	}
+
+	arrInnerParam[0] = "tag";
+	arrInnerValue[0] = (pTask->sTag && pTask->sTag[0]) ? pTask->sTag : "self";
+	arrInnerParam[1] = "seq";
+	arrInnerValue[1] = "1";
+	arrInnerParam[2] = "dry";
+	arrInnerValue[2] = "false";
+
+	objResp = (XTP_MessageObject)xsXtpClientCallText(
+		"127.0.0.1",
+		pTask->iPort,
+		1048576u,
+		1500u,
+		(pTask->iMsgID == 0u) ? 1u : (pTask->iMsgID + 1u),
+		"demo.ping",
+		3u,
+		arrInnerParam,
+		arrInnerValue,
+		"hello self call",
+		1500u
+	);
+	if ( objResp == NULL ) {
+		snprintf(
+			sBody,
+			sizeof(sBody),
+			"client do failed\ncode=%d\nerror=%s\n",
+			xsXtpClientLastErrorCode(),
+			xsXtpClientLastError() ? xsXtpClientLastError() : ""
+		);
+		sCmd = "xtp.error";
+		iStatus = 500;
+	} else {
+		sRespBody = xsXtpBodyDup(objResp, "");
+		snprintf(
+			sBody,
+			sizeof(sBody),
+			"self call ok\nstatus=%d\ncmd=%.*s\nbody=%s\n",
+			xsXtpStatus(objResp),
+			(int)xsXtpCmdLen(objResp),
+			xsXtpCmd(objResp) ? xsXtpCmd(objResp) : "",
+			sRespBody ? sRespBody : ""
+		);
+		if ( sRespBody ) {
+			xrtFree(sRespBody);
+		}
+		xsXtpMessageFree(objResp);
+		sCmd = "xtp.reply";
+		iStatus = 0;
+	}
+
+	if ( pTask->iMsgID != 0u ) {
+		(void)xsXtpSendEx(
+			pTask->pStream,
+			XTP_MSG_RESPONSE,
+			pTask->iMsgID,
+			0u,
+			iStatus,
+			sCmd,
+			strlen(sCmd),
+			0u,
+			NULL,
+			NULL,
+			sBody,
+			strlen(sBody)
+		);
+	}
+
+	if ( pTask->sTag ) {
+		xrtFree(pTask->sTag);
+	}
+	if ( pTask->pCloseFuture ) {
+		xFutureRelease(pTask->pCloseFuture);
+	}
+	xrtFree(pTask);
+	return 0;
+}
+
 void ServiceInit(XS_ServerObject objServer, XS_HostObject objHost)
 {
 	char sText[256];
@@ -114,9 +238,6 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 	const void* pBody;
 	const char* arrParam[3];
 	const char* arrValue[3];
-	char sTagText[128];
-	char sHostText[128];
-	char sInnerCmdText[128];
 	char sCmdText[128];
 	char sBody[512];
 	char sJson[256];
@@ -149,21 +270,15 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 	pBody = xsXtpBody(objMsg);
 	iBodyLen = xsXtpBodyLen(objMsg);
 	sTagDup = xsXtpParamDup(objMsg, "tag", "");
-	sTag = sTagDup;
-	snprintf(sTagText, sizeof(sTagText), "%s", sTag ? sTag : "");
+	sTag = sTagDup ? sTagDup : "";
 	sHostDup = xsXtpParamDup(objMsg, "host", "127.0.0.1");
-	sHost = sHostDup;
-	snprintf(sHostText, sizeof(sHostText), "%s", sHost ? sHost : "");
+	sHost = sHostDup ? sHostDup : "127.0.0.1";
 	sInnerCmdDup = xsXtpParamDup(objMsg, "inner_cmd", "demo.ping");
-	sInnerCmd = sInnerCmdDup;
-	snprintf(sInnerCmdText, sizeof(sInnerCmdText), "%s", sInnerCmd ? sInnerCmd : "");
+	sInnerCmd = sInnerCmdDup ? sInnerCmdDup : "demo.ping";
 	iSeq = xsXtpParamInt(objMsg, "seq", -1);
 	iPortState = 0;
 	iPort = procParseRequestPort(objMsg, &iPortState);
 	iDry = xsXtpParamBool(objMsg, "dry", 0);
-	sTag = sTagText;
-	sHost = sHostText;
-	sInnerCmd = sInnerCmdText;
 	if ( iCmdLen >= sizeof(sCmdText) ) {
 		iCmdLen = sizeof(sCmdText) - 1;
 	}
@@ -1329,6 +1444,9 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 	}
 
 	if ( xsXtpCmdIs(objMsg, "demo.callself") ) {
+		XTP_CallSelfTask* pTask;
+		xthread hThread;
+
 		iPort = procParsePort(xsServerAddr(objServer));
 		if ( iPort == 0 ) {
 			iWrite = xsXtpReplyErrorText(pStream, objMsg, 500, "xtp.error", "invalid self addr") != 0;
@@ -1336,50 +1454,46 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 			return iWrite;
 		}
 
-		pClient = xsXtpClientOpen("127.0.0.1", iPort, 1048576u, 3000u);
-		if ( pClient == NULL ) {
-			iWrite = xsXtpReplyErrorText(pStream, objMsg, 500, "xtp.error", "client open failed") != 0;
+		pTask = (XTP_CallSelfTask*)xrtCalloc(1, sizeof(XTP_CallSelfTask));
+		if ( pTask == NULL ) {
+			iWrite = xsXtpReplyErrorText(pStream, objMsg, 500, "xtp.error", "callself task alloc failed") != 0;
 			FREE_XTP_DUP();
 			return iWrite;
 		}
 
-		arrInnerParam[0] = "tag";
-		arrInnerValue[0] = sTag && sTag[0] ? sTag : "self";
-		arrInnerParam[1] = "seq";
-		arrInnerValue[1] = "1";
-		arrInnerParam[2] = "dry";
-		arrInnerValue[2] = "false";
-		objResp = (XTP_MessageObject)xsXtpClientDoText(
-			pClient,
-			(iMsgID == 0) ? 1u : (iMsgID + 1u),
-			"demo.ping",
-			3,
-			arrInnerParam,
-			arrInnerValue,
-			"hello self call",
-			3000u
-		);
-		xsXtpClientClose(pClient);
-		if ( objResp == NULL ) {
-			iWrite = xsXtpReplyErrorText(pStream, objMsg, 500, "xtp.error", "client do failed") != 0;
+		pTask->pStream = pStream;
+		pTask->pCloseFuture = xrtNetStreamCloseFuture((xnetstream*)pStream);
+		if ( pTask->pCloseFuture == NULL ) {
+			xrtFree(pTask);
+			iWrite = xsXtpReplyErrorText(pStream, objMsg, 500, "xtp.error", "callself close future create failed") != 0;
+			FREE_XTP_DUP();
+			return iWrite;
+		}
+		pTask->iMsgID = iMsgID;
+		pTask->iPort = iPort;
+		pTask->sTag = procDupText((sTag && sTag[0]) ? sTag : "self");
+		if ( pTask->sTag == NULL ) {
+			xFutureRelease(pTask->pCloseFuture);
+			xrtFree(pTask);
+			iWrite = xsXtpReplyErrorText(pStream, objMsg, 500, "xtp.error", "callself tag alloc failed") != 0;
 			FREE_XTP_DUP();
 			return iWrite;
 		}
 
-		snprintf(
-			sInnerBody,
-			sizeof(sInnerBody),
-			"self call ok\nstatus=%d\ncmd=%.*s\nbody=%.*s\n",
-			xsXtpStatus(objResp),
-			(int)xsXtpCmdLen(objResp),
-			xsXtpCmd(objResp) ? xsXtpCmd(objResp) : "",
-			(int)xsXtpBodyLen(objResp),
-			xsXtpBody(objResp) ? (const char*)xsXtpBody(objResp) : ""
-		);
-		xsXtpMessageFree(objResp);
-		iWrite = xsXtpReplyOKText(pStream, objMsg, "xtp.reply", sInnerBody) != 0;
+		hThread = xrtThreadCreate((ptr)procCallSelfThread, pTask, 0);
+		if ( hThread == NULL ) {
+			if ( pTask->sTag ) {
+				xrtFree(pTask->sTag);
+			}
+			xFutureRelease(pTask->pCloseFuture);
+			xrtFree(pTask);
+			iWrite = xsXtpReplyErrorText(pStream, objMsg, 500, "xtp.error", "callself thread create failed") != 0;
+			FREE_XTP_DUP();
+			return iWrite;
+		}
+		hThread->bAutoDestroy = TRUE;
 		FREE_XTP_DUP();
-		return iWrite;
+		return TRUE;
 	}
 
 	if ( !xsXtpCmdIs(objMsg, "demo.ping") ) {
