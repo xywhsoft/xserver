@@ -312,10 +312,50 @@
 			white-space: pre-wrap;
 			word-break: break-word;
 		}
+		.namespace-grid {
+			grid-template-columns: repeat(4, minmax(0, 1fr));
+			margin-bottom: 12px;
+		}
+		.namespace-list {
+			display: grid;
+			gap: 10px;
+			margin-bottom: 12px;
+		}
+		.namespace-card {
+			padding: 14px 16px;
+			border-radius: 14px;
+			background: #f6f9fc;
+		}
+		.namespace-card-head {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 10px;
+			margin-bottom: 8px;
+		}
+		.namespace-card-title {
+			font-size: 15px;
+			font-weight: 700;
+			word-break: break-all;
+		}
+		.namespace-card-meta {
+			font-size: 12px;
+			color: #6c8298;
+			white-space: nowrap;
+		}
+		.namespace-card-line {
+			font-size: 12px;
+			line-height: 1.8;
+			color: #486176;
+			word-break: break-word;
+		}
 		@media (max-width: 1024px) {
 			.hero,
 			.section-grid {
 				grid-template-columns: 1fr;
+			}
+			.namespace-grid {
+				grid-template-columns: repeat(2, minmax(0, 1fr));
 			}
 		}
 		@media (max-width: 720px) {
@@ -326,7 +366,8 @@
 				font-size: 28px;
 			}
 			.status-grid,
-			.cap-grid {
+			.cap-grid,
+			.namespace-grid {
 				grid-template-columns: 1fr;
 			}
 		}
@@ -397,6 +438,22 @@
 					<div class="status-item">
 						<div class="status-label">Bus Data</div>
 						<div class="status-value" id="StatusBusData">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Bus Limits</div>
+						<div class="status-value" id="StatusBusLimits">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Bus Limit Hit</div>
+						<div class="status-value" id="StatusBusLimitReject">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Bus Sweep</div>
+						<div class="status-value" id="StatusBusSweep">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Bus Cleanup</div>
+						<div class="status-value" id="StatusBusCleanup">-</div>
 					</div>
 					<div class="status-item">
 						<div class="status-label">Config</div>
@@ -743,16 +800,44 @@
 						<div class="status-value" id="StatusHttpLimitClose">-</div>
 					</div>
 					<div class="status-item">
+						<div class="status-label">HTTP Req Limit</div>
+						<div class="status-value" id="StatusHttpReqLimit">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">HTTP Policy</div>
+						<div class="status-value" id="StatusHttpPolicyReject">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">HTTP Manage Err</div>
+						<div class="status-value" id="StatusHttpManageReject">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">HTTP Bus Err</div>
+						<div class="status-value" id="StatusHttpBusReject">-</div>
+					</div>
+					<div class="status-item">
 						<div class="status-label">WS Limit Close</div>
 						<div class="status-value" id="StatusWsLimitClose">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">WS Msg Limit</div>
+						<div class="status-value" id="StatusWsMessageLimit">-</div>
 					</div>
 					<div class="status-item">
 						<div class="status-label">XTP Limit Close</div>
 						<div class="status-value" id="StatusXtpLimitClose">-</div>
 					</div>
 					<div class="status-item">
+						<div class="status-label">XTP Recv Limit</div>
+						<div class="status-value" id="StatusXtpRecvLimit">-</div>
+					</div>
+					<div class="status-item">
 						<div class="status-label">TCP Limit Close</div>
 						<div class="status-value" id="StatusCustomLimitClose">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">TCP Recv Limit</div>
+						<div class="status-value" id="StatusCustomRecvLimit">-</div>
 					</div>
 					<div class="status-item">
 						<div class="status-label">HTTP Reject</div>
@@ -897,6 +982,10 @@
 					<div class="status-item">
 						<div class="status-label">TCP Error</div>
 						<div class="status-value" id="StatusCustomError">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">TCP Close Reason</div>
+						<div class="status-value" id="StatusCustomCloseReason">-</div>
 					</div>
 					<div class="status-item">
 						<div class="status-label">TCP Bytes</div>
@@ -1140,6 +1229,7 @@
 							<button type="button" class="bus-btn" id="BusSendServerBtn">发送到 Server</button>
 							<button type="button" class="bus-btn alt" id="BusSendHostBtn">发送到当前 Host</button>
 							<button type="button" class="bus-btn" id="BusSendBroadcastBtn">广播到全部</button>
+							<button type="button" class="bus-btn" id="BusSweepBtn">立即清理</button>
 							<button type="button" class="bus-btn alt" id="BusResetStatsBtn">清空统计</button>
 						</div>
 						<div class="bus-tools">
@@ -1168,6 +1258,13 @@
 							<button type="button" class="bus-btn alt" id="BusRemoveBtn">移除最后 ID</button>
 							<button type="button" class="bus-btn alt" id="BusRemoveAllBtn">批量清理</button>
 						</div>
+						<div class="bus-tools">
+							<input type="text" id="BusReadonlyNamespacesInput" placeholder="readonly_namespaces，例如 policy.live,team.*">
+							<input type="text" id="BusDisabledNamespacesInput" placeholder="disabled_namespaces，例如 policy.off,queue.*">
+							<input type="text" id="BusTTLRequiredNamespacesInput" placeholder="ttl_required_namespaces，例如 cache.*,session.*">
+							<input type="text" id="BusTagRequiredNamespacesInput" placeholder="tag_required_namespaces，例如 order.*,event.*">
+							<button type="button" class="bus-btn" id="BusPolicyBtn">更新 Policy</button>
+						</div>
 						<div class="bus-result" id="BusSendResult">尚未发送消息。</div>
 					</div>
 				</div>
@@ -1185,6 +1282,30 @@
 				<pre class="code-box" id="BusRegistryRaw">loading...</pre>
 				<h2 class="section-title" style="margin-top:20px;">Bus Payload</h2>
 				<pre class="code-box" id="BusPayloadRaw">loading...</pre>
+				<h2 class="section-title" style="margin-top:20px;">Bus Namespace Summary</h2>
+				<div class="status-grid namespace-grid">
+					<div class="status-item">
+						<div class="status-label">Namespace Count</div>
+						<div class="status-value" id="BusNamespaceCount">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Namespace Limit</div>
+						<div class="status-value" id="BusNamespaceLimit">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Hot Namespace</div>
+						<div class="status-value" id="BusNamespacePressure">-</div>
+					</div>
+					<div class="status-item">
+						<div class="status-label">Next Expire</div>
+						<div class="status-value" id="BusNamespaceWindow">-</div>
+					</div>
+				</div>
+				<div class="namespace-list" id="BusNamespaceList">
+					<div class="namespace-card">
+						<div class="namespace-card-line">loading...</div>
+					</div>
+				</div>
 				<h2 class="section-title" style="margin-top:20px;">Bus Namespaces</h2>
 				<pre class="code-box" id="BusNamespaceRaw">loading...</pre>
 			</div>
@@ -1217,6 +1338,360 @@
 				if ( obj ) {
 					obj.textContent = sText;
 				}
+			};
+			var procSyncInputValue = function(sID, sValue)
+			{
+				var obj = document.getElementById(sID);
+				if ( obj && document.activeElement !== obj ) {
+					obj.value = (sValue === undefined || sValue === null) ? '' : String(sValue);
+				}
+			};
+			var procSetHTML = function(sID, sHTML)
+			{
+				var obj = document.getElementById(sID);
+				if ( obj ) {
+					obj.innerHTML = sHTML;
+				}
+			};
+			var procEscapeHTML = function(sText)
+			{
+				return String((sText === undefined || sText === null) ? '' : sText)
+					.replace(/&/g, '&amp;')
+					.replace(/</g, '&lt;')
+					.replace(/>/g, '&gt;')
+					.replace(/"/g, '&quot;')
+					.replace(/'/g, '&#39;');
+			};
+			var procFormatCountLimit = function(iCount, iLimit)
+			{
+				if ( iLimit !== undefined && iLimit !== null && Number(iLimit) > 0 ) {
+					return String(iCount) + '/' + String(iLimit);
+				}
+				return String(iCount);
+			};
+			var procFormatAgeText = function(iAgeMS)
+			{
+				if ( iAgeMS === undefined || iAgeMS === null || Number(iAgeMS) < 0 ) {
+					return '-';
+				}
+				return String(iAgeMS) + ' ms';
+			};
+			var procFormatNetResultReason = function(iCode)
+			{
+				switch ( iCode ) {
+					case 0:
+						return 'none';
+					case -1:
+						return 'error';
+					case -2:
+						return 'again';
+					case -3:
+						return 'timeout';
+					case -4:
+						return 'closed';
+					case -5:
+						return 'cancelled';
+					default:
+						return 'unknown';
+				}
+			};
+			var procFormatNetResultCode = function(iCode)
+			{
+				var iValue = Number(iCode);
+
+				if ( iCode === undefined || iCode === null || iCode === '' || isNaN(iValue) ) {
+					return '-';
+				}
+				return String(iValue) + ' / ' + procFormatNetResultReason(iValue);
+			};
+			var procFormatWsCloseReason = function(iReason)
+			{
+				var iCode = Number(iReason);
+				var sText = '';
+
+				if ( iReason === undefined || iReason === null || iReason === '' || isNaN(iCode) ) {
+					return '-';
+				}
+				switch ( iCode ) {
+					case 1000:
+						sText = 'normal';
+						break;
+					case 1001:
+						sText = 'going away';
+						break;
+					case 1002:
+						sText = 'protocol';
+						break;
+					case 1003:
+						sText = 'unsupported';
+						break;
+					case 1009:
+						sText = 'too big';
+						break;
+					case 1011:
+						sText = 'internal';
+						break;
+					default:
+						sText = procFormatNetResultReason(iCode);
+						break;
+				}
+				return String(iCode) + ' / ' + sText;
+			};
+			var procAppendLatestEvent = function(sText, arrEvents)
+			{
+				var i;
+				var tblEvent;
+				var iAgeMS;
+				var iLatestAgeMS = -1;
+				var sLatestTime = '';
+
+				if ( !Array.isArray(arrEvents) ) {
+					return sText;
+				}
+				for ( i = 0; i < arrEvents.length; i++ ) {
+					tblEvent = arrEvents[i] || {};
+					iAgeMS = Number(tblEvent.age_ms);
+					if ( isNaN(iAgeMS) || iAgeMS < 0 ) {
+						continue;
+					}
+					if ( iLatestAgeMS < 0 || iAgeMS < iLatestAgeMS ) {
+						iLatestAgeMS = iAgeMS;
+						sLatestTime = tblEvent.time || '';
+					}
+				}
+				if ( iLatestAgeMS < 0 ) {
+					return sText;
+				}
+				return String(sText) + ' / ' + (sLatestTime || '-') + ' / ' + procFormatAgeText(iLatestAgeMS);
+			};
+			var procFormatCountTimeAge = function(vCount, sTime, iAgeMS)
+			{
+				return String((vCount !== undefined && vCount !== null) ? vCount : '-') +
+					' / ' +
+					(sTime || '-') +
+					' / ' +
+					procFormatAgeText(iAgeMS);
+			};
+			var procFormatCleanupText = function(vCount, vClosed, vRemain, sTime, iAgeMS)
+			{
+				return String((vCount !== undefined && vCount !== null) ? vCount : '-') +
+					' / ' +
+					String((vClosed !== undefined && vClosed !== null) ? vClosed : '-') +
+					' / ' +
+					String((vRemain !== undefined && vRemain !== null) ? vRemain : '-') +
+					' / ' +
+					(sTime || '-') +
+					' / ' +
+					procFormatAgeText(iAgeMS);
+			};
+			var procFormatLimitText = function(iLimit)
+			{
+				if ( iLimit === undefined || iLimit === null || Number(iLimit) <= 0 ) {
+					return 'unlimited';
+				}
+				return String(iLimit);
+			};
+			var procFormatRemainingText = function(iRemain, iLimit)
+			{
+				if ( iLimit === undefined || iLimit === null || Number(iLimit) <= 0 ) {
+					return 'unlimited';
+				}
+				if ( iRemain === undefined || iRemain === null || Number(iRemain) < 0 ) {
+					return '0';
+				}
+				return String(iRemain);
+			};
+			var procFormatReachedText = function(bReached, iLimit)
+			{
+				if ( iLimit === undefined || iLimit === null || Number(iLimit) <= 0 ) {
+					return 'unlimited';
+				}
+				return String(!!bReached);
+			};
+			var procFormatTimeoutText = function(iTimeoutMS)
+			{
+				if ( iTimeoutMS === undefined || iTimeoutMS === null || Number(iTimeoutMS) <= 0 ) {
+					return 'unlimited';
+				}
+				return String(iTimeoutMS) + ' ms';
+			};
+			var procFormatWsMessageLimitText = function(iMessageLimit, iRecvLimit)
+			{
+				var bHasMessageLimit = !(iMessageLimit === undefined || iMessageLimit === null);
+				var iLimit = bHasMessageLimit ? Number(iMessageLimit) : 0;
+				var iRecv = (iRecvLimit === undefined || iRecvLimit === null) ? 0 : Number(iRecvLimit);
+
+				if ( !bHasMessageLimit ) {
+					return '-';
+				}
+				if ( iLimit > 0 ) {
+					return String(iLimit) + ' B';
+				}
+				if ( iRecv > 0 ) {
+					return 'recv_limit ' + String(iRecv) + ' B';
+				}
+				return 'unlimited';
+			};
+			var procCountRuleList = function(sRules)
+			{
+				var arrItems;
+				var i;
+				var iCount = 0;
+
+				if ( !sRules ) {
+					return 0;
+				}
+				arrItems = String(sRules).split(',');
+				for ( i = 0; i < arrItems.length; i++ ) {
+					if ( arrItems[i] && arrItems[i].trim() ) {
+						iCount++;
+					}
+				}
+				return iCount;
+			};
+			var procRenderBusNamespaces = function(tblData)
+			{
+				var arrItems = [];
+				var arrSorted = [];
+				var arrVisible = [];
+				var objHot = null;
+				var objNextExpire = null;
+				var sHTML = '';
+				var i;
+				var objItem;
+				var iNamespaceCount;
+				var iNamespaceItemCount;
+				var iNamespaceLimit;
+				var iNamespaceRemain;
+				var iReadonlyNamespaceCount;
+				var iDisabledNamespaceCount;
+				var iDerivedNamespaceCount = 0;
+				var iDerivedNamespaceItemCount = 0;
+				var iDerivedReadonlyNamespaceCount = 0;
+				var iDerivedDisabledNamespaceCount = 0;
+				var iDerivedTTLRequiredNamespaceCount = 0;
+				var iDerivedTagRequiredNamespaceCount = 0;
+				var iPressureCount;
+				var iPressureLimit;
+				var iHotCount;
+				var iHotLimit;
+				var fHotScore;
+				var fScore;
+				
+				tblData = tblData || {};
+				arrItems = Array.isArray(tblData.items) ? tblData.items : [];
+				iNamespaceLimit = (tblData.namespace_limit !== undefined) ? Number(tblData.namespace_limit) : 0;
+				var iTTLRequiredNamespaceCount;
+				var iTagRequiredNamespaceCount;
+				for ( i = 0; i < arrItems.length; i++ ) {
+					objItem = arrItems[i] || {};
+					iHotCount = (objItem.count !== undefined) ? Number(objItem.count) : 0;
+					if ( iHotCount > 0 ) {
+						iDerivedNamespaceCount++;
+					}
+					iDerivedNamespaceItemCount += iHotCount;
+					if ( objItem.readonly !== undefined && objItem.readonly ) {
+						iDerivedReadonlyNamespaceCount++;
+					}
+					if ( objItem.disabled !== undefined && objItem.disabled ) {
+						iDerivedDisabledNamespaceCount++;
+					}
+					if ( objItem.ttl_required !== undefined && objItem.ttl_required ) {
+						iDerivedTTLRequiredNamespaceCount++;
+					}
+					if ( objItem.tag_required !== undefined && objItem.tag_required ) {
+						iDerivedTagRequiredNamespaceCount++;
+					}
+				}
+				iNamespaceCount = (tblData.namespace_count !== undefined) ? Number(tblData.namespace_count) : iDerivedNamespaceCount;
+				iNamespaceItemCount = (tblData.namespace_item_count !== undefined) ? Number(tblData.namespace_item_count) : iDerivedNamespaceItemCount;
+				iNamespaceRemain = (tblData.namespace_limit_remaining !== undefined) ? Number(tblData.namespace_limit_remaining) : ((iNamespaceLimit > 0 && iNamespaceCount < iNamespaceLimit) ? (iNamespaceLimit - iNamespaceCount) : 0);
+				iReadonlyNamespaceCount = (tblData.readonly_namespace_count !== undefined) ? Number(tblData.readonly_namespace_count) : iDerivedReadonlyNamespaceCount;
+				iDisabledNamespaceCount = (tblData.disabled_namespace_count !== undefined) ? Number(tblData.disabled_namespace_count) : iDerivedDisabledNamespaceCount;
+				iTTLRequiredNamespaceCount = (tblData.ttl_required_namespace_count !== undefined) ? Number(tblData.ttl_required_namespace_count) : iDerivedTTLRequiredNamespaceCount;
+				iTagRequiredNamespaceCount = (tblData.tag_required_namespace_count !== undefined) ? Number(tblData.tag_required_namespace_count) : iDerivedTagRequiredNamespaceCount;
+				procSetText('BusNamespaceCount', 'Active:' + String(iNamespaceCount) + ' Items:' + String(iNamespaceItemCount) + ' Remain:' + procFormatRemainingText(iNamespaceRemain, iNamespaceLimit));
+				procSetText(
+					'BusNamespaceLimit',
+					'L:' + procFormatLimitText(iNamespaceLimit) +
+					' S:' + procFormatReachedText(tblData.namespace_limit_reached, iNamespaceLimit) +
+					' RO:' + String(iReadonlyNamespaceCount) +
+					' DI:' + String(iDisabledNamespaceCount) +
+					' TR:' + String(iTTLRequiredNamespaceCount) +
+					' TG:' + String(iTagRequiredNamespaceCount)
+				);
+				if ( arrItems.length === 0 ) {
+					procSetText('BusNamespacePressure', '-');
+					procSetText('BusNamespaceWindow', '-');
+					procSetHTML(
+						'BusNamespaceList',
+						'<div class="namespace-card"><div class="namespace-card-line">(empty)</div></div>'
+					);
+					return;
+				}
+				
+				arrSorted = arrItems.slice().sort(function(objA, objB){
+					var iACount = (objA && objA.count !== undefined) ? Number(objA.count) : 0;
+					var iBCount = (objB && objB.count !== undefined) ? Number(objB.count) : 0;
+					var iALimit = (objA && objA.namespace_data_limit !== undefined) ? Number(objA.namespace_data_limit) : 0;
+					var iBLimit = (objB && objB.namespace_data_limit !== undefined) ? Number(objB.namespace_data_limit) : 0;
+					var fAScore = (iALimit > 0) ? (iACount / iALimit) : iACount;
+					var fBScore = (iBLimit > 0) ? (iBCount / iBLimit) : iBCount;
+					
+					if ( fBScore !== fAScore ) {
+						return fBScore - fAScore;
+					}
+					if ( iBCount !== iACount ) {
+						return iBCount - iACount;
+					}
+					return String((objA && objA.namespace) ? objA.namespace : '').localeCompare(String((objB && objB.namespace) ? objB.namespace : ''));
+				});
+				arrVisible = arrSorted.slice(0, 6);
+				for ( i = 0; i < arrItems.length; i++ ) {
+					objItem = arrItems[i] || {};
+					iHotCount = (objItem.count !== undefined) ? Number(objItem.count) : 0;
+					iHotLimit = (objItem.namespace_data_limit !== undefined) ? Number(objItem.namespace_data_limit) : 0;
+					fHotScore = (iHotLimit > 0) ? (iHotCount / iHotLimit) : iHotCount;
+					if ( iHotCount > 0 && (!objHot || (fHotScore > fScore) || (fHotScore === fScore && iHotCount > iPressureCount)) ) {
+						objHot = objItem;
+						fScore = fHotScore;
+						iPressureCount = iHotCount;
+						iPressureLimit = iHotLimit;
+					}
+					if ( objItem.next_expire_in_ms !== undefined && Number(objItem.next_expire_in_ms) >= 0 ) {
+						if ( !objNextExpire || Number(objItem.next_expire_in_ms) < Number(objNextExpire.next_expire_in_ms) ) {
+							objNextExpire = objItem;
+						}
+					}
+				}
+				procSetText(
+					'BusNamespacePressure',
+					objHot ?
+						((objHot.namespace ? objHot.namespace : '-') + ' ' + procFormatCountLimit(iPressureCount, iPressureLimit)) :
+						'-'
+				);
+				procSetText(
+					'BusNamespaceWindow',
+					objNextExpire ?
+						((objNextExpire.namespace || '-') + ' @ ' + (objNextExpire.next_expire_time_text || '-') + ' / in ' + procFormatAgeText(objNextExpire.next_expire_in_ms)) :
+						'-'
+				);
+				for ( i = 0; i < arrVisible.length; i++ ) {
+					objItem = arrVisible[i] || {};
+					sHTML += '<div class="namespace-card">';
+					sHTML += '<div class="namespace-card-head">';
+					sHTML += '<div class="namespace-card-title">' + procEscapeHTML(objItem.namespace || '(default)') + '</div>';
+					sHTML += '<div class="namespace-card-meta">' + procEscapeHTML(objItem.policy_state || 'active') + ' | count ' + procFormatCountLimit((objItem.count !== undefined) ? Number(objItem.count) : 0, (objItem.namespace_data_limit !== undefined) ? Number(objItem.namespace_data_limit) : 0) + '</div>';
+					sHTML += '</div>';
+					sHTML += '<div class="namespace-card-line">persistent ' + procEscapeHTML(String((objItem.persistent_count !== undefined) ? objItem.persistent_count : 0)) + ' | ttl ' + procEscapeHTML(String((objItem.ttl_count !== undefined) ? objItem.ttl_count : 0)) + ' | remain ' + procEscapeHTML(procFormatRemainingText((objItem.namespace_data_limit_remaining !== undefined) ? Number(objItem.namespace_data_limit_remaining) : -1, (objItem.namespace_data_limit !== undefined) ? Number(objItem.namespace_data_limit) : 0)) + '</div>';
+					sHTML += '<div class="namespace-card-line">policy readonly ' + procEscapeHTML(String((objItem.readonly !== undefined) ? objItem.readonly : false)) + ' | disabled ' + procEscapeHTML(String((objItem.disabled !== undefined) ? objItem.disabled : false)) + ' | ttl_required ' + procEscapeHTML(String((objItem.ttl_required !== undefined) ? objItem.ttl_required : false)) + ' | tag_required ' + procEscapeHTML(String((objItem.tag_required !== undefined) ? objItem.tag_required : false)) + '</div>';
+					sHTML += '<div class="namespace-card-line">policy hits total ' + procEscapeHTML(String((objItem.policy_reject_count !== undefined) ? objItem.policy_reject_count : 0)) + ' | ro ' + procEscapeHTML(String((objItem.readonly_reject_count !== undefined) ? objItem.readonly_reject_count : 0)) + ' | di ' + procEscapeHTML(String((objItem.disabled_reject_count !== undefined) ? objItem.disabled_reject_count : 0)) + ' | tr ' + procEscapeHTML(String((objItem.ttl_required_reject_count !== undefined) ? objItem.ttl_required_reject_count : 0)) + ' | tg ' + procEscapeHTML(String((objItem.tag_required_reject_count !== undefined) ? objItem.tag_required_reject_count : 0)) + '</div>';
+					sHTML += '<div class="namespace-card-line">last policy ' + procEscapeHTML(objItem.last_policy_reject_reason || '-') + ' / ' + procEscapeHTML(objItem.last_policy_reject_action || '-') + ' / ' + procEscapeHTML(objItem.last_policy_reject_namespace || '-') + ' / ' + procEscapeHTML(objItem.last_policy_reject_time_text || '-') + ' / ' + procEscapeHTML(procFormatAgeText(objItem.last_policy_reject_age_ms)) + '</div>';
+					sHTML += '<div class="namespace-card-line">oldest ' + procEscapeHTML(objItem.oldest_create_time_text || '-') + ' / ' + procEscapeHTML(procFormatAgeText(objItem.oldest_create_age_ms)) + ' | newest ' + procEscapeHTML(objItem.newest_create_time_text || '-') + ' / ' + procEscapeHTML(procFormatAgeText(objItem.newest_create_age_ms)) + '</div>';
+					sHTML += '<div class="namespace-card-line">next expire ' + procEscapeHTML(objItem.next_expire_time_text || '-') + ' | in ' + procEscapeHTML(procFormatAgeText(objItem.next_expire_in_ms)) + '</div>';
+					sHTML += '</div>';
+				}
+				procSetHTML('BusNamespaceList', sHTML);
 			};
 			var procSetBusDataID = function(vID)
 			{
@@ -1256,18 +1731,114 @@
 					procSetText('StatusHost', (tblStatus.default && tblStatus.default.name) ? tblStatus.default.name : ((tblStatus.default_host ? '默认主机' : '-')));
 					procSetText('StatusScript', (tblStatus.script_loaded !== undefined) ? String(tblStatus.script_loaded) : '-');
 					procSetText('StatusHealth', (tblHealth.ok !== undefined) ? String(tblHealth.ok) : '-');
-					procSetText('StatusReloadLast', tblHealth.reload_time || '-');
+					procSetText(
+						'StatusReloadLast',
+						procAppendLatestEvent(
+							tblHealth.reload_time || '-',
+							[
+								{time: tblHealth.reload_time, age_ms: tblHealth.reload_age_ms}
+							]
+						)
+					);
 					procSetText('StatusReloadAge', (tblHealth.reload_age_ms !== undefined && tblHealth.reload_age_ms >= 0) ? String(tblHealth.reload_age_ms) + ' ms' : '-');
 					procSetText('StatusReloadTotal', (tblHealth.reload_total_count !== undefined) ? String(tblHealth.reload_total_count) : '-');
 					procSetText('StatusReloadSuccess', (tblHealth.reload_success_count !== undefined) ? String(tblHealth.reload_success_count) : '-');
 					procSetText('StatusReloadFailure', (tblHealth.reload_failure_count !== undefined) ? String(tblHealth.reload_failure_count) : '-');
 					procSetText('StatusBusData', (tblData.bus && tblData.bus.data_count !== undefined) ? String(tblData.bus.data_count) : '-');
+					procSetText(
+						'StatusBusLimits',
+						'D:' +
+						((tblBus.data_limit !== undefined && tblBus.data_limit > 0) ? String(tblBus.data_limit) : 'unlimited') +
+						' Q:' +
+						((tblBus.queue_limit !== undefined && tblBus.queue_limit > 0) ? String(tblBus.queue_limit) : 'unlimited') +
+						' NS:' +
+						((tblBus.namespace_limit !== undefined && tblBus.namespace_limit > 0) ? String(tblBus.namespace_limit) : 'unlimited') +
+						' ND:' +
+						((tblBus.namespace_data_limit !== undefined && tblBus.namespace_data_limit > 0) ? String(tblBus.namespace_data_limit) : 'unlimited') +
+						' RO:' +
+						String(procCountRuleList(tblBus.readonly_namespaces)) +
+						' DI:' +
+						String(procCountRuleList(tblBus.disabled_namespaces)) +
+						' TR:' +
+						String(procCountRuleList(tblBus.ttl_required_namespaces)) +
+						' TG:' +
+						String(procCountRuleList(tblBus.tag_required_namespaces))
+					);
+					procSetText(
+						'StatusBusLimitReject',
+						procAppendLatestEvent(
+							'D:' +
+							((tblBus.data_limit_reject_count !== undefined) ? String(tblBus.data_limit_reject_count) : '-') +
+							' Q:' +
+							((tblBus.queue_limit_reject_count !== undefined) ? String(tblBus.queue_limit_reject_count) : '-') +
+							' NS:' +
+							((tblBus.namespace_limit_reject_count !== undefined) ? String(tblBus.namespace_limit_reject_count) : '-') +
+							' ND:' +
+							((tblBus.namespace_data_limit_reject_count !== undefined) ? String(tblBus.namespace_data_limit_reject_count) : '-') +
+							' RO:' +
+							((tblBus.readonly_namespace_reject_count !== undefined) ? String(tblBus.readonly_namespace_reject_count) : '-') +
+							' DI:' +
+							((tblBus.disabled_namespace_reject_count !== undefined) ? String(tblBus.disabled_namespace_reject_count) : '-') +
+							' TR:' +
+							((tblBus.ttl_required_namespace_reject_count !== undefined) ? String(tblBus.ttl_required_namespace_reject_count) : '-') +
+							' TG:' +
+							((tblBus.tag_required_namespace_reject_count !== undefined) ? String(tblBus.tag_required_namespace_reject_count) : '-'),
+							[
+								{time: tblBus.last_data_limit_reject_time, age_ms: tblBus.last_data_limit_reject_age_ms},
+								{time: tblBus.last_queue_limit_reject_time, age_ms: tblBus.last_queue_limit_reject_age_ms},
+								{time: tblBus.last_namespace_limit_reject_time, age_ms: tblBus.last_namespace_limit_reject_age_ms},
+								{time: tblBus.last_namespace_data_limit_reject_time, age_ms: tblBus.last_namespace_data_limit_reject_age_ms},
+								{time: tblBus.last_readonly_namespace_reject_time, age_ms: tblBus.last_readonly_namespace_reject_age_ms},
+								{time: tblBus.last_disabled_namespace_reject_time, age_ms: tblBus.last_disabled_namespace_reject_age_ms},
+								{time: tblBus.last_ttl_required_namespace_reject_time, age_ms: tblBus.last_ttl_required_namespace_reject_age_ms},
+								{time: tblBus.last_tag_required_namespace_reject_time, age_ms: tblBus.last_tag_required_namespace_reject_age_ms}
+							]
+						)
+					);
+					procSetText(
+						'StatusBusSweep',
+						procAppendLatestEvent(
+							'C:' +
+							((tblBus.sweep_count !== undefined) ? String(tblBus.sweep_count) : '-') +
+							' R:' +
+							((tblBus.sweep_removed_count !== undefined) ? String(tblBus.sweep_removed_count) : '-'),
+							[
+								{time: tblBus.last_sweep_time_text, age_ms: tblBus.last_sweep_age_ms}
+							]
+						)
+					);
+					procSetText(
+						'StatusBusCleanup',
+						procAppendLatestEvent(
+							'C:' +
+							((tblBus.cleanup_count !== undefined) ? String(tblBus.cleanup_count) : '-') +
+							' R:' +
+							((tblBus.last_cleanup_removed !== undefined) ? String(tblBus.last_cleanup_removed) : '-') +
+							' M:' +
+							((tblBus.last_cleanup_remain !== undefined) ? String(tblBus.last_cleanup_remain) : '-'),
+							[
+								{time: tblBus.last_cleanup_time_text, age_ms: tblBus.last_cleanup_age_ms}
+							]
+						)
+					);
+					procSyncInputValue('BusReadonlyNamespacesInput', tblBus.readonly_namespaces || '');
+					procSyncInputValue('BusDisabledNamespacesInput', tblBus.disabled_namespaces || '');
+					procSyncInputValue('BusTTLRequiredNamespacesInput', tblBus.ttl_required_namespaces || '');
+					procSyncInputValue('BusTagRequiredNamespacesInput', tblBus.tag_required_namespaces || '');
 					procSetText('StatusConfig', tblStatus.config_file || '-');
 					procSetText('StatusConfigName', tblStatus.config_name || '-');
 					procSetText('StatusConfigMTime', tblStatus.config_mtime || '-');
 					procSetText('StatusConfigSize', (tblStatus.config_size !== undefined) ? String(tblStatus.config_size) + ' B' : '-');
-					procSetText('StatusConfigCheck', (tblCheck.result !== undefined) ? String(tblCheck.result) : '-');
-					procSetText('StatusCheckLast', tblCheck.check_last_time || '-');
+					procSetText('StatusConfigCheck', tblCheck.has_result ? String(tblCheck.result) : '-');
+					procSetText(
+						'StatusCheckLast',
+						procAppendLatestEvent(
+							tblCheck.check_last_time || '-',
+							[
+								{time: tblCheck.check_last_time, age_ms: tblCheck.check_last_age_ms}
+							]
+						)
+					);
 					procSetText('StatusCheckAge', (tblCheck.check_last_age_ms !== undefined && tblCheck.check_last_age_ms >= 0) ? String(tblCheck.check_last_age_ms) + ' ms' : '-');
 					procSetText('StatusCheckTotal', (tblCheck.check_total_count !== undefined) ? String(tblCheck.check_total_count) : '-');
 					procSetText('StatusCheckSuccess', (tblCheck.check_success_count !== undefined) ? String(tblCheck.check_success_count) : '-');
@@ -1355,7 +1926,7 @@
 					procSetText('StatusHttpAppLastConnection', tblStatus.http_last_app_connection || '-');
 					procSetText('StatusHttpAppLastCacheControl', tblStatus.http_last_app_cache_control || '-');
 					procSetText('StatusHttpAppLastType', tblStatus.http_last_app_content_type || '-');
-					procSetText('StatusWsLimit', (tblStatus.ws_message_limit !== undefined) ? String(tblStatus.ws_message_limit) + ' B' : '-');
+					procSetText('StatusWsLimit', procFormatWsMessageLimitText(tblStatus.ws_message_limit, tblStatus.recv_limit));
 					procSetText('StatusWsConn', (tblStatus.ws_conn_current !== undefined) ? String(tblStatus.ws_conn_current) : '-');
 					procSetText('StatusWsPeak', (tblStatus.ws_conn_peak !== undefined) ? String(tblStatus.ws_conn_peak) : '-');
 					procSetText(
@@ -1378,11 +1949,24 @@
 					);
 					procSetText(
 						'StatusWsError',
-						((tblStatus.ws_error_count !== undefined) ? String(tblStatus.ws_error_count) : '-') +
-						' / ' +
-						((tblStatus.ws_last_error_code !== undefined) ? String(tblStatus.ws_last_error_code) : '-')
+						procAppendLatestEvent(
+							((tblStatus.ws_error_count !== undefined) ? String(tblStatus.ws_error_count) : '-') +
+							' / ' +
+							procFormatNetResultCode(tblStatus.ws_last_error_code),
+							[
+								{time: tblStatus.ws_last_error_time, age_ms: tblStatus.ws_last_error_age_ms}
+							]
+						)
 					);
-					procSetText('StatusWsCloseReason', (tblStatus.ws_last_close_reason !== undefined) ? String(tblStatus.ws_last_close_reason) : '-');
+					procSetText(
+						'StatusWsCloseReason',
+						procAppendLatestEvent(
+							procFormatWsCloseReason(tblStatus.ws_last_close_reason),
+							[
+								{time: tblStatus.ws_last_close_time, age_ms: tblStatus.ws_last_close_age_ms}
+							]
+						)
+					);
 					procSetText('StatusWsCloseAge', (tblStatus.ws_last_close_age_ms !== undefined && tblStatus.ws_last_close_age_ms >= 0) ? String(tblStatus.ws_last_close_age_ms) + ' ms' : '-');
 					procSetText(
 						'StatusWsLast',
@@ -1392,104 +1976,255 @@
 					);
 					procSetText('StatusWsErrorAge', (tblStatus.ws_last_error_age_ms !== undefined && tblStatus.ws_last_error_age_ms >= 0) ? String(tblStatus.ws_last_error_age_ms) + ' ms' : '-');
 					procSetText('StatusWsLastAge', (tblStatus.ws_last_age_ms !== undefined && tblStatus.ws_last_age_ms >= 0) ? String(tblStatus.ws_last_age_ms) + ' ms' : '-');
-					procSetText('StatusWsIdleClose', (tblStatus.ws_idle_close_count !== undefined) ? String(tblStatus.ws_idle_close_count) : '-');
+					procSetText(
+						'StatusWsIdleClose',
+						procAppendLatestEvent(
+							(tblStatus.ws_idle_close_count !== undefined) ? String(tblStatus.ws_idle_close_count) : '-',
+							[
+								{time: tblStatus.ws_last_idle_close_time, age_ms: tblStatus.ws_last_idle_close_age_ms}
+							]
+						)
+					);
 					procSetText('StatusWsIdleAge', (tblStatus.ws_last_idle_close_age_ms !== undefined && tblStatus.ws_last_idle_close_age_ms >= 0) ? String(tblStatus.ws_last_idle_close_age_ms) + ' ms' : '-');
-					procSetText('StatusIdleTimeout', (tblStatus.idle_timeout !== undefined) ? String(tblStatus.idle_timeout) + ' ms' : '-');
+					procSetText('StatusIdleTimeout', procFormatTimeoutText(tblStatus.idle_timeout));
 					procSetText('StatusConnLimit', (tblStatus.conn_limit !== undefined && tblStatus.conn_limit > 0) ? String(tblStatus.conn_limit) : 'unlimited');
 					procSetText(
 						'StatusHttpLimitClose',
-						((tblStatus.http_conn_limit_close_count !== undefined) ? String(tblStatus.http_conn_limit_close_count) : '-') +
-						' / ' +
-						((tblStatus.http_last_conn_limit_close_age_ms !== undefined && tblStatus.http_last_conn_limit_close_age_ms >= 0) ? String(tblStatus.http_last_conn_limit_close_age_ms) + ' ms' : '-')
+						procFormatCountTimeAge(
+							tblStatus.http_conn_limit_close_count,
+							tblStatus.http_last_conn_limit_close_time,
+							tblStatus.http_last_conn_limit_close_age_ms
+						)
+					);
+					procSetText(
+						'StatusHttpReqLimit',
+						procAppendLatestEvent(
+							'H:' +
+							((tblStatus.http_header_limit_reject_count !== undefined) ? String(tblStatus.http_header_limit_reject_count) : '-') +
+							' B:' +
+							((tblStatus.http_body_limit_reject_count !== undefined) ? String(tblStatus.http_body_limit_reject_count) : '-') +
+							' P:' +
+							((tblStatus.http_path_limit_reject_count !== undefined) ? String(tblStatus.http_path_limit_reject_count) : '-'),
+							[
+								{time: tblStatus.http_last_header_limit_reject_time, age_ms: tblStatus.http_last_header_limit_reject_age_ms},
+								{time: tblStatus.http_last_body_limit_reject_time, age_ms: tblStatus.http_last_body_limit_reject_age_ms},
+								{time: tblStatus.http_last_path_limit_reject_time, age_ms: tblStatus.http_last_path_limit_reject_age_ms}
+							]
+						)
+					);
+					procSetText(
+						'StatusHttpPolicyReject',
+						procAppendLatestEvent(
+							'A:' +
+							((tblStatus.http_api_disabled_reject_count !== undefined) ? String(tblStatus.http_api_disabled_reject_count) : '-') +
+							' M:' +
+							((tblStatus.http_method_reject_count !== undefined) ? String(tblStatus.http_method_reject_count) : '-') +
+							' H:' +
+							((tblStatus.http_host_not_found_reject_count !== undefined) ? String(tblStatus.http_host_not_found_reject_count) : '-'),
+							[
+								{time: tblStatus.http_last_api_disabled_reject_time, age_ms: tblStatus.http_last_api_disabled_reject_age_ms},
+								{time: tblStatus.http_last_method_reject_time, age_ms: tblStatus.http_last_method_reject_age_ms},
+								{time: tblStatus.http_last_host_not_found_reject_time, age_ms: tblStatus.http_last_host_not_found_reject_age_ms}
+							]
+						)
+					);
+					procSetText(
+						'StatusHttpManageReject',
+						procAppendLatestEvent(
+							'B:' +
+							((tblStatus.http_reload_busy_reject_count !== undefined) ? String(tblStatus.http_reload_busy_reject_count) : '-') +
+							' R:' +
+							((tblStatus.http_reload_failed_reject_count !== undefined) ? String(tblStatus.http_reload_failed_reject_count) : '-') +
+							' C:' +
+							((tblStatus.http_check_config_failed_reject_count !== undefined) ? String(tblStatus.http_check_config_failed_reject_count) : '-'),
+							[
+								{time: tblStatus.http_last_reload_busy_reject_time, age_ms: tblStatus.http_last_reload_busy_reject_age_ms},
+								{time: tblStatus.http_last_reload_failed_reject_time, age_ms: tblStatus.http_last_reload_failed_reject_age_ms},
+								{time: tblStatus.http_last_check_config_failed_reject_time, age_ms: tblStatus.http_last_check_config_failed_reject_age_ms}
+							]
+						)
+					);
+					procSetText(
+						'StatusHttpBusReject',
+						procAppendLatestEvent(
+							'B:' +
+							((tblStatus.http_bus_bad_request_reject_count !== undefined) ? String(tblStatus.http_bus_bad_request_reject_count) : '-') +
+							' N:' +
+							((tblStatus.http_bus_not_found_reject_count !== undefined) ? String(tblStatus.http_bus_not_found_reject_count) : '-') +
+							' L:' +
+							((tblStatus.http_bus_limit_reject_count !== undefined) ? String(tblStatus.http_bus_limit_reject_count) : '-') +
+							' F:' +
+							((tblStatus.http_bus_failed_reject_count !== undefined) ? String(tblStatus.http_bus_failed_reject_count) : '-'),
+							[
+								{time: tblStatus.http_last_bus_bad_request_reject_time, age_ms: tblStatus.http_last_bus_bad_request_reject_age_ms},
+								{time: tblStatus.http_last_bus_not_found_reject_time, age_ms: tblStatus.http_last_bus_not_found_reject_age_ms},
+								{time: tblStatus.http_last_bus_limit_reject_time, age_ms: tblStatus.http_last_bus_limit_reject_age_ms},
+								{time: tblStatus.http_last_bus_failed_reject_time, age_ms: tblStatus.http_last_bus_failed_reject_age_ms}
+							]
+						)
 					);
 					procSetText(
 						'StatusWsLimitClose',
-						((tblStatus.ws_conn_limit_close_count !== undefined) ? String(tblStatus.ws_conn_limit_close_count) : '-') +
-						' / ' +
-						((tblStatus.ws_last_conn_limit_close_age_ms !== undefined && tblStatus.ws_last_conn_limit_close_age_ms >= 0) ? String(tblStatus.ws_last_conn_limit_close_age_ms) + ' ms' : '-')
+						procFormatCountTimeAge(
+							tblStatus.ws_conn_limit_close_count,
+							tblStatus.ws_last_conn_limit_close_time,
+							tblStatus.ws_last_conn_limit_close_age_ms
+						)
+					);
+					procSetText(
+						'StatusWsMessageLimit',
+						procFormatCountTimeAge(
+							tblStatus.ws_message_limit_close_count,
+							tblStatus.ws_last_message_limit_close_time,
+							tblStatus.ws_last_message_limit_close_age_ms
+						)
 					);
 					procSetText(
 						'StatusXtpLimitClose',
-						((tblStatus.xtp_conn_limit_close_count !== undefined) ? String(tblStatus.xtp_conn_limit_close_count) : '-') +
-						' / ' +
-						((tblStatus.xtp_last_conn_limit_close_age_ms !== undefined && tblStatus.xtp_last_conn_limit_close_age_ms >= 0) ? String(tblStatus.xtp_last_conn_limit_close_age_ms) + ' ms' : '-')
+						procFormatCountTimeAge(
+							tblStatus.xtp_conn_limit_close_count,
+							tblStatus.xtp_last_conn_limit_close_time,
+							tblStatus.xtp_last_conn_limit_close_age_ms
+						)
+					);
+					procSetText(
+						'StatusXtpRecvLimit',
+						procFormatCountTimeAge(
+							tblStatus.xtp_recv_limit_close_count,
+							tblStatus.xtp_last_recv_limit_close_time,
+							tblStatus.xtp_last_recv_limit_close_age_ms
+						)
 					);
 					procSetText(
 						'StatusCustomLimitClose',
-						((tblStatus.custom_conn_limit_close_count !== undefined) ? String(tblStatus.custom_conn_limit_close_count) : '-') +
-						' / ' +
-						((tblStatus.custom_last_conn_limit_close_age_ms !== undefined && tblStatus.custom_last_conn_limit_close_age_ms >= 0) ? String(tblStatus.custom_last_conn_limit_close_age_ms) + ' ms' : '-')
+						procFormatCountTimeAge(
+							tblStatus.custom_conn_limit_close_count,
+							tblStatus.custom_last_conn_limit_close_time,
+							tblStatus.custom_last_conn_limit_close_age_ms
+						)
+					);
+					procSetText(
+						'StatusCustomRecvLimit',
+						procFormatCountTimeAge(
+							tblStatus.custom_recv_limit_close_count,
+							tblStatus.custom_last_recv_limit_close_time,
+							tblStatus.custom_last_recv_limit_close_age_ms
+						)
 					);
 					procSetText(
 						'StatusHttpReject',
-						((tblStatus.http_reject_count !== undefined) ? String(tblStatus.http_reject_count) : '-') +
-						' / ' +
-						((tblStatus.http_last_reject_status !== undefined) ? String(tblStatus.http_last_reject_status) : '-') +
-						' / ' +
-						(tblStatus.http_last_reject_reason || '-')
+						procAppendLatestEvent(
+							((tblStatus.http_reject_count !== undefined) ? String(tblStatus.http_reject_count) : '-') +
+							' / ' +
+							((tblStatus.http_last_reject_status !== undefined) ? String(tblStatus.http_last_reject_status) : '-') +
+							' / ' +
+							(tblStatus.http_last_reject_reason || '-'),
+							[
+								{time: tblStatus.http_last_reject_time, age_ms: tblStatus.http_last_reject_age_ms}
+							]
+						)
 					);
 					procSetText(
 						'StatusWsReject',
-						((tblStatus.ws_reject_count !== undefined) ? String(tblStatus.ws_reject_count) : '-') +
-						' / ' +
-						(tblStatus.ws_last_reject_reason || '-')
+						procAppendLatestEvent(
+							((tblStatus.ws_reject_count !== undefined) ? String(tblStatus.ws_reject_count) : '-') +
+							' / ' +
+							(tblStatus.ws_last_reject_reason || '-'),
+							[
+								{time: tblStatus.ws_last_reject_time, age_ms: tblStatus.ws_last_reject_age_ms}
+							]
+						)
 					);
-					procSetText('StatusWsInvalid', (tblStatus.ws_invalid_count !== undefined) ? String(tblStatus.ws_invalid_count) : '-');
-					procSetText('StatusWsInvalidReason', tblStatus.ws_last_invalid_reason || '-');
+					procSetText(
+						'StatusWsInvalid',
+						procAppendLatestEvent(
+							(tblStatus.ws_invalid_count !== undefined) ? String(tblStatus.ws_invalid_count) : '-',
+							[
+								{time: tblStatus.ws_last_invalid_time, age_ms: tblStatus.ws_last_invalid_age_ms}
+							]
+						)
+					);
+					procSetText(
+						'StatusWsInvalidReason',
+						procAppendLatestEvent(
+							tblStatus.ws_last_invalid_reason || '-',
+							[
+								{time: tblStatus.ws_last_invalid_time, age_ms: tblStatus.ws_last_invalid_age_ms}
+							]
+						)
+					);
 					procSetText('StatusWsInvalidAge', (tblStatus.ws_last_invalid_age_ms !== undefined && tblStatus.ws_last_invalid_age_ms >= 0) ? String(tblStatus.ws_last_invalid_age_ms) + ' ms' : '-');
 					procSetText(
 						'StatusXtpReject',
-						((tblStatus.xtp_reject_count !== undefined) ? String(tblStatus.xtp_reject_count) : '-') +
-						' / ' +
-						(tblStatus.xtp_last_reject_reason || '-')
+						procAppendLatestEvent(
+							((tblStatus.xtp_reject_count !== undefined) ? String(tblStatus.xtp_reject_count) : '-') +
+							' / ' +
+							(tblStatus.xtp_last_reject_reason || '-'),
+							[
+								{time: tblStatus.xtp_last_reject_time, age_ms: tblStatus.xtp_last_reject_age_ms}
+							]
+						)
 					);
 					procSetText(
 						'StatusCustomReject',
-						((tblStatus.custom_reject_count !== undefined) ? String(tblStatus.custom_reject_count) : '-') +
-						' / ' +
-						(tblStatus.custom_last_reject_reason || '-')
+						procAppendLatestEvent(
+							((tblStatus.custom_reject_count !== undefined) ? String(tblStatus.custom_reject_count) : '-') +
+							' / ' +
+							(tblStatus.custom_last_reject_reason || '-'),
+							[
+								{time: tblStatus.custom_last_reject_time, age_ms: tblStatus.custom_last_reject_age_ms}
+							]
+						)
 					);
 					procSetText(
 						'StatusHttpCleanup',
-						((tblStatus.http_stop_cleanup_count !== undefined) ? String(tblStatus.http_stop_cleanup_count) : '-') +
-						' / ' +
-						((tblStatus.http_last_stop_cleanup_closed !== undefined) ? String(tblStatus.http_last_stop_cleanup_closed) : '-') +
-						' / ' +
-						((tblStatus.http_last_stop_cleanup_remain !== undefined) ? String(tblStatus.http_last_stop_cleanup_remain) : '-') +
-						' / ' +
-						((tblStatus.http_last_stop_cleanup_age_ms !== undefined && tblStatus.http_last_stop_cleanup_age_ms >= 0) ? String(tblStatus.http_last_stop_cleanup_age_ms) + ' ms' : '-')
+						procFormatCleanupText(
+							tblStatus.http_stop_cleanup_count,
+							tblStatus.http_last_stop_cleanup_closed,
+							tblStatus.http_last_stop_cleanup_remain,
+							tblStatus.http_last_stop_cleanup_time,
+							tblStatus.http_last_stop_cleanup_age_ms
+						)
 					);
 					procSetText(
 						'StatusWsCleanup',
-						((tblStatus.ws_stop_cleanup_count !== undefined) ? String(tblStatus.ws_stop_cleanup_count) : '-') +
-						' / ' +
-						((tblStatus.ws_last_stop_cleanup_closed !== undefined) ? String(tblStatus.ws_last_stop_cleanup_closed) : '-') +
-						' / ' +
-						((tblStatus.ws_last_stop_cleanup_remain !== undefined) ? String(tblStatus.ws_last_stop_cleanup_remain) : '-') +
-						' / ' +
-						((tblStatus.ws_last_stop_cleanup_age_ms !== undefined && tblStatus.ws_last_stop_cleanup_age_ms >= 0) ? String(tblStatus.ws_last_stop_cleanup_age_ms) + ' ms' : '-')
+						procFormatCleanupText(
+							tblStatus.ws_stop_cleanup_count,
+							tblStatus.ws_last_stop_cleanup_closed,
+							tblStatus.ws_last_stop_cleanup_remain,
+							tblStatus.ws_last_stop_cleanup_time,
+							tblStatus.ws_last_stop_cleanup_age_ms
+						)
 					);
 					procSetText(
 						'StatusXtpCleanup',
-						((tblStatus.xtp_stop_cleanup_count !== undefined) ? String(tblStatus.xtp_stop_cleanup_count) : '-') +
-						' / ' +
-						((tblStatus.xtp_last_stop_cleanup_closed !== undefined) ? String(tblStatus.xtp_last_stop_cleanup_closed) : '-') +
-						' / ' +
-						((tblStatus.xtp_last_stop_cleanup_remain !== undefined) ? String(tblStatus.xtp_last_stop_cleanup_remain) : '-') +
-						' / ' +
-						((tblStatus.xtp_last_stop_cleanup_age_ms !== undefined && tblStatus.xtp_last_stop_cleanup_age_ms >= 0) ? String(tblStatus.xtp_last_stop_cleanup_age_ms) + ' ms' : '-')
+						procFormatCleanupText(
+							tblStatus.xtp_stop_cleanup_count,
+							tblStatus.xtp_last_stop_cleanup_closed,
+							tblStatus.xtp_last_stop_cleanup_remain,
+							tblStatus.xtp_last_stop_cleanup_time,
+							tblStatus.xtp_last_stop_cleanup_age_ms
+						)
 					);
 					procSetText(
 						'StatusCustomCleanup',
-						((tblStatus.custom_stop_cleanup_count !== undefined) ? String(tblStatus.custom_stop_cleanup_count) : '-') +
-						' / ' +
-						((tblStatus.custom_last_stop_cleanup_closed !== undefined) ? String(tblStatus.custom_last_stop_cleanup_closed) : '-') +
-						' / ' +
-						((tblStatus.custom_last_stop_cleanup_remain !== undefined) ? String(tblStatus.custom_last_stop_cleanup_remain) : '-') +
-						' / ' +
-						((tblStatus.custom_last_stop_cleanup_age_ms !== undefined && tblStatus.custom_last_stop_cleanup_age_ms >= 0) ? String(tblStatus.custom_last_stop_cleanup_age_ms) + ' ms' : '-')
+						procFormatCleanupText(
+							tblStatus.custom_stop_cleanup_count,
+							tblStatus.custom_last_stop_cleanup_closed,
+							tblStatus.custom_last_stop_cleanup_remain,
+							tblStatus.custom_last_stop_cleanup_time,
+							tblStatus.custom_last_stop_cleanup_age_ms
+						)
 					);
-					procSetText('StatusHttpIdleClose', (tblStatus.http_idle_close_count !== undefined) ? String(tblStatus.http_idle_close_count) : '-');
+					procSetText(
+						'StatusHttpIdleClose',
+						procAppendLatestEvent(
+							(tblStatus.http_idle_close_count !== undefined) ? String(tblStatus.http_idle_close_count) : '-',
+							[
+								{time: tblStatus.http_last_idle_close_time, age_ms: tblStatus.http_last_idle_close_age_ms}
+							]
+						)
+					);
 					procSetText('StatusHttpIdleAge', (tblStatus.http_last_idle_close_age_ms !== undefined && tblStatus.http_last_idle_close_age_ms >= 0) ? String(tblStatus.http_last_idle_close_age_ms) + ' ms' : '-');
 					procSetText(
 						'StatusXtpConn',
@@ -1504,7 +2239,15 @@
 						' / ' +
 						((tblStatus.xtp_resp_count !== undefined) ? String(tblStatus.xtp_resp_count) : '-')
 					);
-					procSetText('StatusXtpInvalid', (tblStatus.xtp_invalid_count !== undefined) ? String(tblStatus.xtp_invalid_count) : '-');
+					procSetText(
+						'StatusXtpInvalid',
+						procAppendLatestEvent(
+							(tblStatus.xtp_invalid_count !== undefined) ? String(tblStatus.xtp_invalid_count) : '-',
+							[
+								{time: tblStatus.xtp_last_invalid_time, age_ms: tblStatus.xtp_last_invalid_age_ms}
+							]
+						)
+					);
 					procSetText(
 						'StatusXtpLast',
 						(tblStatus.xtp_last_msg_type ? tblStatus.xtp_last_msg_type : '-') +
@@ -1520,9 +2263,27 @@
 						' b=' +
 						((tblStatus.xtp_last_body_size !== undefined) ? String(tblStatus.xtp_last_body_size) : '-')
 					);
-					procSetText('StatusXtpInvalidReason', tblStatus.xtp_last_invalid_reason || '-');
+					procSetText(
+						'StatusXtpInvalidReason',
+						procAppendLatestEvent(
+							tblStatus.xtp_last_invalid_reason || '-',
+							[
+								{time: tblStatus.xtp_last_invalid_time, age_ms: tblStatus.xtp_last_invalid_age_ms}
+							]
+						)
+					);
 					procSetText('StatusXtpInvalidAge', (tblStatus.xtp_last_invalid_age_ms !== undefined && tblStatus.xtp_last_invalid_age_ms >= 0) ? String(tblStatus.xtp_last_invalid_age_ms) + ' ms' : '-');
-					procSetText('StatusXtpError', ((tblStatus.xtp_error_count !== undefined) ? String(tblStatus.xtp_error_count) : '-') + ' / ' + ((tblStatus.xtp_last_error_code !== undefined) ? String(tblStatus.xtp_last_error_code) : '-'));
+					procSetText(
+						'StatusXtpError',
+						procAppendLatestEvent(
+							((tblStatus.xtp_error_count !== undefined) ? String(tblStatus.xtp_error_count) : '-') +
+							' / ' +
+							procFormatNetResultCode(tblStatus.xtp_last_error_code),
+							[
+								{time: tblStatus.xtp_last_error_time, age_ms: tblStatus.xtp_last_error_age_ms}
+							]
+						)
+					);
 					procSetText('StatusXtpErrorAge', (tblStatus.xtp_last_error_age_ms !== undefined && tblStatus.xtp_last_error_age_ms >= 0) ? String(tblStatus.xtp_last_error_age_ms) + ' ms' : '-');
 					procSetText(
 						'StatusXtpLastBytes',
@@ -1547,9 +2308,14 @@
 					procSetText('StatusUdpLastBytes', (tblStatus.udp_last_bytes !== undefined) ? String(tblStatus.udp_last_bytes) : '-');
 					procSetText(
 						'StatusUdpError',
-						((tblStatus.udp_error_count !== undefined) ? String(tblStatus.udp_error_count) : '-') +
-						' / ' +
-						((tblStatus.udp_last_error_code !== undefined) ? String(tblStatus.udp_last_error_code) : '-')
+						procAppendLatestEvent(
+							((tblStatus.udp_error_count !== undefined) ? String(tblStatus.udp_error_count) : '-') +
+							' / ' +
+							procFormatNetResultCode(tblStatus.udp_last_error_code),
+							[
+								{time: tblStatus.udp_last_error_time, age_ms: tblStatus.udp_last_error_age_ms}
+							]
+						)
 					);
 					procSetText(
 						'StatusCustomConn',
@@ -1563,14 +2329,44 @@
 						' / ' +
 						((tblStatus.custom_send_count !== undefined) ? String(tblStatus.custom_send_count) : '-')
 					);
-					procSetText('StatusCustomInvalid', (tblStatus.custom_invalid_count !== undefined) ? String(tblStatus.custom_invalid_count) : '-');
-					procSetText('StatusCustomInvalidReason', tblStatus.custom_last_invalid_reason || '-');
+					procSetText(
+						'StatusCustomInvalid',
+						procAppendLatestEvent(
+							(tblStatus.custom_invalid_count !== undefined) ? String(tblStatus.custom_invalid_count) : '-',
+							[
+								{time: tblStatus.custom_last_invalid_time, age_ms: tblStatus.custom_last_invalid_age_ms}
+							]
+						)
+					);
+					procSetText(
+						'StatusCustomInvalidReason',
+						procAppendLatestEvent(
+							tblStatus.custom_last_invalid_reason || '-',
+							[
+								{time: tblStatus.custom_last_invalid_time, age_ms: tblStatus.custom_last_invalid_age_ms}
+							]
+						)
+					);
 					procSetText('StatusCustomInvalidAge', (tblStatus.custom_last_invalid_age_ms !== undefined && tblStatus.custom_last_invalid_age_ms >= 0) ? String(tblStatus.custom_last_invalid_age_ms) + ' ms' : '-');
 					procSetText(
 						'StatusCustomError',
-						((tblStatus.custom_error_count !== undefined) ? String(tblStatus.custom_error_count) : '-') +
-						' / ' +
-						((tblStatus.custom_last_error_code !== undefined) ? String(tblStatus.custom_last_error_code) : '-')
+						procAppendLatestEvent(
+							((tblStatus.custom_error_count !== undefined) ? String(tblStatus.custom_error_count) : '-') +
+							' / ' +
+							procFormatNetResultCode(tblStatus.custom_last_error_code),
+							[
+								{time: tblStatus.custom_last_error_time, age_ms: tblStatus.custom_last_error_age_ms}
+							]
+						)
+					);
+					procSetText(
+						'StatusCustomCloseReason',
+						procAppendLatestEvent(
+							procFormatNetResultCode(tblStatus.custom_last_close_reason),
+							[
+								{time: tblStatus.custom_last_close_time, age_ms: tblStatus.custom_last_close_age_ms}
+							]
+						)
 					);
 					procSetText(
 						'StatusCustomBytes',
@@ -1615,7 +2411,8 @@
 					}
 					procSetText(
 						'CheckConfigResult',
-						'result=' + String(tblCheck.result) +
+						'has_result=' + String(!!tblCheck.has_result) +
+						' | result=' + (tblCheck.has_result ? String(tblCheck.result) : '(none)') +
 						' | file=' + (tblCheck.file || '(none)') +
 						' | base=' + (tblCheck.base || '(none)') +
 						' | server_count=' + String(tblCheck.server_count) +
@@ -1638,6 +2435,11 @@
 					procSetText('StatusReloadTotal', 'error');
 					procSetText('StatusReloadSuccess', 'error');
 					procSetText('StatusReloadFailure', 'error');
+					procSetText('StatusBusData', 'error');
+					procSetText('StatusBusLimits', 'error');
+					procSetText('StatusBusLimitReject', 'error');
+					procSetText('StatusBusSweep', 'error');
+					procSetText('StatusBusCleanup', 'error');
 					procSetText('StatusCheckLast', 'error');
 					procSetText('StatusCheckAge', 'error');
 					procSetText('StatusCheckTotal', 'error');
@@ -1703,9 +2505,16 @@
 					procSetText('StatusIdleTimeout', 'error');
 					procSetText('StatusConnLimit', 'error');
 					procSetText('StatusHttpLimitClose', 'error');
+					procSetText('StatusHttpReqLimit', 'error');
+					procSetText('StatusHttpPolicyReject', 'error');
+					procSetText('StatusHttpManageReject', 'error');
+					procSetText('StatusHttpBusReject', 'error');
 					procSetText('StatusWsLimitClose', 'error');
+					procSetText('StatusWsMessageLimit', 'error');
 					procSetText('StatusXtpLimitClose', 'error');
+					procSetText('StatusXtpRecvLimit', 'error');
 					procSetText('StatusCustomLimitClose', 'error');
+					procSetText('StatusCustomRecvLimit', 'error');
 					procSetText('StatusHttpReject', 'error');
 					procSetText('StatusWsReject', 'error');
 					procSetText('StatusWsInvalid', 'error');
@@ -1742,6 +2551,7 @@
 					procSetText('StatusCustomInvalidReason', 'error');
 					procSetText('StatusCustomInvalidAge', 'error');
 					procSetText('StatusCustomError', 'error');
+					procSetText('StatusCustomCloseReason', 'error');
 					procSetText('StatusCustomBytes', 'error');
 					procSetText('StatusCustomLastBytes', 'error');
 					procSetText('StatusCustomAge', 'error');
@@ -1817,9 +2627,24 @@
 					return objResp.text();
 				})
 				.then(function(sText){
+					var tblData = {};
+					try {
+						tblData = JSON.parse(sText || '{}') || {};
+					} catch ( objErr ) {
+						tblData = {};
+					}
+					procRenderBusNamespaces(tblData);
 					procSetText('BusNamespaceRaw', sText || '');
 				})
 				.catch(function(objErr){
+					procSetText('BusNamespaceCount', 'error');
+					procSetText('BusNamespaceLimit', 'error');
+					procSetText('BusNamespacePressure', 'error');
+					procSetText('BusNamespaceWindow', 'error');
+					procSetHTML(
+						'BusNamespaceList',
+						'<div class="namespace-card"><div class="namespace-card-line">error</div></div>'
+					);
 					procSetText('BusNamespaceRaw', String(objErr));
 				});
 			};
@@ -1830,13 +2655,54 @@
 				.then(function(objResp){
 					return objResp.text();
 				})
+			.then(function(sResp){
+				procSetText('BusSendResult', sResp || '');
+				window.setTimeout(function(){
+					procRefreshPortal(FALSE);
+				}, 300);
+			})
+				.catch(function(objErr){
+					procSetText('BusSendResult', String(objErr));
+				});
+			};
+			var procSweepBus = function()
+			{
+				procSetText('BusSendResult', '正在执行 bus 过期清理...');
+				fetch('/__xs/bus/sweep?all=true')
+				.then(function(objResp){
+					return objResp.text();
+				})
 				.then(function(sResp){
 					procSetText('BusSendResult', sResp || '');
 					window.setTimeout(function(){
-						procLoadBus();
-						procLoadBusRegistry();
-						procLoadBusPayload();
-						procLoadBusNamespaces();
+						procRefreshPortal(FALSE);
+					}, 300);
+				})
+				.catch(function(objErr){
+					procSetText('BusSendResult', String(objErr));
+				});
+			};
+			var procUpdateBusNamespacePolicy = function()
+			{
+				var objReadonly = document.getElementById('BusReadonlyNamespacesInput');
+				var objDisabled = document.getElementById('BusDisabledNamespacesInput');
+				var objTTLRequired = document.getElementById('BusTTLRequiredNamespacesInput');
+				var objTagRequired = document.getElementById('BusTagRequiredNamespacesInput');
+				var sReadonly = objReadonly ? objReadonly.value : '';
+				var sDisabled = objDisabled ? objDisabled.value : '';
+				var sTTLRequired = objTTLRequired ? objTTLRequired.value : '';
+				var sTagRequired = objTagRequired ? objTagRequired.value : '';
+				var sURL = '/__xs/bus/limits?readonly_namespaces=' + encodeURIComponent(sReadonly || '') + '&disabled_namespaces=' + encodeURIComponent(sDisabled || '') + '&ttl_required_namespaces=' + encodeURIComponent(sTTLRequired || '') + '&tag_required_namespaces=' + encodeURIComponent(sTagRequired || '');
+
+				procSetText('BusSendResult', '正在更新 namespace policy...');
+				fetch(sURL)
+				.then(function(objResp){
+					return objResp.text();
+				})
+				.then(function(sResp){
+					procSetText('BusSendResult', sResp || '');
+					window.setTimeout(function(){
+						procRefreshPortal(FALSE);
 					}, 300);
 				})
 				.catch(function(objErr){
@@ -1940,7 +2806,12 @@
 						' | server=' + (tblData.server || '(none)') +
 						' | host=' + (tblData.host || '(none)') +
 						' | force=' + String(tblData.force) +
-						' | code=' + String(tblData.code);
+						' | code=' + String(tblData.code) +
+						' | reload_time=' + (tblData.reload_time || '(none)') +
+						' | reload_age_ms=' + String((tblData.reload_age_ms !== undefined) ? tblData.reload_age_ms : -1) +
+						' | total=' + String((tblData.reload_total_count !== undefined) ? tblData.reload_total_count : 0) +
+						' | success_count=' + String((tblData.reload_success_count !== undefined) ? tblData.reload_success_count : 0) +
+						' | failure_count=' + String((tblData.reload_failure_count !== undefined) ? tblData.reload_failure_count : 0);
 					procSetText('ReloadResult', sSummary);
 					procRefreshPortal(TRUE);
 				})
@@ -1996,7 +2867,9 @@
 				.then(function(sText){
 					procSetText('ReloadConfigResult', sText || '');
 					procSetText('ReloadConfigRaw', sText || '');
-					window.setTimeout(procLoadReloadStatus, 200);
+					window.setTimeout(function(){
+						procRefreshPortal(FALSE);
+					}, 200);
 				})
 				.catch(function(objErr){
 					procSetText('ReloadConfigResult', String(objErr));
@@ -2012,7 +2885,9 @@
 				.then(function(sText){
 					procSetText('ReloadConfigResult', sText || '');
 					procSetText('ReloadConfigRaw', sText || '');
-					window.setTimeout(procLoadReloadStatus, 200);
+					window.setTimeout(function(){
+						procRefreshPortal(FALSE);
+					}, 200);
 				})
 				.catch(function(objErr){
 					procSetText('ReloadConfigResult', String(objErr));
@@ -2064,6 +2939,9 @@
 					procSetText('StatusConfigCheck', (tblData.result !== undefined) ? String(tblData.result) : '-');
 					procSetText('CheckConfigResult', sSummary);
 					procSetText('CheckConfigRaw', sText || '');
+					window.setTimeout(function(){
+						procRefreshPortal(FALSE);
+					}, 200);
 				})
 				.catch(function(objErr){
 					procSetText('StatusConfigCheck', 'error');
@@ -2211,10 +3089,9 @@
 						}
 					} catch (objErr) {
 					}
-					window.setTimeout(procLoadBus, 300);
-					window.setTimeout(procLoadBusRegistry, 300);
-					window.setTimeout(procLoadBusPayload, 300);
-					window.setTimeout(procLoadBusNamespaces, 300);
+					window.setTimeout(function(){
+						procRefreshPortal(FALSE);
+					}, 300);
 				})
 				.catch(function(objErr){
 					procSetText('BusSendResult', String(objErr));
@@ -2256,9 +3133,9 @@
 						}
 					} catch (objErr) {
 					}
-					window.setTimeout(procLoadBusRegistry, 300);
-					window.setTimeout(procLoadBusPayload, 300);
-					window.setTimeout(procLoadBusNamespaces, 300);
+					window.setTimeout(function(){
+						procRefreshPortal(FALSE);
+					}, 300);
 				})
 				.catch(function(objErr){
 					procSetText('BusSendResult', String(objErr));
@@ -2313,9 +3190,9 @@
 						}
 					} catch ( objErr ) {
 					}
-					window.setTimeout(procLoadBusRegistry, 300);
-					window.setTimeout(procLoadBusPayload, 300);
-					window.setTimeout(procLoadBusNamespaces, 300);
+					window.setTimeout(function(){
+						procRefreshPortal(FALSE);
+					}, 300);
 				})
 				.catch(function(objErr){
 					procSetText('BusSendResult', String(objErr));
@@ -2434,8 +3311,9 @@
 				})
 				.then(function(sResp){
 					procSetText('BusSendResult', sResp || '');
-					window.setTimeout(procLoadBusRegistry, 300);
-					window.setTimeout(procLoadBusPayload, 300);
+					window.setTimeout(function(){
+						procRefreshPortal(FALSE);
+					}, 300);
 				})
 				.catch(function(objErr){
 					procSetText('BusSendResult', String(objErr));
@@ -2469,9 +3347,9 @@
 				})
 				.then(function(sResp){
 					procSetText('BusSendResult', sResp || '');
-					window.setTimeout(procLoadBusRegistry, 300);
-					window.setTimeout(procLoadBusPayload, 300);
-					window.setTimeout(procLoadBusNamespaces, 300);
+					window.setTimeout(function(){
+						procRefreshPortal(FALSE);
+					}, 300);
 				})
 				.catch(function(objErr){
 					procSetText('BusSendResult', String(objErr));
@@ -2508,9 +3386,9 @@
 				})
 				.then(function(sResp){
 					procSetText('BusSendResult', sResp || '');
-					window.setTimeout(procLoadBusRegistry, 300);
-					window.setTimeout(procLoadBusPayload, 300);
-					window.setTimeout(procLoadBusNamespaces, 300);
+					window.setTimeout(function(){
+						procRefreshPortal(FALSE);
+					}, 300);
 				})
 				.catch(function(objErr){
 					procSetText('BusSendResult', String(objErr));
@@ -2540,9 +3418,9 @@
 					.then(function(sResp){
 						procSetText('BusSendResult', sResp || '');
 						procSetBusDataID('');
-						window.setTimeout(procLoadBusRegistry, 300);
-						window.setTimeout(procLoadBusPayload, 300);
-						window.setTimeout(procLoadBusNamespaces, 300);
+						window.setTimeout(function(){
+							procRefreshPortal(FALSE);
+						}, 300);
 					})
 					.catch(function(objErr){
 						procSetText('BusSendResult', String(objErr));
@@ -2570,9 +3448,9 @@
 					})
 					.then(function(sResp){
 						procSetText('BusSendResult', sResp || '');
-						window.setTimeout(procLoadBusRegistry, 300);
-						window.setTimeout(procLoadBusPayload, 300);
-						window.setTimeout(procLoadBusNamespaces, 300);
+						window.setTimeout(function(){
+							procRefreshPortal(FALSE);
+						}, 300);
 					})
 					.catch(function(objErr){
 						procSetText('BusSendResult', String(objErr));
@@ -2600,9 +3478,9 @@
 				.then(function(sResp){
 					procSetText('BusSendResult', sResp || '');
 					procSetBusDataID('');
-					window.setTimeout(procLoadBusRegistry, 300);
-					window.setTimeout(procLoadBusPayload, 300);
-					window.setTimeout(procLoadBusNamespaces, 300);
+					window.setTimeout(function(){
+						procRefreshPortal(FALSE);
+					}, 300);
 				})
 				.catch(function(objErr){
 					procSetText('BusSendResult', String(objErr));
@@ -2630,8 +3508,9 @@
 				.then(function(sResp){
 					procSetText('BusSendResult', sResp || '');
 					procSetBusDataID('');
-					window.setTimeout(procLoadBusRegistry, 300);
-					window.setTimeout(procLoadBusPayload, 300);
+					window.setTimeout(function(){
+						procRefreshPortal(FALSE);
+					}, 300);
 				})
 				.catch(function(objErr){
 					procSetText('BusSendResult', String(objErr));
@@ -2783,7 +3662,9 @@
 			document.getElementById('ReloadConfigBtn').addEventListener('click', procDoReloadConfig);
 			document.getElementById('CheckConfigBtn').addEventListener('click', procDoCheckConfig);
 			document.getElementById('CheckConfigClearBtn').addEventListener('click', procClearCheckConfigStats);
-			document.getElementById('ReloadStatusBtn').addEventListener('click', procLoadReloadStatus);
+			document.getElementById('ReloadStatusBtn').addEventListener('click', function(){
+				procRefreshPortal(FALSE);
+			});
 			document.getElementById('ReloadClearBtn').addEventListener('click', procClearReloadStatus);
 			document.getElementById('ReloadResetBtn').addEventListener('click', procResetReloadStats);
 			document.getElementById('BusSendServerBtn').addEventListener('click', function(){
@@ -2795,6 +3676,7 @@
 			document.getElementById('BusSendBroadcastBtn').addEventListener('click', function(){
 				procDoBusSend('broadcast');
 			});
+			document.getElementById('BusSweepBtn').addEventListener('click', procSweepBus);
 			document.getElementById('BusRegisterBtn').addEventListener('click', procDoBusRegister);
 			document.getElementById('BusSetBtn').addEventListener('click', procDoBusSet);
 			document.getElementById('BusFindBtn').addEventListener('click', procDoBusFind);
@@ -2805,6 +3687,7 @@
 			document.getElementById('BusTouchBtn').addEventListener('click', procDoBusTouch);
 			document.getElementById('BusRemoveBtn').addEventListener('click', procDoBusRemove);
 			document.getElementById('BusRemoveAllBtn').addEventListener('click', procDoBusRemoveAll);
+			document.getElementById('BusPolicyBtn').addEventListener('click', procUpdateBusNamespacePolicy);
 			document.getElementById('BusResetStatsBtn').addEventListener('click', procResetBusStats);
 			procRefreshPortal(FALSE);
 		});

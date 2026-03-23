@@ -38,6 +38,19 @@ static volatile int64 g_iXsHttpIdleCloseCount = 0;
 static volatile int64 g_iXsHttpConnLimitCloseCount = 0;
 static volatile int64 g_iXsHttpStopCleanupCount = 0;
 static volatile int64 g_iXsHttpRejectCount = 0;
+static volatile int64 g_iXsHttpHeaderLimitRejectCount = 0;
+static volatile int64 g_iXsHttpBodyLimitRejectCount = 0;
+static volatile int64 g_iXsHttpPathLimitRejectCount = 0;
+static volatile int64 g_iXsHttpApiDisabledRejectCount = 0;
+static volatile int64 g_iXsHttpMethodRejectCount = 0;
+static volatile int64 g_iXsHttpHostNotFoundRejectCount = 0;
+static volatile int64 g_iXsHttpReloadBusyRejectCount = 0;
+static volatile int64 g_iXsHttpReloadFailedRejectCount = 0;
+static volatile int64 g_iXsHttpCheckConfigFailedRejectCount = 0;
+static volatile int64 g_iXsHttpBusBadRequestRejectCount = 0;
+static volatile int64 g_iXsHttpBusNotFoundRejectCount = 0;
+static volatile int64 g_iXsHttpBusLimitRejectCount = 0;
+static volatile int64 g_iXsHttpBusFailedRejectCount = 0;
 static volatile int64 g_iXsHttpMethodGetCount = 0;
 static volatile int64 g_iXsHttpMethodPostCount = 0;
 static volatile int64 g_iXsHttpMethodHeadCount = 0;
@@ -57,6 +70,19 @@ static xtime g_tXsHttpLastIdleCloseTime = 0;
 static xtime g_tXsHttpLastConnLimitCloseTime = 0;
 static xtime g_tXsHttpLastStopCleanupTime = 0;
 static xtime g_tXsHttpLastRejectTime = 0;
+static xtime g_tXsHttpLastHeaderLimitRejectTime = 0;
+static xtime g_tXsHttpLastBodyLimitRejectTime = 0;
+static xtime g_tXsHttpLastPathLimitRejectTime = 0;
+static xtime g_tXsHttpLastApiDisabledRejectTime = 0;
+static xtime g_tXsHttpLastMethodRejectTime = 0;
+static xtime g_tXsHttpLastHostNotFoundRejectTime = 0;
+static xtime g_tXsHttpLastReloadBusyRejectTime = 0;
+static xtime g_tXsHttpLastReloadFailedRejectTime = 0;
+static xtime g_tXsHttpLastCheckConfigFailedRejectTime = 0;
+static xtime g_tXsHttpLastBusBadRequestRejectTime = 0;
+static xtime g_tXsHttpLastBusNotFoundRejectTime = 0;
+static xtime g_tXsHttpLastBusLimitRejectTime = 0;
+static xtime g_tXsHttpLastBusFailedRejectTime = 0;
 static volatile int64 g_iXsHttpLastStopCleanupClosed = 0;
 static volatile int64 g_iXsHttpLastStopCleanupRemain = 0;
 static volatile int64 g_iXsHttpLastBodyLen = 0;
@@ -114,6 +140,7 @@ static volatile int64 g_iXsWsLastFrameType = 0;
 static volatile int64 g_iXsWsLastBytes = 0;
 static volatile int64 g_iXsWsIdleCloseCount = 0;
 static volatile int64 g_iXsWsConnLimitCloseCount = 0;
+static volatile int64 g_iXsWsMessageLimitCloseCount = 0;
 static volatile int64 g_iXsWsStopCleanupCount = 0;
 static volatile int64 g_iXsWsRejectCount = 0;
 static xtime g_tXsWsLastTime = 0;
@@ -122,6 +149,7 @@ static xtime g_tXsWsLastErrorTime = 0;
 static xtime g_tXsWsLastInvalidTime = 0;
 static xtime g_tXsWsLastIdleCloseTime = 0;
 static xtime g_tXsWsLastConnLimitCloseTime = 0;
+static xtime g_tXsWsLastMessageLimitCloseTime = 0;
 static xtime g_tXsWsLastStopCleanupTime = 0;
 static xtime g_tXsWsLastRejectTime = 0;
 static volatile int64 g_iXsWsLastStopCleanupClosed = 0;
@@ -148,6 +176,7 @@ static volatile int64 g_iXsXtpSendBytes = 0;
 static volatile int64 g_iXsXtpLastBytes = 0;
 static volatile int64 g_iXsXtpIdleCloseCount = 0;
 static volatile int64 g_iXsXtpConnLimitCloseCount = 0;
+static volatile int64 g_iXsXtpRecvLimitCloseCount = 0;
 static volatile int64 g_iXsXtpStopCleanupCount = 0;
 static volatile int64 g_iXsXtpRejectCount = 0;
 static volatile int64 g_iXsXtpLastMsgType = 0;
@@ -160,6 +189,7 @@ static xtime g_tXsXtpLastErrorTime = 0;
 static xtime g_tXsXtpLastInvalidTime = 0;
 static xtime g_tXsXtpLastIdleCloseTime = 0;
 static xtime g_tXsXtpLastConnLimitCloseTime = 0;
+static xtime g_tXsXtpLastRecvLimitCloseTime = 0;
 static xtime g_tXsXtpLastStopCleanupTime = 0;
 static xtime g_tXsXtpLastRejectTime = 0;
 static volatile int64 g_iXsXtpLastStopCleanupClosed = 0;
@@ -195,13 +225,16 @@ static volatile int64 g_iXsCustomSendBytes = 0;
 static volatile int64 g_iXsCustomLastBytes = 0;
 static volatile int64 g_iXsCustomIdleCloseCount = 0;
 static volatile int64 g_iXsCustomConnLimitCloseCount = 0;
+static volatile int64 g_iXsCustomRecvLimitCloseCount = 0;
 static volatile int64 g_iXsCustomStopCleanupCount = 0;
 static volatile int64 g_iXsCustomRejectCount = 0;
 static xtime g_tXsCustomLastTime = 0;
+static xtime g_tXsCustomLastCloseTime = 0;
 static xtime g_tXsCustomLastErrorTime = 0;
 static xtime g_tXsCustomLastInvalidTime = 0;
 static xtime g_tXsCustomLastIdleCloseTime = 0;
 static xtime g_tXsCustomLastConnLimitCloseTime = 0;
+static xtime g_tXsCustomLastRecvLimitCloseTime = 0;
 static xtime g_tXsCustomLastStopCleanupTime = 0;
 static xtime g_tXsCustomLastRejectTime = 0;
 static volatile int64 g_iXsCustomLastStopCleanupClosed = 0;
@@ -213,25 +246,53 @@ static char g_sXsCustomLastRejectReason[128] = {0};
 static volatile int64 g_iXsCheckConfigTotalCount = 0;
 static volatile int64 g_iXsCheckConfigSuccessCount = 0;
 static volatile int64 g_iXsCheckConfigFailureCount = 0;
+static volatile int64 g_iXsCheckConfigLastServerCount = 0;
 static xtime g_tXsCheckConfigLastTime = 0;
+static volatile long g_iXsCheckConfigStateLock = 0;
+static bool g_bXsCheckConfigHasResult = FALSE;
+static bool g_bXsCheckConfigLastResult = FALSE;
+static char g_sXsCheckConfigLastFile[1024] = {0};
+static char g_sXsCheckConfigLastBase[1024] = {0};
+static char g_sXsCheckConfigLastMessage[128] = {0};
+
+typedef struct {
+	bool HasResult;
+	bool LastResult;
+	xtime LastTime;
+	int64 iTotalCount;
+	int64 iSuccessCount;
+	int64 iFailureCount;
+	int64 iLastServerCount;
+	char sLastFile[1024];
+	char sLastBase[1024];
+	char sLastMessage[128];
+} XS_CheckConfigStatusSnapshot;
+
+typedef struct {
+	bool Busy;
+	bool Success;
+	bool HasResult;
+	xtime LastTime;
+	int64 iTotalCount;
+	int64 iSuccessCount;
+	int64 iFailureCount;
+	char sServerName[128];
+	char sHostName[128];
+	char sMessage[256];
+} XS_ReloadStatusSnapshot;
 
 static inline bool XS_RequestConfigReloadEx(const char* sServerName, const char* sHostName, bool bForce);
 static inline XS_HostConfig* XS_FindServerHostByName(XS_ServerConfig* objServer, const char* sHostName);
 static inline int XS_ReloadServerHostScript(XS_ServerConfig* objServer, XS_HostConfig* objHost, bool bForce);
 static inline int XS_ReloadServerHostScriptByName(XS_ServerConfig* objServer, const char* sHostName, bool bForce);
 static inline const char* XS_ReloadResultText(int iCode);
-static inline bool XS_ConfigReloadStatusBusy(void);
-static inline bool XS_ConfigReloadStatusHasResult(void);
-static inline bool XS_ConfigReloadStatusSuccess(void);
-static inline const char* XS_ConfigReloadStatusServer(void);
-static inline const char* XS_ConfigReloadStatusHost(void);
-static inline const char* XS_ConfigReloadStatusMessage(void);
-static inline xtime XS_ConfigReloadStatusTime(void);
-static inline int64 XS_ConfigReloadStatusTotalCount(void);
-static inline int64 XS_ConfigReloadStatusSuccessCount(void);
-static inline int64 XS_ConfigReloadStatusFailureCount(void);
 static inline void XS_ClearConfigReloadStatus(void);
 static inline void XS_ResetConfigReloadStats(void);
+static inline void XS_LockCheckConfigState(void);
+static inline void XS_UnlockCheckConfigState(void);
+static inline void XS_GetCheckConfigStatusSnapshot(XS_CheckConfigStatusSnapshot* pStatus);
+static inline void XS_GetReloadStatusSnapshot(XS_ReloadStatusSnapshot* pStatus);
+static inline void XS_RecordReloadStatusLite(const char* sServerName, const char* sHostName, bool bForce, int iCode);
 static inline const char* XS_WsLastFrameTypeName(void);
 static inline char* XS_WsLastTimeText(void);
 static inline int64 XS_WsLastAgeMS(void);
@@ -256,6 +317,95 @@ static inline int64 XS_WsLastErrorAgeMS(void);
 // vNext 运行时
 #include "src/core/runtime.h"
 #include "src/core/reload.h"
+
+static inline void XS_LockCheckConfigState(void)
+{
+	while ( __xrtAtomicCompareExchange32(&g_iXsCheckConfigStateLock, 1, 0) != 0 ) {
+	}
+}
+
+static inline void XS_UnlockCheckConfigState(void)
+{
+	(void)__xrtAtomicExchange32(&g_iXsCheckConfigStateLock, 0);
+}
+
+static inline void XS_GetCheckConfigStatusSnapshot(XS_CheckConfigStatusSnapshot* pStatus)
+{
+	if ( pStatus == NULL ) {
+		return;
+	}
+
+	XS_LockCheckConfigState();
+	memset(pStatus, 0, sizeof(XS_CheckConfigStatusSnapshot));
+	pStatus->HasResult = g_bXsCheckConfigHasResult;
+	pStatus->LastResult = g_bXsCheckConfigLastResult;
+	pStatus->LastTime = g_tXsCheckConfigLastTime;
+	pStatus->iTotalCount = XS_HttpMetricGet(&g_iXsCheckConfigTotalCount);
+	pStatus->iSuccessCount = XS_HttpMetricGet(&g_iXsCheckConfigSuccessCount);
+	pStatus->iFailureCount = XS_HttpMetricGet(&g_iXsCheckConfigFailureCount);
+	pStatus->iLastServerCount = g_iXsCheckConfigLastServerCount;
+	if ( g_sXsCheckConfigLastFile[0] ) {
+		strncpy(pStatus->sLastFile, g_sXsCheckConfigLastFile, sizeof(pStatus->sLastFile) - 1);
+	}
+	if ( g_sXsCheckConfigLastBase[0] ) {
+		strncpy(pStatus->sLastBase, g_sXsCheckConfigLastBase, sizeof(pStatus->sLastBase) - 1);
+	}
+	if ( g_sXsCheckConfigLastMessage[0] ) {
+		strncpy(pStatus->sLastMessage, g_sXsCheckConfigLastMessage, sizeof(pStatus->sLastMessage) - 1);
+	}
+	XS_UnlockCheckConfigState();
+}
+
+static inline void XS_GetReloadStatusSnapshot(XS_ReloadStatusSnapshot* pStatus)
+{
+	XS_ConfigReloadStatus tReloadStatus;
+
+	if ( pStatus == NULL ) {
+		return;
+	}
+
+	memset(pStatus, 0, sizeof(XS_ReloadStatusSnapshot));
+	memset(&tReloadStatus, 0, sizeof(tReloadStatus));
+	XS_GetConfigReloadStatusSnapshot(&tReloadStatus);
+
+	pStatus->Busy = tReloadStatus.Busy;
+	pStatus->Success = tReloadStatus.Success;
+	pStatus->HasResult = tReloadStatus.HasResult;
+	pStatus->LastTime = tReloadStatus.LastTime;
+	pStatus->iTotalCount = tReloadStatus.iTotalCount;
+	pStatus->iSuccessCount = tReloadStatus.iSuccessCount;
+	pStatus->iFailureCount = tReloadStatus.iFailureCount;
+	if ( tReloadStatus.sServerName[0] ) {
+		strncpy(pStatus->sServerName, tReloadStatus.sServerName, sizeof(pStatus->sServerName) - 1);
+	}
+	if ( tReloadStatus.sHostName[0] ) {
+		strncpy(pStatus->sHostName, tReloadStatus.sHostName, sizeof(pStatus->sHostName) - 1);
+	}
+	if ( tReloadStatus.sMessage[0] ) {
+		strncpy(pStatus->sMessage, tReloadStatus.sMessage, sizeof(pStatus->sMessage) - 1);
+	}
+}
+
+static inline void XS_RecordReloadStatusLite(const char* sServerName, const char* sHostName, bool bForce, int iCode)
+{
+	XS_ConfigReloadRequest tReq;
+	XS_ConfigReloadStatus tBusyStatus;
+	bool bPreserveBusy;
+
+	memset(&tReq, 0, sizeof(tReq));
+	memset(&tBusyStatus, 0, sizeof(tBusyStatus));
+	tReq.Force = bForce;
+	if ( sServerName && sServerName[0] ) {
+		strncpy(tReq.sServerName, sServerName, sizeof(tReq.sServerName) - 1);
+	}
+	if ( sHostName && sHostName[0] ) {
+		strncpy(tReq.sHostName, sHostName, sizeof(tReq.sHostName) - 1);
+	}
+
+	XS_GetConfigReloadStatusSnapshot(&tBusyStatus);
+	bPreserveBusy = tBusyStatus.Busy;
+	XS_SetConfigReloadStatusEx((iCode == 0), &tReq, XS_ReloadResultText(iCode), bPreserveBusy ? &tBusyStatus : NULL);
+}
 
 static inline void XS_UpdateRuntimeStats(XS_Runtime* objRuntime)
 {
@@ -377,6 +527,7 @@ static bool XS_PerformTargetHostReload(XS_ServerConfig* objServerOld, XS_ServerC
 	XS_HostConfig* objHostNewSrc;
 	XS_HostConfig objHostBackup;
 	bool bBackupValid;
+	bool bReloadLocked;
 	
 	if ( objServerOld == NULL || objServerNew == NULL || pReq == NULL ) {
 		XS_SetConfigReloadStatus(FALSE, pReq, "invalid target");
@@ -390,6 +541,18 @@ static bool XS_PerformTargetHostReload(XS_ServerConfig* objServerOld, XS_ServerC
 	memset(&objHostBackup, 0, sizeof(objHostBackup));
 	memcpy(&objHostBackup, objHostOld, sizeof(XS_HostConfig));
 	bBackupValid = TRUE;
+	bReloadLocked = FALSE;
+
+	if ( !XS_TryLockHostScriptReload(objHostOld) ) {
+		XS_LogError(
+			"config reload failed: target host reload busy: server=%s host=%s",
+			pReq->sServerName,
+			pReq->sHostName
+		);
+		XS_SetConfigReloadStatus(FALSE, pReq, "target host reload busy");
+		return FALSE;
+	}
+	bReloadLocked = TRUE;
 	
 	if ( objHostOld->procServiceStop ) {
 		objHostOld->procServiceStop(objServerOld, objHostOld);
@@ -398,6 +561,7 @@ static bool XS_PerformTargetHostReload(XS_ServerConfig* objServerOld, XS_ServerC
 	
 	memcpy(objHostOld, objHostNewSrc, sizeof(XS_HostConfig));
 	memset(objHostNewSrc, 0, sizeof(XS_HostConfig));
+	XS_ForceLockHostScriptReload(objHostOld);
 	
 	if ( !XS_LoadHostScript(objServerOld, objHostOld) ) {
 		XS_LogError("config reload failed: target host script load error");
@@ -405,6 +569,7 @@ static bool XS_PerformTargetHostReload(XS_ServerConfig* objServerOld, XS_ServerC
 		XS_FreeHostConfig(objHostOld);
 		memset(objHostOld, 0, sizeof(XS_HostConfig));
 		memcpy(objHostOld, &objHostBackup, sizeof(XS_HostConfig));
+		XS_ForceLockHostScriptReload(objHostOld);
 		memset(&objHostBackup, 0, sizeof(XS_HostConfig));
 		bBackupValid = FALSE;
 		if ( XS_LoadHostScript(objServerOld, objHostOld) ) {
@@ -426,6 +591,9 @@ static bool XS_PerformTargetHostReload(XS_ServerConfig* objServerOld, XS_ServerC
 				pReq->sHostName
 			);
 		}
+		if ( bReloadLocked ) {
+			XS_UnlockHostScriptReload(objHostOld);
+		}
 		return FALSE;
 	}
 	
@@ -446,6 +614,9 @@ static bool XS_PerformTargetHostReload(XS_ServerConfig* objServerOld, XS_ServerC
 		pReq->sHostName
 	);
 	XS_SetConfigReloadStatus(TRUE, pReq, "target host reload success");
+	if ( bReloadLocked ) {
+		XS_UnlockHostScriptReload(objHostOld);
+	}
 	return TRUE;
 }
 
@@ -686,7 +857,6 @@ int main(int argc, char** argv)
 	}
 	
 	XS_LogInfo("XServer vNext bootstrap");
-	XS_LogInfo("loading config : %s", sOptFile);
 	if ( g_sXsConfigFile && g_bXsConfigFileOwned ) {
 		xrtFree(g_sXsConfigFile);
 	}
@@ -695,6 +865,7 @@ int main(int argc, char** argv)
 	if ( !g_bXsConfigFileOwned ) {
 		g_sXsConfigFile = sOptFile;
 	}
+	XS_LogInfo("loading config : %s", g_sXsConfigFile ? g_sXsConfigFile : sOptFile);
 	
 	if ( !XS_BusInit() ) {
 		XS_LogError("bus init failed");
@@ -702,7 +873,7 @@ int main(int argc, char** argv)
 		goto ExitMain;
 	}
 	
-	if ( !XS_LoadConfig(&objCfg, sOptFile) ) {
+	if ( !XS_LoadConfig(&objCfg, g_sXsConfigFile ? g_sXsConfigFile : sOptFile) ) {
 		XS_LogError("config load failed");
 		iExitCode = 1;
 		goto ExitMain;
@@ -750,7 +921,7 @@ int main(int argc, char** argv)
 				tReloadReq.sHostName[0] ? tReloadReq.sHostName : "(all)",
 				tReloadReq.Force ? "true" : "false"
 			);
-			(void)XS_PerformConfigReload(&objCfg, &objRuntime, sOptFile, &tReloadReq);
+			(void)XS_PerformConfigReload(&objCfg, &objRuntime, g_sXsConfigFile ? g_sXsConfigFile : sOptFile, &tReloadReq);
 		}
 		XS_BusDispatchMessages(objRuntime.Servers);
 		XS_BusSweepExpiredData();

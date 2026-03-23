@@ -4,7 +4,8 @@
 static unsigned short procParsePort(const char* sAddr)
 {
 	const char* sPos;
-	long iPort;
+	const char* sPort;
+	unsigned long iPort;
 
 	if ( sAddr == NULL ) {
 		return 0;
@@ -15,11 +16,60 @@ static unsigned short procParsePort(const char* sAddr)
 		return 0;
 	}
 
-	iPort = strtol(sPos + 1, NULL, 10);
-	if ( iPort <= 0 || iPort > 65535 ) {
+	sPort = sPos + 1;
+	for ( ; *sPort; ++sPort ) {
+		if ( *sPort < '0' || *sPort > '9' ) {
+			return 0;
+		}
+	}
+
+	iPort = strtoul(sPos + 1, NULL, 10);
+	if ( iPort == 0 || iPort > 65535ul ) {
 		return 0;
 	}
 
+	return (unsigned short)iPort;
+}
+
+static unsigned short procParseRequestPort(XTP_MessageObject objMsg, int* piState)
+{
+	const char* sPort;
+	const char* sPortText;
+	unsigned long iPort;
+
+	if ( piState ) {
+		*piState = 0;
+	}
+	if ( objMsg == NULL ) {
+		return 0;
+	}
+
+	sPortText = xsXtpParamText(objMsg, "port", NULL);
+	if ( sPortText == NULL || sPortText[0] == '\0' ) {
+		return 0;
+	}
+
+	sPort = sPortText;
+	for ( ; *sPort; ++sPort ) {
+		if ( *sPort < '0' || *sPort > '9' ) {
+			if ( piState ) {
+				*piState = -1;
+			}
+			return 0;
+		}
+	}
+
+	iPort = strtoul(sPortText, NULL, 10);
+	if ( iPort == 0 || iPort > 65535ul ) {
+		if ( piState ) {
+			*piState = -1;
+		}
+		return 0;
+	}
+
+	if ( piState ) {
+		*piState = 1;
+	}
 	return (unsigned short)iPort;
 }
 
@@ -77,6 +127,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 	void* pClient;
 	int64_t iSeq;
 	int iDry;
+	int iPortState;
 	int iWrite;
 	uint64_t iMsgID;
 	unsigned iMsgType;
@@ -107,7 +158,8 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 	sInnerCmd = sInnerCmdDup;
 	snprintf(sInnerCmdText, sizeof(sInnerCmdText), "%s", sInnerCmd ? sInnerCmd : "");
 	iSeq = xsXtpParamInt(objMsg, "seq", -1);
-	iPort = (unsigned short)xsXtpParamInt(objMsg, "port", 0);
+	iPortState = 0;
+	iPort = procParseRequestPort(objMsg, &iPortState);
 	iDry = xsXtpParamBool(objMsg, "dry", 0);
 	sTag = sTagText;
 	sHost = sHostText;
@@ -126,12 +178,19 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 	if ( sHostDup ) xrtFree(sHostDup); \
 	if ( sInnerCmdDup ) xrtFree(sInnerCmdDup); \
 } while ( 0 )
+#define CHECK_XTP_PORT() do { \
+	if ( iPort == 0 ) { \
+		if ( iPortState < 0 ) { \
+			iWrite = xsXtpReplyErrorText(pStream, objMsg, 400, "xtp.error", "invalid port") != 0; \
+		} else { \
+			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0; \
+		} \
+		FREE_XTP_DUP(); \
+		return iWrite; \
+	} \
+} while ( 0 )
 	if ( xsXtpCmdIs(objMsg, "demo.call") ) {
-		if ( iPort == 0 ) {
-			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
-			FREE_XTP_DUP();
-			return iWrite;
-		}
+		CHECK_XTP_PORT();
 
 		pClient = xsXtpClientOpen(sHost, iPort, 1048576u, 3000u);
 		if ( pClient == NULL ) {
@@ -194,11 +253,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 	}
 
 	if ( xsXtpCmdIs(objMsg, "demo.callsimple") ) {
-		if ( iPort == 0 ) {
-			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
-			FREE_XTP_DUP();
-			return iWrite;
-		}
+		CHECK_XTP_PORT();
 
 		pClient = xsXtpClientOpen(sHost, iPort, 1048576u, 3000u);
 		if ( pClient == NULL ) {
@@ -252,11 +307,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 	}
 
 	if ( xsXtpCmdIs(objMsg, "demo.callonce") ) {
-		if ( iPort == 0 ) {
-			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
-			FREE_XTP_DUP();
-			return iWrite;
-		}
+		CHECK_XTP_PORT();
 
 		objResp = (XTP_MessageObject)xsXtpClientCallSimple(
 			sHost,
@@ -304,11 +355,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 	}
 
 	if ( xsXtpCmdIs(objMsg, "demo.calljson") ) {
-		if ( iPort == 0 ) {
-			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
-			FREE_XTP_DUP();
-			return iWrite;
-		}
+		CHECK_XTP_PORT();
 
 		snprintf(
 			sJson,
@@ -370,11 +417,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 	if ( xsXtpCmdIs(objMsg, "demo.callbody") ) {
 		char* sRespBody;
 
-		if ( iPort == 0 ) {
-			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
-			FREE_XTP_DUP();
-			return iWrite;
-		}
+		CHECK_XTP_PORT();
 
 		sRespBody = xsXtpClientCallSimpleBody(
 			sHost,
@@ -414,11 +457,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 	if ( xsXtpCmdIs(objMsg, "demo.callsummary") ) {
 		char* sSummary;
 
-		if ( iPort == 0 ) {
-			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
-			FREE_XTP_DUP();
-			return iWrite;
-		}
+		CHECK_XTP_PORT();
 
 		sSummary = xsXtpClientCallSimpleSummary(
 			sHost,
@@ -457,11 +496,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 	if ( xsXtpCmdIs(objMsg, "demo.callsummaryjson") ) {
 		char* sSummary;
 
-		if ( iPort == 0 ) {
-			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
-			FREE_XTP_DUP();
-			return iWrite;
-		}
+		CHECK_XTP_PORT();
 
 		sSummary = xsXtpClientCallSimpleSummaryJson(
 			sHost,
@@ -494,11 +529,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 	if ( xsXtpCmdIs(objMsg, "demo.callresult") ) {
 		char* sResult;
 
-		if ( iPort == 0 ) {
-			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
-			FREE_XTP_DUP();
-			return iWrite;
-		}
+		CHECK_XTP_PORT();
 
 		sResult = xsXtpClientCallSimpleResult(
 			sHost,
@@ -539,11 +570,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		int iRemoteStatus;
 		char* sRemoteCmd;
 
-		if ( iPort == 0 ) {
-			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
-			FREE_XTP_DUP();
-			return iWrite;
-		}
+		CHECK_XTP_PORT();
 
 		iRemoteStatus = xsXtpClientCallSimpleStatus(
 			sHost,
@@ -595,11 +622,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 	if ( xsXtpCmdIs(objMsg, "demo.callmeta") ) {
 		char* sMeta;
 
-		if ( iPort == 0 ) {
-			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
-			FREE_XTP_DUP();
-			return iWrite;
-		}
+		CHECK_XTP_PORT();
 
 		sMeta = xsXtpClientCallSimpleMeta(
 			sHost,
@@ -638,11 +661,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 	if ( xsXtpCmdIs(objMsg, "demo.callmetajson") ) {
 		char* sMeta;
 
-		if ( iPort == 0 ) {
-			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
-			FREE_XTP_DUP();
-			return iWrite;
-		}
+		CHECK_XTP_PORT();
 
 		sMeta = xsXtpClientCallSimpleMetaJson(
 			sHost,
@@ -676,11 +695,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		xvalue objVal;
 		char* sValueJson;
 
-		if ( iPort == 0 ) {
-			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
-			FREE_XTP_DUP();
-			return iWrite;
-		}
+		CHECK_XTP_PORT();
 
 		objVal = xsXtpClientCallSimpleValue(
 			sHost,
@@ -722,11 +737,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		xvalue objVal;
 		char* sValueJson;
 
-		if ( iPort == 0 ) {
-			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
-			FREE_XTP_DUP();
-			return iWrite;
-		}
+		CHECK_XTP_PORT();
 
 		objVal = xsXtpClientCallSimpleParamsValue(
 			sHost,
@@ -768,11 +779,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		xvalue objVal;
 		char* sValueJson;
 
-		if ( iPort == 0 ) {
-			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
-			FREE_XTP_DUP();
-			return iWrite;
-		}
+		CHECK_XTP_PORT();
 
 		objVal = xsXtpClientCallSimpleBodyValue(
 			sHost,
@@ -817,11 +824,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		xvalue objRespVal;
 		char* sValueJson;
 
-		if ( iPort == 0 ) {
-			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
-			FREE_XTP_DUP();
-			return iWrite;
-		}
+		CHECK_XTP_PORT();
 
 		objParam = xvoCreateTable();
 		objBody = xvoCreateTable();
@@ -899,11 +902,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		xvalue objRespVal;
 		char* sValueJson;
 
-		if ( iPort == 0 ) {
-			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
-			FREE_XTP_DUP();
-			return iWrite;
-		}
+		CHECK_XTP_PORT();
 
 		pReq = xsXtpRequestCreate(sInnerCmd && sInnerCmd[0] ? sInnerCmd : "demo.python");
 		objParam = xvoCreateTable();
@@ -976,11 +975,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		xvalue objBody;
 		char* sSummaryJson;
 
-		if ( iPort == 0 ) {
-			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
-			FREE_XTP_DUP();
-			return iWrite;
-		}
+		CHECK_XTP_PORT();
 
 		pReq = xsXtpRequestCreate(sInnerCmd && sInnerCmd[0] ? sInnerCmd : "demo.python");
 		objParam = xvoCreateTable();
@@ -1045,11 +1040,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		xvalue objParam;
 		char* sResultJson;
 
-		if ( iPort == 0 ) {
-			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
-			FREE_XTP_DUP();
-			return iWrite;
-		}
+		CHECK_XTP_PORT();
 
 		pReq = xsXtpRequestCreate(sInnerCmd && sInnerCmd[0] ? sInnerCmd : "demo.python");
 		objParam = xvoCreateTable();
@@ -1105,11 +1096,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		int iCallOK;
 		int iCallStatus;
 
-		if ( iPort == 0 ) {
-			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
-			FREE_XTP_DUP();
-			return iWrite;
-		}
+		CHECK_XTP_PORT();
 
 		pReq = xsXtpRequestCreate(sInnerCmd && sInnerCmd[0] ? sInnerCmd : "demo.python");
 		objParam = xvoCreateTable();
@@ -1189,11 +1176,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 	if ( xsXtpCmdIs(objMsg, "demo.callresultjson") ) {
 		char* sResultJson;
 
-		if ( iPort == 0 ) {
-			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
-			FREE_XTP_DUP();
-			return iWrite;
-		}
+		CHECK_XTP_PORT();
 
 		sResultJson = xsXtpClientCallSimpleResultJson(
 			sHost,
@@ -1226,11 +1209,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 	if ( xsXtpCmdIs(objMsg, "demo.callerrorjson") ) {
 		char* sErrorJson;
 
-		if ( iPort == 0 ) {
-			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
-			FREE_XTP_DUP();
-			return iWrite;
-		}
+		CHECK_XTP_PORT();
 
 		sErrorJson = xsXtpClientCallSimpleErrorJson(
 			sHost,
@@ -1264,11 +1243,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 	if ( xsXtpCmdIs(objMsg, "demo.callerror") ) {
 		char* sError;
 
-		if ( iPort == 0 ) {
-			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
-			FREE_XTP_DUP();
-			return iWrite;
-		}
+		CHECK_XTP_PORT();
 
 		objResp = (XTP_MessageObject)xsXtpClientCallSimple(
 			sHost,
@@ -1316,11 +1291,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 	if ( xsXtpCmdIs(objMsg, "demo.callerrorbody") ) {
 		char* sError;
 
-		if ( iPort == 0 ) {
-			iWrite = xsXtpReplyMissingParam(pStream, objMsg, "port") != 0;
-			FREE_XTP_DUP();
-			return iWrite;
-		}
+		CHECK_XTP_PORT();
 
 		sError = xsXtpClientCallSimpleError(
 			sHost,

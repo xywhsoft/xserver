@@ -1,0 +1,40 @@
+[
+	{
+		"enabled": true,
+		"class": "http",
+		"name": "test Manage HTTP Policy Server",
+		"desc": "vNext http manage policy reject test",
+		"param": "manage",
+		"backlog": 128,
+		"recv_limit": 1048576,
+		"ip": "0.0.0.0",
+		"port": 8085,
+		"debug": false,
+		"host_default": {
+			"enabled": true,
+			"name": "默认主机",
+			"debug": true,
+			"path": "wwwroot",
+			"devlang": "c",
+			"devfile": "script_vnext/main.c"
+		},
+		"hosts": [
+			{
+				"enabled": true,
+				"name": "禁用管理主机",
+				"host": "disabled.local",
+				"debug": false,
+				"path": "wwwroot",
+				"devlang": "c",
+				"devfile": "script_vnext/main.c"
+			},
+			{
+				"enabled": true,
+				"name": "static host",
+				"host": "static.local",
+				"debug": true,
+				"path": "wwwroot"
+			}
+		]
+	}
+]

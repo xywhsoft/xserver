@@ -2,6 +2,7 @@
 	{
 		"enabled": true,
 		"class": "http",
-		"addr": "http://0.0.0.0:80"
+		"ip": "0.0.0.0",
+		"port": 80
 	}
 ]

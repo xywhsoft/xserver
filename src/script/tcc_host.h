@@ -9,9 +9,52 @@ static void XS_CreateTCC_ErrorHandler(void* pOpaque, const char* sMsg)
 	fprintf(stderr, "[TCC] %s\n", sMsg);
 }
 
+static inline void XS_TCCAddIncludePathEx(TCCState* s, const char* sBasePath, const char* sRelPath)
+{
+	char* sPath;
+	
+	if ( s == NULL || sRelPath == NULL || sRelPath[0] == '\0' ) {
+		return;
+	}
+	
+	if ( sBasePath && sBasePath[0] != '\0' ) {
+		sPath = xrtPathJoin(2, (char*)sBasePath, (char*)sRelPath);
+		if ( sPath ) {
+			if ( xrtDirExists(sPath) ) {
+				tcc_add_include_path(s, sPath);
+			}
+			xrtFree(sPath);
+		}
+	}
+	
+	tcc_add_include_path(s, sRelPath);
+}
+
+static inline void XS_TCCAddLibraryPathEx(TCCState* s, const char* sBasePath, const char* sRelPath)
+{
+	char* sPath;
+	
+	if ( s == NULL || sRelPath == NULL || sRelPath[0] == '\0' ) {
+		return;
+	}
+	
+	if ( sBasePath && sBasePath[0] != '\0' ) {
+		sPath = xrtPathJoin(2, (char*)sBasePath, (char*)sRelPath);
+		if ( sPath ) {
+			if ( xrtDirExists(sPath) ) {
+				tcc_add_library_path(s, sPath);
+			}
+			xrtFree(sPath);
+		}
+	}
+	
+	tcc_add_library_path(s, sRelPath);
+}
+
 static inline TCCState* XS_CreateTCC(const char* sWorkPath, void (*procImportAll)(TCCState*))
 {
 	TCCState* s = tcc_new();
+	const char* sAppPath = xCore.AppPath;
 	
 	if ( s == NULL ) {
 		return NULL;
@@ -20,10 +63,10 @@ static inline TCCState* XS_CreateTCC(const char* sWorkPath, void (*procImportAll
 	tcc_set_error_func(s, stderr, XS_CreateTCC_ErrorHandler);
 	
 	#if defined(_WIN32) || defined(_WIN64)
-		tcc_add_include_path(s, "tcc/include_win/winapi");
-		tcc_add_include_path(s, "tcc/include_win");
+		XS_TCCAddIncludePathEx(s, sAppPath, "tcc/include_win/winapi");
+		XS_TCCAddIncludePathEx(s, sAppPath, "tcc/include_win");
 	#else
-		tcc_add_include_path(s, "tcc/include_linux");
+		XS_TCCAddIncludePathEx(s, sAppPath, "tcc/include_linux");
 		tcc_add_include_path(s, "/usr/include");
 		tcc_add_include_path(s, "/usr/include/i386-linux-gnu");
 		tcc_add_include_path(s, "/usr/include/i386-linux-gnu/sys");
@@ -34,9 +77,9 @@ static inline TCCState* XS_CreateTCC(const char* sWorkPath, void (*procImportAll
 		tcc_add_library_path(s, "/usr/lib/x86_64-linux-gnu");
 	#endif
 	
-	tcc_add_include_path(s, "tcc/inc_xs");
-	tcc_add_include_path(s, "tcc/include");
-	tcc_add_library_path(s, "tcc/lib");
+	XS_TCCAddIncludePathEx(s, sAppPath, "tcc/inc_xs");
+	XS_TCCAddIncludePathEx(s, sAppPath, "tcc/include");
+	XS_TCCAddLibraryPathEx(s, sAppPath, "tcc/lib");
 	
 	if ( sWorkPath && sWorkPath[0] != '\0' ) {
 		tcc_add_include_path(s, sWorkPath);

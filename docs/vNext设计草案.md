@@ -260,6 +260,7 @@ TCC 仍然作为全功能 C 语言脚本宿主，不做权限限制。
 
 - `xs_vnext.h` 提供稳定宿主便利函数
 - `xs_vnext_full.h` 额外引入 `xrt / libtcc / sqlite3` 的宿主可用头环境，用于旧脚本迁移期
+- TCC 宿主当前会优先按 `xs/xs.exe` 所在目录解析 `release/tcc` 运行时资源，因此使用相对 `devfile` 的配置不再依赖当前工作目录；从项目根目录或 `release` 目录启动都应能稳定加载脚本
 
 当前 `xtp` 脚本宿主已经提供第一版同步客户端请求/应答能力：
 
@@ -461,6 +462,8 @@ TCC 仍然作为全功能 C 语言脚本宿主，不做权限限制。
 - `xsDataRelease`
 - `xsDataRemove`
 
+脚本侧 `xsDataRetain / xsDataRelease` 现也会受 `readonly_namespaces / disabled_namespaces` 约束；命中策略时应结合 `xsBusLastErrorCode / xsBusLastError` 读取失败原因。
+
 其中第一阶段建议支持：
 
 - `namespace`
@@ -566,21 +569,48 @@ TCC 仍然作为全功能 C 语言脚本宿主，不做权限限制。
 - `__xs/health_json` 已提供宿主 + reload + bus 的轻量健康摘要，适合监控与探测
 - `__xs/dashboard_json` 已提供 status / health / reload / bus 的结构化总览，便于首页与外部工具减少多次请求
 - `http` 当前也支持 `idle_timeout`，超时空闲连接会被宿主主动关闭；`__xs/http_metrics` / `__xs/http_metrics_json` / `__xs/http_metrics_clear` 已提供 HTTP 请求计数、响应分布、空闲关闭计数/时间与清零入口，便于压测窗口、故障复盘与运维观察
-- `ws/wss` 当前也支持 `idle_timeout`，超时空闲连接会被宿主主动关闭；`__xs/ws_metrics` / `__xs/ws_metrics_json` / `__xs/ws_metrics_clear` 已提供 WebSocket 连接、消息、ping/pong、错误计数、空闲关闭计数/时间、最近一次帧类型/字节数/文本摘要/时间上下文、最近一次关闭原因与时间、最近一次错误现场与清零入口，便于 WebSocket 压测窗口与故障复盘
-- `xtp/xtps` 当前已支持 `idle_timeout`，超时空闲连接会被宿主主动关闭；`__xs/xtp_metrics` / `__xs/xtp_metrics_json` / `__xs/xtp_metrics_clear` 已提供 XTP 连接、坏包计数、消息类型分布、最近一包对端地址、长度与上下文、最近一次坏包原因/时间、最近一次系统错误现场、空闲关闭计数/时间与收发字节统计及清零入口，便于 XTP/XTPS 压测窗口与故障复盘
+- `ws/wss` 当前也支持 `idle_timeout`，超时空闲连接会被宿主主动关闭；`__xs/ws_metrics` / `__xs/ws_metrics_json` / `__xs/ws_metrics_clear` 已提供 WebSocket 连接、消息、ping/pong、错误计数、空闲/连接上限/消息上限关闭计数与时间、最近一次帧类型/字节数/文本摘要/时间上下文、最近一次关闭原因与时间、最近一次错误现场与清零入口，便于 WebSocket 压测窗口与故障复盘
+- `xtp/xtps` 当前已支持 `idle_timeout`，超时空闲连接会被宿主主动关闭；`__xs/xtp_metrics` / `__xs/xtp_metrics_json` / `__xs/xtp_metrics_clear` 已提供 XTP 连接、坏包计数、消息类型分布、最近一包对端地址、长度与上下文、最近一次坏包原因/时间、最近一次系统错误现场、空闲/连接上限/收包上限关闭计数与时间、收发字节统计及清零入口，便于 XTP/XTPS 压测窗口与故障复盘
 - `__xs/udp_metrics` / `__xs/udp_metrics_json` / `__xs/udp_metrics_clear` 已提供 UDP 收发包数、字节数、最近一包长度、最近一包上下文与最近一次错误现场及清零入口，便于 UDP 压测窗口与故障复盘
-- `custom/tcp` 当前也支持 `idle_timeout`，超时空闲连接会被宿主主动关闭；`__xs/custom_metrics` / `__xs/custom_metrics_json` / `__xs/custom_metrics_clear` 已提供 custom/tcp 连接、收发、错误、坏包计数、最近一次对端地址、最近一次无效输入原因与时间、最近一次断开原因、最近一次系统错误、最近一包长度、空闲关闭计数/时间及最近一次收包上下文与清零入口，便于 TCP 压测窗口与故障复盘
+- `custom/tcp` 当前也支持 `idle_timeout`，超时空闲连接会被宿主主动关闭；`__xs/custom_metrics` / `__xs/custom_metrics_json` / `__xs/custom_metrics_clear` 已提供 custom/tcp 连接、收发、错误、坏包计数、最近一次对端地址、最近一次无效输入原因与时间、最近一次断开原因、最近一次系统错误、最近一包长度、空闲/连接上限/收包上限关闭计数与时间及最近一次收包上下文与清零入口，便于 TCP 压测窗口与故障复盘
 - `__xs/dashboard` 文本版当前也会直接输出 `ws / xtp / udp / custom` 的关键运行态字段，便于终端排障时不切 JSON 也能看到协议侧连接、收发、错误与最近一包上下文
-- `__xs/status_json`、`__xs/health_json`、`__xs/dashboard` / `__xs/dashboard_json` 当前额外输出 `bind_ip / bind_port / tls / bind_ip_tls / bind_port_tls / addr_tls / ws_protocol / ws_message_limit / ws_conn_current / ws_conn_peak / ws_open_count / ws_close_count / ws_text_count / ws_binary_count / ws_ping_count / ws_pong_count / ws_error_count / ws_last_error_code / ws_last_close_reason / ws_last_frame_type / ws_last_remote / ws_last_bytes / ws_last_text / ws_last_time / ws_last_age_ms / ws_last_error_time / ws_last_error_age_ms / xtp_conn_current / xtp_conn_peak / xtp_open_count / xtp_close_count / xtp_error_count / xtp_invalid_count / xtp_msg_count / xtp_req_count / xtp_resp_count / xtp_push_count / xtp_event_count / xtp_send_count / xtp_recv_bytes / xtp_send_bytes / xtp_last_msg_type / xtp_last_status / xtp_last_msg_id / xtp_last_flags / xtp_last_param_count / xtp_last_body_size / xtp_last_remote / xtp_last_cmd / xtp_last_time / xtp_last_age_ms / xtp_last_invalid_reason / xtp_last_invalid_time / xtp_last_invalid_age_ms / xtp_last_error_code / xtp_last_error_time / xtp_last_error_age_ms / custom_conn_current / custom_conn_peak / custom_open_count / custom_close_count / custom_error_count / custom_invalid_count / custom_last_invalid_reason / custom_last_invalid_time / custom_last_invalid_age_ms / custom_last_close_reason / custom_last_error_code / custom_last_error_time / custom_last_error_age_ms / custom_recv_count / custom_send_count / custom_recv_bytes / custom_send_bytes / custom_last_remote / custom_last_text / custom_last_time / custom_last_age_ms / tls_cert_file / tls_key_file / tls_ca_file / current_dir / app_file / app_mtime / app_size / app_path / build / compiler / platform / arch / mem_debug / pid / start_time / uptime_ms / engine_workers / runtime_server_count / manage_api / config_name / config_mtime / config_size / http_req_count / http_2xx_count / http_3xx_count / http_4xx_count / http_5xx_count / http_conn_current / http_conn_peak / http_get_count / http_post_count / http_head_count / http_other_count / http_time_total_ms / http_time_max_ms / http_time_avg_ms / http_last_method / http_last_status / http_last_path / http_last_target / http_last_version / http_last_remote / http_last_time / http_last_age_ms / http_last_app_method / http_last_app_status / http_last_app_path / http_last_app_target / http_last_app_version / http_last_app_remote / http_last_app_time / http_last_app_age_ms`，便于定位实际监听地址、TLS 监听、WebSocket 子协议、WebSocket 消息上限、WebSocket 连接与消息计数、最近一次 WebSocket 帧上下文、最近一次 WebSocket 对端地址、最近一次 WebSocket 关闭原因、最近一次 WebSocket 错误现场、XTP 最近一包的 flags、参数数量、body 大小、对端地址与坏包/系统错误现场、TCP 最近一次对端地址、无效输入与传输错误现场、TLS 证书路径、当前工作目录、程序文件与配置文件更新时间和大小、运行进程、目录、构建变体、编译器、目标平台架构、内存调试状态、持续运行时间、运行中的服务数量、工作线程规模、HTTP 请求规模、方法分布、当前连接、峰值连接、最近一次任意请求，以及最近一次非 `__xs/*` 业务请求的方法、路径、协议版本、对端地址、状态与处理耗时，以及管理面启用状态
+- `__xs/status_json`、`__xs/health_json`、`__xs/dashboard` / `__xs/dashboard_json` 当前额外输出 `bind_ip / bind_port / tls / bind_ip_tls / bind_port_tls / addr_tls / ws_protocol / ws_message_limit / ws_conn_current / ws_conn_peak / ws_open_count / ws_close_count / ws_text_count / ws_binary_count / ws_ping_count / ws_pong_count / ws_error_count / ws_invalid_count / ws_idle_close_count / ws_conn_limit_close_count / ws_message_limit_close_count / ws_last_error_code / ws_last_close_reason / ws_last_frame_type / ws_last_remote / ws_last_bytes / ws_last_text / ws_last_time / ws_last_age_ms / ws_last_error_time / ws_last_error_age_ms / xtp_conn_current / xtp_conn_peak / xtp_open_count / xtp_close_count / xtp_error_count / xtp_invalid_count / xtp_msg_count / xtp_req_count / xtp_resp_count / xtp_push_count / xtp_event_count / xtp_send_count / xtp_recv_bytes / xtp_send_bytes / xtp_last_msg_type / xtp_last_status / xtp_last_msg_id / xtp_last_flags / xtp_last_param_count / xtp_last_body_size / xtp_last_remote / xtp_last_cmd / xtp_last_time / xtp_last_age_ms / xtp_last_invalid_reason / xtp_last_invalid_time / xtp_last_invalid_age_ms / xtp_last_error_code / xtp_last_error_time / xtp_last_error_age_ms / xtp_idle_close_count / xtp_conn_limit_close_count / xtp_recv_limit_close_count / custom_conn_current / custom_conn_peak / custom_open_count / custom_close_count / custom_error_count / custom_invalid_count / custom_last_invalid_reason / custom_last_invalid_time / custom_last_invalid_age_ms / custom_last_close_reason / custom_last_error_code / custom_last_error_time / custom_last_error_age_ms / custom_recv_count / custom_send_count / custom_recv_bytes / custom_send_bytes / custom_last_remote / custom_last_text / custom_last_time / custom_last_age_ms / custom_idle_close_count / custom_conn_limit_close_count / custom_recv_limit_close_count / tls_cert_file / tls_key_file / tls_ca_file / current_dir / app_file / app_mtime / app_size / app_path / build / compiler / platform / arch / mem_debug / pid / start_time / uptime_ms / engine_workers / runtime_server_count / manage_api / config_name / config_mtime / config_size / http_req_count / http_2xx_count / http_3xx_count / http_4xx_count / http_5xx_count / http_conn_current / http_conn_peak / http_get_count / http_post_count / http_head_count / http_other_count / http_time_total_ms / http_time_max_ms / http_time_avg_ms / http_last_method / http_last_status / http_last_path / http_last_target / http_last_version / http_last_remote / http_last_time / http_last_age_ms / http_last_app_method / http_last_app_status / http_last_app_path / http_last_app_target / http_last_app_version / http_last_app_remote / http_last_app_time / http_last_app_age_ms`，便于定位实际监听地址、TLS 监听、WebSocket 子协议、WebSocket 消息上限、WebSocket 连接与消息计数、最近一次 WebSocket 帧上下文、最近一次 WebSocket 对端地址、最近一次 WebSocket 关闭原因、最近一次 WebSocket 错误现场，以及空闲/连接上限/消息上限关闭计数；XTP 最近一包的 flags、参数数量、body 大小、对端地址与坏包/系统错误现场，以及空闲/连接上限/收包上限关闭计数；TCP 最近一次对端地址、无效输入与传输错误现场，以及空闲/连接上限/收包上限关闭计数；TLS 证书路径、当前工作目录、程序文件与配置文件更新时间和大小、运行进程、目录、构建变体、编译器、目标平台架构、内存调试状态、持续运行时间、运行中的服务数量、工作线程规模、HTTP 请求规模、方法分布、当前连接、峰值连接、最近一次任意请求，以及最近一次非 `__xs/*` 业务请求的方法、路径、协议版本、对端地址、状态与处理耗时，以及管理面启用状态
 - `__xs/reload_status_json`、`__xs/health_json`、`__xs/dashboard_json` 当前额外输出 `reload_total_count / reload_success_count / reload_failure_count`，用于区分最近一次结果与累计重载统计
-- `__xs/reload_reset` 已提供配置热加载累计统计清零入口；与 `__xs/reload_clear` 的“只清最近一次结果”语义分开，便于窗口化观察 reload 统计
+- `__xs/reload_reset` 已提供配置热加载累计统计清零入口；与 `__xs/reload_clear` 的“只清最近一次结果”语义分开，便于窗口化观察 reload 统计；新一轮 `reload_config` 排队当前也不会再把这组累计计数提前清零
+- 同一 `server/host` 上的并发 `__xs/reload` / `__xs/reload_json`，以及定向到同一 Host 的 `__xs/reload_config` / `__xs/reload_config_json` 热重载，当前也已共用宿主级互斥门闩；直接重入请求会稳定返回 `409 + reload busy`，而异步目标 Host reload 会计入 reload 失败统计并在日志里记录 `target host reload busy`，避免 Host 脚本状态被并发替换
+- `__xs/reload_config` / `__xs/reload_config_json` 的排队门闩当前也已经改成原子状态流转；并发请求命中同一个 reload 窗口时，后续请求会稳定返回 `busy`，不会再覆盖已经挂起的 target server / host
+- `__xs/reload_config` / `__xs/reload_config_json` 在传入 `host=<主机名>` 且目标 `server` 就是当前服务时，当前也会先做同步 Host 存在性校验；像 `GET /__xs/reload_config_json?host=<missing>` 这类明显无效目标会直接返回 `404 + reload host not found`，不再先排队再在 `reload_status` 里迟到失败
+- `__xs/reload_clear` / `__xs/reload_reset` 当前在 reload 仍处于 `busy` 时，也只会清结果或清累计统计，不会把正在进行的 reload 伪装成空闲；`busy` 与当前 target server / host 会继续保留到本轮 reload 完成
+- `__xs/reload` / `__xs/reload_json` / `__xs/reload_config` / `__xs/reload_config_json` 的 `force` 参数当前也已切到严格布尔校验；像 `force=maybe` 这类非法值会直接返回 `400 invalid force`，不再静默按 `false` 回退
+- reload 状态读写当前也已统一走同一份受保护快照；`__xs/reload_status` / `__xs/reload_status_json`、`__xs/health` / `__xs/health_json`、`__xs/dashboard` / `__xs/dashboard_json` 在并发 `reload_json / reload_clear / reload_reset` 压力下，也不会再在单次响应里混出半新半旧的 `busy / has_result / server / host / message / reload_*count` 组合
+- 当前 `__xs/reload` / `__xs/reload_json`、`__xs/reload_config` / `__xs/reload_config_json`、`__xs/reload_status` / `__xs/reload_status_json`、`__xs/check_config` / `__xs/check_config_json`、`__xs/status` / `__xs/status_json`、`__xs/health` / `__xs/health_json`、`__xs/dashboard` / `__xs/dashboard_json` 以及 `__xs/http_metrics` / `__xs/ws_metrics` / `__xs/xtp_metrics` / `__xs/udp_metrics` / `__xs/custom_metrics` 与各自 `_json` 版本，当前都已经按同一套字段口径收平；其中 `*_clear` / `reload_clear` / `reload_reset` / `check_config_clear` 的文本响应也已对齐对应主接口的键集，便于直接做脚本化 diff、回归归档与窗口化运维观察
 - `__xs/check_config_json`、`__xs/dashboard_json` 当前额外输出 `check_total_count / check_success_count / check_failure_count / check_last_time / check_last_age_ms`，用于观察在线配置校验的累计调用、最近一次校验时间以及距离上次校验过去多久
 - `__xs/health` 文本接口当前也会输出 `reload_time / reload_age_ms / check_total_count / check_success_count / check_failure_count / check_last_time / check_last_age_ms / bus_queue_count / bus_data_count / bus_total_queued / bus_total_delivered / bus_total_dropped / bus_last_queue_time / bus_last_queue_time_text / bus_last_dispatch_time / bus_last_dispatch_time_text`，便于纯文本探针直接观察热加载、配置校验与总线运行态
 - `__xs/health_json` 当前也已补齐 `check_total_count / check_success_count / check_failure_count / check_last_time / check_last_age_ms / bus_total_queued / bus_total_delivered / bus_total_dropped / bus_last_queue_time / bus_last_queue_time_text / bus_last_dispatch_time / bus_last_dispatch_time_text / http_last_method / http_last_status / http_last_path / http_last_target / http_last_time / http_last_age_ms`
 - 首页状态卡当前已直接展示 `Reload Last / Reload Age / Reload Total / Reload Success / Reload Failure / Check Last / Check Age / Check Total / Check Success / Check Failure / HTTP Last / HTTP Last Age / HTTP Last Path / Bus Queue Time / Bus Dispatch Time`
 - `__xs/check_config_clear` 已提供在线配置校验统计清零入口，便于按时间窗口重新观察配置校验调用情况
-- `__xs/bus/status` / `__xs/bus/registry` / `__xs/bus/namespaces` / `__xs/bus/find` / `__xs/bus/exists` / `__xs/bus/get` / `__xs/bus/values` / `__xs/bus/retain` / `__xs/bus/release` / `__xs/bus/touch` / `__xs/bus/register` / `__xs/bus/set` / `__xs/bus/send` / `__xs/bus/remove` / `__xs/bus/reset` 已作为宿主层总线管理接口落地，且首页已支持显式 `data_id` 管理，也支持仅通过 `namespace/tag` 读取、续期、`retain/release`、更新与删除共享数据
-- bus 管理面已提供累计统计：`total_queued / total_delivered / total_dropped / last_queue_time / last_dispatch_time / last_queue_time_text / last_dispatch_time_text`，其中 `__xs/bus/reset` 只清空统计，不清空共享数据表
+- `__xs/bus/status` / `__xs/bus/registry` / `__xs/bus/namespaces` / `__xs/bus/find` / `__xs/bus/exists` / `__xs/bus/get` / `__xs/bus/values` / `__xs/bus/retain` / `__xs/bus/release` / `__xs/bus/touch` / `__xs/bus/register` / `__xs/bus/set` / `__xs/bus/send` / `__xs/bus/remove` / `__xs/bus/sweep` / `__xs/bus/reset` 已作为宿主层总线管理接口落地，且首页已支持显式 `data_id` 管理，也支持仅通过 `namespace/tag` 读取、续期、`retain/release`、更新与删除共享数据
+- `__xs/bus/*` 管理接口在传入非法或保留 namespace 时，现已统一复用同一条 `400 bad request` 响应链；`register/send` 也已与 `find/get/set/remove` 等接口保持一致，都会直接返回 `{"result":false,"message":"invalid namespace",...}`
+- `__xs/bus/send` 现只接受 `target=server|host|broadcast`；传入其他值时会直接返回 `400` + `{"result":false,"message":"invalid target",...}`，不再静默回退成默认 `server` 投递
+- `__xs/bus/exists / get / retain / release / touch / set / remove / send(data_id)` 在传入非法 `id/data_id` 时，现也统一返回 `400` + `{"result":false,"message":"invalid data id","data_id":0}`，不再把非数字值静默当成 `0`
+- `__xs/bus/touch / register / set / send(ttl)` 在传入非法 `ttl` 时，现也统一返回 `400` + `{"result":false,"message":"invalid ttl","ttl":0}`；其中 `touch` 的数值约束不变，传入 `ttl=0` 这类非正整数时仍会返回 `ttl must be greater than 0`
+- `__xs/bus/*` 这组本身返回 JSON 的管理接口，在 `api disabled / build failed / stringify failed` 这类直接错误分支里，现也继续保持 `application/json` 口径；例如命中 `disabled.local` 这类禁用管理 host 时，`bus/status / bus/namespaces / bus/send` 会直接返回结构化 `403 JSON`，不再回退成 `text/plain`
+- `__xs/bus/sweep?all=true&max_pass=<count>` 与 `__xs/bus/limits` 现也切到严格十进制参数校验：`abc` 这类非法文本会统一返回 `400` + `{"result":false,"message":"invalid <field>",...}`，不再静默折叠成 `0`；而 `max_pass<=0`、`data_limit<0` 这类范围约束与 namespace rule 校验当前也继续保留 `max_pass must be > 0`、`data_limit must be >= 0`、`namespace must not contain empty segment` 这类原 message 语义，但外层响应现已统一为 `application/json`
+- `__xs/bus/remove?all=<bool>`、`__xs/bus/sweep?all=<bool>&drain=<bool>`、`__xs/bus/send?persist=<bool>` 这组布尔参数当前也已切到严格校验；像 `all=maybe`、`drain=maybe`、`persist=maybe` 这类非法值会直接返回 `400` + `{"result":false,"message":"invalid <field>"}`，不再静默按 `false` 处理
+- bus 管理面已提供累计统计：`total_queued / total_delivered / total_dropped / last_queue_time / last_dispatch_time / last_queue_time_text / last_dispatch_time_text`，其中 `__xs/bus/reset` 只清空统计，不清空共享数据表，且会直接返回 reset 后的 `bus/status` 同口径 JSON 快照，但不会因为这次返回而额外触发一次 host 侧 sweep
+- `__xs/bus/sweep` 可手动触发一次过期共享数据清理，并直接返回当前 `data_limit / queue_limit / sweep / cleanup` 摘要，方便压测、巡检与故障排查时立即验证清理效果
+- `__xs/bus/remove?all=true` 已支持直接批量删除当前 registry 中的共享数据；如同时提供 `namespace/tag`，则只删除匹配条件的数据，并会持续删除直到当前匹配集合清空，而不是停在单批 `256` 条
+- `__xs/bus/sweep?all=true` 已支持在单次管理调用中循环清理过期积压，`max_pass` 可限制最多 sweep 轮数，适合一次性处理超过单批 `256` 条的过期共享数据
+- `__xs/bus/limits` 现已支持 `namespace_limit / namespace_data_limit / sweep_interval_ms`，可对活跃 namespace 数量、单 namespace 共享数据量以及宿主层自动 sweep 节奏做在线治理，并统一复用现有 `409 bus_limit` 观测链路
+- `__xs/bus/limits` 已继续补到 namespace 级宿主管理规则：`readonly_namespaces` 会拒绝 `register/set/touch/remove/retain/release` 这类会改写共享对象状态的操作，`disabled_namespaces` 会进一步拒绝这些操作以及基于该 namespace 的 `send`，`ttl_required_namespaces` 会要求命中的 namespace 共享数据最终必须带 TTL，拒绝 `register` 或会把对象继续留成持久数据的 `set/update` 路径，但允许通过 `touch` 或 `set(ttl>0)` 给旧持久数据补上 TTL；`tag_required_namespaces` 会要求命中的 namespace 共享数据必须带 tag，并拒绝无 tag 的 `register/set/touch`；并补齐 `readonly_namespace_reject_count / disabled_namespace_reject_count / ttl_required_namespace_reject_count / tag_required_namespace_reject_count / last_*_action`；规则项同时支持精确 namespace 与 `tenant.*` 这类前缀规则
+- `__xs/bus/namespaces` 已补齐 namespace 级治理观测：顶层可直接看到 `namespace_count / namespace_limit_remaining / namespace_limit_reached / namespace_item_count / readonly_namespace_count / disabled_namespace_count / ttl_required_namespace_count / tag_required_namespace_count`，其中 `namespace_count` 表示当前有活跃共享数据的 namespace 数量，`namespace_item_count` 表示这些 namespace 下共享数据总条数；每个 namespace 可直接看到 `policy_state / readonly / disabled / ttl_required / tag_required / policy_reject_count / readonly_reject_count / disabled_reject_count / ttl_required_reject_count / tag_required_reject_count / last_policy_reject_hit / last_policy_reject_reason / last_policy_reject_action / last_policy_reject_namespace / last_policy_reject_time / last_policy_reject_time_text / last_policy_reject_age_ms / persistent_count / ttl_count / oldest_create_time / oldest_create_time_text / oldest_create_age_ms / newest_create_time / newest_create_time_text / newest_create_age_ms / next_expire_time / next_expire_time_text / next_expire_in_ms / namespace_data_limit / namespace_data_limit_remaining / namespace_data_limit_reached`，且纯规则 namespace 也会单独出现在列表里
+- 首页 dashboard 已把 `__xs/bus/namespaces` 渲染成 `Bus Namespace Summary` 与 Top 列表，方便直接观察活跃 namespace 数、共享数据总数、热点 namespace、配额压力和最近过期窗口
+- 首页 Bus 管理区已补 `readonly_namespaces / disabled_namespaces / ttl_required_namespaces / tag_required_namespaces` 在线编辑入口，可直接调用 `__xs/bus/limits` 改 namespace 策略
+
+- `_json` 管理/监控接口当前也继续补了直接错误场景的 JSON 保真：`reload_json / reload_config_json / reload_status_json / check_config_json / status_json / health_json / dashboard_json / http_metrics_json / ws_metrics_json / xtp_metrics_json / udp_metrics_json / custom_metrics_json` 现在在 disabled / not found / build failed 这类直接错误分支也会保持 `application/json`；例如 `GET /__xs/reload_json?host=<missing>` 会直接返回 `404` + `{"result":false,"message":"reload host not found"}`，而命中 `disabled.local` 这类禁用管理 host 时，`status_json / dashboard_json / http_metrics_json` 也都会直接返回结构化 `403 JSON`
+- 这组本身返回 JSON 的管理接口，当前也已把顶层请求校验一起收平：`__xs/bus/*` 与上述 `_json` 接口命中 `405 / 413 / 414 / 431` 这类 method / body_limit / path_limit / header_limit 拒绝时，也会继续保持 `application/json`；例如 `POST /__xs/bus/status` 会返回 `405 JSON`，`GET /__xs/status_json?<long query>` 会返回 `414 JSON`，而 `header_limit` 超限时 `__xs/status_json` 与 `__xs/bus/status` 都会直接返回结构化 `431 JSON`；其中 `reload_json / reload_config_json` 也继续保留原本的 `GET / POST` 语义，真正只读的观测接口继续接受 `GET / HEAD`，而 `__xs/bus/*` 当前统一收成 `GET only`，即使是 `status / registry / namespaces / find / exists / get / values` 这组只读 bus 接口也不再接受 `HEAD`，因为底层读路径可能伴随 `sweep` 或存在性解析，继续放行 `HEAD` 会引入隐藏副作用；method 拒绝当前也会返回各自准确的接口名，不再统一误写成 `status api ...`。同时 `GET /__xs/bus/exists?id=<data_id>` 现在也会按真实注册表状态判断存在性，不再把任意正整数 `id` 误报成 `exists=true`
+- `__xs` 与 `__xs/*` 当前也继续作为保留管理前缀处理：未知管理路径不再落到脚本 host 或 static host；例如 `GET /__xs/bus` 与 `GET /__xs/bus/unknown` 会直接返回 `404 JSON`，`GET /__xs/unknown` 与 `GET /__xs` 会直接返回 `404 text/plain`，而 `GET /__xs/unknown_json` 这类未知 JSON 风格管理路径也会直接返回结构化 `404 JSON`；这些保留管理路径默认同样附带 `Cache-Control: no-store / X-Frame-Options: DENY / Referrer-Policy: no-referrer`，并统一计入 `http_manage_req_count`；其中 `__xs/bus` 与 `__xs/bus/*` 的未知路径也会统一记成 `http_last_reject_reason=bus_not_found`
+- 当请求 `Host` 无法命中任何宿主时，这组 JSON 风格接口当前也继续保持结构化错误返回：例如 `GET /__xs/status_json` 或 `GET /__xs/bus/status` 在无 `host_default` 且 `Host: missing.local` 的场景下，会直接返回 `404` + `{"result":false,"message":"host not found"}`；对应文本接口则仍保持 `text/plain`
 
 ### 10.4 force 语义
 
@@ -832,7 +862,7 @@ XServer vNext 的核心方向已经明确：
 
 ## 20. 交接清单
 
-以下事项截至 `2026-03-20` 仍未最终完成，后续上下文应以此作为继续实现的主清单。
+以下事项截至 `2026-03-22` 仍未最终完成，后续上下文应以此作为继续实现的主清单。
 
 ### 20.1 协议层生产化治理
 
@@ -841,6 +871,7 @@ XServer vNext 的核心方向已经明确：
 - `idle_timeout` 已在 `http / ws / xtp / custom` 上落地并做过真实回归
 - `conn_limit` 已在 `http / ws / xtp / custom` 上落地并做过真实回归
 - 管理面和首页已经能看到 `idle close / conn limit close` 计数与时间
+- `ws_message_limit / xtp_recv_limit / custom_recv_limit` 的关闭计数、最近时间与首页摘要已补进管理面
 
 仍需继续补：
 
@@ -877,13 +908,15 @@ XServer vNext 的核心方向已经明确：
 - namespace
 - send / broadcast
 - `__xs/bus/*` 宿主管理面
+- 配额 / 上限
+- `sweep / cleanup / sweep_interval_ms`
+- `readonly_namespaces / disabled_namespaces / ttl_required_namespaces / tag_required_namespaces`
+- `health / dashboard / index.html` 的治理摘要与在线策略编辑
 
 仍需继续补：
 
-- 配额 / 上限
-- 更严格的 namespace 治理
-- 自动清理策略
-- 更偏生产化的宿主管理规则
+- 对新增治理规则做最后一轮跨接口回归归档
+- 与最终文档、压测、长稳结论做统一收口
 
 
 
@@ -944,6 +977,13 @@ XServer vNext 的核心方向已经明确：
 1. 协议层生产化治理
 2. XTP 接口定版
 3. 配置热加载差异化重建
-4. Bus 治理补齐
-5. 长稳 / 压测 / 内存调试
-6. 文档最终整理
+4. 长稳 / 压测 / 内存调试
+5. 文档最终整理
+6. Bus 新治理规则最终回归归档
+
+### 路径语义补充
+
+- 传给 `xs / xs.exe` 的相对配置路径，当前也会优先按可执行文件所在目录解析，避免启动入口继续依赖当前工作目录
+- `GET /__xs/check_config?file=<path>` 与 `GET /__xs/check_config_json?file=<path>` 传入的相对 `file`，当前也统一按可执行文件所在目录优先解析，保持和启动入口一致的 `config file / config base` 语义
+- `GET /__xs/reload_config` 与 `GET /__xs/reload_config_json` 当前也复用启动时已经规范化后的配置路径，不会在运行期热重载时重新退回原始相对 argv 的工作目录语义
+- TCC 宿主加载 `release/tcc` 运行时资源时也采用可执行文件目录优先策略，因此相对 `devfile` 与相对配置路径在项目根目录和 `release` 目录两种启动方式下都应保持一致

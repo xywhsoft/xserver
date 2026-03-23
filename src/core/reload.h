@@ -31,8 +31,65 @@ typedef struct {
 } XS_ConfigReloadStatus;
 
 static volatile long g_iXsConfigReloadRequested = 0;
+static volatile long g_iXsConfigReloadStateLock = 0;
 static XS_ConfigReloadRequest g_tXsConfigReloadRequest;
 static XS_ConfigReloadStatus g_tXsConfigReloadStatus;
+
+enum {
+	XS_CONFIG_RELOAD_REQ_IDLE = 0,
+	XS_CONFIG_RELOAD_REQ_QUEUED = 1,
+	XS_CONFIG_RELOAD_REQ_LOCKED = 2
+};
+
+static inline void XS_LockConfigReloadState(void)
+{
+	while ( __xrtAtomicCompareExchange32(&g_iXsConfigReloadStateLock, 1, 0) != 0 ) {
+	}
+}
+
+static inline void XS_UnlockConfigReloadState(void)
+{
+	(void)__xrtAtomicExchange32(&g_iXsConfigReloadStateLock, 0);
+}
+
+static inline void XS_GetConfigReloadStatusSnapshot(XS_ConfigReloadStatus* pStatus)
+{
+	if ( pStatus == NULL ) {
+		return;
+	}
+
+	XS_LockConfigReloadState();
+	memset(pStatus, 0, sizeof(XS_ConfigReloadStatus));
+	*pStatus = g_tXsConfigReloadStatus;
+	XS_UnlockConfigReloadState();
+}
+
+static inline bool XS_TryLockHostScriptReload(XS_HostConfig* objHost)
+{
+	if ( objHost == NULL ) {
+		return FALSE;
+	}
+
+	return __xrtAtomicCompareExchange32(&objHost->iScriptReloading, 1, 0) == 0;
+}
+
+static inline void XS_ForceLockHostScriptReload(XS_HostConfig* objHost)
+{
+	if ( objHost == NULL ) {
+		return;
+	}
+
+	(void)__xrtAtomicExchange32(&objHost->iScriptReloading, 1);
+}
+
+static inline void XS_UnlockHostScriptReload(XS_HostConfig* objHost)
+{
+	if ( objHost == NULL ) {
+		return;
+	}
+
+	(void)__xrtAtomicExchange32(&objHost->iScriptReloading, 0);
+}
 
 static inline XS_ServerConfig* XS_FindRuntimeServerByName(XS_Runtime* objRuntime, const char* sServerName)
 {
@@ -72,10 +129,19 @@ static inline XS_ServerConfig* XS_FindConfigServerByName(XS_Config* objCfg, cons
 
 static inline bool XS_RequestConfigReloadEx(const char* sServerName, const char* sHostName, bool bForce)
 {
-	if ( g_iXsConfigReloadRequested ) {
+	int64 iTotalCount;
+	int64 iSuccessCount;
+	int64 iFailureCount;
+
+	if ( __xrtAtomicCompareExchange32(&g_iXsConfigReloadRequested, XS_CONFIG_RELOAD_REQ_LOCKED, XS_CONFIG_RELOAD_REQ_IDLE) != XS_CONFIG_RELOAD_REQ_IDLE ) {
 		return FALSE;
 	}
-	
+
+	XS_LockConfigReloadState();
+	iTotalCount = g_tXsConfigReloadStatus.iTotalCount;
+	iSuccessCount = g_tXsConfigReloadStatus.iSuccessCount;
+	iFailureCount = g_tXsConfigReloadStatus.iFailureCount;
+
 	memset(&g_tXsConfigReloadRequest, 0, sizeof(g_tXsConfigReloadRequest));
 	g_tXsConfigReloadRequest.Force = bForce;
 	if ( sServerName && sServerName[0] ) {
@@ -86,14 +152,17 @@ static inline bool XS_RequestConfigReloadEx(const char* sServerName, const char*
 	}
 	memset(&g_tXsConfigReloadStatus, 0, sizeof(g_tXsConfigReloadStatus));
 	g_tXsConfigReloadStatus.Busy = TRUE;
+	g_tXsConfigReloadStatus.iTotalCount = iTotalCount;
+	g_tXsConfigReloadStatus.iSuccessCount = iSuccessCount;
+	g_tXsConfigReloadStatus.iFailureCount = iFailureCount;
 	if ( sServerName && sServerName[0] ) {
 		strncpy(g_tXsConfigReloadStatus.sServerName, sServerName, sizeof(g_tXsConfigReloadStatus.sServerName) - 1);
 	}
 	if ( sHostName && sHostName[0] ) {
 		strncpy(g_tXsConfigReloadStatus.sHostName, sHostName, sizeof(g_tXsConfigReloadStatus.sHostName) - 1);
 	}
-	g_iXsConfigReloadRequested = 0;
-	g_iXsConfigReloadRequested = 1;
+	XS_UnlockConfigReloadState();
+	(void)__xrtAtomicExchange32(&g_iXsConfigReloadRequested, XS_CONFIG_RELOAD_REQ_QUEUED);
 	return TRUE;
 }
 
@@ -104,7 +173,7 @@ static inline bool XS_RequestConfigReload(bool bForce)
 
 static inline bool XS_TakeConfigReloadRequest(XS_ConfigReloadRequest* pReq)
 {
-	if ( !g_iXsConfigReloadRequested ) {
+	if ( __xrtAtomicCompareExchange32(&g_iXsConfigReloadRequested, XS_CONFIG_RELOAD_REQ_LOCKED, XS_CONFIG_RELOAD_REQ_QUEUED) != XS_CONFIG_RELOAD_REQ_QUEUED ) {
 		return FALSE;
 	}
 	
@@ -112,16 +181,17 @@ static inline bool XS_TakeConfigReloadRequest(XS_ConfigReloadRequest* pReq)
 		*pReq = g_tXsConfigReloadRequest;
 	}
 	memset(&g_tXsConfigReloadRequest, 0, sizeof(g_tXsConfigReloadRequest));
-	g_iXsConfigReloadRequested = 0;
+	(void)__xrtAtomicExchange32(&g_iXsConfigReloadRequested, XS_CONFIG_RELOAD_REQ_IDLE);
 	return TRUE;
 }
 
-static inline void XS_SetConfigReloadStatus(bool bSuccess, const XS_ConfigReloadRequest* pReq, const char* sMessage)
+static inline void XS_SetConfigReloadStatusEx(bool bSuccess, const XS_ConfigReloadRequest* pReq, const char* sMessage, const XS_ConfigReloadStatus* pBusyStatus)
 {
 	int64 iTotalCount;
 	int64 iSuccessCount;
 	int64 iFailureCount;
 
+	XS_LockConfigReloadState();
 	iTotalCount = g_tXsConfigReloadStatus.iTotalCount;
 	iSuccessCount = g_tXsConfigReloadStatus.iSuccessCount;
 	iFailureCount = g_tXsConfigReloadStatus.iFailureCount;
@@ -134,7 +204,15 @@ static inline void XS_SetConfigReloadStatus(bool bSuccess, const XS_ConfigReload
 	g_tXsConfigReloadStatus.iTotalCount = iTotalCount + 1;
 	g_tXsConfigReloadStatus.iSuccessCount = iSuccessCount + (bSuccess ? 1 : 0);
 	g_tXsConfigReloadStatus.iFailureCount = iFailureCount + (bSuccess ? 0 : 1);
-	if ( pReq ) {
+	if ( pBusyStatus && pBusyStatus->Busy ) {
+		g_tXsConfigReloadStatus.Busy = TRUE;
+		if ( pBusyStatus->sServerName[0] ) {
+			strncpy(g_tXsConfigReloadStatus.sServerName, pBusyStatus->sServerName, sizeof(g_tXsConfigReloadStatus.sServerName) - 1);
+		}
+		if ( pBusyStatus->sHostName[0] ) {
+			strncpy(g_tXsConfigReloadStatus.sHostName, pBusyStatus->sHostName, sizeof(g_tXsConfigReloadStatus.sHostName) - 1);
+		}
+	} else if ( pReq ) {
 		if ( pReq->sServerName[0] ) {
 			strncpy(g_tXsConfigReloadStatus.sServerName, pReq->sServerName, sizeof(g_tXsConfigReloadStatus.sServerName) - 1);
 		}
@@ -145,61 +223,12 @@ static inline void XS_SetConfigReloadStatus(bool bSuccess, const XS_ConfigReload
 	if ( sMessage && sMessage[0] ) {
 		strncpy(g_tXsConfigReloadStatus.sMessage, sMessage, sizeof(g_tXsConfigReloadStatus.sMessage) - 1);
 	}
+	XS_UnlockConfigReloadState();
 }
 
-static inline const XS_ConfigReloadStatus* XS_GetConfigReloadStatus(void)
+static inline void XS_SetConfigReloadStatus(bool bSuccess, const XS_ConfigReloadRequest* pReq, const char* sMessage)
 {
-	return &g_tXsConfigReloadStatus;
-}
-
-static inline bool XS_ConfigReloadStatusBusy(void)
-{
-	return g_tXsConfigReloadStatus.Busy;
-}
-
-static inline bool XS_ConfigReloadStatusHasResult(void)
-{
-	return g_tXsConfigReloadStatus.HasResult;
-}
-
-static inline bool XS_ConfigReloadStatusSuccess(void)
-{
-	return g_tXsConfigReloadStatus.Success;
-}
-
-static inline const char* XS_ConfigReloadStatusServer(void)
-{
-	return g_tXsConfigReloadStatus.sServerName[0] ? g_tXsConfigReloadStatus.sServerName : "(all)";
-}
-
-static inline const char* XS_ConfigReloadStatusHost(void)
-{
-	return g_tXsConfigReloadStatus.sHostName[0] ? g_tXsConfigReloadStatus.sHostName : "(all)";
-}
-
-static inline const char* XS_ConfigReloadStatusMessage(void)
-{
-	return g_tXsConfigReloadStatus.sMessage[0] ? g_tXsConfigReloadStatus.sMessage : "(none)";
-}
-
-static inline xtime XS_ConfigReloadStatusTime(void)
-{
-	return g_tXsConfigReloadStatus.LastTime;
-}
-
-static inline int64 XS_ConfigReloadStatusTotalCount(void)
-{
-	return g_tXsConfigReloadStatus.iTotalCount;
-}
-
-static inline int64 XS_ConfigReloadStatusSuccessCount(void)
-{
-	return g_tXsConfigReloadStatus.iSuccessCount;
-}
-
-static inline int64 XS_ConfigReloadStatusFailureCount(void)
-{
-	return g_tXsConfigReloadStatus.iFailureCount;
+	XS_SetConfigReloadStatusEx(bSuccess, pReq, sMessage, NULL);
 }
 
 static inline void XS_ClearConfigReloadStatus(void)
@@ -207,19 +236,54 @@ static inline void XS_ClearConfigReloadStatus(void)
 	int64 iTotalCount;
 	int64 iSuccessCount;
 	int64 iFailureCount;
+	bool bBusy;
+	char sServerName[128];
+	char sHostName[128];
 
+	XS_LockConfigReloadState();
 	iTotalCount = g_tXsConfigReloadStatus.iTotalCount;
 	iSuccessCount = g_tXsConfigReloadStatus.iSuccessCount;
 	iFailureCount = g_tXsConfigReloadStatus.iFailureCount;
+	bBusy = g_tXsConfigReloadStatus.Busy;
+	memset(sServerName, 0, sizeof(sServerName));
+	memset(sHostName, 0, sizeof(sHostName));
+	if ( bBusy ) {
+		strncpy(sServerName, g_tXsConfigReloadStatus.sServerName, sizeof(sServerName) - 1);
+		strncpy(sHostName, g_tXsConfigReloadStatus.sHostName, sizeof(sHostName) - 1);
+	}
 	memset(&g_tXsConfigReloadStatus, 0, sizeof(g_tXsConfigReloadStatus));
+	g_tXsConfigReloadStatus.Busy = bBusy;
 	g_tXsConfigReloadStatus.iTotalCount = iTotalCount;
 	g_tXsConfigReloadStatus.iSuccessCount = iSuccessCount;
 	g_tXsConfigReloadStatus.iFailureCount = iFailureCount;
+	if ( bBusy ) {
+		strncpy(g_tXsConfigReloadStatus.sServerName, sServerName, sizeof(g_tXsConfigReloadStatus.sServerName) - 1);
+		strncpy(g_tXsConfigReloadStatus.sHostName, sHostName, sizeof(g_tXsConfigReloadStatus.sHostName) - 1);
+	}
+	XS_UnlockConfigReloadState();
 }
 
 static inline void XS_ResetConfigReloadStats(void)
 {
+	bool bBusy;
+	char sServerName[128];
+	char sHostName[128];
+
+	XS_LockConfigReloadState();
+	bBusy = g_tXsConfigReloadStatus.Busy;
+	memset(sServerName, 0, sizeof(sServerName));
+	memset(sHostName, 0, sizeof(sHostName));
+	if ( bBusy ) {
+		strncpy(sServerName, g_tXsConfigReloadStatus.sServerName, sizeof(sServerName) - 1);
+		strncpy(sHostName, g_tXsConfigReloadStatus.sHostName, sizeof(sHostName) - 1);
+	}
 	memset(&g_tXsConfigReloadStatus, 0, sizeof(g_tXsConfigReloadStatus));
+	g_tXsConfigReloadStatus.Busy = bBusy;
+	if ( bBusy ) {
+		strncpy(g_tXsConfigReloadStatus.sServerName, sServerName, sizeof(g_tXsConfigReloadStatus.sServerName) - 1);
+		strncpy(g_tXsConfigReloadStatus.sHostName, sHostName, sizeof(g_tXsConfigReloadStatus.sHostName) - 1);
+	}
+	XS_UnlockConfigReloadState();
 }
 
 static inline bool XS_ReloadHostScript(XS_ServerConfig* objServer, XS_HostConfig* objHost);
@@ -248,6 +312,8 @@ static inline XS_HostConfig* XS_FindServerHostByName(XS_ServerConfig* objServer,
 
 static inline int XS_ReloadServerHostScript(XS_ServerConfig* objServer, XS_HostConfig* objHost, bool bForce)
 {
+	bool bOK;
+
 	(void)bForce;
 	
 	if ( objServer == NULL || objHost == NULL ) {
@@ -257,8 +323,14 @@ static inline int XS_ReloadServerHostScript(XS_ServerConfig* objServer, XS_HostC
 	if ( objHost->DevMode != XS_DEV_SCRIPT_C ) {
 		return -2;
 	}
-	
-	return XS_ReloadHostScript(objServer, objHost) ? 0 : -3;
+
+	if ( !XS_TryLockHostScriptReload(objHost) ) {
+		return -4;
+	}
+
+	bOK = XS_ReloadHostScript(objServer, objHost);
+	XS_UnlockHostScriptReload(objHost);
+	return bOK ? 0 : -3;
 }
 
 static inline int XS_ReloadServerDefaultHostScript(XS_ServerConfig* objServer, bool bForce)
@@ -288,6 +360,7 @@ static inline const char* XS_ReloadResultText(int iCode)
 		case -1: return "invalid target";
 		case -2: return "host is not script-c";
 		case -3: return "reload failed";
+		case -4: return "reload busy";
 		default: return "unknown";
 	}
 }

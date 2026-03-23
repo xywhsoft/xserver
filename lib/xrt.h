@@ -3237,6 +3237,7 @@
 	char sProtocol[XWS_PROTOCOL_CAP];
 	uint32 iConnectTimeoutMs;
 	uint32 iRecvLimit;
+	uint32 iMessageLimit;
 	bool bVerifyPeer;
 	xnetproxy* pProxy;
 	} xwsclientconfig;
@@ -3245,6 +3246,7 @@
 	uint32 iFlags;
 	uint32 iBacklog;
 	uint32 iRecvLimit;
+	uint32 iMessageLimit;
 	const xtlsconfig* pTlsConfig;
 	char sProtocol[XWS_PROTOCOL_CAP];
 	} xwsserverconfig;
@@ -24935,6 +24937,23 @@ static bool __xcodecHttpParseInt64(const char* sText, int64_t* pValue)
 	*pValue = iValue;
 	return true;
 }
+static bool __xcodecHttpParseStatusCode(const char* sText, uint32* pValue)
+{
+	uint32 iValue = 0;
+	size_t i = 0;
+
+	if ( !sText || !sText[0] ) return false;
+	for ( i = 0; i < 3u; ++i ) {
+		char ch = sText[i];
+
+		if ( ch < '0' || ch > '9' ) return false;
+		iValue = (iValue * 10u) + (uint32)(ch - '0');
+	}
+	if ( sText[3] != '\0' ) return false;
+	if ( iValue < 100u ) return false;
+	if ( pValue ) *pValue = iValue;
+	return true;
+}
 static bool __xcodecHttpParseHexU64(const char* sText, size_t iLen, uint64* pValue)
 {
 	uint64 iValue = 0;
@@ -25126,7 +25145,10 @@ XXAPI xcodecstatus xrtCodecHttp1Parse(const xnetchain* pInput, xcodecframe* pFra
 		pMsg->iFlags |= XCODEC_HTTP1_F_RESPONSE;
 		pFrame->iFlags |= XCODEC_FRAME_F_RESPONSE;
 		__xcodecHttpCopyToken(pMsg->sVersion, sizeof(pMsg->sVersion), sVersion, strlen(sVersion));
-		pMsg->iStatusCode = (uint32)atoi(sStatus);
+		if ( !__xcodecHttpParseStatusCode(sStatus, &pMsg->iStatusCode) ) {
+			XNET_FREE(sHeadBuf);
+			return XCODEC_STATUS_ERROR;
+		}
 		if ( sReason ) __xcodecHttpCopyToken(pMsg->sReason, sizeof(pMsg->sReason), sReason, strlen(sReason));
 	} else {
 		char* sMethod = sHeadBuf;
@@ -36552,7 +36574,9 @@ static uint32 __xnetProxyStateFeed(__xnet_proxy_state* pState, const xnetproxy* 
 					uint32 iHeaderEnd = __xnetProxyFindHttpHeaderEnd(pState->aRecv, pState->iRecvLen);
 					char chSaved;
 					char* pStatus;
-					int iStatusCode;
+					char* pStatusEnd;
+					char chStatusSaved;
+					uint32 iStatusCode;
 					if ( iHeaderEnd == 0u ) return __XNET_PROXY_ACTION_WAIT;
 					chSaved = pState->aRecv[iHeaderEnd - 1u];
 					pState->aRecv[iHeaderEnd - 1u] = '\0';
@@ -36565,9 +36589,19 @@ static uint32 __xnetProxyStateFeed(__xnet_proxy_state* pState, const xnetproxy* 
 						pState->aRecv[iHeaderEnd - 1u] = chSaved;
 						return __XNET_PROXY_ACTION_ERROR;
 					}
-					iStatusCode = atoi(pStatus + 1);
+					while ( *pStatus == ' ' ) pStatus++;
+					pStatusEnd = pStatus;
+					while ( *pStatusEnd && *pStatusEnd != ' ' && *pStatusEnd != '\r' ) pStatusEnd++;
+					chStatusSaved = *pStatusEnd;
+					*pStatusEnd = '\0';
+					if ( !__xcodecHttpParseStatusCode(pStatus, &iStatusCode) ) {
+						*pStatusEnd = chStatusSaved;
+						pState->aRecv[iHeaderEnd - 1u] = chSaved;
+						return __XNET_PROXY_ACTION_ERROR;
+					}
+					*pStatusEnd = chStatusSaved;
 					pState->aRecv[iHeaderEnd - 1u] = chSaved;
-					if ( iStatusCode != 200 ) return __XNET_PROXY_ACTION_ERROR;
+					if ( iStatusCode != 200u ) return __XNET_PROXY_ACTION_ERROR;
 					__xnetProxyConsumeRecv(pState, iHeaderEnd);
 					pState->iStage = __XNET_PROXY_STAGE_READY;
 					return __XNET_PROXY_ACTION_READY;
@@ -36706,6 +36740,7 @@ struct xrt_net_stream {
 	uint32 iFlags;
 	uint32 iRecvLimit;
 	uint32 iConnectTimeoutMs;
+	uint32 iInternalError;
 	xnet_result iCloseReason;
 	volatile long iAsyncHoldCount;
 	volatile long iOpenTimerState;
@@ -36717,6 +36752,8 @@ struct xrt_net_stream {
 	bool bTlsCloseQueued;
 	bool bDestroyPending;
 };
+#define XNET_STREAM_INTERNAL_ERROR_NONE 0u
+#define XNET_STREAM_INTERNAL_ERROR_RECV_LIMIT 1u
 XXAPI void xrtNetStreamDestroy(xnetstream* pStream);
 XXAPI void xrtNetStreamClose(xnetstream* pStream, uint32 iFlags);
 static void __xnetStreamOnPortEvents(xnetworker* pWorker, const xnetportevent* pEvents, uint32 iCount);
@@ -37377,6 +37414,32 @@ static ptr __xnetStreamOwner(xnetstream* pStream)
 {
 	return pStream ? pStream->pUserData : NULL;
 }
+
+static inline void __xnetStreamEmitInternalError(xnetstream* pStream, uint32 iInternalError)
+{
+	if ( pStream == NULL ) {
+		return;
+	}
+
+	pStream->iInternalError = iInternalError;
+	if ( pStream->pEvents && pStream->pEvents->OnError ) {
+		pStream->pEvents->OnError(__xnetStreamOwner(pStream), pStream, -1);
+	}
+}
+
+static inline uint32 xrtNetStreamTakeInternalError(xnetstream* pStream)
+{
+	uint32 iInternalError;
+
+	if ( pStream == NULL ) {
+		return XNET_STREAM_INTERNAL_ERROR_NONE;
+	}
+
+	iInternalError = pStream->iInternalError;
+	pStream->iInternalError = XNET_STREAM_INTERNAL_ERROR_NONE;
+	return iInternalError;
+}
+
 static bool __xnetStreamAttachTls(xnetstream* pStream, const xtlsconfig* pCfg, bool bIsServer)
 {
 	if ( !pStream ) return false;
@@ -37546,9 +37609,7 @@ static bool __xnetStreamAppendRecvCopy(xnetstream* pStream, const void* pData, s
 	bool bOk;
 	if ( !pStream || !pData || iLen == 0 ) return false;
 	if ( pStream->iRecvLimit > 0 && xrtNetChainBytes(&pStream->tRxChain) + iLen > pStream->iRecvLimit ) {
-		if ( pStream->pEvents && pStream->pEvents->OnError ) {
-			pStream->pEvents->OnError(__xnetStreamOwner(pStream), pStream, -1);
-		}
+		__xnetStreamEmitInternalError(pStream, XNET_STREAM_INTERNAL_ERROR_RECV_LIMIT);
 		xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 		return false;
 	}
@@ -37563,9 +37624,7 @@ static bool __xnetStreamAppendRecvRef(xnetstream* pStream, const xnetbufref* pRe
 	bool bOk;
 	if ( !pStream || !pRef ) return false;
 	if ( pStream->iRecvLimit > 0 && xrtNetChainBytes(&pStream->tRxChain) + pRef->iLen > pStream->iRecvLimit ) {
-		if ( pStream->pEvents && pStream->pEvents->OnError ) {
-			pStream->pEvents->OnError(__xnetStreamOwner(pStream), pStream, -1);
-		}
+		__xnetStreamEmitInternalError(pStream, XNET_STREAM_INTERNAL_ERROR_RECV_LIMIT);
 		xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 		return false;
 	}
@@ -37637,9 +37696,7 @@ static bool __xnetStreamDriveProxyState(xnetstream* pStream, const void* pData, 
 	}
 	if ( iAction == __XNET_PROXY_ACTION_ERROR ) {
 		__xnetStreamFreeTempChain(pCarry);
-		if ( pStream->pEvents && pStream->pEvents->OnError ) {
-			pStream->pEvents->OnError(__xnetStreamOwner(pStream), pStream, -1);
-		}
+		__xnetStreamEmitInternalError(pStream, XNET_STREAM_INTERNAL_ERROR_NONE);
 		xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 		return false;
 	}
@@ -37739,9 +37796,7 @@ static bool __xnetStreamDrainTlsPlain(xnetstream* pStream)
 			return false;
 		}
 		if ( iRes != XRT_NET_OK ) {
-			if ( pStream->pEvents && pStream->pEvents->OnError ) {
-				pStream->pEvents->OnError(__xnetStreamOwner(pStream), pStream, -1);
-			}
+			__xnetStreamEmitInternalError(pStream, XNET_STREAM_INTERNAL_ERROR_NONE);
 			xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 			return false;
 		}
@@ -37782,9 +37837,7 @@ static bool __xnetStreamDriveTlsHandshake(xnetstream* pStream)
 				__xnetSocketBytesAvailable(pStream->hSocket));
 		#endif
 		if ( !__xnetStreamQueueTlsCipher(pStream) ) {
-			if ( pStream->pEvents && pStream->pEvents->OnError ) {
-				pStream->pEvents->OnError(__xnetStreamOwner(pStream), pStream, -1);
-			}
+			__xnetStreamEmitInternalError(pStream, XNET_STREAM_INTERNAL_ERROR_NONE);
 			xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 			return false;
 		}
@@ -37804,9 +37857,7 @@ static bool __xnetStreamDriveTlsHandshake(xnetstream* pStream)
 		(void)__xnetStreamArmRecvWatch(pStream);
 	}
 	if ( iRes == XRT_NET_OK || iRes == XRT_NET_AGAIN ) return true;
-	if ( pStream->pEvents && pStream->pEvents->OnError ) {
-		pStream->pEvents->OnError(__xnetStreamOwner(pStream), pStream, -1);
-	}
+	__xnetStreamEmitInternalError(pStream, XNET_STREAM_INTERNAL_ERROR_NONE);
 	xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 	return false;
 }
@@ -38063,9 +38114,7 @@ static void __xnetStreamHandleRecvEvent(xnetstream* pStream, xnetchain* pChain)
 		return;
 	}
 	if ( pStream->iRecvLimit > 0 && xrtNetChainBytes(&pStream->tRxChain) + xrtNetChainBytes(pChain) > pStream->iRecvLimit ) {
-		if ( pStream->pEvents && pStream->pEvents->OnError ) {
-			pStream->pEvents->OnError(__xnetStreamOwner(pStream), pStream, -1);
-		}
+		__xnetStreamEmitInternalError(pStream, XNET_STREAM_INTERNAL_ERROR_RECV_LIMIT);
 		__xnetStreamFreeTempChain(pChain);
 		xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 		return;
@@ -38074,9 +38123,7 @@ static void __xnetStreamHandleRecvEvent(xnetstream* pStream, xnetchain* pChain)
 		bool bHandshakeReady = __xnetStreamTlsReady(pStream);
 		if ( !__xnetStreamFeedTlsChain(pStream, pChain) ) {
 			__xnetStreamFreeTempChain(pChain);
-			if ( pStream->pEvents && pStream->pEvents->OnError ) {
-				pStream->pEvents->OnError(__xnetStreamOwner(pStream), pStream, -1);
-			}
+			__xnetStreamEmitInternalError(pStream, XNET_STREAM_INTERNAL_ERROR_NONE);
 			xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 			return;
 		}
@@ -38936,9 +38983,7 @@ static void __xnetStreamOnPortEvents(xnetworker* pWorker, const xnetportevent* p
 			xnetstream* pStream = (xnetstream*)pEvent->pUserData;
 			if ( pStream ) {
 				if ( pEvent->iStatus != XRT_NET_OK ) {
-					if ( pStream->pEvents && pStream->pEvents->OnError ) {
-						pStream->pEvents->OnError(__xnetStreamOwner(pStream), pStream, -1);
-					}
+					__xnetStreamEmitInternalError(pStream, XNET_STREAM_INTERNAL_ERROR_NONE);
 					xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 				} else {
 					if ( __xnetSocketIsValid(pStream->hSocket) ) {
@@ -38987,9 +39032,7 @@ static void __xnetStreamOnPortEvents(xnetworker* pWorker, const xnetportevent* p
 				if ( pEvent->iStatus == XRT_NET_CLOSED || (pEvent->iFlags & XNET_PORT_EVENT_F_EOF) != 0 ) {
 					xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 				} else if ( pEvent->iStatus != XRT_NET_OK ) {
-					if ( pStream->pEvents && pStream->pEvents->OnError ) {
-						pStream->pEvents->OnError(__xnetStreamOwner(pStream), pStream, -1);
-					}
+					__xnetStreamEmitInternalError(pStream, XNET_STREAM_INTERNAL_ERROR_NONE);
 					xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 				} else if ( pStream->pProxyState ) {
 					(void)__xnetStreamArmRecvWatch(pStream);
@@ -39008,9 +39051,7 @@ static void __xnetStreamOnPortEvents(xnetworker* pWorker, const xnetportevent* p
 			}
 		} else if ( pEvent->iType == XNET_PORT_EVENT_ERROR ) {
 			xnetstream* pStream = (xnetstream*)pEvent->pUserData;
-			if ( pStream && pStream->pEvents && pStream->pEvents->OnError ) {
-				pStream->pEvents->OnError(__xnetStreamOwner(pStream), pStream, -1);
-			}
+			__xnetStreamEmitInternalError(pStream, XNET_STREAM_INTERNAL_ERROR_NONE);
 		}
 	}
 }
@@ -45747,6 +45788,7 @@ typedef struct {
 	char sProtocol[XWS_PROTOCOL_CAP];
 	uint32 iConnectTimeoutMs;
 	uint32 iRecvLimit;
+	uint32 iMessageLimit;
 	bool bVerifyPeer;
 	xnetproxy* pProxy;
 } xwsclientconfig;
@@ -45755,6 +45797,7 @@ typedef struct {
 	uint32 iFlags;
 	uint32 iBacklog;
 	uint32 iRecvLimit;
+	uint32 iMessageLimit;
 	const xtlsconfig* pTlsConfig;
 	char sProtocol[XWS_PROTOCOL_CAP];
 } xwsserverconfig;
@@ -45800,6 +45843,7 @@ struct xrt_ws_client {
 	volatile long iOpen;
 	volatile long iClosePosted;
 	volatile long iCloseNotified;
+	uint16 iLastCloseCode;
 	int iLastSysErr;
 };
 struct xrt_ws_conn {
@@ -45808,6 +45852,7 @@ struct xrt_ws_conn {
 	volatile long iOpen;
 	volatile long iClosePosted;
 	volatile long iCloseNotified;
+	uint16 iLastCloseCode;
 	xwsserver* pServer;
 	xnetstream* pStream;
 	char sProtocol[XWS_PROTOCOL_CAP];
@@ -46326,7 +46371,7 @@ static void __xwsServerEmitBinary(xwsconn* pConn, const void* pData, size_t iLen
 }
 static int __xwsClientConsumeDataFrame(xwsclient* pClient, uint8 iOpcode, bool bFin, const char* pPayload, size_t iPayloadLen)
 {
-	size_t iLimit = pClient && pClient->tConfig.iRecvLimit > 0u ? (size_t)pClient->tConfig.iRecvLimit : 0u;
+	size_t iLimit = pClient && pClient->tConfig.iMessageLimit > 0u ? (size_t)pClient->tConfig.iMessageLimit : (pClient && pClient->tConfig.iRecvLimit > 0u ? (size_t)pClient->tConfig.iRecvLimit : 0u);
 	int iAppend;
 	if ( !pClient ) return __XWS_APPEND_INTERNAL;
 	if ( iOpcode == XCODEC_WS_OPCODE_CONT ) {
@@ -46343,6 +46388,7 @@ static int __xwsClientConsumeDataFrame(xwsclient* pClient, uint8 iOpcode, bool b
 	}
 	if ( iOpcode != XCODEC_WS_OPCODE_TEXT && iOpcode != XCODEC_WS_OPCODE_BINARY ) return __XWS_APPEND_PROTOCOL;
 	if ( pClient->iMsgOpcode != 0u ) return __XWS_APPEND_PROTOCOL;
+	if ( iLimit > 0u && iPayloadLen > iLimit ) return __XWS_APPEND_TOO_BIG;
 	if ( bFin ) {
 		if ( iOpcode == XCODEC_WS_OPCODE_TEXT ) __xwsClientEmitText(pClient, pPayload, iPayloadLen);
 		else __xwsClientEmitBinary(pClient, pPayload, iPayloadLen);
@@ -46352,7 +46398,7 @@ static int __xwsClientConsumeDataFrame(xwsclient* pClient, uint8 iOpcode, bool b
 }
 static int __xwsServerConsumeDataFrame(xwsconn* pConn, uint8 iOpcode, bool bFin, const char* pPayload, size_t iPayloadLen)
 {
-	size_t iLimit = (pConn && pConn->pServer && pConn->pServer->tConfig.iRecvLimit > 0u) ? (size_t)pConn->pServer->tConfig.iRecvLimit : 0u;
+	size_t iLimit = (pConn && pConn->pServer && pConn->pServer->tConfig.iMessageLimit > 0u) ? (size_t)pConn->pServer->tConfig.iMessageLimit : ((pConn && pConn->pServer && pConn->pServer->tConfig.iRecvLimit > 0u) ? (size_t)pConn->pServer->tConfig.iRecvLimit : 0u);
 	int iAppend;
 	if ( !pConn ) return __XWS_APPEND_INTERNAL;
 	if ( iOpcode == XCODEC_WS_OPCODE_CONT ) {
@@ -46369,6 +46415,7 @@ static int __xwsServerConsumeDataFrame(xwsconn* pConn, uint8 iOpcode, bool bFin,
 	}
 	if ( iOpcode != XCODEC_WS_OPCODE_TEXT && iOpcode != XCODEC_WS_OPCODE_BINARY ) return __XWS_APPEND_PROTOCOL;
 	if ( pConn->iMsgOpcode != 0u ) return __XWS_APPEND_PROTOCOL;
+	if ( iLimit > 0u && iPayloadLen > iLimit ) return __XWS_APPEND_TOO_BIG;
 	if ( bFin ) {
 		if ( iOpcode == XCODEC_WS_OPCODE_TEXT ) __xwsServerEmitText(pConn, pPayload, iPayloadLen);
 		else __xwsServerEmitBinary(pConn, pPayload, iPayloadLen);
@@ -46392,6 +46439,13 @@ static void __xwsClientEmitCloseOnce(xwsclient* pClient, xnet_result iReason)
 	if ( pClient->tEvents.OnClose ) {
 		pClient->tEvents.OnClose(pClient->pUserData, pClient, iReason);
 	}
+}
+static xnet_result __xwsClientResolveCloseReason(const xwsclient* pClient, xnet_result iReason)
+{
+	if ( iReason == XRT_NET_CLOSED && pClient && pClient->iLastCloseCode > 0u ) {
+		return (xnet_result)pClient->iLastCloseCode;
+	}
+	return iReason;
 }
 static bool __xwsIsBenignStreamError(int iSysErr, xnetstream* pStream, volatile long* pClosePosted, volatile long* pCloseNotified)
 {
@@ -46445,6 +46499,7 @@ static void __xwsClientConsumeFrames(xwsclient* pClient, xnetchain* pChain)
 			return;
 		}
 		if ( (tInfo.iFlags & XCODEC_WS_F_CONTROL) != 0u && tInfo.iPayloadLen > 125u ) {
+			pClient->iLastCloseCode = XWS_CLOSE_PROTOCOL;
 			(void)__xwsPostClose(pClient->pStream, true, XWS_CLOSE_PROTOCOL, "control too large", true);
 			return;
 		}
@@ -46462,8 +46517,10 @@ static void __xwsClientConsumeFrames(xwsclient* pClient, xnetchain* pChain)
 				iDataRet = __xwsClientConsumeDataFrame(pClient, tInfo.iOpcode, bFin, pPayload, iPayloadLen);
 				if ( iDataRet == __XWS_APPEND_OK ) break;
 				if ( iDataRet == __XWS_APPEND_TOO_BIG ) {
+					pClient->iLastCloseCode = XWS_CLOSE_TOO_BIG;
 					(void)__xwsPostClose(pClient->pStream, true, XWS_CLOSE_TOO_BIG, "message too large", true);
 				} else if ( iDataRet == __XWS_APPEND_PROTOCOL ) {
+					pClient->iLastCloseCode = XWS_CLOSE_PROTOCOL;
 					(void)__xwsPostClose(pClient->pStream, true, XWS_CLOSE_PROTOCOL, "bad fragment sequence", true);
 				} else {
 					__xwsClientEmitError(pClient, -7);
@@ -46482,6 +46539,7 @@ static void __xwsClientConsumeFrames(xwsclient* pClient, xnetchain* pChain)
 			case XCODEC_WS_OPCODE_CLOSE:
 				if ( iPayloadLen >= 2u ) {
 					iCloseCode = (uint16)(((uint8)pPayload[0] << 8u) | (uint8)pPayload[1]);
+					pClient->iLastCloseCode = iCloseCode;
 				}
 				#if defined(XNET_DEBUG_CLOSE_DIAG)
 					fprintf(stderr, "[CLOSE_DIAG][WS-CLIENT] recv close stream=%p code=%u posted=%ld open=%ld len=%zu\n",
@@ -46491,7 +46549,7 @@ static void __xwsClientConsumeFrames(xwsclient* pClient, xnetchain* pChain)
 						(long)__xwsAtomicLoad(&pClient->iOpen),
 						iPayloadLen);
 				#endif
-				__xwsClientEmitCloseOnce(pClient, XRT_NET_CLOSED);
+				__xwsClientEmitCloseOnce(pClient, __xwsClientResolveCloseReason(pClient, XRT_NET_CLOSED));
 				if ( __xwsAtomicCompareExchange(&pClient->iClosePosted, 1, 0) == 0 ) {
 					if ( pClient->pStream ) (void)__xwsPostClose(pClient->pStream, true, iCloseCode, NULL, true);
 				} else if ( pClient->pStream ) {
@@ -46500,6 +46558,7 @@ static void __xwsClientConsumeFrames(xwsclient* pClient, xnetchain* pChain)
 				XNET_FREE(pPayload);
 				return;
 			default:
+				pClient->iLastCloseCode = XWS_CLOSE_PROTOCOL;
 				(void)__xwsPostClose(pClient->pStream, true, XWS_CLOSE_PROTOCOL, "bad opcode", true);
 				XNET_FREE(pPayload);
 				return;
@@ -46559,7 +46618,7 @@ static void __xwsClientStreamOnClose(ptr pOwner, xnetstream* pStream, xnet_resul
 			pClient ? (long)__xwsAtomicLoad(&pClient->iCloseNotified) : -1L);
 	#endif
 	(void)pStream;
-	__xwsClientEmitCloseOnce(pClient, iReason);
+	__xwsClientEmitCloseOnce(pClient, __xwsClientResolveCloseReason(pClient, iReason));
 }
 static void __xwsClientStreamOnError(ptr pOwner, xnetstream* pStream, int iSysErr)
 {
@@ -46657,6 +46716,13 @@ static void __xwsServerEmitCloseOnce(xwsserver* pServer, xwsconn* pConn, xnet_re
 		pServer->tEvents.OnClose(pServer->pUserData, pServer, pConn, iReason);
 	}
 }
+static xnet_result __xwsServerResolveCloseReason(const xwsconn* pConn, xnet_result iReason)
+{
+	if ( iReason == XRT_NET_CLOSED && pConn && pConn->iLastCloseCode > 0u ) {
+		return (xnet_result)pConn->iLastCloseCode;
+	}
+	return iReason;
+}
 static bool __xwsSendHttpReply(xnetstream* pStream, uint32 iStatusCode, const char* sBody, const char* sAccept, const char* sProtocol, bool bClose)
 {
 	char* pBytes = NULL;
@@ -46711,10 +46777,12 @@ static void __xwsServerConsumeFrames(xwsconn* pConn, xnetchain* pChain)
 			return;
 		}
 		if ( (tInfo.iFlags & XCODEC_WS_F_MASKED) == 0u ) {
+			pConn->iLastCloseCode = XWS_CLOSE_PROTOCOL;
 			(void)__xwsPostClose(pConn->pStream, false, XWS_CLOSE_PROTOCOL, "mask required", true);
 			return;
 		}
 		if ( (tInfo.iFlags & XCODEC_WS_F_CONTROL) != 0u && tInfo.iPayloadLen > 125u ) {
+			pConn->iLastCloseCode = XWS_CLOSE_PROTOCOL;
 			(void)__xwsPostClose(pConn->pStream, false, XWS_CLOSE_PROTOCOL, "control too large", true);
 			return;
 		}
@@ -46732,8 +46800,10 @@ static void __xwsServerConsumeFrames(xwsconn* pConn, xnetchain* pChain)
 				iDataRet = __xwsServerConsumeDataFrame(pConn, tInfo.iOpcode, bFin, pPayload, iPayloadLen);
 				if ( iDataRet == __XWS_APPEND_OK ) break;
 				if ( iDataRet == __XWS_APPEND_TOO_BIG ) {
+					pConn->iLastCloseCode = XWS_CLOSE_TOO_BIG;
 					(void)__xwsPostClose(pConn->pStream, false, XWS_CLOSE_TOO_BIG, "message too large", true);
 				} else if ( iDataRet == __XWS_APPEND_PROTOCOL ) {
+					pConn->iLastCloseCode = XWS_CLOSE_PROTOCOL;
 					(void)__xwsPostClose(pConn->pStream, false, XWS_CLOSE_PROTOCOL, "bad fragment sequence", true);
 				} else {
 					__xwsServerEmitError(pServer, pConn, -23);
@@ -46752,6 +46822,7 @@ static void __xwsServerConsumeFrames(xwsconn* pConn, xnetchain* pChain)
 			case XCODEC_WS_OPCODE_CLOSE:
 				if ( iPayloadLen >= 2u ) {
 					iCloseCode = (uint16)(((uint8)pPayload[0] << 8u) | (uint8)pPayload[1]);
+					pConn->iLastCloseCode = iCloseCode;
 				}
 				#if defined(XNET_DEBUG_CLOSE_DIAG)
 					fprintf(stderr, "[CLOSE_DIAG][WS-SERVER] recv close stream=%p code=%u posted=%ld open=%ld len=%zu\n",
@@ -46761,7 +46832,7 @@ static void __xwsServerConsumeFrames(xwsconn* pConn, xnetchain* pChain)
 						(long)__xwsAtomicLoad(&pConn->iOpen),
 						iPayloadLen);
 				#endif
-				__xwsServerEmitCloseOnce(pServer, pConn, XRT_NET_CLOSED);
+				__xwsServerEmitCloseOnce(pServer, pConn, __xwsServerResolveCloseReason(pConn, XRT_NET_CLOSED));
 				if ( __xwsAtomicCompareExchange(&pConn->iClosePosted, 1, 0) == 0 ) {
 					if ( pConn->pStream ) (void)__xwsPostClose(pConn->pStream, false, iCloseCode, NULL, true);
 				} else if ( pConn->pStream ) {
@@ -46770,6 +46841,7 @@ static void __xwsServerConsumeFrames(xwsconn* pConn, xnetchain* pChain)
 				XNET_FREE(pPayload);
 				return;
 			default:
+				pConn->iLastCloseCode = XWS_CLOSE_PROTOCOL;
 				(void)__xwsPostClose(pConn->pStream, false, XWS_CLOSE_PROTOCOL, "bad opcode", true);
 				XNET_FREE(pPayload);
 				return;
@@ -46790,6 +46862,7 @@ static bool __xwsListenerOnAccept(ptr pOwner, xnetlistener* pListener, xnetstrea
 		memset(pConn, 0, sizeof(xwsconn));
 		xrtNetStreamSetUserData(pStream, pConn);
 	}
+	pConn->iLastCloseCode = 0u;
 	pConn->pServer = pServer;
 	pConn->pStream = pStream;
 	__xwsServerAddConn(pServer, pConn);
@@ -46855,7 +46928,7 @@ static void __xwsServerStreamOnClose(ptr pOwner, xnetstream* pStream, xnet_resul
 			pConn ? (long)__xwsAtomicLoad(&pConn->iCloseNotified) : -1L);
 	#endif
 	(void)pStream;
-	__xwsServerEmitCloseOnce(pServer, pConn, iReason);
+	__xwsServerEmitCloseOnce(pServer, pConn, __xwsServerResolveCloseReason(pConn, iReason));
 	__xwsConnPostCleanup(pConn);
 }
 static void __xwsServerStreamOnError(ptr pOwner, xnetstream* pStream, int iSysErr)
@@ -46913,6 +46986,7 @@ XXAPI void xrtWsClientConfigInit(xwsclientconfig* pCfg)
 	memset(pCfg, 0, sizeof(xwsclientconfig));
 	pCfg->iConnectTimeoutMs = 5000u;
 	pCfg->iRecvLimit = 1024u * 1024u;
+	pCfg->iMessageLimit = pCfg->iRecvLimit;
 	pCfg->bVerifyPeer = true;
 }
 XXAPI void xrtWsServerConfigInit(xwsserverconfig* pCfg)
@@ -46921,6 +46995,7 @@ XXAPI void xrtWsServerConfigInit(xwsserverconfig* pCfg)
 	memset(pCfg, 0, sizeof(xwsserverconfig));
 	pCfg->iBacklog = 128u;
 	pCfg->iRecvLimit = 1024u * 1024u;
+	pCfg->iMessageLimit = pCfg->iRecvLimit;
 }
 XXAPI xwsclient* xrtWsClientCreate(xnetengine* pEngine, const xwsclientconfig* pCfg, const xwsclientevents* pEvents, ptr pUserData)
 {
@@ -47008,6 +47083,7 @@ XXAPI xnet_result xrtWsClientClose(xwsclient* pClient, uint16 iCode, const char*
 {
 	if ( !pClient || !pClient->pStream ) return XRT_NET_ERROR;
 	if ( __xwsAtomicCompareExchange(&pClient->iClosePosted, 1, 0) != 0 ) return XRT_NET_OK;
+	pClient->iLastCloseCode = iCode ? iCode : XWS_CLOSE_NORMAL;
 	return __xwsPostClose(pClient->pStream, true, iCode, sReason, false);
 }
 XXAPI xwsserver* xrtWsServerCreate(xnetengine* pEngine, const xwsserverconfig* pCfg, const xwsserverevents* pEvents, ptr pUserData)
@@ -47117,6 +47193,7 @@ XXAPI xnet_result xrtWsConnClose(xwsconn* pConn, uint16 iCode, const char* sReas
 {
 	if ( !pConn || !pConn->pStream ) return XRT_NET_ERROR;
 	if ( __xwsAtomicCompareExchange(&pConn->iClosePosted, 1, 0) != 0 ) return XRT_NET_OK;
+	pConn->iLastCloseCode = iCode ? iCode : XWS_CLOSE_NORMAL;
 	return __xwsPostClose(pConn->pStream, false, iCode, sReason, false);
 }
 #endif

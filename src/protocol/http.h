@@ -188,13 +188,129 @@ static inline bool XS_HttpLooksLikeJson(const char* sText)
 	return FALSE;
 }
 
+static inline bool XS_HttpExtractLineValue(const char* sText, const char* sName, char* sBuf, size_t iBufCap)
+{
+	const char* pLine;
+	const char* pValue;
+	const char* pEnd;
+	size_t iNameLen;
+	size_t iCopy;
+
+	if ( sBuf && iBufCap > 0 ) {
+		sBuf[0] = '\0';
+	}
+	if ( sText == NULL || sName == NULL || sName[0] == '\0' || sBuf == NULL || iBufCap <= 1 ) {
+		return FALSE;
+	}
+
+	iNameLen = strlen(sName);
+	pLine = sText;
+	while ( pLine && *pLine ) {
+		while ( *pLine == '\r' || *pLine == '\n' ) {
+			pLine++;
+		}
+		if ( strncmp(pLine, sName, iNameLen) == 0 && pLine[iNameLen] == '=' ) {
+			pValue = pLine + iNameLen + 1;
+			pEnd = pValue;
+			while ( *pEnd != '\0' && *pEnd != '\r' && *pEnd != '\n' ) {
+				pEnd++;
+			}
+			iCopy = (size_t)(pEnd - pValue);
+			if ( iCopy >= iBufCap ) {
+				iCopy = iBufCap - 1;
+			}
+			memcpy(sBuf, pValue, iCopy);
+			sBuf[iCopy] = '\0';
+			return TRUE;
+		}
+		while ( *pLine != '\0' && *pLine != '\n' ) {
+			pLine++;
+		}
+		if ( *pLine == '\n' ) {
+			pLine++;
+		}
+	}
+
+	return FALSE;
+}
+
+static inline bool XS_HttpExtractJsonMessage(const char* sText, char* sBuf, size_t iBufCap)
+{
+	const char* pKey;
+	const char* pValue;
+	const char* pEnd;
+	size_t iCopy;
+
+	if ( sBuf && iBufCap > 0 ) {
+		sBuf[0] = '\0';
+	}
+	if ( sText == NULL || sBuf == NULL || iBufCap <= 1 ) {
+		return FALSE;
+	}
+
+	pKey = strstr(sText, "\"message\"");
+	while ( pKey ) {
+		pValue = pKey + strlen("\"message\"");
+		while ( *pValue == ' ' || *pValue == '\t' || *pValue == '\r' || *pValue == '\n' ) {
+			pValue++;
+		}
+		if ( *pValue != ':' ) {
+			pKey = strstr(pValue, "\"message\"");
+			continue;
+		}
+		pValue++;
+		while ( *pValue == ' ' || *pValue == '\t' || *pValue == '\r' || *pValue == '\n' ) {
+			pValue++;
+		}
+		if ( *pValue != '"' ) {
+			return FALSE;
+		}
+		pValue++;
+		pEnd = pValue;
+		while ( *pEnd != '\0' ) {
+			if ( *pEnd == '"' && (pEnd == pValue || pEnd[-1] != '\\') ) {
+				break;
+			}
+			pEnd++;
+		}
+		if ( *pEnd != '"' ) {
+			return FALSE;
+		}
+		iCopy = (size_t)(pEnd - pValue);
+		if ( iCopy >= iBufCap ) {
+			iCopy = iBufCap - 1;
+		}
+		memcpy(sBuf, pValue, iCopy);
+		sBuf[iCopy] = '\0';
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+static inline bool XS_HttpExtractResponseMessage(const xhttpdresponse* pResp, char* sBuf, size_t iBufCap)
+{
+	if ( sBuf && iBufCap > 0 ) {
+		sBuf[0] = '\0';
+	}
+	if ( pResp == NULL || pResp->pBody == NULL || pResp->iBodyLen == 0 ) {
+		return FALSE;
+	}
+
+	if ( XS_HttpLooksLikeJson(pResp->pBody) ) {
+		return XS_HttpExtractJsonMessage(pResp->pBody, sBuf, iBufCap);
+	}
+
+	return XS_HttpExtractLineValue(pResp->pBody, "message", sBuf, iBufCap);
+}
+
 static inline bool XS_HttpIsManagePath(const char* sPath)
 {
 	if ( sPath == NULL ) {
 		return FALSE;
 	}
 
-	return strncmp(sPath, "/__xs/", 6) == 0;
+	return strcmp(sPath, "/__xs") == 0 || strncmp(sPath, "/__xs/", 6) == 0;
 }
 
 static inline uint64 XS_ProcessID(void)
@@ -313,6 +429,11 @@ static inline char* XS_ConfigFileName(void)
 	return xrtPathGetName(g_sXsConfigFile, 0);
 }
 
+static inline char* XS_ConfigNormalizeRuntimePath(const char* sFilePath)
+{
+	return XS_NormalizePath(xCore.AppPath, sFilePath);
+}
+
 static inline char* XS_FileChangeTimeText(const char* sPath)
 {
 	int64 iTime;
@@ -386,6 +507,463 @@ static inline void XS_HttpMetricSetText(char* sValue, size_t iCapacity, const ch
 	}
 }
 
+static inline const char* XS_HttpCanonicalRejectReason(const char* sReason)
+{
+	if ( sReason == NULL || sReason[0] == '\0' ) {
+		return "reject";
+	}
+	if ( strcmp(sReason, "header count limit exceeded") == 0 ) {
+		return "header_limit";
+	}
+	if ( strcmp(sReason, "request body limit exceeded") == 0 ) {
+		return "body_limit";
+	}
+	if ( strcmp(sReason, "request path limit exceeded") == 0 ) {
+		return "path_limit";
+	}
+	if ( strstr(sReason, "api disabled") != NULL ) {
+		return "api_disabled";
+	}
+	if ( strstr(sReason, "only supports ") != NULL ) {
+		return "method_not_allowed";
+	}
+	if ( strcmp(sReason, "reload host not found") == 0 || strcmp(sReason, "host not found") == 0 ) {
+		return "host_not_found";
+	}
+	if ( strcmp(sReason, "config reload busy") == 0 || strcmp(sReason, "config_reload=busy") == 0 || strcmp(sReason, "reload busy") == 0 ) {
+		return "reload_busy";
+	}
+	if ( strcmp(sReason, "reload failed") == 0 || strcmp(sReason, "invalid target") == 0 || strcmp(sReason, "host is not script-c") == 0 ) {
+		return "reload_failed";
+	}
+	if ( strcmp(sReason, "check config failed") == 0 || strcmp(sReason, "config file not set") == 0 ) {
+		return "check_config_failed";
+	}
+	if (
+		strcmp(sReason, "data limit exceeded") == 0 ||
+		strcmp(sReason, "queue limit exceeded") == 0 ||
+		strcmp(sReason, "namespace limit exceeded") == 0 ||
+		strcmp(sReason, "namespace data limit exceeded") == 0 ||
+		strcmp(sReason, "bus_limit") == 0
+	) {
+		return "bus_limit";
+	}
+	if ( strcmp(sReason, "bus_bad_request") == 0 || strcmp(sReason, "bus_not_found") == 0 || strcmp(sReason, "bus_failed") == 0 ) {
+		return sReason;
+	}
+
+	return sReason;
+}
+
+static inline void XS_HttpRecordPolicyReject(const char* sReason)
+{
+	if ( sReason == NULL || sReason[0] == '\0' ) {
+		return;
+	}
+	if ( strcmp(sReason, "api_disabled") == 0 ) {
+		XS_HttpMetricAdd(&g_iXsHttpApiDisabledRejectCount, 1);
+		g_tXsHttpLastApiDisabledRejectTime = xrtNow();
+		return;
+	}
+	if ( strcmp(sReason, "method_not_allowed") == 0 ) {
+		XS_HttpMetricAdd(&g_iXsHttpMethodRejectCount, 1);
+		g_tXsHttpLastMethodRejectTime = xrtNow();
+		return;
+	}
+	if ( strcmp(sReason, "host_not_found") == 0 ) {
+		XS_HttpMetricAdd(&g_iXsHttpHostNotFoundRejectCount, 1);
+		g_tXsHttpLastHostNotFoundRejectTime = xrtNow();
+		return;
+	}
+}
+
+static inline void XS_HttpRecordManageReject(const char* sReason)
+{
+	if ( sReason == NULL || sReason[0] == '\0' ) {
+		return;
+	}
+	if ( strcmp(sReason, "reload_busy") == 0 ) {
+		XS_HttpMetricAdd(&g_iXsHttpReloadBusyRejectCount, 1);
+		g_tXsHttpLastReloadBusyRejectTime = xrtNow();
+		return;
+	}
+	if ( strcmp(sReason, "reload_failed") == 0 ) {
+		XS_HttpMetricAdd(&g_iXsHttpReloadFailedRejectCount, 1);
+		g_tXsHttpLastReloadFailedRejectTime = xrtNow();
+		return;
+	}
+	if ( strcmp(sReason, "check_config_failed") == 0 ) {
+		XS_HttpMetricAdd(&g_iXsHttpCheckConfigFailedRejectCount, 1);
+		g_tXsHttpLastCheckConfigFailedRejectTime = xrtNow();
+		return;
+	}
+}
+
+static inline void XS_HttpRecordBusReject(const char* sReason)
+{
+	if ( sReason == NULL || sReason[0] == '\0' ) {
+		return;
+	}
+	if ( strcmp(sReason, "bus_bad_request") == 0 ) {
+		XS_HttpMetricAdd(&g_iXsHttpBusBadRequestRejectCount, 1);
+		g_tXsHttpLastBusBadRequestRejectTime = xrtNow();
+		return;
+	}
+	if ( strcmp(sReason, "bus_not_found") == 0 ) {
+		XS_HttpMetricAdd(&g_iXsHttpBusNotFoundRejectCount, 1);
+		g_tXsHttpLastBusNotFoundRejectTime = xrtNow();
+		return;
+	}
+	if ( strcmp(sReason, "bus_limit") == 0 ) {
+		XS_HttpMetricAdd(&g_iXsHttpBusLimitRejectCount, 1);
+		g_tXsHttpLastBusLimitRejectTime = xrtNow();
+		return;
+	}
+	if ( strcmp(sReason, "bus_failed") == 0 ) {
+		XS_HttpMetricAdd(&g_iXsHttpBusFailedRejectCount, 1);
+		g_tXsHttpLastBusFailedRejectTime = xrtNow();
+		return;
+	}
+}
+
+static inline int32 XS_HttpBusErrorStatusCode(int32 iBusCode)
+{
+	if ( XS_BusIsBadRequestError(iBusCode) ) {
+		return 400;
+	}
+	if ( XS_BusIsLimitError(iBusCode) ) {
+		return 409;
+	}
+
+	return 500;
+}
+
+static inline const char* XS_HttpBusErrorStatusText(int32 iBusCode)
+{
+	if ( XS_BusIsBadRequestError(iBusCode) ) {
+		return "Bad Request";
+	}
+	if ( XS_BusIsLimitError(iBusCode) ) {
+		return "Conflict";
+	}
+
+	return "Internal Server Error";
+}
+
+static inline bool XS_HttpRespondBusNamespaceBadRequest(xhttpdresponse* pResp, const char* sNamespace)
+{
+	const char* sError;
+	int32 iBusCode;
+	char sBody[256];
+
+	if ( pResp == NULL || sNamespace == NULL || sNamespace[0] == '\0' ) {
+		return FALSE;
+	}
+
+	sError = XS_BusNamespaceInvalidReason(sNamespace);
+	iBusCode = XS_BUS_ERR_NONE;
+	if ( sError ) {
+		iBusCode = XS_BUS_ERR_INVALID_NAMESPACE;
+	} else if ( XS_BusIsReservedNamespace(sNamespace) ) {
+		sError = "reserved namespace";
+		iBusCode = XS_BUS_ERR_RESERVED_NAMESPACE;
+	}
+	if ( sError == NULL || iBusCode == XS_BUS_ERR_NONE ) {
+		return FALSE;
+	}
+
+	snprintf(
+		sBody,
+		sizeof(sBody),
+		"{\"result\":false,\"message\":\"invalid namespace\",\"bus_code\":%d,\"bus_error\":\"%s\"}",
+		(int)iBusCode,
+		sError
+	);
+	xrtHttpdResponseSetStatus(pResp, 400, "Bad Request");
+	return xrtHttpdResponseSetBodyCopy(pResp, sBody, strlen(sBody), "application/json; charset=utf-8");
+}
+
+static inline bool XS_HttpParseInt64(const char* sText, int64* piValue)
+{
+	char* sEnd = NULL;
+	int64 iValue = 0;
+
+	if ( piValue ) {
+		*piValue = 0;
+	}
+	if ( sText == NULL || sText[0] == '\0' ) {
+		return FALSE;
+	}
+
+	iValue = (int64)strtoll(sText, &sEnd, 10);
+	if ( sEnd == NULL || sEnd[0] != '\0' ) {
+		return FALSE;
+	}
+	if ( piValue ) {
+		*piValue = iValue;
+	}
+	return TRUE;
+}
+
+static inline bool XS_HttpParseBoolText(const char* sText, size_t iTextLen, bool* pbValue)
+{
+	if ( pbValue ) {
+		*pbValue = FALSE;
+	}
+	if ( sText == NULL || iTextLen == 0 ) {
+		return FALSE;
+	}
+
+	if ( iTextLen == 1 && (sText[0] == '1' || sText[0] == 'y' || sText[0] == 'Y') ) {
+		if ( pbValue ) {
+			*pbValue = TRUE;
+		}
+		return TRUE;
+	}
+	if ( iTextLen == 4 && _strnicmp(sText, "true", 4) == 0 ) {
+		if ( pbValue ) {
+			*pbValue = TRUE;
+		}
+		return TRUE;
+	}
+	if ( iTextLen == 3 && _strnicmp(sText, "yes", 3) == 0 ) {
+		if ( pbValue ) {
+			*pbValue = TRUE;
+		}
+		return TRUE;
+	}
+	if ( iTextLen == 1 && (sText[0] == '0' || sText[0] == 'n' || sText[0] == 'N') ) {
+		if ( pbValue ) {
+			*pbValue = FALSE;
+		}
+		return TRUE;
+	}
+	if ( iTextLen == 5 && _strnicmp(sText, "false", 5) == 0 ) {
+		if ( pbValue ) {
+			*pbValue = FALSE;
+		}
+		return TRUE;
+	}
+	if ( iTextLen == 2 && _strnicmp(sText, "no", 2) == 0 ) {
+		if ( pbValue ) {
+			*pbValue = FALSE;
+		}
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+static inline bool XS_HttpParsePositiveInt64(const char* sText, int64* piValue)
+{
+	int64 iValue = 0;
+
+	if ( !XS_HttpParseInt64(sText, &iValue) || iValue <= 0 ) {
+		return FALSE;
+	}
+	if ( piValue ) {
+		*piValue = iValue;
+	}
+	return TRUE;
+}
+
+static inline bool XS_HttpParseNonNegativeInt64(const char* sText, int64* piValue)
+{
+	int64 iValue = 0;
+
+	if ( !XS_HttpParseInt64(sText, &iValue) || iValue < 0 ) {
+		return FALSE;
+	}
+	if ( piValue ) {
+		*piValue = iValue;
+	}
+	return TRUE;
+}
+
+static inline bool XS_ParsePortText(const char* sText, uint16* piPort)
+{
+	uint32 iValue = 0;
+	size_t iTextLen = 0;
+
+	if ( piPort ) {
+		*piPort = 0;
+	}
+	if ( sText == NULL || sText[0] == '\0' ) {
+		return FALSE;
+	}
+
+	iTextLen = strlen(sText);
+	if ( iTextLen == 0 || iTextLen > 5 ) {
+		return FALSE;
+	}
+
+	for ( size_t i = 0; i < iTextLen; ++i ) {
+		char ch = sText[i];
+
+		if ( ch < '0' || ch > '9' ) {
+			return FALSE;
+		}
+		iValue = (iValue * 10u) + (uint32)(ch - '0');
+		if ( iValue > 65535u ) {
+			return FALSE;
+		}
+	}
+
+	if ( iValue == 0u ) {
+		return FALSE;
+	}
+	if ( piPort ) {
+		*piPort = (uint16)iValue;
+	}
+	return TRUE;
+}
+
+static inline bool XS_HttpRespondBusDataIDBadRequest(xhttpdresponse* pResp, const char* sID)
+{
+	char sBody[128];
+
+	if ( pResp == NULL || sID == NULL || sID[0] == '\0' ) {
+		return FALSE;
+	}
+	if ( XS_HttpParsePositiveInt64(sID, NULL) ) {
+		return FALSE;
+	}
+
+	snprintf(
+		sBody,
+		sizeof(sBody),
+		"{\"result\":false,\"message\":\"invalid data id\",\"data_id\":0}"
+	);
+	xrtHttpdResponseSetStatus(pResp, 400, "Bad Request");
+	return xrtHttpdResponseSetBodyCopy(pResp, sBody, strlen(sBody), "application/json; charset=utf-8");
+}
+
+static inline bool XS_HttpRespondBusTTLBadRequest(xhttpdresponse* pResp, const char* sTTL)
+{
+	char sBody[120];
+
+	if ( pResp == NULL || sTTL == NULL || sTTL[0] == '\0' ) {
+		return FALSE;
+	}
+	if ( XS_HttpParseNonNegativeInt64(sTTL, NULL) ) {
+		return FALSE;
+	}
+
+	snprintf(
+		sBody,
+		sizeof(sBody),
+		"{\"result\":false,\"message\":\"invalid ttl\",\"ttl\":0}"
+	);
+	xrtHttpdResponseSetStatus(pResp, 400, "Bad Request");
+	return xrtHttpdResponseSetBodyCopy(pResp, sBody, strlen(sBody), "application/json; charset=utf-8");
+}
+
+static inline bool XS_HttpRespondBusNamedIntBadRequest(xhttpdresponse* pResp, const char* sName)
+{
+	char sBody[160];
+
+	if ( pResp == NULL || sName == NULL || sName[0] == '\0' ) {
+		return FALSE;
+	}
+
+	snprintf(
+		sBody,
+		sizeof(sBody),
+		"{\"result\":false,\"message\":\"invalid %s\",\"%s\":0}",
+		sName,
+		sName
+	);
+	xrtHttpdResponseSetStatus(pResp, 400, "Bad Request");
+	return xrtHttpdResponseSetBodyCopy(pResp, sBody, strlen(sBody), "application/json; charset=utf-8");
+}
+
+static inline bool XS_HttpRespondNamedBoolBadRequestText(xhttpdresponse* pResp, const char* sName)
+{
+	char sBody[160];
+
+	if ( pResp == NULL || sName == NULL || sName[0] == '\0' ) {
+		return FALSE;
+	}
+
+	snprintf(sBody, sizeof(sBody), "invalid %s", sName);
+	return XS_HttpRespondText(pResp, 400, "Bad Request", sBody);
+}
+
+static inline bool XS_HttpRespondNamedBoolBadRequestJson(xhttpdresponse* pResp, const char* sName)
+{
+	char sBody[160];
+
+	if ( pResp == NULL || sName == NULL || sName[0] == '\0' ) {
+		return FALSE;
+	}
+
+	snprintf(sBody, sizeof(sBody), "{\"result\":false,\"message\":\"invalid %s\"}", sName);
+	xrtHttpdResponseSetStatus(pResp, 400, "Bad Request");
+	return xrtHttpdResponseSetBodyCopy(pResp, sBody, strlen(sBody), "application/json; charset=utf-8");
+}
+
+static inline bool XS_HttpRespondJsonResult(xhttpdresponse* pResp, int32 iStatusCode, const char* sStatusText, bool bResult, const char* sMessage)
+{
+	char sBody[512];
+	const char* pStatusText = sStatusText ? sStatusText : (bResult ? "OK" : "Bad Request");
+	const char* pMessage = sMessage ? sMessage : "";
+
+	if ( pResp == NULL ) {
+		return FALSE;
+	}
+
+	snprintf(
+		sBody,
+		sizeof(sBody),
+		"{\"result\":%s,\"message\":\"%s\"}",
+		bResult ? "true" : "false",
+		pMessage
+	);
+	xrtHttpdResponseSetStatus(pResp, iStatusCode, pStatusText);
+	return xrtHttpdResponseSetBodyCopy(pResp, sBody, strlen(sBody), "application/json; charset=utf-8");
+}
+
+static inline void XS_HttpFreeBusLimitQueryValues(
+	char* sDataLimit,
+	char* sQueueLimit,
+	char* sNamespaceLimit,
+	char* sNamespaceDataLimit,
+	char* sSweepIntervalMS,
+	char* sReadonlyNamespaces,
+	char* sDisabledNamespaces,
+	char* sTTLRequiredNamespaces,
+	char* sTagRequiredNamespaces
+)
+{
+	if ( sDataLimit ) {
+		xrtFree(sDataLimit);
+	}
+	if ( sQueueLimit ) {
+		xrtFree(sQueueLimit);
+	}
+	if ( sNamespaceLimit ) {
+		xrtFree(sNamespaceLimit);
+	}
+	if ( sNamespaceDataLimit ) {
+		xrtFree(sNamespaceDataLimit);
+	}
+	if ( sSweepIntervalMS ) {
+		xrtFree(sSweepIntervalMS);
+	}
+	if ( sReadonlyNamespaces ) {
+		xrtFree(sReadonlyNamespaces);
+	}
+	if ( sDisabledNamespaces ) {
+		xrtFree(sDisabledNamespaces);
+	}
+	if ( sTTLRequiredNamespaces ) {
+		xrtFree(sTTLRequiredNamespaces);
+	}
+	if ( sTagRequiredNamespaces ) {
+		xrtFree(sTagRequiredNamespaces);
+	}
+}
+
 static inline void XS_HttpRecordRejectCommon(volatile int64* pCount, xtime* pTime, char* sReason, size_t iReasonCap, const char* sValue)
 {
 	if ( pCount ) {
@@ -415,8 +993,13 @@ static inline void XS_HttpRecordStopCleanupCommon(volatile int64* pCount, xtime*
 
 static inline void XS_HttpRecordRejectEvent(int64 iStatusCode, const char* sReason)
 {
-	XS_HttpRecordRejectCommon(&g_iXsHttpRejectCount, &g_tXsHttpLastRejectTime, g_sXsHttpLastRejectReason, sizeof(g_sXsHttpLastRejectReason), sReason);
+	const char* sCanonical = XS_HttpCanonicalRejectReason(sReason);
+
+	XS_HttpRecordRejectCommon(&g_iXsHttpRejectCount, &g_tXsHttpLastRejectTime, g_sXsHttpLastRejectReason, sizeof(g_sXsHttpLastRejectReason), sCanonical);
 	g_iXsHttpLastRejectStatus = iStatusCode;
+	XS_HttpRecordPolicyReject(sCanonical);
+	XS_HttpRecordManageReject(sCanonical);
+	XS_HttpRecordBusReject(sCanonical);
 }
 
 static inline void XS_HttpRecordStopCleanup(int64 iClosed, int64 iRemain)
@@ -456,16 +1039,70 @@ static inline const char* XS_HttpRejectReasonText(const xhttpdresponse* pResp, c
 				}
 				memcpy(sBuf, sText + iStart, iCopy);
 				sBuf[iCopy] = '\0';
-				return sBuf;
+				return XS_HttpCanonicalRejectReason(sBuf);
 			}
 		}
 	}
 
 	if ( pResp->sReason[0] ) {
-		return pResp->sReason;
+		return XS_HttpCanonicalRejectReason(pResp->sReason);
 	}
 
 	return "reject";
+}
+
+static inline const char* XS_HttpRejectReasonTextEx(const xhttpdrequest* pReq, const xhttpdresponse* pResp, char* sBuf, size_t iBufCap)
+{
+	const char* sPath;
+	uint32 iStatusCode;
+
+	if ( sBuf && iBufCap > 0 ) {
+		sBuf[0] = '\0';
+	}
+	if ( pResp == NULL ) {
+		return "reject";
+	}
+
+	sPath = (pReq && pReq->sPath) ? pReq->sPath : NULL;
+	iStatusCode = pResp->iStatusCode;
+	if ( sPath ) {
+		if ( strcmp(sPath, "/__xs/bus") == 0 || strncmp(sPath, "/__xs/bus/", 10) == 0 ) {
+			if ( iStatusCode == 400u ) {
+				return "bus_bad_request";
+			}
+			if ( iStatusCode == 404u ) {
+				return "bus_not_found";
+			}
+			if ( iStatusCode == 409u ) {
+				return "bus_limit";
+			}
+			if ( iStatusCode >= 500u ) {
+				return "bus_failed";
+			}
+		}
+		if (
+			(strcmp(sPath, "/__xs/reload_config") == 0 || strcmp(sPath, "/__xs/reload_config_json") == 0) &&
+			iStatusCode == 409u
+		) {
+			return "reload_busy";
+		}
+		if (
+			(strcmp(sPath, "/__xs/check_config") == 0 || strcmp(sPath, "/__xs/check_config_json") == 0) &&
+			iStatusCode >= 500u
+		) {
+			return "check_config_failed";
+		}
+	}
+	if ( XS_HttpExtractResponseMessage(pResp, sBuf, iBufCap) ) {
+		return XS_HttpCanonicalRejectReason(sBuf);
+	}
+	if ( sPath ) {
+		if ( (strcmp(sPath, "/__xs/reload") == 0 || strcmp(sPath, "/__xs/reload_json") == 0) && iStatusCode >= 500u ) {
+			return "reload_failed";
+		}
+	}
+
+	return XS_HttpRejectReasonText(pResp, sBuf, iBufCap);
 }
 
 static inline void XS_WsRecordRejectEvent(const char* sReason)
@@ -695,6 +1332,24 @@ static inline void XS_HttpRecordConnLimitClose(void)
 	XS_HttpRecordRejectEvent(0, "conn_limit");
 }
 
+static inline void XS_HttpRecordHeaderLimitReject(void)
+{
+	XS_HttpMetricAdd(&g_iXsHttpHeaderLimitRejectCount, 1);
+	g_tXsHttpLastHeaderLimitRejectTime = xrtNow();
+}
+
+static inline void XS_HttpRecordBodyLimitReject(void)
+{
+	XS_HttpMetricAdd(&g_iXsHttpBodyLimitRejectCount, 1);
+	g_tXsHttpLastBodyLimitRejectTime = xrtNow();
+}
+
+static inline void XS_HttpRecordPathLimitReject(void)
+{
+	XS_HttpMetricAdd(&g_iXsHttpPathLimitRejectCount, 1);
+	g_tXsHttpLastPathLimitRejectTime = xrtNow();
+}
+
 static inline int64 XS_HttpQueryLength(const xhttpdrequest* pReq)
 {
 	const char* pQuery;
@@ -750,7 +1405,7 @@ static inline void XS_HttpRecordResponseMetrics(const xhttpdconn* pConn, const x
 	}
 
 	XS_HttpMetricAdd(&g_iXsHttpReqCount, 1);
-	bManagePath = (pReq && pReq->sPath && strncmp(pReq->sPath, "/__xs/", 6) == 0);
+	bManagePath = (pReq && XS_HttpIsManagePath(pReq->sPath));
 	if ( bManagePath ) {
 		XS_HttpMetricAdd(&g_iXsHttpManageReqCount, 1);
 	} else {
@@ -991,7 +1646,7 @@ static inline void XS_HttpRecordResponseMetrics(const xhttpdconn* pConn, const x
 
 		XS_HttpRecordRejectEvent(
 			(int64)iStatusCode,
-			XS_HttpRejectReasonText(pResp, sRejectReason, sizeof(sRejectReason))
+			XS_HttpRejectReasonTextEx(pReq, pResp, sRejectReason, sizeof(sRejectReason))
 		);
 	}
 }
@@ -1209,6 +1864,58 @@ static inline void XS_HttpClearMetrics(void)
 	if ( iValue != 0 ) {
 		XS_HttpMetricAdd(&g_iXsHttpRejectCount, -iValue);
 	}
+	iValue = XS_HttpMetricGet(&g_iXsHttpHeaderLimitRejectCount);
+	if ( iValue != 0 ) {
+		XS_HttpMetricAdd(&g_iXsHttpHeaderLimitRejectCount, -iValue);
+	}
+	iValue = XS_HttpMetricGet(&g_iXsHttpBodyLimitRejectCount);
+	if ( iValue != 0 ) {
+		XS_HttpMetricAdd(&g_iXsHttpBodyLimitRejectCount, -iValue);
+	}
+	iValue = XS_HttpMetricGet(&g_iXsHttpPathLimitRejectCount);
+	if ( iValue != 0 ) {
+		XS_HttpMetricAdd(&g_iXsHttpPathLimitRejectCount, -iValue);
+	}
+	iValue = XS_HttpMetricGet(&g_iXsHttpApiDisabledRejectCount);
+	if ( iValue != 0 ) {
+		XS_HttpMetricAdd(&g_iXsHttpApiDisabledRejectCount, -iValue);
+	}
+	iValue = XS_HttpMetricGet(&g_iXsHttpMethodRejectCount);
+	if ( iValue != 0 ) {
+		XS_HttpMetricAdd(&g_iXsHttpMethodRejectCount, -iValue);
+	}
+	iValue = XS_HttpMetricGet(&g_iXsHttpHostNotFoundRejectCount);
+	if ( iValue != 0 ) {
+		XS_HttpMetricAdd(&g_iXsHttpHostNotFoundRejectCount, -iValue);
+	}
+	iValue = XS_HttpMetricGet(&g_iXsHttpReloadBusyRejectCount);
+	if ( iValue != 0 ) {
+		XS_HttpMetricAdd(&g_iXsHttpReloadBusyRejectCount, -iValue);
+	}
+	iValue = XS_HttpMetricGet(&g_iXsHttpReloadFailedRejectCount);
+	if ( iValue != 0 ) {
+		XS_HttpMetricAdd(&g_iXsHttpReloadFailedRejectCount, -iValue);
+	}
+	iValue = XS_HttpMetricGet(&g_iXsHttpCheckConfigFailedRejectCount);
+	if ( iValue != 0 ) {
+		XS_HttpMetricAdd(&g_iXsHttpCheckConfigFailedRejectCount, -iValue);
+	}
+	iValue = XS_HttpMetricGet(&g_iXsHttpBusBadRequestRejectCount);
+	if ( iValue != 0 ) {
+		XS_HttpMetricAdd(&g_iXsHttpBusBadRequestRejectCount, -iValue);
+	}
+	iValue = XS_HttpMetricGet(&g_iXsHttpBusNotFoundRejectCount);
+	if ( iValue != 0 ) {
+		XS_HttpMetricAdd(&g_iXsHttpBusNotFoundRejectCount, -iValue);
+	}
+	iValue = XS_HttpMetricGet(&g_iXsHttpBusLimitRejectCount);
+	if ( iValue != 0 ) {
+		XS_HttpMetricAdd(&g_iXsHttpBusLimitRejectCount, -iValue);
+	}
+	iValue = XS_HttpMetricGet(&g_iXsHttpBusFailedRejectCount);
+	if ( iValue != 0 ) {
+		XS_HttpMetricAdd(&g_iXsHttpBusFailedRejectCount, -iValue);
+	}
 
 	iValue = XS_HttpMetricGet(&g_iXsHttpMethodGetCount);
 	if ( iValue != 0 ) {
@@ -1259,6 +1966,19 @@ static inline void XS_HttpClearMetrics(void)
 	g_tXsHttpLastConnLimitCloseTime = 0;
 	g_tXsHttpLastStopCleanupTime = 0;
 	g_tXsHttpLastRejectTime = 0;
+	g_tXsHttpLastHeaderLimitRejectTime = 0;
+	g_tXsHttpLastBodyLimitRejectTime = 0;
+	g_tXsHttpLastPathLimitRejectTime = 0;
+	g_tXsHttpLastApiDisabledRejectTime = 0;
+	g_tXsHttpLastMethodRejectTime = 0;
+	g_tXsHttpLastHostNotFoundRejectTime = 0;
+	g_tXsHttpLastReloadBusyRejectTime = 0;
+	g_tXsHttpLastReloadFailedRejectTime = 0;
+	g_tXsHttpLastCheckConfigFailedRejectTime = 0;
+	g_tXsHttpLastBusBadRequestRejectTime = 0;
+	g_tXsHttpLastBusNotFoundRejectTime = 0;
+	g_tXsHttpLastBusLimitRejectTime = 0;
+	g_tXsHttpLastBusFailedRejectTime = 0;
 	g_iXsHttpLastStopCleanupClosed = 0;
 	g_iXsHttpLastStopCleanupRemain = 0;
 	g_sXsHttpLastPath[0] = '\0';
@@ -1356,6 +2076,10 @@ static inline void XS_WsClearMetrics(void)
 	if ( iValue != 0 ) {
 		XS_HttpMetricAdd(&g_iXsWsConnLimitCloseCount, -iValue);
 	}
+	iValue = XS_HttpMetricGet(&g_iXsWsMessageLimitCloseCount);
+	if ( iValue != 0 ) {
+		XS_HttpMetricAdd(&g_iXsWsMessageLimitCloseCount, -iValue);
+	}
 	iValue = XS_HttpMetricGet(&g_iXsWsStopCleanupCount);
 	if ( iValue != 0 ) {
 		XS_HttpMetricAdd(&g_iXsWsStopCleanupCount, -iValue);
@@ -1369,12 +2093,14 @@ static inline void XS_WsClearMetrics(void)
 	g_iXsWsLastBytes = 0;
 	g_iXsWsIdleCloseCount = 0;
 	g_iXsWsConnLimitCloseCount = 0;
+	g_iXsWsMessageLimitCloseCount = 0;
 	g_tXsWsLastTime = 0;
 	g_tXsWsLastCloseTime = 0;
 	g_tXsWsLastErrorTime = 0;
 	g_tXsWsLastInvalidTime = 0;
 	g_tXsWsLastIdleCloseTime = 0;
 	g_tXsWsLastConnLimitCloseTime = 0;
+	g_tXsWsLastMessageLimitCloseTime = 0;
 	g_tXsWsLastStopCleanupTime = 0;
 	g_tXsWsLastRejectTime = 0;
 	g_iXsWsLastErrorCode = 0;
@@ -1409,6 +2135,17 @@ static inline char* XS_WsLastConnLimitCloseTimeText(void)
 	return xrtTimeToStr(tLast, XRT_TIME_FORMAT_DATETIME);
 }
 
+static inline char* XS_WsLastMessageLimitCloseTimeText(void)
+{
+	xtime tLast = g_tXsWsLastMessageLimitCloseTime;
+
+	if ( tLast <= 0 ) {
+		return NULL;
+	}
+
+	return xrtTimeToStr(tLast, XRT_TIME_FORMAT_DATETIME);
+}
+
 static inline char* XS_WsLastStopCleanupTimeText(void)
 {
 	xtime tLast = g_tXsWsLastStopCleanupTime;
@@ -1434,6 +2171,17 @@ static inline int64 XS_WsLastIdleCloseAgeMS(void)
 static inline int64 XS_WsLastConnLimitCloseAgeMS(void)
 {
 	xtime tLast = g_tXsWsLastConnLimitCloseTime;
+
+	if ( tLast <= 0 ) {
+		return -1;
+	}
+
+	return (int64)(xrtNow() - tLast) * 1000;
+}
+
+static inline int64 XS_WsLastMessageLimitCloseAgeMS(void)
+{
+	xtime tLast = g_tXsWsLastMessageLimitCloseTime;
 
 	if ( tLast <= 0 ) {
 		return -1;
@@ -1561,6 +2309,10 @@ static inline void XS_XtpClearMetrics(void)
 	if ( iValue != 0 ) {
 		XS_HttpMetricAdd(&g_iXsXtpConnLimitCloseCount, -iValue);
 	}
+	iValue = XS_HttpMetricGet(&g_iXsXtpRecvLimitCloseCount);
+	if ( iValue != 0 ) {
+		XS_HttpMetricAdd(&g_iXsXtpRecvLimitCloseCount, -iValue);
+	}
 	iValue = XS_HttpMetricGet(&g_iXsXtpStopCleanupCount);
 	if ( iValue != 0 ) {
 		XS_HttpMetricAdd(&g_iXsXtpStopCleanupCount, -iValue);
@@ -1585,8 +2337,10 @@ static inline void XS_XtpClearMetrics(void)
 	g_iXsXtpLastErrorCode = 0;
 	g_tXsXtpLastIdleCloseTime = 0;
 	g_tXsXtpLastConnLimitCloseTime = 0;
+	g_tXsXtpLastRecvLimitCloseTime = 0;
 	g_tXsXtpLastStopCleanupTime = 0;
 	g_tXsXtpLastRejectTime = 0;
+	g_iXsXtpRecvLimitCloseCount = 0;
 	g_iXsXtpLastStopCleanupClosed = 0;
 	g_iXsXtpLastStopCleanupRemain = 0;
 	g_sXsXtpLastRejectReason[0] = '\0';
@@ -1676,6 +2430,10 @@ static inline void XS_CustomClearMetrics(void)
 	if ( iValue != 0 ) {
 		XS_HttpMetricAdd(&g_iXsCustomConnLimitCloseCount, -iValue);
 	}
+	iValue = XS_HttpMetricGet(&g_iXsCustomRecvLimitCloseCount);
+	if ( iValue != 0 ) {
+		XS_HttpMetricAdd(&g_iXsCustomRecvLimitCloseCount, -iValue);
+	}
 	iValue = XS_HttpMetricGet(&g_iXsCustomStopCleanupCount);
 	if ( iValue != 0 ) {
 		XS_HttpMetricAdd(&g_iXsCustomStopCleanupCount, -iValue);
@@ -1689,11 +2447,14 @@ static inline void XS_CustomClearMetrics(void)
 	g_tXsCustomLastInvalidTime = 0;
 	g_tXsCustomLastIdleCloseTime = 0;
 	g_tXsCustomLastConnLimitCloseTime = 0;
+	g_tXsCustomLastRecvLimitCloseTime = 0;
 	g_tXsCustomLastStopCleanupTime = 0;
 	g_tXsCustomLastRejectTime = 0;
+	g_tXsCustomLastCloseTime = 0;
 	g_iXsCustomLastCloseReason = 0;
 	g_iXsCustomLastErrorCode = 0;
 	g_iXsCustomLastBytes = 0;
+	g_iXsCustomRecvLimitCloseCount = 0;
 	g_iXsCustomLastStopCleanupClosed = 0;
 	g_iXsCustomLastStopCleanupRemain = 0;
 	g_sXsCustomLastText[0] = '\0';
@@ -1767,6 +2528,123 @@ static inline char* XS_HttpLastRejectTimeText(void)
 	}
 
 	return xrtTimeToStr(g_tXsHttpLastRejectTime, XRT_TIME_FORMAT_DATETIME);
+}
+
+static inline char* XS_HttpLastHeaderLimitRejectTimeText(void)
+{
+	if ( g_tXsHttpLastHeaderLimitRejectTime <= 0 ) {
+		return NULL;
+	}
+
+	return xrtTimeToStr(g_tXsHttpLastHeaderLimitRejectTime, XRT_TIME_FORMAT_DATETIME);
+}
+
+static inline char* XS_HttpLastBodyLimitRejectTimeText(void)
+{
+	if ( g_tXsHttpLastBodyLimitRejectTime <= 0 ) {
+		return NULL;
+	}
+
+	return xrtTimeToStr(g_tXsHttpLastBodyLimitRejectTime, XRT_TIME_FORMAT_DATETIME);
+}
+
+static inline char* XS_HttpLastPathLimitRejectTimeText(void)
+{
+	if ( g_tXsHttpLastPathLimitRejectTime <= 0 ) {
+		return NULL;
+	}
+
+	return xrtTimeToStr(g_tXsHttpLastPathLimitRejectTime, XRT_TIME_FORMAT_DATETIME);
+}
+
+static inline char* XS_HttpLastApiDisabledRejectTimeText(void)
+{
+	if ( g_tXsHttpLastApiDisabledRejectTime <= 0 ) {
+		return NULL;
+	}
+
+	return xrtTimeToStr(g_tXsHttpLastApiDisabledRejectTime, XRT_TIME_FORMAT_DATETIME);
+}
+
+static inline char* XS_HttpLastMethodRejectTimeText(void)
+{
+	if ( g_tXsHttpLastMethodRejectTime <= 0 ) {
+		return NULL;
+	}
+
+	return xrtTimeToStr(g_tXsHttpLastMethodRejectTime, XRT_TIME_FORMAT_DATETIME);
+}
+
+static inline char* XS_HttpLastHostNotFoundRejectTimeText(void)
+{
+	if ( g_tXsHttpLastHostNotFoundRejectTime <= 0 ) {
+		return NULL;
+	}
+
+	return xrtTimeToStr(g_tXsHttpLastHostNotFoundRejectTime, XRT_TIME_FORMAT_DATETIME);
+}
+
+static inline char* XS_HttpLastReloadBusyRejectTimeText(void)
+{
+	if ( g_tXsHttpLastReloadBusyRejectTime <= 0 ) {
+		return NULL;
+	}
+
+	return xrtTimeToStr(g_tXsHttpLastReloadBusyRejectTime, XRT_TIME_FORMAT_DATETIME);
+}
+
+static inline char* XS_HttpLastReloadFailedRejectTimeText(void)
+{
+	if ( g_tXsHttpLastReloadFailedRejectTime <= 0 ) {
+		return NULL;
+	}
+
+	return xrtTimeToStr(g_tXsHttpLastReloadFailedRejectTime, XRT_TIME_FORMAT_DATETIME);
+}
+
+static inline char* XS_HttpLastCheckConfigFailedRejectTimeText(void)
+{
+	if ( g_tXsHttpLastCheckConfigFailedRejectTime <= 0 ) {
+		return NULL;
+	}
+
+	return xrtTimeToStr(g_tXsHttpLastCheckConfigFailedRejectTime, XRT_TIME_FORMAT_DATETIME);
+}
+
+static inline char* XS_HttpLastBusBadRequestRejectTimeText(void)
+{
+	if ( g_tXsHttpLastBusBadRequestRejectTime <= 0 ) {
+		return NULL;
+	}
+
+	return xrtTimeToStr(g_tXsHttpLastBusBadRequestRejectTime, XRT_TIME_FORMAT_DATETIME);
+}
+
+static inline char* XS_HttpLastBusNotFoundRejectTimeText(void)
+{
+	if ( g_tXsHttpLastBusNotFoundRejectTime <= 0 ) {
+		return NULL;
+	}
+
+	return xrtTimeToStr(g_tXsHttpLastBusNotFoundRejectTime, XRT_TIME_FORMAT_DATETIME);
+}
+
+static inline char* XS_HttpLastBusLimitRejectTimeText(void)
+{
+	if ( g_tXsHttpLastBusLimitRejectTime <= 0 ) {
+		return NULL;
+	}
+
+	return xrtTimeToStr(g_tXsHttpLastBusLimitRejectTime, XRT_TIME_FORMAT_DATETIME);
+}
+
+static inline char* XS_HttpLastBusFailedRejectTimeText(void)
+{
+	if ( g_tXsHttpLastBusFailedRejectTime <= 0 ) {
+		return NULL;
+	}
+
+	return xrtTimeToStr(g_tXsHttpLastBusFailedRejectTime, XRT_TIME_FORMAT_DATETIME);
 }
 
 static inline const char* XS_XtpLastMsgTypeName(void)
@@ -1852,6 +2730,15 @@ static inline char* XS_XtpLastConnLimitCloseTimeText(void)
 	return xrtTimeToStr(g_tXsXtpLastConnLimitCloseTime, XRT_TIME_FORMAT_DATETIME);
 }
 
+static inline char* XS_XtpLastRecvLimitCloseTimeText(void)
+{
+	if ( g_tXsXtpLastRecvLimitCloseTime <= 0 ) {
+		return NULL;
+	}
+
+	return xrtTimeToStr(g_tXsXtpLastRecvLimitCloseTime, XRT_TIME_FORMAT_DATETIME);
+}
+
 static inline char* XS_XtpLastStopCleanupTimeText(void)
 {
 	if ( g_tXsXtpLastStopCleanupTime <= 0 ) {
@@ -1886,6 +2773,15 @@ static inline int64 XS_XtpLastConnLimitCloseAgeMS(void)
 	}
 
 	return (int64)(xrtNow() - g_tXsXtpLastConnLimitCloseTime) * 1000;
+}
+
+static inline int64 XS_XtpLastRecvLimitCloseAgeMS(void)
+{
+	if ( g_tXsXtpLastRecvLimitCloseTime <= 0 ) {
+		return -1;
+	}
+
+	return (int64)(xrtNow() - g_tXsXtpLastRecvLimitCloseTime) * 1000;
 }
 
 static inline int64 XS_XtpLastStopCleanupAgeMS(void)
@@ -1969,6 +2865,24 @@ static inline char* XS_CustomLastErrorTimeText(void)
 	return xrtTimeToStr(g_tXsCustomLastErrorTime, XRT_TIME_FORMAT_DATETIME);
 }
 
+static inline char* XS_CustomLastCloseTimeText(void)
+{
+	if ( g_tXsCustomLastCloseTime <= 0 ) {
+		return NULL;
+	}
+
+	return xrtTimeToStr(g_tXsCustomLastCloseTime, XRT_TIME_FORMAT_DATETIME);
+}
+
+static inline int64 XS_CustomLastCloseAgeMS(void)
+{
+	if ( g_tXsCustomLastCloseTime <= 0 ) {
+		return -1;
+	}
+
+	return (int64)(xrtNow() - g_tXsCustomLastCloseTime) * 1000;
+}
+
 static inline int64 XS_CustomLastErrorAgeMS(void)
 {
 	if ( g_tXsCustomLastErrorTime <= 0 ) {
@@ -2014,6 +2928,15 @@ static inline char* XS_CustomLastConnLimitCloseTimeText(void)
 	return xrtTimeToStr(g_tXsCustomLastConnLimitCloseTime, XRT_TIME_FORMAT_DATETIME);
 }
 
+static inline char* XS_CustomLastRecvLimitCloseTimeText(void)
+{
+	if ( g_tXsCustomLastRecvLimitCloseTime <= 0 ) {
+		return NULL;
+	}
+
+	return xrtTimeToStr(g_tXsCustomLastRecvLimitCloseTime, XRT_TIME_FORMAT_DATETIME);
+}
+
 static inline char* XS_CustomLastStopCleanupTimeText(void)
 {
 	if ( g_tXsCustomLastStopCleanupTime <= 0 ) {
@@ -2048,6 +2971,15 @@ static inline int64 XS_CustomLastConnLimitCloseAgeMS(void)
 	}
 
 	return (int64)(xrtNow() - g_tXsCustomLastConnLimitCloseTime) * 1000;
+}
+
+static inline int64 XS_CustomLastRecvLimitCloseAgeMS(void)
+{
+	if ( g_tXsCustomLastRecvLimitCloseTime <= 0 ) {
+		return -1;
+	}
+
+	return (int64)(xrtNow() - g_tXsCustomLastRecvLimitCloseTime) * 1000;
 }
 
 static inline int64 XS_CustomLastStopCleanupAgeMS(void)
@@ -2111,6 +3043,123 @@ static inline int64 XS_HttpLastRejectAgeMS(void)
 	}
 
 	return (int64)(xrtNow() - g_tXsHttpLastRejectTime) * 1000;
+}
+
+static inline int64 XS_HttpLastHeaderLimitRejectAgeMS(void)
+{
+	if ( g_tXsHttpLastHeaderLimitRejectTime <= 0 ) {
+		return -1;
+	}
+
+	return (int64)(xrtNow() - g_tXsHttpLastHeaderLimitRejectTime) * 1000;
+}
+
+static inline int64 XS_HttpLastBodyLimitRejectAgeMS(void)
+{
+	if ( g_tXsHttpLastBodyLimitRejectTime <= 0 ) {
+		return -1;
+	}
+
+	return (int64)(xrtNow() - g_tXsHttpLastBodyLimitRejectTime) * 1000;
+}
+
+static inline int64 XS_HttpLastPathLimitRejectAgeMS(void)
+{
+	if ( g_tXsHttpLastPathLimitRejectTime <= 0 ) {
+		return -1;
+	}
+
+	return (int64)(xrtNow() - g_tXsHttpLastPathLimitRejectTime) * 1000;
+}
+
+static inline int64 XS_HttpLastApiDisabledRejectAgeMS(void)
+{
+	if ( g_tXsHttpLastApiDisabledRejectTime <= 0 ) {
+		return -1;
+	}
+
+	return (int64)(xrtNow() - g_tXsHttpLastApiDisabledRejectTime) * 1000;
+}
+
+static inline int64 XS_HttpLastMethodRejectAgeMS(void)
+{
+	if ( g_tXsHttpLastMethodRejectTime <= 0 ) {
+		return -1;
+	}
+
+	return (int64)(xrtNow() - g_tXsHttpLastMethodRejectTime) * 1000;
+}
+
+static inline int64 XS_HttpLastHostNotFoundRejectAgeMS(void)
+{
+	if ( g_tXsHttpLastHostNotFoundRejectTime <= 0 ) {
+		return -1;
+	}
+
+	return (int64)(xrtNow() - g_tXsHttpLastHostNotFoundRejectTime) * 1000;
+}
+
+static inline int64 XS_HttpLastReloadBusyRejectAgeMS(void)
+{
+	if ( g_tXsHttpLastReloadBusyRejectTime <= 0 ) {
+		return -1;
+	}
+
+	return (int64)(xrtNow() - g_tXsHttpLastReloadBusyRejectTime) * 1000;
+}
+
+static inline int64 XS_HttpLastReloadFailedRejectAgeMS(void)
+{
+	if ( g_tXsHttpLastReloadFailedRejectTime <= 0 ) {
+		return -1;
+	}
+
+	return (int64)(xrtNow() - g_tXsHttpLastReloadFailedRejectTime) * 1000;
+}
+
+static inline int64 XS_HttpLastCheckConfigFailedRejectAgeMS(void)
+{
+	if ( g_tXsHttpLastCheckConfigFailedRejectTime <= 0 ) {
+		return -1;
+	}
+
+	return (int64)(xrtNow() - g_tXsHttpLastCheckConfigFailedRejectTime) * 1000;
+}
+
+static inline int64 XS_HttpLastBusBadRequestRejectAgeMS(void)
+{
+	if ( g_tXsHttpLastBusBadRequestRejectTime <= 0 ) {
+		return -1;
+	}
+
+	return (int64)(xrtNow() - g_tXsHttpLastBusBadRequestRejectTime) * 1000;
+}
+
+static inline int64 XS_HttpLastBusNotFoundRejectAgeMS(void)
+{
+	if ( g_tXsHttpLastBusNotFoundRejectTime <= 0 ) {
+		return -1;
+	}
+
+	return (int64)(xrtNow() - g_tXsHttpLastBusNotFoundRejectTime) * 1000;
+}
+
+static inline int64 XS_HttpLastBusLimitRejectAgeMS(void)
+{
+	if ( g_tXsHttpLastBusLimitRejectTime <= 0 ) {
+		return -1;
+	}
+
+	return (int64)(xrtNow() - g_tXsHttpLastBusLimitRejectTime) * 1000;
+}
+
+static inline int64 XS_HttpLastBusFailedRejectAgeMS(void)
+{
+	if ( g_tXsHttpLastBusFailedRejectTime <= 0 ) {
+		return -1;
+	}
+
+	return (int64)(xrtNow() - g_tXsHttpLastBusFailedRejectTime) * 1000;
 }
 
 static inline int64 XS_HttpLastAppRequestAgeMS(void)
@@ -2180,6 +3229,191 @@ static inline void XS_HttpAppendRejectMetrics(xvalue objValue)
 	}
 }
 
+static inline void XS_HttpAppendRequestLimitMetrics(xvalue objValue)
+{
+	char* sHeaderTime;
+	char* sBodyTime;
+	char* sPathTime;
+
+	if ( objValue == NULL ) {
+		return;
+	}
+
+	sHeaderTime = XS_HttpLastHeaderLimitRejectTimeText();
+	sBodyTime = XS_HttpLastBodyLimitRejectTimeText();
+	sPathTime = XS_HttpLastPathLimitRejectTimeText();
+	xvoTableSetInt(objValue, "http_header_limit_reject_count", sizeof("http_header_limit_reject_count") - 1, XS_HttpMetricGet(&g_iXsHttpHeaderLimitRejectCount));
+	xvoTableSetText(objValue, "http_last_header_limit_reject_time", sizeof("http_last_header_limit_reject_time") - 1, (ptr)(sHeaderTime ? sHeaderTime : ""), 0, FALSE);
+	xvoTableSetInt(objValue, "http_last_header_limit_reject_age_ms", sizeof("http_last_header_limit_reject_age_ms") - 1, XS_HttpLastHeaderLimitRejectAgeMS());
+	xvoTableSetInt(objValue, "http_body_limit_reject_count", sizeof("http_body_limit_reject_count") - 1, XS_HttpMetricGet(&g_iXsHttpBodyLimitRejectCount));
+	xvoTableSetText(objValue, "http_last_body_limit_reject_time", sizeof("http_last_body_limit_reject_time") - 1, (ptr)(sBodyTime ? sBodyTime : ""), 0, FALSE);
+	xvoTableSetInt(objValue, "http_last_body_limit_reject_age_ms", sizeof("http_last_body_limit_reject_age_ms") - 1, XS_HttpLastBodyLimitRejectAgeMS());
+	xvoTableSetInt(objValue, "http_path_limit_reject_count", sizeof("http_path_limit_reject_count") - 1, XS_HttpMetricGet(&g_iXsHttpPathLimitRejectCount));
+	xvoTableSetText(objValue, "http_last_path_limit_reject_time", sizeof("http_last_path_limit_reject_time") - 1, (ptr)(sPathTime ? sPathTime : ""), 0, FALSE);
+	xvoTableSetInt(objValue, "http_last_path_limit_reject_age_ms", sizeof("http_last_path_limit_reject_age_ms") - 1, XS_HttpLastPathLimitRejectAgeMS());
+	if ( sHeaderTime ) {
+		xrtFree(sHeaderTime);
+	}
+	if ( sBodyTime ) {
+		xrtFree(sBodyTime);
+	}
+	if ( sPathTime ) {
+		xrtFree(sPathTime);
+	}
+}
+
+static inline void XS_HttpAppendPolicyRejectMetrics(xvalue objValue)
+{
+	char* sApiDisabledTime;
+	char* sMethodTime;
+	char* sHostNotFoundTime;
+
+	if ( objValue == NULL ) {
+		return;
+	}
+
+	sApiDisabledTime = XS_HttpLastApiDisabledRejectTimeText();
+	sMethodTime = XS_HttpLastMethodRejectTimeText();
+	sHostNotFoundTime = XS_HttpLastHostNotFoundRejectTimeText();
+	xvoTableSetInt(objValue, "http_api_disabled_reject_count", sizeof("http_api_disabled_reject_count") - 1, XS_HttpMetricGet(&g_iXsHttpApiDisabledRejectCount));
+	xvoTableSetText(objValue, "http_last_api_disabled_reject_time", sizeof("http_last_api_disabled_reject_time") - 1, (ptr)(sApiDisabledTime ? sApiDisabledTime : ""), 0, FALSE);
+	xvoTableSetInt(objValue, "http_last_api_disabled_reject_age_ms", sizeof("http_last_api_disabled_reject_age_ms") - 1, XS_HttpLastApiDisabledRejectAgeMS());
+	xvoTableSetInt(objValue, "http_method_reject_count", sizeof("http_method_reject_count") - 1, XS_HttpMetricGet(&g_iXsHttpMethodRejectCount));
+	xvoTableSetText(objValue, "http_last_method_reject_time", sizeof("http_last_method_reject_time") - 1, (ptr)(sMethodTime ? sMethodTime : ""), 0, FALSE);
+	xvoTableSetInt(objValue, "http_last_method_reject_age_ms", sizeof("http_last_method_reject_age_ms") - 1, XS_HttpLastMethodRejectAgeMS());
+	xvoTableSetInt(objValue, "http_host_not_found_reject_count", sizeof("http_host_not_found_reject_count") - 1, XS_HttpMetricGet(&g_iXsHttpHostNotFoundRejectCount));
+	xvoTableSetText(objValue, "http_last_host_not_found_reject_time", sizeof("http_last_host_not_found_reject_time") - 1, (ptr)(sHostNotFoundTime ? sHostNotFoundTime : ""), 0, FALSE);
+	xvoTableSetInt(objValue, "http_last_host_not_found_reject_age_ms", sizeof("http_last_host_not_found_reject_age_ms") - 1, XS_HttpLastHostNotFoundRejectAgeMS());
+	if ( sApiDisabledTime ) {
+		xrtFree(sApiDisabledTime);
+	}
+	if ( sMethodTime ) {
+		xrtFree(sMethodTime);
+	}
+	if ( sHostNotFoundTime ) {
+		xrtFree(sHostNotFoundTime);
+	}
+}
+
+static inline void XS_HttpAppendManageRejectMetrics(xvalue objValue)
+{
+	char* sReloadBusyTime;
+	char* sReloadFailedTime;
+	char* sCheckConfigFailedTime;
+
+	if ( objValue == NULL ) {
+		return;
+	}
+
+	sReloadBusyTime = XS_HttpLastReloadBusyRejectTimeText();
+	sReloadFailedTime = XS_HttpLastReloadFailedRejectTimeText();
+	sCheckConfigFailedTime = XS_HttpLastCheckConfigFailedRejectTimeText();
+	xvoTableSetInt(objValue, "http_reload_busy_reject_count", sizeof("http_reload_busy_reject_count") - 1, XS_HttpMetricGet(&g_iXsHttpReloadBusyRejectCount));
+	xvoTableSetText(objValue, "http_last_reload_busy_reject_time", sizeof("http_last_reload_busy_reject_time") - 1, (ptr)(sReloadBusyTime ? sReloadBusyTime : ""), 0, FALSE);
+	xvoTableSetInt(objValue, "http_last_reload_busy_reject_age_ms", sizeof("http_last_reload_busy_reject_age_ms") - 1, XS_HttpLastReloadBusyRejectAgeMS());
+	xvoTableSetInt(objValue, "http_reload_failed_reject_count", sizeof("http_reload_failed_reject_count") - 1, XS_HttpMetricGet(&g_iXsHttpReloadFailedRejectCount));
+	xvoTableSetText(objValue, "http_last_reload_failed_reject_time", sizeof("http_last_reload_failed_reject_time") - 1, (ptr)(sReloadFailedTime ? sReloadFailedTime : ""), 0, FALSE);
+	xvoTableSetInt(objValue, "http_last_reload_failed_reject_age_ms", sizeof("http_last_reload_failed_reject_age_ms") - 1, XS_HttpLastReloadFailedRejectAgeMS());
+	xvoTableSetInt(objValue, "http_check_config_failed_reject_count", sizeof("http_check_config_failed_reject_count") - 1, XS_HttpMetricGet(&g_iXsHttpCheckConfigFailedRejectCount));
+	xvoTableSetText(objValue, "http_last_check_config_failed_reject_time", sizeof("http_last_check_config_failed_reject_time") - 1, (ptr)(sCheckConfigFailedTime ? sCheckConfigFailedTime : ""), 0, FALSE);
+	xvoTableSetInt(objValue, "http_last_check_config_failed_reject_age_ms", sizeof("http_last_check_config_failed_reject_age_ms") - 1, XS_HttpLastCheckConfigFailedRejectAgeMS());
+	if ( sReloadBusyTime ) {
+		xrtFree(sReloadBusyTime);
+	}
+	if ( sReloadFailedTime ) {
+		xrtFree(sReloadFailedTime);
+	}
+	if ( sCheckConfigFailedTime ) {
+		xrtFree(sCheckConfigFailedTime);
+	}
+}
+
+static inline void XS_HttpAppendBusRejectMetrics(xvalue objValue)
+{
+	char* sBadRequestTime;
+	char* sNotFoundTime;
+	char* sLimitTime;
+	char* sFailedTime;
+
+	if ( objValue == NULL ) {
+		return;
+	}
+
+	sBadRequestTime = XS_HttpLastBusBadRequestRejectTimeText();
+	sNotFoundTime = XS_HttpLastBusNotFoundRejectTimeText();
+	sLimitTime = XS_HttpLastBusLimitRejectTimeText();
+	sFailedTime = XS_HttpLastBusFailedRejectTimeText();
+	xvoTableSetInt(objValue, "http_bus_bad_request_reject_count", sizeof("http_bus_bad_request_reject_count") - 1, XS_HttpMetricGet(&g_iXsHttpBusBadRequestRejectCount));
+	xvoTableSetText(objValue, "http_last_bus_bad_request_reject_time", sizeof("http_last_bus_bad_request_reject_time") - 1, (ptr)(sBadRequestTime ? sBadRequestTime : ""), 0, FALSE);
+	xvoTableSetInt(objValue, "http_last_bus_bad_request_reject_age_ms", sizeof("http_last_bus_bad_request_reject_age_ms") - 1, XS_HttpLastBusBadRequestRejectAgeMS());
+	xvoTableSetInt(objValue, "http_bus_not_found_reject_count", sizeof("http_bus_not_found_reject_count") - 1, XS_HttpMetricGet(&g_iXsHttpBusNotFoundRejectCount));
+	xvoTableSetText(objValue, "http_last_bus_not_found_reject_time", sizeof("http_last_bus_not_found_reject_time") - 1, (ptr)(sNotFoundTime ? sNotFoundTime : ""), 0, FALSE);
+	xvoTableSetInt(objValue, "http_last_bus_not_found_reject_age_ms", sizeof("http_last_bus_not_found_reject_age_ms") - 1, XS_HttpLastBusNotFoundRejectAgeMS());
+	xvoTableSetInt(objValue, "http_bus_limit_reject_count", sizeof("http_bus_limit_reject_count") - 1, XS_HttpMetricGet(&g_iXsHttpBusLimitRejectCount));
+	xvoTableSetText(objValue, "http_last_bus_limit_reject_time", sizeof("http_last_bus_limit_reject_time") - 1, (ptr)(sLimitTime ? sLimitTime : ""), 0, FALSE);
+	xvoTableSetInt(objValue, "http_last_bus_limit_reject_age_ms", sizeof("http_last_bus_limit_reject_age_ms") - 1, XS_HttpLastBusLimitRejectAgeMS());
+	xvoTableSetInt(objValue, "http_bus_failed_reject_count", sizeof("http_bus_failed_reject_count") - 1, XS_HttpMetricGet(&g_iXsHttpBusFailedRejectCount));
+	xvoTableSetText(objValue, "http_last_bus_failed_reject_time", sizeof("http_last_bus_failed_reject_time") - 1, (ptr)(sFailedTime ? sFailedTime : ""), 0, FALSE);
+	xvoTableSetInt(objValue, "http_last_bus_failed_reject_age_ms", sizeof("http_last_bus_failed_reject_age_ms") - 1, XS_HttpLastBusFailedRejectAgeMS());
+	if ( sBadRequestTime ) {
+		xrtFree(sBadRequestTime);
+	}
+	if ( sNotFoundTime ) {
+		xrtFree(sNotFoundTime);
+	}
+	if ( sLimitTime ) {
+		xrtFree(sLimitTime);
+	}
+	if ( sFailedTime ) {
+		xrtFree(sFailedTime);
+	}
+}
+
+static inline void XS_ConfigCheckStatusSnapshot(XS_CheckConfigStatusSnapshot* pStatus)
+{
+	XS_GetCheckConfigStatusSnapshot(pStatus);
+}
+
+static inline char* XS_CheckConfigTimeTextByStatus(const XS_CheckConfigStatusSnapshot* pStatus)
+{
+	if ( pStatus == NULL || pStatus->LastTime <= 0 ) {
+		return NULL;
+	}
+
+	return xrtTimeToStr(pStatus->LastTime, XRT_TIME_FORMAT_DATETIME);
+}
+
+static inline int64 XS_CheckConfigAgeMSByStatus(const XS_CheckConfigStatusSnapshot* pStatus)
+{
+	if ( pStatus == NULL || pStatus->LastTime <= 0 ) {
+		return -1;
+	}
+
+	return (int64)(xrtNow() - pStatus->LastTime) * 1000;
+}
+
+static inline void XS_HttpAppendCheckConfigSnapshotByStatus(xvalue objValue, const XS_CheckConfigStatusSnapshot* pStatus)
+{
+	if ( objValue == NULL || pStatus == NULL ) {
+		return;
+	}
+
+	xvoTableSetBool(objValue, "check_has_result", sizeof("check_has_result") - 1, pStatus->HasResult);
+	xvoTableSetBool(objValue, "check_last_result", sizeof("check_last_result") - 1, pStatus->LastResult);
+	xvoTableSetText(objValue, "check_last_file", sizeof("check_last_file") - 1, (ptr)pStatus->sLastFile, 0, FALSE);
+	xvoTableSetText(objValue, "check_last_base", sizeof("check_last_base") - 1, (ptr)pStatus->sLastBase, 0, FALSE);
+	xvoTableSetInt(objValue, "check_last_server_count", sizeof("check_last_server_count") - 1, pStatus->iLastServerCount);
+	xvoTableSetText(objValue, "check_last_message", sizeof("check_last_message") - 1, (ptr)pStatus->sLastMessage, 0, FALSE);
+}
+
+static inline void XS_HttpAppendCheckConfigSnapshot(xvalue objValue)
+{
+	XS_CheckConfigStatusSnapshot tStatus;
+
+	XS_ConfigCheckStatusSnapshot(&tStatus);
+	XS_HttpAppendCheckConfigSnapshotByStatus(objValue, &tStatus);
+}
+
 static inline void XS_HttpAppendStopCleanupMetrics(xvalue objValue)
 {
 	char* sLastTime;
@@ -2236,6 +3470,23 @@ static inline void XS_WsAppendStopCleanupMetrics(xvalue objValue)
 	}
 }
 
+static inline void XS_WsAppendMessageLimitMetrics(xvalue objValue)
+{
+	char* sLastTime;
+
+	if ( objValue == NULL ) {
+		return;
+	}
+
+	sLastTime = XS_WsLastMessageLimitCloseTimeText();
+	xvoTableSetInt(objValue, "ws_message_limit_close_count", sizeof("ws_message_limit_close_count") - 1, XS_HttpMetricGet(&g_iXsWsMessageLimitCloseCount));
+	xvoTableSetText(objValue, "ws_last_message_limit_close_time", sizeof("ws_last_message_limit_close_time") - 1, (ptr)(sLastTime ? sLastTime : ""), 0, FALSE);
+	xvoTableSetInt(objValue, "ws_last_message_limit_close_age_ms", sizeof("ws_last_message_limit_close_age_ms") - 1, XS_WsLastMessageLimitCloseAgeMS());
+	if ( sLastTime ) {
+		xrtFree(sLastTime);
+	}
+}
+
 static inline void XS_XtpAppendRejectMetrics(xvalue objValue)
 {
 	char* sLastTime;
@@ -2249,6 +3500,23 @@ static inline void XS_XtpAppendRejectMetrics(xvalue objValue)
 	xvoTableSetText(objValue, "xtp_last_reject_reason", sizeof("xtp_last_reject_reason") - 1, (ptr)g_sXsXtpLastRejectReason, 0, FALSE);
 	xvoTableSetText(objValue, "xtp_last_reject_time", sizeof("xtp_last_reject_time") - 1, (ptr)(sLastTime ? sLastTime : ""), 0, FALSE);
 	xvoTableSetInt(objValue, "xtp_last_reject_age_ms", sizeof("xtp_last_reject_age_ms") - 1, XS_XtpLastRejectAgeMS());
+	if ( sLastTime ) {
+		xrtFree(sLastTime);
+	}
+}
+
+static inline void XS_XtpAppendRecvLimitMetrics(xvalue objValue)
+{
+	char* sLastTime;
+
+	if ( objValue == NULL ) {
+		return;
+	}
+
+	sLastTime = XS_XtpLastRecvLimitCloseTimeText();
+	xvoTableSetInt(objValue, "xtp_recv_limit_close_count", sizeof("xtp_recv_limit_close_count") - 1, XS_HttpMetricGet(&g_iXsXtpRecvLimitCloseCount));
+	xvoTableSetText(objValue, "xtp_last_recv_limit_close_time", sizeof("xtp_last_recv_limit_close_time") - 1, (ptr)(sLastTime ? sLastTime : ""), 0, FALSE);
+	xvoTableSetInt(objValue, "xtp_last_recv_limit_close_age_ms", sizeof("xtp_last_recv_limit_close_age_ms") - 1, XS_XtpLastRecvLimitCloseAgeMS());
 	if ( sLastTime ) {
 		xrtFree(sLastTime);
 	}
@@ -2268,6 +3536,23 @@ static inline void XS_XtpAppendStopCleanupMetrics(xvalue objValue)
 	xvoTableSetInt(objValue, "xtp_last_stop_cleanup_remain", sizeof("xtp_last_stop_cleanup_remain") - 1, XS_HttpMetricGet(&g_iXsXtpLastStopCleanupRemain));
 	xvoTableSetText(objValue, "xtp_last_stop_cleanup_time", sizeof("xtp_last_stop_cleanup_time") - 1, (ptr)(sLastTime ? sLastTime : ""), 0, FALSE);
 	xvoTableSetInt(objValue, "xtp_last_stop_cleanup_age_ms", sizeof("xtp_last_stop_cleanup_age_ms") - 1, XS_XtpLastStopCleanupAgeMS());
+	if ( sLastTime ) {
+		xrtFree(sLastTime);
+	}
+}
+
+static inline void XS_CustomAppendRecvLimitMetrics(xvalue objValue)
+{
+	char* sLastTime;
+
+	if ( objValue == NULL ) {
+		return;
+	}
+
+	sLastTime = XS_CustomLastRecvLimitCloseTimeText();
+	xvoTableSetInt(objValue, "custom_recv_limit_close_count", sizeof("custom_recv_limit_close_count") - 1, XS_HttpMetricGet(&g_iXsCustomRecvLimitCloseCount));
+	xvoTableSetText(objValue, "custom_last_recv_limit_close_time", sizeof("custom_last_recv_limit_close_time") - 1, (ptr)(sLastTime ? sLastTime : ""), 0, FALSE);
+	xvoTableSetInt(objValue, "custom_last_recv_limit_close_age_ms", sizeof("custom_last_recv_limit_close_age_ms") - 1, XS_CustomLastRecvLimitCloseAgeMS());
 	if ( sLastTime ) {
 		xrtFree(sLastTime);
 	}
@@ -2310,8 +3595,9 @@ static inline void XS_CustomAppendStopCleanupMetrics(xvalue objValue)
 	}
 }
 
-static inline void XS_CheckConfigRecordResult(bool bSuccess)
+static inline void XS_CheckConfigRecordResultEx(bool bSuccess, const char* sFilePath, const char* sBaseDir, int64 iServerCount, const char* sMessage)
 {
+	XS_LockCheckConfigState();
 	XS_HttpMetricAdd(&g_iXsCheckConfigTotalCount, 1);
 	if ( bSuccess ) {
 		XS_HttpMetricAdd(&g_iXsCheckConfigSuccessCount, 1);
@@ -2319,30 +3605,41 @@ static inline void XS_CheckConfigRecordResult(bool bSuccess)
 		XS_HttpMetricAdd(&g_iXsCheckConfigFailureCount, 1);
 	}
 	g_tXsCheckConfigLastTime = xrtNow();
+	g_bXsCheckConfigHasResult = TRUE;
+	g_bXsCheckConfigLastResult = bSuccess;
+	g_iXsCheckConfigLastServerCount = iServerCount;
+	XS_HttpMetricSetText(g_sXsCheckConfigLastFile, sizeof(g_sXsCheckConfigLastFile), sFilePath ? sFilePath : "");
+	XS_HttpMetricSetText(g_sXsCheckConfigLastBase, sizeof(g_sXsCheckConfigLastBase), sBaseDir ? sBaseDir : "");
+	XS_HttpMetricSetText(g_sXsCheckConfigLastMessage, sizeof(g_sXsCheckConfigLastMessage), sMessage ? sMessage : "");
+	XS_UnlockCheckConfigState();
+}
+
+static inline void XS_CheckConfigRecordResult(bool bSuccess)
+{
+	XS_CheckConfigRecordResultEx(bSuccess, g_sXsConfigFile, NULL, 0, bSuccess ? "config check passed" : "config check failed");
 }
 
 static inline char* XS_CheckConfigLastTimeText(void)
 {
-	if ( g_tXsCheckConfigLastTime <= 0 ) {
-		return NULL;
-	}
-	
-	return xrtTimeToStr(g_tXsCheckConfigLastTime, XRT_TIME_FORMAT_DATETIME);
+	XS_CheckConfigStatusSnapshot tStatus;
+
+	XS_ConfigCheckStatusSnapshot(&tStatus);
+	return XS_CheckConfigTimeTextByStatus(&tStatus);
 }
 
 static inline int64 XS_CheckConfigLastAgeMS(void)
 {
-	if ( g_tXsCheckConfigLastTime <= 0 ) {
-		return -1;
-	}
-	
-	return (int64)(xrtNow() - g_tXsCheckConfigLastTime) * 1000;
+	XS_CheckConfigStatusSnapshot tStatus;
+
+	XS_ConfigCheckStatusSnapshot(&tStatus);
+	return XS_CheckConfigAgeMSByStatus(&tStatus);
 }
 
 static inline void XS_CheckConfigClearStats(void)
 {
 	int64 iValue;
 
+	XS_LockCheckConfigState();
 	iValue = XS_HttpMetricGet(&g_iXsCheckConfigTotalCount);
 	if ( iValue != 0 ) {
 		XS_HttpMetricAdd(&g_iXsCheckConfigTotalCount, -iValue);
@@ -2359,34 +3656,41 @@ static inline void XS_CheckConfigClearStats(void)
 	}
 
 	g_tXsCheckConfigLastTime = 0;
+	g_iXsCheckConfigLastServerCount = 0;
+	g_bXsCheckConfigHasResult = FALSE;
+	g_bXsCheckConfigLastResult = FALSE;
+	g_sXsCheckConfigLastFile[0] = '\0';
+	g_sXsCheckConfigLastBase[0] = '\0';
+	g_sXsCheckConfigLastMessage[0] = '\0';
+	XS_UnlockCheckConfigState();
 }
 
-static inline char* XS_ReloadTimeText(void)
+static inline void XS_ConfigReloadStatusSnapshot(XS_ReloadStatusSnapshot* pStatus)
 {
-	xtime tReloadTime;
+	XS_GetReloadStatusSnapshot(pStatus);
+}
 
-	tReloadTime = XS_ConfigReloadStatusTime();
-	if ( tReloadTime <= 0 ) {
+static inline char* XS_ReloadTimeTextByStatus(const XS_ReloadStatusSnapshot* pStatus)
+{
+	if ( pStatus == NULL || pStatus->LastTime <= 0 ) {
 		return NULL;
 	}
 
-	return xrtTimeToStr(tReloadTime, XRT_TIME_FORMAT_DATETIME);
+	return xrtTimeToStr(pStatus->LastTime, XRT_TIME_FORMAT_DATETIME);
 }
 
-static inline int64 XS_ReloadAgeMS(void)
+static inline int64 XS_ReloadAgeMSByStatus(const XS_ReloadStatusSnapshot* pStatus)
 {
-	xtime tReloadTime;
 	double fNowTick;
 	double fReloadTick;
 	double fSpan;
 
-	tReloadTime = XS_ConfigReloadStatusTime();
-	if ( tReloadTime <= 0 ) {
+	if ( pStatus == NULL || pStatus->LastTime <= 0 ) {
 		return -1;
 	}
 
 	fNowTick = xrtTimer();
-	fReloadTick = g_fXsStartTick + ((double)(tReloadTime - g_tXsStartTime));
+	fReloadTick = g_fXsStartTick + ((double)(pStatus->LastTime - g_tXsStartTime));
 	fSpan = fNowTick - fReloadTick;
 	if ( fSpan < 0.0 ) {
 		fSpan = 0.0;
@@ -2432,6 +3736,180 @@ static inline bool XS_ManageAPIEnabled(const XS_ServerConfig* objServer, const X
 	return objServer->Debug || objHost->Debug;
 }
 
+static inline bool XS_HttpPathExpectsJSONError(const char* sPath)
+{
+	size_t iLen;
+
+	if ( sPath == NULL || sPath[0] == '\0' ) {
+		return FALSE;
+	}
+	if ( strcmp(sPath, "/__xs/bus") == 0 || strncmp(sPath, "/__xs/bus/", 10) == 0 ) {
+		return TRUE;
+	}
+	if ( strncmp(sPath, "/__xs/", 6) == 0 ) {
+		iLen = strlen(sPath);
+		if ( iLen >= 5u && strcmp(sPath + iLen - 5u, "_json") == 0 ) {
+			return TRUE;
+		}
+	}
+	return
+		strcmp(sPath, "/__xs/http_metrics_json") == 0 ||
+		strcmp(sPath, "/__xs/ws_metrics_json") == 0 ||
+		strcmp(sPath, "/__xs/xtp_metrics_json") == 0 ||
+		strcmp(sPath, "/__xs/udp_metrics_json") == 0 ||
+		strcmp(sPath, "/__xs/custom_metrics_json") == 0 ||
+		strcmp(sPath, "/__xs/check_config_json") == 0 ||
+		strcmp(sPath, "/__xs/status_json") == 0 ||
+		strcmp(sPath, "/__xs/reload_json") == 0 ||
+		strcmp(sPath, "/__xs/reload_status_json") == 0 ||
+		strcmp(sPath, "/__xs/reload_config_json") == 0 ||
+		strcmp(sPath, "/__xs/health_json") == 0 ||
+		strcmp(sPath, "/__xs/dashboard_json") == 0;
+}
+
+static inline bool XS_HttpPathReservedManage(const char* sPath)
+{
+	return sPath && (strcmp(sPath, "/__xs") == 0 || strncmp(sPath, "/__xs/", 6) == 0);
+}
+
+static inline const char* XS_HttpReadOnlyAPIAllowHeader(const char* sPath)
+{
+	(void)sPath;
+	return "GET, HEAD";
+}
+
+static inline const char* XS_HttpGetOnlyAPIMethodMessage(const char* sPath)
+{
+	if ( sPath == NULL || sPath[0] == '\0' ) {
+		return "manage api only supports GET";
+	}
+	if (
+		strcmp(sPath, "/__xs/bus/retain") == 0 ||
+		strcmp(sPath, "/__xs/bus/release") == 0 ||
+		strcmp(sPath, "/__xs/bus/touch") == 0 ||
+		strcmp(sPath, "/__xs/bus/set") == 0 ||
+		strcmp(sPath, "/__xs/bus/remove") == 0 ||
+		strcmp(sPath, "/__xs/bus/reset") == 0 ||
+		strcmp(sPath, "/__xs/bus/sweep") == 0 ||
+		strcmp(sPath, "/__xs/bus/limits") == 0 ||
+		strcmp(sPath, "/__xs/bus/register") == 0 ||
+		strcmp(sPath, "/__xs/bus/send") == 0
+	) {
+		return "bus management api only supports GET";
+	}
+	if ( strcmp(sPath, "/__xs/check_config") == 0 || strcmp(sPath, "/__xs/check_config_json") == 0 ) {
+		return (strcmp(sPath, "/__xs/check_config_json") == 0) ? "check config json api only supports GET" : "check config api only supports GET";
+	}
+	if ( strcmp(sPath, "/__xs/check_config_clear") == 0 ) {
+		return "check config clear api only supports GET";
+	}
+	if ( strcmp(sPath, "/__xs/reload_clear") == 0 ) {
+		return "config reload clear api only supports GET";
+	}
+	if ( strcmp(sPath, "/__xs/reload_reset") == 0 ) {
+		return "config reload reset api only supports GET";
+	}
+	if ( strcmp(sPath, "/__xs/http_metrics_clear") == 0 ) {
+		return "http metrics clear api only supports GET";
+	}
+	if ( strcmp(sPath, "/__xs/ws_metrics_clear") == 0 ) {
+		return "ws metrics clear api only supports GET";
+	}
+	if ( strcmp(sPath, "/__xs/xtp_metrics_clear") == 0 ) {
+		return "xtp metrics clear api only supports GET";
+	}
+	if ( strcmp(sPath, "/__xs/udp_metrics_clear") == 0 ) {
+		return "udp metrics clear api only supports GET";
+	}
+	if ( strcmp(sPath, "/__xs/custom_metrics_clear") == 0 ) {
+		return "custom metrics clear api only supports GET";
+	}
+	return "manage api only supports GET";
+}
+
+static inline bool XS_HttpBusReadOnlyPath(const char* sPath)
+{
+	if ( sPath == NULL || sPath[0] == '\0' ) {
+		return FALSE;
+	}
+	return
+		strcmp(sPath, "/__xs/bus/status") == 0 ||
+		strcmp(sPath, "/__xs/bus/registry") == 0 ||
+		strcmp(sPath, "/__xs/bus/namespaces") == 0 ||
+		strcmp(sPath, "/__xs/bus/find") == 0 ||
+		strcmp(sPath, "/__xs/bus/exists") == 0 ||
+		strcmp(sPath, "/__xs/bus/get") == 0 ||
+		strcmp(sPath, "/__xs/bus/values") == 0;
+}
+
+static inline bool XS_HttpBusMutatingPath(const char* sPath)
+{
+	if ( sPath == NULL || sPath[0] == '\0' ) {
+		return FALSE;
+	}
+	return
+		strcmp(sPath, "/__xs/bus/retain") == 0 ||
+		strcmp(sPath, "/__xs/bus/release") == 0 ||
+		strcmp(sPath, "/__xs/bus/touch") == 0 ||
+		strcmp(sPath, "/__xs/bus/set") == 0 ||
+		strcmp(sPath, "/__xs/bus/remove") == 0 ||
+		strcmp(sPath, "/__xs/bus/reset") == 0 ||
+		strcmp(sPath, "/__xs/bus/sweep") == 0 ||
+		strcmp(sPath, "/__xs/bus/limits") == 0 ||
+		strcmp(sPath, "/__xs/bus/register") == 0 ||
+		strcmp(sPath, "/__xs/bus/send") == 0;
+}
+
+static inline const char* XS_HttpReadOnlyAPIMethodMessage(const char* sPath)
+{
+	if ( sPath == NULL || sPath[0] == '\0' ) {
+		return "manage api only supports GET or HEAD";
+	}
+	if ( strcmp(sPath, "/__xs/health") == 0 || strcmp(sPath, "/__xs/health_json") == 0 ) {
+		return (strcmp(sPath, "/__xs/health_json") == 0) ? "health json api only supports GET or HEAD" : "health api only supports GET or HEAD";
+	}
+	if ( strcmp(sPath, "/__xs/status") == 0 || strcmp(sPath, "/__xs/status_json") == 0 ) {
+		return (strcmp(sPath, "/__xs/status_json") == 0) ? "status json api only supports GET or HEAD" : "status api only supports GET or HEAD";
+	}
+	if ( strcmp(sPath, "/__xs/dashboard") == 0 || strcmp(sPath, "/__xs/dashboard_json") == 0 ) {
+		return (strcmp(sPath, "/__xs/dashboard_json") == 0) ? "dashboard json api only supports GET or HEAD" : "dashboard api only supports GET or HEAD";
+	}
+	if ( strcmp(sPath, "/__xs/reload_status") == 0 || strcmp(sPath, "/__xs/reload_status_json") == 0 ) {
+		return (strcmp(sPath, "/__xs/reload_status_json") == 0) ? "config reload status json api only supports GET or HEAD" : "config reload status api only supports GET or HEAD";
+	}
+	if ( strcmp(sPath, "/__xs/http_metrics") == 0 || strcmp(sPath, "/__xs/http_metrics_json") == 0 ) {
+		return (strcmp(sPath, "/__xs/http_metrics_json") == 0) ? "http metrics json api only supports GET or HEAD" : "http metrics api only supports GET or HEAD";
+	}
+	if ( strcmp(sPath, "/__xs/http_metrics_clear") == 0 ) {
+		return "http metrics clear api only supports GET or HEAD";
+	}
+	if ( strcmp(sPath, "/__xs/ws_metrics") == 0 || strcmp(sPath, "/__xs/ws_metrics_json") == 0 ) {
+		return (strcmp(sPath, "/__xs/ws_metrics_json") == 0) ? "ws metrics json api only supports GET or HEAD" : "ws metrics api only supports GET or HEAD";
+	}
+	if ( strcmp(sPath, "/__xs/ws_metrics_clear") == 0 ) {
+		return "ws metrics clear api only supports GET or HEAD";
+	}
+	if ( strcmp(sPath, "/__xs/xtp_metrics") == 0 || strcmp(sPath, "/__xs/xtp_metrics_json") == 0 ) {
+		return (strcmp(sPath, "/__xs/xtp_metrics_json") == 0) ? "xtp metrics json api only supports GET or HEAD" : "xtp metrics api only supports GET or HEAD";
+	}
+	if ( strcmp(sPath, "/__xs/xtp_metrics_clear") == 0 ) {
+		return "xtp metrics clear api only supports GET or HEAD";
+	}
+	if ( strcmp(sPath, "/__xs/udp_metrics") == 0 || strcmp(sPath, "/__xs/udp_metrics_json") == 0 ) {
+		return (strcmp(sPath, "/__xs/udp_metrics_json") == 0) ? "udp metrics json api only supports GET or HEAD" : "udp metrics api only supports GET or HEAD";
+	}
+	if ( strcmp(sPath, "/__xs/udp_metrics_clear") == 0 ) {
+		return "udp metrics clear api only supports GET or HEAD";
+	}
+	if ( strcmp(sPath, "/__xs/custom_metrics") == 0 || strcmp(sPath, "/__xs/custom_metrics_json") == 0 ) {
+		return (strcmp(sPath, "/__xs/custom_metrics_json") == 0) ? "custom metrics json api only supports GET or HEAD" : "custom metrics api only supports GET or HEAD";
+	}
+	if ( strcmp(sPath, "/__xs/custom_metrics_clear") == 0 ) {
+		return "custom metrics clear api only supports GET or HEAD";
+	}
+	return "manage api only supports GET or HEAD";
+}
+
 static inline const char* XS_TlsConfigFileText(const char* sText)
 {
 	return (sText && sText[0] != '\0') ? sText : "";
@@ -2444,7 +3922,7 @@ static inline void XS_HttpApplyDefaultHeaders(const xhttpdrequest* pReq, xhttpdr
 	}
 
 	(void)xrtHttpdResponseSetHeader(pResp, "X-Content-Type-Options", "nosniff");
-	if ( pReq && strncmp(pReq->sPath, "/__xs/", 6) == 0 ) {
+	if ( pReq && XS_HttpPathReservedManage(pReq->sPath) ) {
 		(void)xrtHttpdResponseSetHeader(pResp, "Cache-Control", "no-store");
 		(void)xrtHttpdResponseSetHeader(pResp, "X-Frame-Options", "DENY");
 		(void)xrtHttpdResponseSetHeader(pResp, "Referrer-Policy", "no-referrer");
@@ -2455,23 +3933,78 @@ static inline bool XS_HttpValidateRequest(XS_ServerConfig* objServer, const xhtt
 {
 	size_t iPathLen;
 	size_t iQueryLen;
+	bool bJsonError;
 
 	if ( objServer == NULL || pReq == NULL || pResp == NULL ) {
 		return FALSE;
 	}
+	bJsonError = XS_HttpPathExpectsJSONError(pReq->sPath);
 
 	if ( objServer->HeaderLimit > 0u && pReq->iHeaderCount > objServer->HeaderLimit ) {
+		XS_HttpRecordHeaderLimitReject();
+		if ( bJsonError ) {
+			return XS_HttpRespondJsonResult(pResp, 431, "Request Header Fields Too Large", FALSE, "header count limit exceeded");
+		}
 		return XS_HttpRespondText(pResp, 431, "Request Header Fields Too Large", "header count limit exceeded");
 	}
 
 	if ( objServer->BodyLimit > 0u && pReq->iBodyLen > (size_t)objServer->BodyLimit ) {
+		XS_HttpRecordBodyLimitReject();
+		if ( bJsonError ) {
+			return XS_HttpRespondJsonResult(pResp, 413, "Payload Too Large", FALSE, "request body limit exceeded");
+		}
 		return XS_HttpRespondText(pResp, 413, "Payload Too Large", "request body limit exceeded");
 	}
 
-	if ( strncmp(pReq->sPath, "/__xs/bus/", 10) == 0 ) {
-		if ( _stricmp(pReq->sMethod, "GET") != 0 && _stricmp(pReq->sMethod, "HEAD") != 0 ) {
-			xrtHttpdResponseSetHeader(pResp, "Allow", "GET, HEAD");
-			return XS_HttpRespondText(pResp, 405, "Method Not Allowed", "bus management api only supports GET or HEAD");
+	if ( XS_HttpBusReadOnlyPath(pReq->sPath) ) {
+		if ( _stricmp(pReq->sMethod, "GET") != 0 ) {
+			xrtHttpdResponseSetHeader(pResp, "Allow", "GET");
+			if ( bJsonError ) {
+				return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, "bus management api only supports GET");
+			}
+			return XS_HttpRespondText(pResp, 405, "Method Not Allowed", "bus management api only supports GET");
+		}
+	}
+
+	if ( XS_HttpBusMutatingPath(pReq->sPath) ) {
+		if ( _stricmp(pReq->sMethod, "GET") != 0 ) {
+			xrtHttpdResponseSetHeader(pResp, "Allow", "GET");
+			if ( bJsonError ) {
+				return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, "bus management api only supports GET");
+			}
+			return XS_HttpRespondText(pResp, 405, "Method Not Allowed", "bus management api only supports GET");
+		}
+	}
+
+	if ( strcmp(pReq->sPath, "/__xs/reload_json") == 0 || strcmp(pReq->sPath, "/__xs/reload_config_json") == 0 ) {
+		if ( _stricmp(pReq->sMethod, "GET") != 0 && _stricmp(pReq->sMethod, "POST") != 0 ) {
+			xrtHttpdResponseSetHeader(pResp, "Allow", "GET, POST");
+			if ( strcmp(pReq->sPath, "/__xs/reload_json") == 0 ) {
+				return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, "reload json api only supports GET or POST");
+			}
+			return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, "config reload json api only supports GET or POST");
+		}
+	}
+
+	if (
+		strcmp(pReq->sPath, "/__xs/check_config") == 0 ||
+		strcmp(pReq->sPath, "/__xs/check_config_json") == 0 ||
+		strcmp(pReq->sPath, "/__xs/check_config_clear") == 0 ||
+		strcmp(pReq->sPath, "/__xs/reload_clear") == 0 ||
+		strcmp(pReq->sPath, "/__xs/reload_reset") == 0 ||
+		strcmp(pReq->sPath, "/__xs/http_metrics_clear") == 0 ||
+		strcmp(pReq->sPath, "/__xs/ws_metrics_clear") == 0 ||
+		strcmp(pReq->sPath, "/__xs/xtp_metrics_clear") == 0 ||
+		strcmp(pReq->sPath, "/__xs/udp_metrics_clear") == 0 ||
+		strcmp(pReq->sPath, "/__xs/custom_metrics_clear") == 0
+	) {
+		if ( _stricmp(pReq->sMethod, "GET") != 0 ) {
+			const char* sMethodMessage = XS_HttpGetOnlyAPIMethodMessage(pReq->sPath);
+			xrtHttpdResponseSetHeader(pResp, "Allow", "GET");
+			if ( bJsonError ) {
+				return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, sMethodMessage);
+			}
+			return XS_HttpRespondText(pResp, 405, "Method Not Allowed", sMethodMessage);
 		}
 	}
 
@@ -2479,43 +4012,39 @@ static inline bool XS_HttpValidateRequest(XS_ServerConfig* objServer, const xhtt
 		strcmp(pReq->sPath, "/__xs/health") == 0 ||
 		strcmp(pReq->sPath, "/__xs/http_metrics") == 0 ||
 		strcmp(pReq->sPath, "/__xs/http_metrics_json") == 0 ||
-		strcmp(pReq->sPath, "/__xs/http_metrics_clear") == 0 ||
 		strcmp(pReq->sPath, "/__xs/ws_metrics") == 0 ||
 		strcmp(pReq->sPath, "/__xs/ws_metrics_json") == 0 ||
-		strcmp(pReq->sPath, "/__xs/ws_metrics_clear") == 0 ||
 		strcmp(pReq->sPath, "/__xs/xtp_metrics") == 0 ||
 		strcmp(pReq->sPath, "/__xs/xtp_metrics_json") == 0 ||
-		strcmp(pReq->sPath, "/__xs/xtp_metrics_clear") == 0 ||
 		strcmp(pReq->sPath, "/__xs/udp_metrics") == 0 ||
 		strcmp(pReq->sPath, "/__xs/udp_metrics_json") == 0 ||
-		strcmp(pReq->sPath, "/__xs/udp_metrics_clear") == 0 ||
 		strcmp(pReq->sPath, "/__xs/custom_metrics") == 0 ||
 		strcmp(pReq->sPath, "/__xs/custom_metrics_json") == 0 ||
-		strcmp(pReq->sPath, "/__xs/custom_metrics_clear") == 0 ||
 		strcmp(pReq->sPath, "/__xs/dashboard") == 0 ||
-		strcmp(pReq->sPath, "/__xs/check_config") == 0 ||
-		strcmp(pReq->sPath, "/__xs/check_config_json") == 0 ||
-		strcmp(pReq->sPath, "/__xs/check_config_clear") == 0 ||
 		strcmp(pReq->sPath, "/__xs/status") == 0 ||
 		strcmp(pReq->sPath, "/__xs/status_json") == 0 ||
-		strcmp(pReq->sPath, "/__xs/reload_clear") == 0 ||
-		strcmp(pReq->sPath, "/__xs/reload_reset") == 0 ||
 		strcmp(pReq->sPath, "/__xs/reload_status") == 0 ||
-		strcmp(pReq->sPath, "/__xs/reload_json") == 0 ||
 		strcmp(pReq->sPath, "/__xs/reload_status_json") == 0 ||
-		strcmp(pReq->sPath, "/__xs/reload_config_json") == 0 ||
 		strcmp(pReq->sPath, "/__xs/health_json") == 0 ||
 		strcmp(pReq->sPath, "/__xs/dashboard_json") == 0
 	) {
 		if ( _stricmp(pReq->sMethod, "GET") != 0 && _stricmp(pReq->sMethod, "HEAD") != 0 ) {
-			xrtHttpdResponseSetHeader(pResp, "Allow", "GET, HEAD");
-			return XS_HttpRespondText(pResp, 405, "Method Not Allowed", "status api only supports GET or HEAD");
+			const char* sMethodMessage = XS_HttpReadOnlyAPIMethodMessage(pReq->sPath);
+			xrtHttpdResponseSetHeader(pResp, "Allow", XS_HttpReadOnlyAPIAllowHeader(pReq->sPath));
+			if ( bJsonError ) {
+				return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, sMethodMessage);
+			}
+			return XS_HttpRespondText(pResp, 405, "Method Not Allowed", sMethodMessage);
 		}
 	}
 
 	iPathLen = strlen(pReq->sPath);
 	iQueryLen = strlen(pReq->sQuery);
 	if ( objServer->PathLimit > 0u && (iPathLen + iQueryLen) > (size_t)objServer->PathLimit ) {
+		XS_HttpRecordPathLimitReject();
+		if ( bJsonError ) {
+			return XS_HttpRespondJsonResult(pResp, 414, "URI Too Long", FALSE, "request path limit exceeded");
+		}
 		return XS_HttpRespondText(pResp, 414, "URI Too Long", "request path limit exceeded");
 	}
 
@@ -2660,13 +4189,20 @@ static inline bool XS_HttpHandleScriptHost(XS_ServerConfig* objServer, const XS_
 	return FALSE;
 }
 
-static inline bool XS_HttpQueryBool(const char* sQuery, const char* sName, bool bDefault)
+static inline bool XS_HttpQueryBoolEx(const char* sQuery, const char* sName, bool bDefault, bool* pbValue, bool* pbPresent)
 {
 	const char* sFind;
 	size_t iNameLen;
+	bool bValue = bDefault;
 	
+	if ( pbValue ) {
+		*pbValue = bDefault;
+	}
+	if ( pbPresent ) {
+		*pbPresent = FALSE;
+	}
 	if ( sQuery == NULL || sName == NULL || sName[0] == '\0' ) {
-		return bDefault;
+		return TRUE;
 	}
 	
 	iNameLen = strlen(sName);
@@ -2677,18 +4213,52 @@ static inline bool XS_HttpQueryBool(const char* sQuery, const char* sName, bool 
 		if ( iPairLen > iNameLen + 1 && strncmp(sFind, sName, iNameLen) == 0 && sFind[iNameLen] == '=' ) {
 			const char* sVal = sFind + iNameLen + 1;
 			size_t iValLen = iPairLen - iNameLen - 1;
-			if ( iValLen == 1 && (sVal[0] == '1' || sVal[0] == 'y' || sVal[0] == 'Y')) return TRUE;
-			if ( iValLen == 4 && _strnicmp(sVal, "true", 4) == 0 ) return TRUE;
-			if ( iValLen == 3 && _strnicmp(sVal, "yes", 3) == 0 ) return TRUE;
-			if ( iValLen == 1 && (sVal[0] == '0' || sVal[0] == 'n' || sVal[0] == 'N')) return FALSE;
-			if ( iValLen == 5 && _strnicmp(sVal, "false", 5) == 0 ) return FALSE;
-			if ( iValLen == 2 && _strnicmp(sVal, "no", 2) == 0 ) return FALSE;
-			return bDefault;
+			if ( pbPresent ) {
+				*pbPresent = TRUE;
+			}
+			if ( !XS_HttpParseBoolText(sVal, iValLen, &bValue) ) {
+				return FALSE;
+			}
+			if ( pbValue ) {
+				*pbValue = bValue;
+			}
+			return TRUE;
 		}
 		sFind = pNext ? (pNext + 1) : NULL;
 	}
 	
-	return bDefault;
+	return TRUE;
+}
+
+static inline bool XS_HttpQueryBool(const char* sQuery, const char* sName, bool bDefault)
+{
+	bool bValue = bDefault;
+
+	(void)XS_HttpQueryBoolEx(sQuery, sName, bDefault, &bValue, NULL);
+	return bValue;
+}
+
+static inline bool XS_HttpQueryHas(const char* sQuery, const char* sName)
+{
+	const char* sFind;
+	size_t iNameLen;
+
+	if ( sQuery == NULL || sName == NULL || sName[0] == '\0' ) {
+		return FALSE;
+	}
+
+	iNameLen = strlen(sName);
+	sFind = sQuery;
+	while ( sFind && sFind[0] ) {
+		const char* pNext = strchr(sFind, '&');
+		size_t iPairLen = pNext ? (size_t)(pNext - sFind) : strlen(sFind);
+		if ( iPairLen >= iNameLen + 1 && strncmp(sFind, sName, iNameLen) == 0 && sFind[iNameLen] == '=' ) {
+			return TRUE;
+		}
+		sFind = pNext ? (pNext + 1) : NULL;
+	}
+
+	return FALSE;
 }
 
 static inline int XS_HttpHexValue(char ch)
@@ -2764,9 +4334,45 @@ static inline char* XS_HttpQueryDup(const char* sQuery, const char* sName)
 	return XS_HttpQueryText(sQuery, sName);
 }
 
+static inline void XS_HttpRecordReloadStatus(XS_ServerConfig* objServer, const XS_HostConfig* objHost, bool bForce, int iCode)
+{
+	XS_RecordReloadStatusLite(
+		(objServer && objServer->Name) ? objServer->Name : NULL,
+		(objHost && objHost->Name) ? objHost->Name : NULL,
+		bForce,
+		iCode
+	);
+}
+
+static inline int32 XS_HttpReloadStatusCode(int iCode)
+{
+	if ( iCode == 0 ) {
+		return 200;
+	}
+	if ( iCode == -4 ) {
+		return 409;
+	}
+
+	return 500;
+}
+
+static inline const char* XS_HttpReloadStatusText(int iCode)
+{
+	if ( iCode == 0 ) {
+		return "OK";
+	}
+	if ( iCode == -4 ) {
+		return "Conflict";
+	}
+
+	return "Internal Server Error";
+}
+
 static inline bool XS_HttpHandleReload(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
+	XS_ReloadStatusSnapshot tReloadStatus;
 	char* sReloadHostName;
+	char* sReloadTime;
 	XS_HostConfig* objReloadHost;
 	bool bForce;
 	int iRet;
@@ -2789,7 +4395,12 @@ static inline bool XS_HttpHandleReload(XS_ServerConfig* objServer, const XS_Host
 	}
 	
 	sReloadHostName = XS_HttpQueryText(pReq->sQuery, "host");
-	bForce = XS_HttpQueryBool(pReq->sQuery, "force", FALSE);
+	if ( !XS_HttpQueryBoolEx(pReq->sQuery, "force", FALSE, &bForce, NULL) ) {
+		if ( sReloadHostName ) {
+			xrtFree(sReloadHostName);
+		}
+		return XS_HttpRespondNamedBoolBadRequestText(pResp, "force");
+	}
 	
 	if ( sReloadHostName && sReloadHostName[0] ) {
 		objReloadHost = XS_FindServerHostByName(objServer, sReloadHostName);
@@ -2801,37 +4412,51 @@ static inline bool XS_HttpHandleReload(XS_ServerConfig* objServer, const XS_Host
 		if ( sReloadHostName ) xrtFree(sReloadHostName);
 		return XS_HttpRespondText(pResp, 404, "Not Found", "reload host not found");
 	}
-	
+
 	iRet = XS_ReloadServerHostScript(objServer, objReloadHost, bForce);
+	XS_HttpRecordReloadStatus(objServer, objReloadHost, bForce, iRet);
+	XS_ConfigReloadStatusSnapshot(&tReloadStatus);
+	sReloadTime = XS_ReloadTimeTextByStatus(&tReloadStatus);
 	snprintf(
 		sBody,
 		sizeof(sBody),
-		"reload=%s\nserver=%s\nhost=%s\nforce=%s\ncode=%d\nmessage=%s\n",
-		(iRet == 0) ? "ok" : "failed",
+		"result=%s\nserver=%s\nhost=%s\nforce=%s\ncode=%d\nmessage=%s\nreload_has_result=%s\nreload_time=%s\nreload_age_ms=%lld\nreload_total_count=%lld\nreload_success_count=%lld\nreload_failure_count=%lld\n",
+		(iRet == 0) ? "true" : "false",
 		objServer->Name ? objServer->Name : "(null)",
 		objReloadHost->Name ? objReloadHost->Name : "(default)",
 		bForce ? "true" : "false",
 		iRet,
-		XS_ReloadResultText(iRet)
+		XS_ReloadResultText(iRet),
+		tReloadStatus.HasResult ? "true" : "false",
+		sReloadTime ? sReloadTime : "(none)",
+		(long long)XS_ReloadAgeMSByStatus(&tReloadStatus),
+		(long long)tReloadStatus.iTotalCount,
+		(long long)tReloadStatus.iSuccessCount,
+		(long long)tReloadStatus.iFailureCount
 	);
 	
 	if ( sReloadHostName ) {
 		xrtFree(sReloadHostName);
 	}
+	if ( sReloadTime ) {
+		xrtFree(sReloadTime);
+	}
 	
 	return XS_HttpRespondText(
 		pResp,
-		(iRet == 0) ? 200 : 500,
-		(iRet == 0) ? "OK" : "Internal Server Error",
+		XS_HttpReloadStatusCode(iRet),
+		XS_HttpReloadStatusText(iRet),
 		sBody
 	);
 }
 
 static inline bool XS_HttpHandleReloadJson(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
+	XS_ReloadStatusSnapshot tReloadStatus;
 	xvalue objRet;
 	char* sJson;
 	char* sReloadHostName;
+	char* sReloadTime;
 	XS_HostConfig* objReloadHost;
 	bool bForce;
 	int iRet;
@@ -2843,14 +4468,19 @@ static inline bool XS_HttpHandleReloadJson(XS_ServerConfig* objServer, const XS_
 		return FALSE;
 	}
 	if ( !(objServer->Debug || objHost->Debug) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "reload json api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "reload json api disabled");
 	}
 	if ( _stricmp(pReq->sMethod, "GET") != 0 && _stricmp(pReq->sMethod, "POST") != 0 ) {
-		return XS_HttpRespondText(pResp, 405, "Method Not Allowed", "reload json api only supports GET or POST");
+		return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, "reload json api only supports GET or POST");
 	}
 
 	sReloadHostName = XS_HttpQueryText(pReq->sQuery, "host");
-	bForce = XS_HttpQueryBool(pReq->sQuery, "force", FALSE);
+	if ( !XS_HttpQueryBoolEx(pReq->sQuery, "force", FALSE, &bForce, NULL) ) {
+		if ( sReloadHostName ) {
+			xrtFree(sReloadHostName);
+		}
+		return XS_HttpRespondNamedBoolBadRequestJson(pResp, "force");
+	}
 	if ( sReloadHostName && sReloadHostName[0] ) {
 		objReloadHost = XS_FindServerHostByName(objServer, sReloadHostName);
 	} else {
@@ -2860,10 +4490,13 @@ static inline bool XS_HttpHandleReloadJson(XS_ServerConfig* objServer, const XS_
 		if ( sReloadHostName ) {
 			xrtFree(sReloadHostName);
 		}
-		return XS_HttpRespondText(pResp, 404, "Not Found", "reload host not found");
+		return XS_HttpRespondJsonResult(pResp, 404, "Not Found", FALSE, "reload host not found");
 	}
 
 	iRet = XS_ReloadServerHostScript(objServer, objReloadHost, bForce);
+	XS_HttpRecordReloadStatus(objServer, objReloadHost, bForce, iRet);
+	XS_ConfigReloadStatusSnapshot(&tReloadStatus);
+	sReloadTime = XS_ReloadTimeTextByStatus(&tReloadStatus);
 	objRet = xvoCreateTable();
 	xvoTableSetBool(objRet, "result", 6, (iRet == 0));
 	xvoTableSetText(objRet, "message", 7, (ptr)XS_ReloadResultText(iRet), 0, FALSE);
@@ -2871,16 +4504,25 @@ static inline bool XS_HttpHandleReloadJson(XS_ServerConfig* objServer, const XS_
 	xvoTableSetText(objRet, "host", 4, (ptr)(objReloadHost->Name ? objReloadHost->Name : "(default)"), 0, FALSE);
 	xvoTableSetBool(objRet, "force", 5, bForce);
 	xvoTableSetInt(objRet, "code", 4, iRet);
+	xvoTableSetBool(objRet, "reload_has_result", 17, tReloadStatus.HasResult);
+	xvoTableSetText(objRet, "reload_time", 11, (ptr)(sReloadTime ? sReloadTime : ""), 0, FALSE);
+	xvoTableSetInt(objRet, "reload_age_ms", 13, XS_ReloadAgeMSByStatus(&tReloadStatus));
+	xvoTableSetInt(objRet, "reload_total_count", 18, tReloadStatus.iTotalCount);
+	xvoTableSetInt(objRet, "reload_success_count", 20, tReloadStatus.iSuccessCount);
+	xvoTableSetInt(objRet, "reload_failure_count", 20, tReloadStatus.iFailureCount);
 
 	sJson = xrtStringifyJSON(objRet, FALSE, NULL);
 	xvoUnref(objRet);
 	if ( sReloadHostName ) {
 		xrtFree(sReloadHostName);
 	}
-	if ( sJson == NULL ) {
-		return XS_HttpRespondText(pResp, 500, "Internal Server Error", "reload json build failed");
+	if ( sReloadTime ) {
+		xrtFree(sReloadTime);
 	}
-	xrtHttpdResponseSetStatus(pResp, (iRet == 0) ? 200 : 500, (iRet == 0) ? "OK" : "Internal Server Error");
+	if ( sJson == NULL ) {
+		return XS_HttpRespondJsonResult(pResp, 500, "Internal Server Error", FALSE, "reload json build failed");
+	}
+	xrtHttpdResponseSetStatus(pResp, XS_HttpReloadStatusCode(iRet), XS_HttpReloadStatusText(iRet));
 	if ( !xrtHttpdResponseSetBodyCopy(pResp, sJson, strlen(sJson), "application/json; charset=utf-8") ) {
 		xrtFree(sJson);
 		return FALSE;
@@ -2889,11 +4531,37 @@ static inline bool XS_HttpHandleReloadJson(XS_ServerConfig* objServer, const XS_
 	return TRUE;
 }
 
+static inline bool XS_HttpConfigReloadTargetsCurrentServer(const XS_ServerConfig* objServer, const char* sServerName)
+{
+	if ( objServer == NULL ) {
+		return FALSE;
+	}
+	if ( sServerName == NULL || sServerName[0] == '\0' ) {
+		return TRUE;
+	}
+	if ( objServer->Name == NULL || objServer->Name[0] == '\0' ) {
+		return FALSE;
+	}
+	return strcmp(objServer->Name, sServerName) == 0;
+}
+
+static inline XS_HostConfig* XS_HttpFindConfigReloadTargetHost(XS_ServerConfig* objServer, const char* sServerName, const char* sHostName)
+{
+	if ( objServer == NULL || sHostName == NULL || sHostName[0] == '\0' ) {
+		return NULL;
+	}
+	if ( !XS_HttpConfigReloadTargetsCurrentServer(objServer, sServerName) ) {
+		return NULL;
+	}
+	return XS_FindServerHostByName(objServer, sHostName);
+}
+
 static inline bool XS_HttpHandleConfigReload(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
 	char sBody[512];
 	char* sServerName;
 	char* sHostName;
+	XS_HostConfig* objTargetHost;
 	bool bQueued;
 	bool bForce;
 	
@@ -2910,18 +4578,31 @@ static inline bool XS_HttpHandleConfigReload(XS_ServerConfig* objServer, const X
 		return XS_HttpRespondText(pResp, 405, "Method Not Allowed", "config reload api only supports GET or POST");
 	}
 	
-	bForce = XS_HttpQueryBool(pReq->sQuery, "force", FALSE);
+	if ( !XS_HttpQueryBoolEx(pReq->sQuery, "force", FALSE, &bForce, NULL) ) {
+		return XS_HttpRespondNamedBoolBadRequestText(pResp, "force");
+	}
 	sServerName = XS_HttpQueryDup(pReq->sQuery, "server");
 	sHostName = XS_HttpQueryDup(pReq->sQuery, "host");
 	if ( (sServerName == NULL || sServerName[0] == '\0') && sHostName && sHostName[0] != '\0' ) {
 		sServerName = XS_CopyText(objServer->Name);
 	}
+	objTargetHost = XS_HttpFindConfigReloadTargetHost(objServer, sServerName, sHostName);
+	if ( sHostName && sHostName[0] != '\0' && XS_HttpConfigReloadTargetsCurrentServer(objServer, sServerName) && objTargetHost == NULL ) {
+		if ( sServerName ) {
+			xrtFree(sServerName);
+		}
+		if ( sHostName ) {
+			xrtFree(sHostName);
+		}
+		return XS_HttpRespondText(pResp, 404, "Not Found", "reload host not found");
+	}
 	bQueued = XS_RequestConfigReloadEx(sServerName, sHostName, bForce);
 	snprintf(
 		sBody,
 		sizeof(sBody),
-		"config_reload=%s\nserver=%s\ntarget_server=%s\ntarget_host=%s\nforce=%s\n",
-		bQueued ? "queued" : "busy",
+		"result=%s\nmessage=%s\nserver=%s\ntarget_server=%s\ntarget_host=%s\nforce=%s\n",
+		bQueued ? "true" : "false",
+		bQueued ? "config reload queued" : "config reload busy",
 		objServer->Name ? objServer->Name : "(null)",
 		(sServerName && sServerName[0]) ? sServerName : "(all)",
 		(sHostName && sHostName[0]) ? sHostName : "(all)",
@@ -2942,6 +4623,7 @@ static inline bool XS_HttpHandleConfigReloadJson(XS_ServerConfig* objServer, con
 	char* sJson;
 	char* sServerName;
 	char* sHostName;
+	XS_HostConfig* objTargetHost;
 	bool bQueued;
 	bool bForce;
 
@@ -2952,17 +4634,29 @@ static inline bool XS_HttpHandleConfigReloadJson(XS_ServerConfig* objServer, con
 		return FALSE;
 	}
 	if ( !(objServer->Debug || objHost->Debug) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "config reload json api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "config reload json api disabled");
 	}
 	if ( _stricmp(pReq->sMethod, "GET") != 0 && _stricmp(pReq->sMethod, "POST") != 0 ) {
-		return XS_HttpRespondText(pResp, 405, "Method Not Allowed", "config reload json api only supports GET or POST");
+		return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, "config reload json api only supports GET or POST");
 	}
 
-	bForce = XS_HttpQueryBool(pReq->sQuery, "force", FALSE);
+	if ( !XS_HttpQueryBoolEx(pReq->sQuery, "force", FALSE, &bForce, NULL) ) {
+		return XS_HttpRespondNamedBoolBadRequestJson(pResp, "force");
+	}
 	sServerName = XS_HttpQueryDup(pReq->sQuery, "server");
 	sHostName = XS_HttpQueryDup(pReq->sQuery, "host");
 	if ( (sServerName == NULL || sServerName[0] == '\0') && sHostName && sHostName[0] != '\0' ) {
 		sServerName = XS_CopyText(objServer->Name);
+	}
+	objTargetHost = XS_HttpFindConfigReloadTargetHost(objServer, sServerName, sHostName);
+	if ( sHostName && sHostName[0] != '\0' && XS_HttpConfigReloadTargetsCurrentServer(objServer, sServerName) && objTargetHost == NULL ) {
+		if ( sServerName ) {
+			xrtFree(sServerName);
+		}
+		if ( sHostName ) {
+			xrtFree(sHostName);
+		}
+		return XS_HttpRespondJsonResult(pResp, 404, "Not Found", FALSE, "reload host not found");
 	}
 	bQueued = XS_RequestConfigReloadEx(sServerName, sHostName, bForce);
 
@@ -2983,7 +4677,7 @@ static inline bool XS_HttpHandleConfigReloadJson(XS_ServerConfig* objServer, con
 		xrtFree(sHostName);
 	}
 	if ( sJson == NULL ) {
-		return XS_HttpRespondText(pResp, 500, "Internal Server Error", "config reload json build failed");
+		return XS_HttpRespondJsonResult(pResp, 500, "Internal Server Error", FALSE, "config reload json build failed");
 	}
 	xrtHttpdResponseSetStatus(pResp, bQueued ? 200 : 409, bQueued ? "OK" : "Conflict");
 	if ( !xrtHttpdResponseSetBodyCopy(pResp, sJson, strlen(sJson), "application/json; charset=utf-8") ) {
@@ -2996,6 +4690,7 @@ static inline bool XS_HttpHandleConfigReloadJson(XS_ServerConfig* objServer, con
 
 static inline bool XS_HttpHandleConfigReloadStatus(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
+	XS_ReloadStatusSnapshot tStatus;
 	char sBody[512];
 	char* sReloadTime;
 	
@@ -3009,23 +4704,24 @@ static inline bool XS_HttpHandleConfigReloadStatus(XS_ServerConfig* objServer, c
 		return XS_HttpRespondText(pResp, 403, "Forbidden", "config reload status api disabled");
 	}
 
-	sReloadTime = XS_ReloadTimeText();
+	XS_ConfigReloadStatusSnapshot(&tStatus);
+	sReloadTime = XS_ReloadTimeTextByStatus(&tStatus);
 	
 	snprintf(
 		sBody,
 		sizeof(sBody),
 		"busy=%s\nhas_result=%s\nsuccess=%s\nserver=%s\nhost=%s\nmessage=%s\nreload_time=%s\nreload_age_ms=%lld\nreload_total_count=%lld\nreload_success_count=%lld\nreload_failure_count=%lld\n",
-		XS_ConfigReloadStatusBusy() ? "true" : "false",
-		XS_ConfigReloadStatusHasResult() ? "true" : "false",
-		XS_ConfigReloadStatusSuccess() ? "true" : "false",
-		XS_ConfigReloadStatusServer(),
-		XS_ConfigReloadStatusHost(),
-		XS_ConfigReloadStatusMessage(),
+		tStatus.Busy ? "true" : "false",
+		tStatus.HasResult ? "true" : "false",
+		tStatus.Success ? "true" : "false",
+		tStatus.sServerName[0] ? tStatus.sServerName : "(all)",
+		tStatus.sHostName[0] ? tStatus.sHostName : "(all)",
+		tStatus.sMessage[0] ? tStatus.sMessage : "(none)",
 		sReloadTime ? sReloadTime : "(none)",
-		(long long)XS_ReloadAgeMS(),
-		(long long)XS_ConfigReloadStatusTotalCount(),
-		(long long)XS_ConfigReloadStatusSuccessCount(),
-		(long long)XS_ConfigReloadStatusFailureCount()
+		(long long)XS_ReloadAgeMSByStatus(&tStatus),
+		(long long)tStatus.iTotalCount,
+		(long long)tStatus.iSuccessCount,
+		(long long)tStatus.iFailureCount
 	);
 	if ( sReloadTime ) {
 		xrtFree(sReloadTime);
@@ -3035,6 +4731,7 @@ static inline bool XS_HttpHandleConfigReloadStatus(XS_ServerConfig* objServer, c
 
 static inline bool XS_HttpHandleConfigReloadStatusJson(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
+	XS_ReloadStatusSnapshot tStatus;
 	xvalue objRet;
 	char* sReloadTime;
 	char* sJson;
@@ -3046,22 +4743,23 @@ static inline bool XS_HttpHandleConfigReloadStatusJson(XS_ServerConfig* objServe
 		return FALSE;
 	}
 	if ( !(objServer->Debug || objHost->Debug) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "config reload status json api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "config reload status json api disabled");
 	}
 
-	sReloadTime = XS_ReloadTimeText();
+	XS_ConfigReloadStatusSnapshot(&tStatus);
+	sReloadTime = XS_ReloadTimeTextByStatus(&tStatus);
 	objRet = xvoCreateTable();
-	xvoTableSetBool(objRet, "busy", 4, XS_ConfigReloadStatusBusy());
-	xvoTableSetBool(objRet, "has_result", 10, XS_ConfigReloadStatusHasResult());
-	xvoTableSetBool(objRet, "success", 7, XS_ConfigReloadStatusSuccess());
-	xvoTableSetText(objRet, "server", 6, (ptr)XS_ConfigReloadStatusServer(), 0, FALSE);
-	xvoTableSetText(objRet, "host", 4, (ptr)XS_ConfigReloadStatusHost(), 0, FALSE);
-	xvoTableSetText(objRet, "message", 7, (ptr)XS_ConfigReloadStatusMessage(), 0, FALSE);
+	xvoTableSetBool(objRet, "busy", 4, tStatus.Busy);
+	xvoTableSetBool(objRet, "has_result", 10, tStatus.HasResult);
+	xvoTableSetBool(objRet, "success", 7, tStatus.Success);
+	xvoTableSetText(objRet, "server", 6, (ptr)(tStatus.sServerName[0] ? tStatus.sServerName : "(all)"), 0, FALSE);
+	xvoTableSetText(objRet, "host", 4, (ptr)(tStatus.sHostName[0] ? tStatus.sHostName : "(all)"), 0, FALSE);
+	xvoTableSetText(objRet, "message", 7, (ptr)(tStatus.sMessage[0] ? tStatus.sMessage : "(none)"), 0, FALSE);
 	xvoTableSetText(objRet, "reload_time", 11, (ptr)(sReloadTime ? sReloadTime : ""), 0, FALSE);
-	xvoTableSetInt(objRet, "reload_age_ms", 13, XS_ReloadAgeMS());
-	xvoTableSetInt(objRet, "reload_total_count", 18, XS_ConfigReloadStatusTotalCount());
-	xvoTableSetInt(objRet, "reload_success_count", 20, XS_ConfigReloadStatusSuccessCount());
-	xvoTableSetInt(objRet, "reload_failure_count", 20, XS_ConfigReloadStatusFailureCount());
+	xvoTableSetInt(objRet, "reload_age_ms", 13, XS_ReloadAgeMSByStatus(&tStatus));
+	xvoTableSetInt(objRet, "reload_total_count", 18, tStatus.iTotalCount);
+	xvoTableSetInt(objRet, "reload_success_count", 20, tStatus.iSuccessCount);
+	xvoTableSetInt(objRet, "reload_failure_count", 20, tStatus.iFailureCount);
 
 	sJson = xrtStringifyJSON(objRet, FALSE, NULL);
 	xvoUnref(objRet);
@@ -3069,7 +4767,7 @@ static inline bool XS_HttpHandleConfigReloadStatusJson(XS_ServerConfig* objServe
 		xrtFree(sReloadTime);
 	}
 	if ( sJson == NULL ) {
-		return XS_HttpRespondText(pResp, 500, "Internal Server Error", "reload status json build failed");
+		return XS_HttpRespondJsonResult(pResp, 500, "Internal Server Error", FALSE, "reload status json build failed");
 	}
 	xrtHttpdResponseSetStatus(pResp, 200, "OK");
 	if ( !xrtHttpdResponseSetBodyCopy(pResp, sJson, strlen(sJson), "application/json; charset=utf-8") ) {
@@ -3082,6 +4780,10 @@ static inline bool XS_HttpHandleConfigReloadStatusJson(XS_ServerConfig* objServe
 
 static inline bool XS_HttpHandleConfigReloadClear(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
+	XS_ReloadStatusSnapshot tStatus;
+	char sBody[512];
+	char* sReloadTime;
+
 	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
 		return FALSE;
 	}
@@ -3093,12 +4795,35 @@ static inline bool XS_HttpHandleConfigReloadClear(XS_ServerConfig* objServer, co
 	}
 
 	XS_ClearConfigReloadStatus();
-	return XS_HttpRespondText(pResp, 200, "OK", "reload status cleared");
+	XS_ConfigReloadStatusSnapshot(&tStatus);
+	sReloadTime = XS_ReloadTimeTextByStatus(&tStatus);
+	snprintf(
+		sBody,
+		sizeof(sBody),
+		"busy=%s\nhas_result=%s\nsuccess=%s\nserver=%s\nhost=%s\nmessage=%s\nreload_time=%s\nreload_age_ms=%lld\nreload_total_count=%lld\nreload_success_count=%lld\nreload_failure_count=%lld\n",
+		tStatus.Busy ? "true" : "false",
+		tStatus.HasResult ? "true" : "false",
+		tStatus.Success ? "true" : "false",
+		tStatus.sServerName[0] ? tStatus.sServerName : "(all)",
+		tStatus.sHostName[0] ? tStatus.sHostName : "(all)",
+		tStatus.sMessage[0] ? tStatus.sMessage : "(none)",
+		sReloadTime ? sReloadTime : "(none)",
+		(long long)XS_ReloadAgeMSByStatus(&tStatus),
+		(long long)tStatus.iTotalCount,
+		(long long)tStatus.iSuccessCount,
+		(long long)tStatus.iFailureCount
+	);
+	if ( sReloadTime ) {
+		xrtFree(sReloadTime);
+	}
+	return XS_HttpRespondText(pResp, 200, "OK", sBody);
 }
 
 static inline bool XS_HttpHandleConfigReloadReset(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
-	char sBody[256];
+	XS_ReloadStatusSnapshot tStatus;
+	char sBody[512];
+	char* sReloadTime;
 
 	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
 		return FALSE;
@@ -3111,14 +4836,27 @@ static inline bool XS_HttpHandleConfigReloadReset(XS_ServerConfig* objServer, co
 	}
 
 	XS_ResetConfigReloadStats();
+	XS_ConfigReloadStatusSnapshot(&tStatus);
+	sReloadTime = XS_ReloadTimeTextByStatus(&tStatus);
 	snprintf(
 		sBody,
 		sizeof(sBody),
-		"reload_total_count=%lld\nreload_success_count=%lld\nreload_failure_count=%lld\nreload_time=(none)\n",
-		(long long)XS_ConfigReloadStatusTotalCount(),
-		(long long)XS_ConfigReloadStatusSuccessCount(),
-		(long long)XS_ConfigReloadStatusFailureCount()
+		"busy=%s\nhas_result=%s\nsuccess=%s\nserver=%s\nhost=%s\nmessage=%s\nreload_time=%s\nreload_age_ms=%lld\nreload_total_count=%lld\nreload_success_count=%lld\nreload_failure_count=%lld\n",
+		tStatus.Busy ? "true" : "false",
+		tStatus.HasResult ? "true" : "false",
+		tStatus.Success ? "true" : "false",
+		tStatus.sServerName[0] ? tStatus.sServerName : "(all)",
+		tStatus.sHostName[0] ? tStatus.sHostName : "(all)",
+		tStatus.sMessage[0] ? tStatus.sMessage : "(none)",
+		sReloadTime ? sReloadTime : "(none)",
+		(long long)XS_ReloadAgeMSByStatus(&tStatus),
+		(long long)tStatus.iTotalCount,
+		(long long)tStatus.iSuccessCount,
+		(long long)tStatus.iFailureCount
 	);
+	if ( sReloadTime ) {
+		xrtFree(sReloadTime);
+	}
 	return XS_HttpRespondText(pResp, 200, "OK", sBody);
 }
 
@@ -3135,10 +4873,16 @@ static inline bool XS_HttpHandleBusStatus(XS_ServerConfig* objServer, const XS_H
 		return FALSE;
 	}
 	if ( !(objServer->Debug || objHost->Debug) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "bus status api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "bus status api disabled");
 	}
 
 	sNamespace = XS_HttpQueryDup(pReq->sQuery, "namespace");
+	if ( XS_HttpRespondBusNamespaceBadRequest(pResp, sNamespace) ) {
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		return TRUE;
+	}
 	sTag = XS_HttpQueryDup(pReq->sQuery, "tag");
 	if ( (sNamespace && sNamespace[0] != '\0') || (sTag && sTag[0] != '\0') ) {
 		sJson = XS_BusBuildStatusJsonEx(
@@ -3156,7 +4900,7 @@ static inline bool XS_HttpHandleBusStatus(XS_ServerConfig* objServer, const XS_H
 		xrtFree(sTag);
 	}
 	if ( sJson == NULL ) {
-		return XS_HttpRespondText(pResp, 500, "Internal Server Error", "bus status build failed");
+		return XS_HttpRespondJsonResult(pResp, 500, "Internal Server Error", FALSE, "bus status build failed");
 	}
 	if ( !xrtHttpdResponseSetBodyCopy(pResp, sJson, strlen(sJson), "application/json; charset=utf-8") ) {
 		xrtFree(sJson);
@@ -3178,12 +4922,12 @@ static inline bool XS_HttpHandleBusNamespaces(XS_ServerConfig* objServer, const 
 		return FALSE;
 	}
 	if ( !(objServer->Debug || objHost->Debug) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "bus namespace api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "bus namespace api disabled");
 	}
 
 	sJson = XS_BusBuildNamespaceStatsJson();
 	if ( sJson == NULL ) {
-		return XS_HttpRespondText(pResp, 500, "Internal Server Error", "bus namespace build failed");
+		return XS_HttpRespondJsonResult(pResp, 500, "Internal Server Error", FALSE, "bus namespace build failed");
 	}
 	if ( !xrtHttpdResponseSetBodyCopy(pResp, sJson, strlen(sJson), "application/json; charset=utf-8") ) {
 		xrtFree(sJson);
@@ -3208,10 +4952,16 @@ static inline bool XS_HttpHandleBusFind(XS_ServerConfig* objServer, const XS_Hos
 		return FALSE;
 	}
 	if ( !(objServer->Debug || objHost->Debug) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "bus find api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "bus find api disabled");
 	}
 
 	sNamespace = XS_HttpQueryDup(pReq->sQuery, "namespace");
+	if ( XS_HttpRespondBusNamespaceBadRequest(pResp, sNamespace) ) {
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		return TRUE;
+	}
 	sTag = XS_HttpQueryDup(pReq->sQuery, "tag");
 	iDataID = XS_BusDataFindFirst(
 		(sNamespace && sNamespace[0] != '\0') ? sNamespace : NULL,
@@ -3243,6 +4993,7 @@ static inline bool XS_HttpHandleBusExists(XS_ServerConfig* objServer, const XS_H
 	char sBody[320];
 	int64 iDataID;
 	bool bExists;
+	xvalue objData;
 
 	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
 		return FALSE;
@@ -3251,20 +5002,47 @@ static inline bool XS_HttpHandleBusExists(XS_ServerConfig* objServer, const XS_H
 		return FALSE;
 	}
 	if ( !(objServer->Debug || objHost->Debug) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "bus exists api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "bus exists api disabled");
 	}
 
 	sNamespace = XS_HttpQueryDup(pReq->sQuery, "namespace");
+	if ( XS_HttpRespondBusNamespaceBadRequest(pResp, sNamespace) ) {
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		return TRUE;
+	}
 	sTag = XS_HttpQueryDup(pReq->sQuery, "tag");
 	sID = XS_HttpQueryDup(pReq->sQuery, "id");
-	iDataID = (sID && sID[0] != '\0') ? _strtoi64(sID, NULL, 10) : 0;
-	if ( iDataID <= 0 && ((sNamespace && sNamespace[0] != '\0') || (sTag && sTag[0] != '\0')) ) {
+	if ( XS_HttpRespondBusDataIDBadRequest(pResp, sID) ) {
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		if ( sTag ) {
+			xrtFree(sTag);
+		}
+		if ( sID ) {
+			xrtFree(sID);
+		}
+		return TRUE;
+	}
+	iDataID = 0;
+	if ( sID && sID[0] != '\0' ) {
+		(void)XS_HttpParsePositiveInt64(sID, &iDataID);
+	}
+	objData = NULL;
+	if ( iDataID > 0 ) {
+		objData = XS_BusDataGet(iDataID);
+		bExists = (objData != NULL);
+	} else if ( ((sNamespace && sNamespace[0] != '\0')) || ((sTag && sTag[0] != '\0')) ) {
 		iDataID = XS_BusDataFindFirst(
 			(sNamespace && sNamespace[0] != '\0') ? sNamespace : NULL,
 			(sTag && sTag[0] != '\0') ? sTag : NULL
 		);
+		bExists = (iDataID > 0);
+	} else {
+		bExists = FALSE;
 	}
-	bExists = (iDataID > 0);
 	snprintf(
 		sBody,
 		sizeof(sBody),
@@ -3303,13 +5081,34 @@ static inline bool XS_HttpHandleBusGet(XS_ServerConfig* objServer, const XS_Host
 		return FALSE;
 	}
 	if ( !(objServer->Debug || objHost->Debug) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "bus get api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "bus get api disabled");
 	}
 
 	sNamespace = XS_HttpQueryDup(pReq->sQuery, "namespace");
+	if ( XS_HttpRespondBusNamespaceBadRequest(pResp, sNamespace) ) {
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		return TRUE;
+	}
 	sTag = XS_HttpQueryDup(pReq->sQuery, "tag");
 	sID = XS_HttpQueryDup(pReq->sQuery, "id");
-	iDataID = (sID && sID[0] != '\0') ? _strtoi64(sID, NULL, 10) : 0;
+	if ( XS_HttpRespondBusDataIDBadRequest(pResp, sID) ) {
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		if ( sTag ) {
+			xrtFree(sTag);
+		}
+		if ( sID ) {
+			xrtFree(sID);
+		}
+		return TRUE;
+	}
+	iDataID = 0;
+	if ( sID && sID[0] != '\0' ) {
+		(void)XS_HttpParsePositiveInt64(sID, &iDataID);
+	}
 
 	if ( iDataID <= 0 && ((sNamespace && sNamespace[0] != '\0') || (sTag && sTag[0] != '\0')) ) {
 		iDataID = XS_BusDataFindFirst(
@@ -3396,10 +5195,16 @@ static inline bool XS_HttpHandleBusValues(XS_ServerConfig* objServer, const XS_H
 		return FALSE;
 	}
 	if ( !(objServer->Debug || objHost->Debug) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "bus values api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "bus values api disabled");
 	}
 
 	sNamespace = XS_HttpQueryDup(pReq->sQuery, "namespace");
+	if ( XS_HttpRespondBusNamespaceBadRequest(pResp, sNamespace) ) {
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		return TRUE;
+	}
 	sTag = XS_HttpQueryDup(pReq->sQuery, "tag");
 	sJson = XS_BusBuildDataListJsonEx(
 		(sNamespace && sNamespace[0] != '\0') ? sNamespace : NULL,
@@ -3434,6 +5239,7 @@ static inline bool XS_HttpHandleBusRetain(XS_ServerConfig* objServer, const XS_H
 	char sBody[384];
 	int64 iDataID;
 	bool bOk;
+	int32 iBusCode = XS_BUS_ERR_NONE;
 
 	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
 		return FALSE;
@@ -3442,29 +5248,65 @@ static inline bool XS_HttpHandleBusRetain(XS_ServerConfig* objServer, const XS_H
 		return FALSE;
 	}
 	if ( !(objServer->Debug || objHost->Debug) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "bus retain api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "bus retain api disabled");
 	}
 
 	sNamespace = XS_HttpQueryDup(pReq->sQuery, "namespace");
+	if ( XS_HttpRespondBusNamespaceBadRequest(pResp, sNamespace) ) {
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		return TRUE;
+	}
 	sTag = XS_HttpQueryDup(pReq->sQuery, "tag");
 	sID = XS_HttpQueryDup(pReq->sQuery, "id");
-	iDataID = (sID && sID[0] != '\0') ? _strtoi64(sID, NULL, 10) : 0;
+	XS_BusClearLastError();
+	if ( XS_HttpRespondBusDataIDBadRequest(pResp, sID) ) {
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		if ( sTag ) {
+			xrtFree(sTag);
+		}
+		if ( sID ) {
+			xrtFree(sID);
+		}
+		return TRUE;
+	}
+	iDataID = 0;
+	if ( sID && sID[0] != '\0' ) {
+		(void)XS_HttpParsePositiveInt64(sID, &iDataID);
+	}
 	iDataID = XS_BusDataResolveID(
 		(sNamespace && sNamespace[0] != '\0') ? sNamespace : NULL,
 		(sTag && sTag[0] != '\0') ? sTag : NULL,
 		iDataID
 	);
-	bOk = (iDataID > 0) ? XS_BusDataRetain(iDataID) : FALSE;
-	snprintf(
-		sBody,
-		sizeof(sBody),
-		"{\"result\":%s,\"message\":\"%s\",\"data_id\":%lld,\"namespace\":\"%s\",\"tag\":\"%s\"}",
-		bOk ? "true" : "false",
-		bOk ? "retain ok" : "data not found",
-		(long long)iDataID,
-		(sNamespace && sNamespace[0] != '\0') ? sNamespace : "",
-		(sTag && sTag[0] != '\0') ? sTag : ""
-	);
+	bOk = (iDataID > 0) ? XS_BusDataRetainManaged(iDataID) : FALSE;
+	iBusCode = XS_BusGetLastErrorCode();
+	if ( !bOk && iBusCode != XS_BUS_ERR_NONE ) {
+		snprintf(
+			sBody,
+			sizeof(sBody),
+			"{\"result\":false,\"message\":\"retain failed\",\"bus_code\":%d,\"bus_error\":\"%s\",\"data_id\":%lld,\"namespace\":\"%s\",\"tag\":\"%s\"}",
+			(int)iBusCode,
+			XS_BusGetLastError(),
+			(long long)iDataID,
+			(sNamespace && sNamespace[0] != '\0') ? sNamespace : "",
+			(sTag && sTag[0] != '\0') ? sTag : ""
+		);
+	} else {
+		snprintf(
+			sBody,
+			sizeof(sBody),
+			"{\"result\":%s,\"message\":\"%s\",\"data_id\":%lld,\"namespace\":\"%s\",\"tag\":\"%s\"}",
+			bOk ? "true" : "false",
+			bOk ? "retain ok" : "data not found",
+			(long long)iDataID,
+			(sNamespace && sNamespace[0] != '\0') ? sNamespace : "",
+			(sTag && sTag[0] != '\0') ? sTag : ""
+		);
+	}
 	if ( sNamespace ) {
 		xrtFree(sNamespace);
 	}
@@ -3474,7 +5316,11 @@ static inline bool XS_HttpHandleBusRetain(XS_ServerConfig* objServer, const XS_H
 	if ( sID ) {
 		xrtFree(sID);
 	}
-	xrtHttpdResponseSetStatus(pResp, bOk ? 200 : 404, bOk ? "OK" : "Not Found");
+	xrtHttpdResponseSetStatus(
+		pResp,
+		bOk ? 200 : (iBusCode != XS_BUS_ERR_NONE ? XS_HttpBusErrorStatusCode(iBusCode) : 404),
+		bOk ? "OK" : (iBusCode != XS_BUS_ERR_NONE ? XS_HttpBusErrorStatusText(iBusCode) : "Not Found")
+	);
 	return xrtHttpdResponseSetBodyCopy(pResp, sBody, strlen(sBody), "application/json; charset=utf-8");
 }
 
@@ -3486,6 +5332,7 @@ static inline bool XS_HttpHandleBusRelease(XS_ServerConfig* objServer, const XS_
 	char sBody[384];
 	int64 iDataID;
 	bool bOk;
+	int32 iBusCode = XS_BUS_ERR_NONE;
 
 	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
 		return FALSE;
@@ -3494,29 +5341,65 @@ static inline bool XS_HttpHandleBusRelease(XS_ServerConfig* objServer, const XS_
 		return FALSE;
 	}
 	if ( !(objServer->Debug || objHost->Debug) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "bus release api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "bus release api disabled");
 	}
 
 	sNamespace = XS_HttpQueryDup(pReq->sQuery, "namespace");
+	if ( XS_HttpRespondBusNamespaceBadRequest(pResp, sNamespace) ) {
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		return TRUE;
+	}
 	sTag = XS_HttpQueryDup(pReq->sQuery, "tag");
 	sID = XS_HttpQueryDup(pReq->sQuery, "id");
-	iDataID = (sID && sID[0] != '\0') ? _strtoi64(sID, NULL, 10) : 0;
+	XS_BusClearLastError();
+	if ( XS_HttpRespondBusDataIDBadRequest(pResp, sID) ) {
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		if ( sTag ) {
+			xrtFree(sTag);
+		}
+		if ( sID ) {
+			xrtFree(sID);
+		}
+		return TRUE;
+	}
+	iDataID = 0;
+	if ( sID && sID[0] != '\0' ) {
+		(void)XS_HttpParsePositiveInt64(sID, &iDataID);
+	}
 	iDataID = XS_BusDataResolveID(
 		(sNamespace && sNamespace[0] != '\0') ? sNamespace : NULL,
 		(sTag && sTag[0] != '\0') ? sTag : NULL,
 		iDataID
 	);
-	bOk = (iDataID > 0) ? XS_BusDataRelease(iDataID) : FALSE;
-	snprintf(
-		sBody,
-		sizeof(sBody),
-		"{\"result\":%s,\"message\":\"%s\",\"data_id\":%lld,\"namespace\":\"%s\",\"tag\":\"%s\"}",
-		bOk ? "true" : "false",
-		bOk ? "release ok" : "data not found",
-		(long long)iDataID,
-		(sNamespace && sNamespace[0] != '\0') ? sNamespace : "",
-		(sTag && sTag[0] != '\0') ? sTag : ""
-	);
+	bOk = (iDataID > 0) ? XS_BusDataReleaseManaged(iDataID) : FALSE;
+	iBusCode = XS_BusGetLastErrorCode();
+	if ( !bOk && iBusCode != XS_BUS_ERR_NONE ) {
+		snprintf(
+			sBody,
+			sizeof(sBody),
+			"{\"result\":false,\"message\":\"release failed\",\"bus_code\":%d,\"bus_error\":\"%s\",\"data_id\":%lld,\"namespace\":\"%s\",\"tag\":\"%s\"}",
+			(int)iBusCode,
+			XS_BusGetLastError(),
+			(long long)iDataID,
+			(sNamespace && sNamespace[0] != '\0') ? sNamespace : "",
+			(sTag && sTag[0] != '\0') ? sTag : ""
+		);
+	} else {
+		snprintf(
+			sBody,
+			sizeof(sBody),
+			"{\"result\":%s,\"message\":\"%s\",\"data_id\":%lld,\"namespace\":\"%s\",\"tag\":\"%s\"}",
+			bOk ? "true" : "false",
+			bOk ? "release ok" : "data not found",
+			(long long)iDataID,
+			(sNamespace && sNamespace[0] != '\0') ? sNamespace : "",
+			(sTag && sTag[0] != '\0') ? sTag : ""
+		);
+	}
 	if ( sNamespace ) {
 		xrtFree(sNamespace);
 	}
@@ -3526,7 +5409,11 @@ static inline bool XS_HttpHandleBusRelease(XS_ServerConfig* objServer, const XS_
 	if ( sID ) {
 		xrtFree(sID);
 	}
-	xrtHttpdResponseSetStatus(pResp, bOk ? 200 : 404, bOk ? "OK" : "Not Found");
+	xrtHttpdResponseSetStatus(
+		pResp,
+		bOk ? 200 : (iBusCode != XS_BUS_ERR_NONE ? XS_HttpBusErrorStatusCode(iBusCode) : 404),
+		bOk ? "OK" : (iBusCode != XS_BUS_ERR_NONE ? XS_HttpBusErrorStatusText(iBusCode) : "Not Found")
+	);
 	return xrtHttpdResponseSetBodyCopy(pResp, sBody, strlen(sBody), "application/json; charset=utf-8");
 }
 
@@ -3541,6 +5428,7 @@ static inline bool XS_HttpHandleBusTouch(XS_ServerConfig* objServer, const XS_Ho
 	int64 iTTL;
 	int64 tExpire;
 	bool bOk;
+	int32 iBusCode = XS_BUS_ERR_NONE;
 
 	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
 		return FALSE;
@@ -3549,20 +5437,60 @@ static inline bool XS_HttpHandleBusTouch(XS_ServerConfig* objServer, const XS_Ho
 		return FALSE;
 	}
 	if ( !(objServer->Debug || objHost->Debug) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "bus touch api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "bus touch api disabled");
 	}
 
 	sNamespace = XS_HttpQueryDup(pReq->sQuery, "namespace");
+	if ( XS_HttpRespondBusNamespaceBadRequest(pResp, sNamespace) ) {
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		return TRUE;
+	}
 	sTag = XS_HttpQueryDup(pReq->sQuery, "tag");
 	sID = XS_HttpQueryDup(pReq->sQuery, "id");
+	if ( XS_HttpRespondBusDataIDBadRequest(pResp, sID) ) {
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		if ( sTag ) {
+			xrtFree(sTag);
+		}
+		if ( sID ) {
+			xrtFree(sID);
+		}
+		return TRUE;
+	}
 	sTTL = XS_HttpQueryDup(pReq->sQuery, "ttl");
-	iDataID = (sID && sID[0] != '\0') ? _strtoi64(sID, NULL, 10) : 0;
+	if ( XS_HttpRespondBusTTLBadRequest(pResp, sTTL) ) {
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		if ( sTag ) {
+			xrtFree(sTag);
+		}
+		if ( sID ) {
+			xrtFree(sID);
+		}
+		if ( sTTL ) {
+			xrtFree(sTTL);
+		}
+		return TRUE;
+	}
+	XS_BusClearLastError();
+	iDataID = 0;
+	if ( sID && sID[0] != '\0' ) {
+		(void)XS_HttpParsePositiveInt64(sID, &iDataID);
+	}
 	iDataID = XS_BusDataResolveID(
 		(sNamespace && sNamespace[0] != '\0') ? sNamespace : NULL,
 		(sTag && sTag[0] != '\0') ? sTag : NULL,
 		iDataID
 	);
-	iTTL = (sTTL && sTTL[0] != '\0') ? _strtoi64(sTTL, NULL, 10) : 0;
+	iTTL = 0;
+	if ( sTTL && sTTL[0] != '\0' ) {
+		(void)XS_HttpParseNonNegativeInt64(sTTL, &iTTL);
+	}
 	if ( iTTL <= 0 ) {
 		snprintf(
 			sBody,
@@ -3590,19 +5518,34 @@ static inline bool XS_HttpHandleBusTouch(XS_ServerConfig* objServer, const XS_Ho
 	}
 
 	bOk = (iDataID > 0) ? XS_BusDataTouchTTL(iDataID, iTTL) : FALSE;
+	iBusCode = XS_BusGetLastErrorCode();
 	tExpire = bOk ? XS_BusDataGetExpireTime(iDataID) : 0;
-	snprintf(
-		sBody,
-		sizeof(sBody),
-		"{\"result\":%s,\"message\":\"%s\",\"data_id\":%lld,\"ttl\":%lld,\"expire_time\":%lld,\"namespace\":\"%s\",\"tag\":\"%s\"}",
-		bOk ? "true" : "false",
-		bOk ? "ttl updated" : "data not found",
-		(long long)iDataID,
-		(long long)iTTL,
-		(long long)tExpire,
-		(sNamespace && sNamespace[0] != '\0') ? sNamespace : "",
-		(sTag && sTag[0] != '\0') ? sTag : ""
-	);
+	if ( !bOk && iBusCode != XS_BUS_ERR_NONE ) {
+		snprintf(
+			sBody,
+			sizeof(sBody),
+			"{\"result\":false,\"message\":\"touch failed\",\"bus_code\":%d,\"bus_error\":\"%s\",\"data_id\":%lld,\"ttl\":%lld,\"namespace\":\"%s\",\"tag\":\"%s\"}",
+			(int)iBusCode,
+			XS_BusGetLastError(),
+			(long long)iDataID,
+			(long long)iTTL,
+			(sNamespace && sNamespace[0] != '\0') ? sNamespace : "",
+			(sTag && sTag[0] != '\0') ? sTag : ""
+		);
+	} else {
+		snprintf(
+			sBody,
+			sizeof(sBody),
+			"{\"result\":%s,\"message\":\"%s\",\"data_id\":%lld,\"ttl\":%lld,\"expire_time\":%lld,\"namespace\":\"%s\",\"tag\":\"%s\"}",
+			bOk ? "true" : "false",
+			bOk ? "ttl updated" : "data not found",
+			(long long)iDataID,
+			(long long)iTTL,
+			(long long)tExpire,
+			(sNamespace && sNamespace[0] != '\0') ? sNamespace : "",
+			(sTag && sTag[0] != '\0') ? sTag : ""
+		);
+	}
 	if ( sNamespace ) {
 		xrtFree(sNamespace);
 	}
@@ -3615,7 +5558,11 @@ static inline bool XS_HttpHandleBusTouch(XS_ServerConfig* objServer, const XS_Ho
 	if ( sTTL ) {
 		xrtFree(sTTL);
 	}
-	xrtHttpdResponseSetStatus(pResp, bOk ? 200 : 404, bOk ? "OK" : "Not Found");
+	xrtHttpdResponseSetStatus(
+		pResp,
+		bOk ? 200 : (iBusCode != XS_BUS_ERR_NONE ? XS_HttpBusErrorStatusCode(iBusCode) : 404),
+		bOk ? "OK" : (iBusCode != XS_BUS_ERR_NONE ? XS_HttpBusErrorStatusText(iBusCode) : "Not Found")
+	);
 	return xrtHttpdResponseSetBodyCopy(pResp, sBody, strlen(sBody), "application/json; charset=utf-8");
 }
 
@@ -3632,6 +5579,7 @@ static inline bool XS_HttpHandleBusSet(XS_ServerConfig* objServer, const XS_Host
 	int64 iTTL = -1;
 	int64 tExpire = 0;
 	bool bOk = FALSE;
+	int32 iBusCode = XS_BUS_ERR_NONE;
 	xvalue objData = NULL;
 
 	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
@@ -3641,23 +5589,60 @@ static inline bool XS_HttpHandleBusSet(XS_ServerConfig* objServer, const XS_Host
 		return FALSE;
 	}
 	if ( !(objServer->Debug || objHost->Debug) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "bus set api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "bus set api disabled");
 	}
 
 	sNamespace = XS_HttpQueryDup(pReq->sQuery, "namespace");
+	if ( XS_HttpRespondBusNamespaceBadRequest(pResp, sNamespace) ) {
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		return TRUE;
+	}
 	sTag = XS_HttpQueryDup(pReq->sQuery, "tag");
 	sID = XS_HttpQueryDup(pReq->sQuery, "id");
+	if ( XS_HttpRespondBusDataIDBadRequest(pResp, sID) ) {
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		if ( sTag ) {
+			xrtFree(sTag);
+		}
+		if ( sID ) {
+			xrtFree(sID);
+		}
+		return TRUE;
+	}
 	sText = XS_HttpQueryDup(pReq->sQuery, "text");
 	sJson = XS_HttpQueryDup(pReq->sQuery, "json");
 	sTTL = XS_HttpQueryDup(pReq->sQuery, "ttl");
-	iDataID = (sID && sID[0] != '\0') ? _strtoi64(sID, NULL, 10) : 0;
+	if ( XS_HttpRespondBusTTLBadRequest(pResp, sTTL) ) {
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		if ( sTag ) {
+			xrtFree(sTag);
+		}
+		if ( sID ) {
+			xrtFree(sID);
+		}
+		if ( sTTL ) {
+			xrtFree(sTTL);
+		}
+		return TRUE;
+	}
+	XS_BusClearLastError();
+	iDataID = 0;
+	if ( sID && sID[0] != '\0' ) {
+		(void)XS_HttpParsePositiveInt64(sID, &iDataID);
+	}
 	iDataID = XS_BusDataResolveID(
 		(sNamespace && sNamespace[0] != '\0') ? sNamespace : NULL,
 		(sTag && sTag[0] != '\0') ? sTag : NULL,
 		iDataID
 	);
 	if ( sTTL && sTTL[0] != '\0' ) {
-		iTTL = _strtoi64(sTTL, NULL, 10);
+		(void)XS_HttpParseNonNegativeInt64(sTTL, &iTTL);
 	}
 
 	if ( iDataID <= 0 ) {
@@ -3711,24 +5696,40 @@ static inline bool XS_HttpHandleBusSet(XS_ServerConfig* objServer, const XS_Host
 		xvoTableSetText(objData, "text", 4, sText, 0, FALSE);
 	}
 
-	bOk = XS_BusDataSetValue(iDataID, objData);
-	if ( bOk && iTTL >= 0 ) {
-		bOk = XS_BusDataSetTTL(iDataID, iTTL);
-	}
+	bOk = XS_BusDataSetValueEx(iDataID, objData, iTTL, iTTL >= 0);
+	iBusCode = XS_BusGetLastErrorCode();
 	tExpire = bOk ? XS_BusDataGetExpireTime(iDataID) : 0;
-	snprintf(
-		sBody,
-		sizeof(sBody),
-		"{\"result\":%s,\"message\":\"%s\",\"data_id\":%lld,\"ttl\":%lld,\"expire_time\":%lld,\"namespace\":\"%s\",\"tag\":\"%s\"}",
-		bOk ? "true" : "false",
-		bOk ? "data updated" : "update failed",
-		(long long)iDataID,
-		(long long)iTTL,
-		(long long)tExpire,
-		(sNamespace && sNamespace[0] != '\0') ? sNamespace : "",
-		(sTag && sTag[0] != '\0') ? sTag : ""
+	if ( !bOk && iBusCode != XS_BUS_ERR_NONE ) {
+		snprintf(
+			sBody,
+			sizeof(sBody),
+			"{\"result\":false,\"message\":\"update failed\",\"bus_code\":%d,\"bus_error\":\"%s\",\"data_id\":%lld,\"ttl\":%lld,\"namespace\":\"%s\",\"tag\":\"%s\"}",
+			(int)iBusCode,
+			XS_BusGetLastError(),
+			(long long)iDataID,
+			(long long)iTTL,
+			(sNamespace && sNamespace[0] != '\0') ? sNamespace : "",
+			(sTag && sTag[0] != '\0') ? sTag : ""
+		);
+	} else {
+		snprintf(
+			sBody,
+			sizeof(sBody),
+			"{\"result\":%s,\"message\":\"%s\",\"data_id\":%lld,\"ttl\":%lld,\"expire_time\":%lld,\"namespace\":\"%s\",\"tag\":\"%s\"}",
+			bOk ? "true" : "false",
+			bOk ? "data updated" : "update failed",
+			(long long)iDataID,
+			(long long)iTTL,
+			(long long)tExpire,
+			(sNamespace && sNamespace[0] != '\0') ? sNamespace : "",
+			(sTag && sTag[0] != '\0') ? sTag : ""
+		);
+	}
+	xrtHttpdResponseSetStatus(
+		pResp,
+		bOk ? 200 : (iBusCode != XS_BUS_ERR_NONE ? XS_HttpBusErrorStatusCode(iBusCode) : 500),
+		bOk ? "OK" : (iBusCode != XS_BUS_ERR_NONE ? XS_HttpBusErrorStatusText(iBusCode) : "Internal Server Error")
 	);
-	xrtHttpdResponseSetStatus(pResp, bOk ? 200 : 500, bOk ? "OK" : "Internal Server Error");
 
 ExitBusSet:
 	if ( objData ) {
@@ -3764,6 +5765,8 @@ static inline bool XS_HttpHandleBusRemove(XS_ServerConfig* objServer, const XS_H
 	bool bAll;
 	int64 iDataID;
 	int64 iRemoved;
+	int64 iBatchRemoved;
+	int32 iBusCode = XS_BUS_ERR_NONE;
 
 	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
 		return FALSE;
@@ -3772,49 +5775,95 @@ static inline bool XS_HttpHandleBusRemove(XS_ServerConfig* objServer, const XS_H
 		return FALSE;
 	}
 	if ( !(objServer->Debug || objHost->Debug) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "bus remove api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "bus remove api disabled");
 	}
 
 	sNamespace = XS_HttpQueryDup(pReq->sQuery, "namespace");
+	if ( XS_HttpRespondBusNamespaceBadRequest(pResp, sNamespace) ) {
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		return TRUE;
+	}
 	sTag = XS_HttpQueryDup(pReq->sQuery, "tag");
 	sID = XS_HttpQueryDup(pReq->sQuery, "id");
-	bAll = XS_HttpQueryBool(pReq->sQuery, "all", FALSE);
+	XS_BusClearLastError();
+	if ( !XS_HttpQueryBoolEx(pReq->sQuery, "all", FALSE, &bAll, NULL) ) {
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		if ( sTag ) {
+			xrtFree(sTag);
+		}
+		if ( sID ) {
+			xrtFree(sID);
+		}
+		return XS_HttpRespondNamedBoolBadRequestJson(pResp, "all");
+	}
 	iRemoved = 0;
 	iDataID = 0;
+	if ( XS_HttpRespondBusDataIDBadRequest(pResp, sID) ) {
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		if ( sTag ) {
+			xrtFree(sTag);
+		}
+		if ( sID ) {
+			xrtFree(sID);
+		}
+		return TRUE;
+	}
 
 	if ( sID && sID[0] != '\0' ) {
-		iDataID = _strtoi64(sID, NULL, 10);
+		(void)XS_HttpParsePositiveInt64(sID, &iDataID);
 		if ( iDataID > 0 && XS_BusDataRemove(iDataID) ) {
 			iRemoved = 1;
 		}
-	} else if ( (sNamespace && sNamespace[0] != '\0') || (sTag && sTag[0] != '\0') ) {
-		if ( bAll ) {
-			iRemoved = XS_BusDataRemoveByQuery(
+	} else if ( bAll ) {
+		do {
+			iBatchRemoved = XS_BusDataRemoveByQuery(
 				(sNamespace && sNamespace[0] != '\0') ? sNamespace : NULL,
 				(sTag && sTag[0] != '\0') ? sTag : NULL,
 				256
 			);
-		} else {
-			iDataID = XS_BusDataFindFirst(
-				(sNamespace && sNamespace[0] != '\0') ? sNamespace : NULL,
-				(sTag && sTag[0] != '\0') ? sTag : NULL
-			);
-			if ( iDataID > 0 && XS_BusDataRemove(iDataID) ) {
-				iRemoved = 1;
-			}
+			iRemoved += iBatchRemoved;
+		} while ( iBatchRemoved > 0 );
+	} else if ( (sNamespace && sNamespace[0] != '\0') || (sTag && sTag[0] != '\0') ) {
+		iDataID = XS_BusDataFindFirst(
+			(sNamespace && sNamespace[0] != '\0') ? sNamespace : NULL,
+			(sTag && sTag[0] != '\0') ? sTag : NULL
+		);
+		if ( iDataID > 0 && XS_BusDataRemove(iDataID) ) {
+			iRemoved = 1;
 		}
 	}
+	iBusCode = XS_BusGetLastErrorCode();
 
-	snprintf(
-		sBody,
-		sizeof(sBody),
-		"{\"result\":true,\"removed\":%lld,\"data_id\":%lld,\"namespace\":\"%s\",\"tag\":\"%s\",\"all\":%s}",
-		(long long)iRemoved,
-		(long long)iDataID,
-		(sNamespace && sNamespace[0] != '\0') ? sNamespace : "",
-		(sTag && sTag[0] != '\0') ? sTag : "",
-		bAll ? "true" : "false"
-	);
+	if ( iRemoved == 0 && iBusCode != XS_BUS_ERR_NONE ) {
+		snprintf(
+			sBody,
+			sizeof(sBody),
+			"{\"result\":false,\"message\":\"remove failed\",\"bus_code\":%d,\"bus_error\":\"%s\",\"removed\":0,\"data_id\":%lld,\"namespace\":\"%s\",\"tag\":\"%s\",\"all\":%s}",
+			(int)iBusCode,
+			XS_BusGetLastError(),
+			(long long)iDataID,
+			(sNamespace && sNamespace[0] != '\0') ? sNamespace : "",
+			(sTag && sTag[0] != '\0') ? sTag : "",
+			bAll ? "true" : "false"
+		);
+	} else {
+		snprintf(
+			sBody,
+			sizeof(sBody),
+			"{\"result\":true,\"removed\":%lld,\"data_id\":%lld,\"namespace\":\"%s\",\"tag\":\"%s\",\"all\":%s}",
+			(long long)iRemoved,
+			(long long)iDataID,
+			(sNamespace && sNamespace[0] != '\0') ? sNamespace : "",
+			(sTag && sTag[0] != '\0') ? sTag : "",
+			bAll ? "true" : "false"
+		);
+	}
 	if ( sNamespace ) {
 		xrtFree(sNamespace);
 	}
@@ -3824,13 +5873,18 @@ static inline bool XS_HttpHandleBusRemove(XS_ServerConfig* objServer, const XS_H
 	if ( sID ) {
 		xrtFree(sID);
 	}
-	xrtHttpdResponseSetStatus(pResp, 200, "OK");
+	xrtHttpdResponseSetStatus(
+		pResp,
+		(iRemoved > 0 || iBusCode == XS_BUS_ERR_NONE) ? 200 : XS_HttpBusErrorStatusCode(iBusCode),
+		(iRemoved > 0 || iBusCode == XS_BUS_ERR_NONE) ? "OK" : XS_HttpBusErrorStatusText(iBusCode)
+	);
 	return xrtHttpdResponseSetBodyCopy(pResp, sBody, strlen(sBody), "application/json; charset=utf-8");
 }
 
 static inline bool XS_HttpHandleBusReset(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
-	char sBody[256];
+	xvalue objRet;
+	char* sJson;
 
 	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
 		return FALSE;
@@ -3839,16 +5893,316 @@ static inline bool XS_HttpHandleBusReset(XS_ServerConfig* objServer, const XS_Ho
 		return FALSE;
 	}
 	if ( !XS_ManageAPIEnabled(objServer, objHost) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "bus reset api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "bus reset api disabled");
 	}
 
 	XS_BusClearStats();
-	snprintf(
-		sBody,
-		sizeof(sBody),
-		"total_queued=0\ntotal_delivered=0\ntotal_dropped=0\nlast_queue_time=0\nlast_dispatch_time=0\n"
-	);
-	return XS_HttpRespondText(pResp, 200, "OK", sBody);
+	objRet = XS_BusBuildStatusValueNoSweep();
+	if ( objRet == NULL ) {
+		return XS_HttpRespondJsonResult(pResp, 500, "Internal Server Error", FALSE, "bus reset build failed");
+	}
+	sJson = xrtStringifyJSON(objRet, FALSE, NULL);
+	xvoUnref(objRet);
+	if ( sJson == NULL ) {
+		return XS_HttpRespondJsonResult(pResp, 500, "Internal Server Error", FALSE, "bus reset stringify failed");
+	}
+	xrtHttpdResponseSetStatus(pResp, 200, "OK");
+	if ( !xrtHttpdResponseSetBodyCopy(pResp, sJson, strlen(sJson), "application/json; charset=utf-8") ) {
+		xrtFree(sJson);
+		return FALSE;
+	}
+	xrtFree(sJson);
+	return TRUE;
+}
+
+static inline bool XS_HttpHandleBusSweep(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
+{
+	char* sMaxPass;
+	xvalue objRet;
+	char* sJson;
+	bool bDrain;
+	int64 iPassCount = 0;
+	int64 iRemovedTotal = 0;
+	int64 iRemain = 0;
+	int32 iMaxPass = 0;
+
+	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
+		return FALSE;
+	}
+	if ( strcmp(pReq->sPath, "/__xs/bus/sweep") != 0 ) {
+		return FALSE;
+	}
+	if ( !XS_ManageAPIEnabled(objServer, objHost) ) {
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "bus sweep api disabled");
+	}
+
+	{
+		bool bAll = FALSE;
+		bool bDrainFlag = FALSE;
+
+		if ( !XS_HttpQueryBoolEx(pReq->sQuery, "all", FALSE, &bAll, NULL) ) {
+			return XS_HttpRespondNamedBoolBadRequestJson(pResp, "all");
+		}
+		if ( !XS_HttpQueryBoolEx(pReq->sQuery, "drain", FALSE, &bDrainFlag, NULL) ) {
+			return XS_HttpRespondNamedBoolBadRequestJson(pResp, "drain");
+		}
+		bDrain = bAll || bDrainFlag;
+	}
+	sMaxPass = XS_HttpQueryDup(pReq->sQuery, "max_pass");
+	if ( sMaxPass && sMaxPass[0] != '\0' ) {
+		int64 iMaxPassValue = 0;
+
+		if ( !XS_HttpParseInt64(sMaxPass, &iMaxPassValue) ) {
+			xrtFree(sMaxPass);
+			return XS_HttpRespondBusNamedIntBadRequest(pResp, "max_pass");
+		}
+		if ( iMaxPassValue <= 0 ) {
+			xrtFree(sMaxPass);
+			return XS_HttpRespondJsonResult(pResp, 400, "Bad Request", FALSE, "max_pass must be > 0");
+		}
+		if ( iMaxPassValue > 1024 ) {
+			xrtFree(sMaxPass);
+			return XS_HttpRespondJsonResult(pResp, 400, "Bad Request", FALSE, "max_pass must be <= 1024");
+		}
+		iMaxPass = (int32)iMaxPassValue;
+	}
+	if ( bDrain ) {
+		XS_BusSweepExpiredDataDrain(iMaxPass, &iPassCount, &iRemovedTotal, &iRemain);
+	} else {
+		XS_BusSweepExpiredDataForce();
+		iPassCount = 1;
+	}
+	objRet = XS_BusBuildLimitValue();
+	if ( sMaxPass ) {
+		xrtFree(sMaxPass);
+	}
+	if ( objRet == NULL ) {
+		return XS_HttpRespondJsonResult(pResp, 500, "Internal Server Error", FALSE, "bus sweep build failed");
+	}
+	if ( !bDrain ) {
+		iRemovedTotal = xvoTableGetInt(objRet, "last_sweep_removed", sizeof("last_sweep_removed") - 1);
+		iRemain = xvoTableGetInt(objRet, "last_sweep_remain", sizeof("last_sweep_remain") - 1);
+	}
+	xvoTableSetBool(objRet, "result", 6, TRUE);
+	xvoTableSetBool(objRet, "forced", 6, TRUE);
+	xvoTableSetBool(objRet, "drain", 5, bDrain);
+	xvoTableSetInt(objRet, "pass_count", 10, iPassCount);
+	xvoTableSetInt(objRet, "pass_limit", 10, (iMaxPass > 0) ? iMaxPass : XS_BUS_SWEEP_DRAIN_MAX_PASS);
+	xvoTableSetInt(objRet, "removed_total", 13, iRemovedTotal);
+	xvoTableSetInt(objRet, "remain_after", 12, iRemain);
+	xvoTableSetBool(objRet, "pass_limited", 12, bDrain && (iRemain > 0) && (iPassCount >= ((iMaxPass > 0) ? iMaxPass : XS_BUS_SWEEP_DRAIN_MAX_PASS)));
+	xvoTableSetText(objRet, "message", 7, bDrain ? "bus sweep drain ok" : "bus sweep ok", 0, FALSE);
+	sJson = xrtStringifyJSON(objRet, FALSE, NULL);
+	xvoUnref(objRet);
+	if ( sJson == NULL ) {
+		return XS_HttpRespondJsonResult(pResp, 500, "Internal Server Error", FALSE, "bus sweep stringify failed");
+	}
+	xrtHttpdResponseSetStatus(pResp, 200, "OK");
+	if ( !xrtHttpdResponseSetBodyCopy(pResp, sJson, strlen(sJson), "application/json; charset=utf-8") ) {
+		xrtFree(sJson);
+		return FALSE;
+	}
+	xrtFree(sJson);
+	return TRUE;
+}
+
+static inline bool XS_HttpHandleBusLimits(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
+{
+	char* sDataLimit;
+	char* sQueueLimit;
+	char* sNamespaceLimit;
+	char* sNamespaceDataLimit;
+	char* sSweepIntervalMS;
+	char* sReadonlyNamespaces;
+	char* sDisabledNamespaces;
+	char* sTTLRequiredNamespaces;
+	char* sTagRequiredNamespaces;
+	char sReadonlyRules[XS_BUS_NAMESPACE_RULES_MAX_LEN];
+	char sDisabledRules[XS_BUS_NAMESPACE_RULES_MAX_LEN];
+	char sTTLRequiredRules[XS_BUS_NAMESPACE_RULES_MAX_LEN];
+	char sTagRequiredRules[XS_BUS_NAMESPACE_RULES_MAX_LEN];
+	const char* sRuleError = NULL;
+	bool bHasReadonlyNamespaces = FALSE;
+	bool bHasDisabledNamespaces = FALSE;
+	bool bHasTTLRequiredNamespaces = FALSE;
+	bool bHasTagRequiredNamespaces = FALSE;
+	bool bSetDataLimit = FALSE;
+	bool bSetQueueLimit = FALSE;
+	bool bSetNamespaceLimit = FALSE;
+	bool bSetNamespaceDataLimit = FALSE;
+	bool bSetSweepIntervalMS = FALSE;
+	bool bSetReadonlyNamespaces = FALSE;
+	bool bSetDisabledNamespaces = FALSE;
+	bool bSetTTLRequiredNamespaces = FALSE;
+	bool bSetTagRequiredNamespaces = FALSE;
+	int64 iDataLimit = 0;
+	int64 iQueueLimit = 0;
+	int64 iNamespaceLimit = 0;
+	int64 iNamespaceDataLimit = 0;
+	int64 iSweepIntervalMS = 0;
+	xvalue objRet;
+	char* sJson;
+
+	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
+		return FALSE;
+	}
+	if ( strcmp(pReq->sPath, "/__xs/bus/limits") != 0 ) {
+		return FALSE;
+	}
+	if ( !XS_ManageAPIEnabled(objServer, objHost) ) {
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "bus limit api disabled");
+	}
+
+	sDataLimit = XS_HttpQueryDup(pReq->sQuery, "data_limit");
+	sQueueLimit = XS_HttpQueryDup(pReq->sQuery, "queue_limit");
+	sNamespaceLimit = XS_HttpQueryDup(pReq->sQuery, "namespace_limit");
+	sNamespaceDataLimit = XS_HttpQueryDup(pReq->sQuery, "namespace_data_limit");
+	sSweepIntervalMS = XS_HttpQueryDup(pReq->sQuery, "sweep_interval_ms");
+	sReadonlyNamespaces = XS_HttpQueryDup(pReq->sQuery, "readonly_namespaces");
+	sDisabledNamespaces = XS_HttpQueryDup(pReq->sQuery, "disabled_namespaces");
+	sTTLRequiredNamespaces = XS_HttpQueryDup(pReq->sQuery, "ttl_required_namespaces");
+	sTagRequiredNamespaces = XS_HttpQueryDup(pReq->sQuery, "tag_required_namespaces");
+	bHasReadonlyNamespaces = XS_HttpQueryHas(pReq->sQuery, "readonly_namespaces");
+	bHasDisabledNamespaces = XS_HttpQueryHas(pReq->sQuery, "disabled_namespaces");
+	bHasTTLRequiredNamespaces = XS_HttpQueryHas(pReq->sQuery, "ttl_required_namespaces");
+	bHasTagRequiredNamespaces = XS_HttpQueryHas(pReq->sQuery, "tag_required_namespaces");
+	sReadonlyRules[0] = '\0';
+	sDisabledRules[0] = '\0';
+	sTTLRequiredRules[0] = '\0';
+	sTagRequiredRules[0] = '\0';
+	if ( sDataLimit && sDataLimit[0] != '\0' ) {
+		if ( !XS_HttpParseInt64(sDataLimit, &iDataLimit) ) {
+			XS_HttpFreeBusLimitQueryValues(sDataLimit, sQueueLimit, sNamespaceLimit, sNamespaceDataLimit, sSweepIntervalMS, sReadonlyNamespaces, sDisabledNamespaces, sTTLRequiredNamespaces, sTagRequiredNamespaces);
+			return XS_HttpRespondBusNamedIntBadRequest(pResp, "data_limit");
+		}
+		if ( iDataLimit < 0 ) {
+			XS_HttpFreeBusLimitQueryValues(sDataLimit, sQueueLimit, sNamespaceLimit, sNamespaceDataLimit, sSweepIntervalMS, sReadonlyNamespaces, sDisabledNamespaces, sTTLRequiredNamespaces, sTagRequiredNamespaces);
+			return XS_HttpRespondJsonResult(pResp, 400, "Bad Request", FALSE, "data_limit must be >= 0");
+		}
+		bSetDataLimit = TRUE;
+	}
+	if ( sQueueLimit && sQueueLimit[0] != '\0' ) {
+		if ( !XS_HttpParseInt64(sQueueLimit, &iQueueLimit) ) {
+			XS_HttpFreeBusLimitQueryValues(sDataLimit, sQueueLimit, sNamespaceLimit, sNamespaceDataLimit, sSweepIntervalMS, sReadonlyNamespaces, sDisabledNamespaces, sTTLRequiredNamespaces, sTagRequiredNamespaces);
+			return XS_HttpRespondBusNamedIntBadRequest(pResp, "queue_limit");
+		}
+		if ( iQueueLimit < 0 ) {
+			XS_HttpFreeBusLimitQueryValues(sDataLimit, sQueueLimit, sNamespaceLimit, sNamespaceDataLimit, sSweepIntervalMS, sReadonlyNamespaces, sDisabledNamespaces, sTTLRequiredNamespaces, sTagRequiredNamespaces);
+			return XS_HttpRespondJsonResult(pResp, 400, "Bad Request", FALSE, "queue_limit must be >= 0");
+		}
+		bSetQueueLimit = TRUE;
+	}
+	if ( sNamespaceLimit && sNamespaceLimit[0] != '\0' ) {
+		if ( !XS_HttpParseInt64(sNamespaceLimit, &iNamespaceLimit) ) {
+			XS_HttpFreeBusLimitQueryValues(sDataLimit, sQueueLimit, sNamespaceLimit, sNamespaceDataLimit, sSweepIntervalMS, sReadonlyNamespaces, sDisabledNamespaces, sTTLRequiredNamespaces, sTagRequiredNamespaces);
+			return XS_HttpRespondBusNamedIntBadRequest(pResp, "namespace_limit");
+		}
+		if ( iNamespaceLimit < 0 ) {
+			XS_HttpFreeBusLimitQueryValues(sDataLimit, sQueueLimit, sNamespaceLimit, sNamespaceDataLimit, sSweepIntervalMS, sReadonlyNamespaces, sDisabledNamespaces, sTTLRequiredNamespaces, sTagRequiredNamespaces);
+			return XS_HttpRespondJsonResult(pResp, 400, "Bad Request", FALSE, "namespace_limit must be >= 0");
+		}
+		bSetNamespaceLimit = TRUE;
+	}
+	if ( sNamespaceDataLimit && sNamespaceDataLimit[0] != '\0' ) {
+		if ( !XS_HttpParseInt64(sNamespaceDataLimit, &iNamespaceDataLimit) ) {
+			XS_HttpFreeBusLimitQueryValues(sDataLimit, sQueueLimit, sNamespaceLimit, sNamespaceDataLimit, sSweepIntervalMS, sReadonlyNamespaces, sDisabledNamespaces, sTTLRequiredNamespaces, sTagRequiredNamespaces);
+			return XS_HttpRespondBusNamedIntBadRequest(pResp, "namespace_data_limit");
+		}
+		if ( iNamespaceDataLimit < 0 ) {
+			XS_HttpFreeBusLimitQueryValues(sDataLimit, sQueueLimit, sNamespaceLimit, sNamespaceDataLimit, sSweepIntervalMS, sReadonlyNamespaces, sDisabledNamespaces, sTTLRequiredNamespaces, sTagRequiredNamespaces);
+			return XS_HttpRespondJsonResult(pResp, 400, "Bad Request", FALSE, "namespace_data_limit must be >= 0");
+		}
+		bSetNamespaceDataLimit = TRUE;
+	}
+	if ( sSweepIntervalMS && sSweepIntervalMS[0] != '\0' ) {
+		if ( !XS_HttpParseInt64(sSweepIntervalMS, &iSweepIntervalMS) ) {
+			XS_HttpFreeBusLimitQueryValues(sDataLimit, sQueueLimit, sNamespaceLimit, sNamespaceDataLimit, sSweepIntervalMS, sReadonlyNamespaces, sDisabledNamespaces, sTTLRequiredNamespaces, sTagRequiredNamespaces);
+			return XS_HttpRespondBusNamedIntBadRequest(pResp, "sweep_interval_ms");
+		}
+		if ( iSweepIntervalMS < 0 ) {
+			XS_HttpFreeBusLimitQueryValues(sDataLimit, sQueueLimit, sNamespaceLimit, sNamespaceDataLimit, sSweepIntervalMS, sReadonlyNamespaces, sDisabledNamespaces, sTTLRequiredNamespaces, sTagRequiredNamespaces);
+			return XS_HttpRespondJsonResult(pResp, 400, "Bad Request", FALSE, "sweep_interval_ms must be >= 0");
+		}
+		bSetSweepIntervalMS = TRUE;
+	}
+	if ( bHasReadonlyNamespaces ) {
+		if ( sReadonlyNamespaces && sReadonlyNamespaces[0] != '\0' ) {
+			if ( !XS_BusNormalizeNamespaceRules(sReadonlyNamespaces, sReadonlyRules, sizeof(sReadonlyRules), &sRuleError) ) {
+				XS_HttpFreeBusLimitQueryValues(sDataLimit, sQueueLimit, sNamespaceLimit, sNamespaceDataLimit, sSweepIntervalMS, sReadonlyNamespaces, sDisabledNamespaces, sTTLRequiredNamespaces, sTagRequiredNamespaces);
+				return XS_HttpRespondJsonResult(pResp, 400, "Bad Request", FALSE, sRuleError ? sRuleError : "invalid readonly namespaces");
+			}
+		}
+		bSetReadonlyNamespaces = TRUE;
+	}
+	if ( bHasDisabledNamespaces ) {
+		if ( sDisabledNamespaces && sDisabledNamespaces[0] != '\0' ) {
+			if ( !XS_BusNormalizeNamespaceRules(sDisabledNamespaces, sDisabledRules, sizeof(sDisabledRules), &sRuleError) ) {
+				XS_HttpFreeBusLimitQueryValues(sDataLimit, sQueueLimit, sNamespaceLimit, sNamespaceDataLimit, sSweepIntervalMS, sReadonlyNamespaces, sDisabledNamespaces, sTTLRequiredNamespaces, sTagRequiredNamespaces);
+				return XS_HttpRespondJsonResult(pResp, 400, "Bad Request", FALSE, sRuleError ? sRuleError : "invalid disabled namespaces");
+			}
+		}
+		bSetDisabledNamespaces = TRUE;
+	}
+	if ( bHasTTLRequiredNamespaces ) {
+		if ( sTTLRequiredNamespaces && sTTLRequiredNamespaces[0] != '\0' ) {
+			if ( !XS_BusNormalizeNamespaceRules(sTTLRequiredNamespaces, sTTLRequiredRules, sizeof(sTTLRequiredRules), &sRuleError) ) {
+				XS_HttpFreeBusLimitQueryValues(sDataLimit, sQueueLimit, sNamespaceLimit, sNamespaceDataLimit, sSweepIntervalMS, sReadonlyNamespaces, sDisabledNamespaces, sTTLRequiredNamespaces, sTagRequiredNamespaces);
+				return XS_HttpRespondJsonResult(pResp, 400, "Bad Request", FALSE, sRuleError ? sRuleError : "invalid ttl required namespaces");
+			}
+		}
+		bSetTTLRequiredNamespaces = TRUE;
+	}
+	if ( bHasTagRequiredNamespaces ) {
+		if ( sTagRequiredNamespaces && sTagRequiredNamespaces[0] != '\0' ) {
+			if ( !XS_BusNormalizeNamespaceRules(sTagRequiredNamespaces, sTagRequiredRules, sizeof(sTagRequiredRules), &sRuleError) ) {
+				XS_HttpFreeBusLimitQueryValues(sDataLimit, sQueueLimit, sNamespaceLimit, sNamespaceDataLimit, sSweepIntervalMS, sReadonlyNamespaces, sDisabledNamespaces, sTTLRequiredNamespaces, sTagRequiredNamespaces);
+				return XS_HttpRespondJsonResult(pResp, 400, "Bad Request", FALSE, sRuleError ? sRuleError : "invalid tag required namespaces");
+			}
+		}
+		bSetTagRequiredNamespaces = TRUE;
+	}
+	if ( bSetDataLimit || bSetQueueLimit || bSetNamespaceLimit || bSetNamespaceDataLimit || bSetReadonlyNamespaces || bSetDisabledNamespaces || bSetTTLRequiredNamespaces || bSetTagRequiredNamespaces ) {
+		XS_BusConfigureLimits(
+			bSetDataLimit,
+			iDataLimit,
+			bSetQueueLimit,
+			iQueueLimit,
+			bSetNamespaceLimit,
+			iNamespaceLimit,
+			bSetNamespaceDataLimit,
+			iNamespaceDataLimit,
+			bSetReadonlyNamespaces,
+			sReadonlyRules,
+			bSetDisabledNamespaces,
+			sDisabledRules,
+			bSetTTLRequiredNamespaces,
+			sTTLRequiredRules,
+			bSetTagRequiredNamespaces,
+			sTagRequiredRules
+		);
+	}
+	if ( bSetSweepIntervalMS ) {
+		XS_BusConfigureSweep(TRUE, iSweepIntervalMS);
+	}
+
+	objRet = XS_BusBuildLimitValue();
+	XS_HttpFreeBusLimitQueryValues(sDataLimit, sQueueLimit, sNamespaceLimit, sNamespaceDataLimit, sSweepIntervalMS, sReadonlyNamespaces, sDisabledNamespaces, sTTLRequiredNamespaces, sTagRequiredNamespaces);
+	if ( objRet == NULL ) {
+		return XS_HttpRespondJsonResult(pResp, 500, "Internal Server Error", FALSE, "bus limit build failed");
+	}
+	xvoTableSetBool(objRet, "updated", 7, bSetDataLimit || bSetQueueLimit || bSetNamespaceLimit || bSetNamespaceDataLimit || bSetSweepIntervalMS || bSetReadonlyNamespaces || bSetDisabledNamespaces || bSetTTLRequiredNamespaces || bSetTagRequiredNamespaces);
+	sJson = xrtStringifyJSON(objRet, FALSE, NULL);
+	xvoUnref(objRet);
+	if ( sJson == NULL ) {
+		return XS_HttpRespondJsonResult(pResp, 500, "Internal Server Error", FALSE, "bus limit stringify failed");
+	}
+	xrtHttpdResponseSetStatus(pResp, 200, "OK");
+	if ( !xrtHttpdResponseSetBodyCopy(pResp, sJson, strlen(sJson), "application/json; charset=utf-8") ) {
+		xrtFree(sJson);
+		return FALSE;
+	}
+	xrtFree(sJson);
+	return TRUE;
 }
 
 static inline bool XS_HttpHandleBusRegister(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
@@ -3859,6 +6213,7 @@ static inline bool XS_HttpHandleBusRegister(XS_ServerConfig* objServer, const XS
 	char sBody[384];
 	int64 iTTL;
 	int64 iDataID;
+	int32 iBusCode;
 	xvalue objData;
 
 	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
@@ -3868,13 +6223,34 @@ static inline bool XS_HttpHandleBusRegister(XS_ServerConfig* objServer, const XS
 		return FALSE;
 	}
 	if ( !(objServer->Debug || objHost->Debug) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "bus register api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "bus register api disabled");
 	}
 
 	sNamespace = XS_HttpQueryDup(pReq->sQuery, "namespace");
+	if ( XS_HttpRespondBusNamespaceBadRequest(pResp, sNamespace) ) {
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		return TRUE;
+	}
 	sTag = XS_HttpQueryDup(pReq->sQuery, "tag");
 	sTTL = XS_HttpQueryDup(pReq->sQuery, "ttl");
-	iTTL = (sTTL && sTTL[0] != '\0') ? _strtoi64(sTTL, NULL, 10) : 0;
+	if ( XS_HttpRespondBusTTLBadRequest(pResp, sTTL) ) {
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		if ( sTag ) {
+			xrtFree(sTag);
+		}
+		if ( sTTL ) {
+			xrtFree(sTTL);
+		}
+		return TRUE;
+	}
+	iTTL = 0;
+	if ( sTTL && sTTL[0] != '\0' ) {
+		(void)XS_HttpParseNonNegativeInt64(sTTL, &iTTL);
+	}
 
 	objData = xvoCreateTable();
 	xvoTableSetText(objData, "source", 6, "__xs.bus.register", 0, FALSE);
@@ -3892,12 +6268,13 @@ static inline bool XS_HttpHandleBusRegister(XS_ServerConfig* objServer, const XS
 	);
 	xvoUnref(objData);
 
+	iBusCode = XS_BusGetLastErrorCode();
 	if ( iDataID <= 0 ) {
 		snprintf(
 			sBody,
 			sizeof(sBody),
 			"{\"result\":false,\"message\":\"register failed\",\"bus_code\":%d,\"bus_error\":\"%s\"}",
-			(int)XS_BusGetLastErrorCode(),
+			(int)iBusCode,
 			XS_BusGetLastError()
 		);
 	} else {
@@ -3921,7 +6298,11 @@ static inline bool XS_HttpHandleBusRegister(XS_ServerConfig* objServer, const XS
 	if ( sTTL ) {
 		xrtFree(sTTL);
 	}
-	xrtHttpdResponseSetStatus(pResp, iDataID > 0 ? 200 : 500, iDataID > 0 ? "OK" : "Internal Server Error");
+	xrtHttpdResponseSetStatus(
+		pResp,
+		iDataID > 0 ? 200 : XS_HttpBusErrorStatusCode(iBusCode),
+		iDataID > 0 ? "OK" : XS_HttpBusErrorStatusText(iBusCode)
+	);
 	return xrtHttpdResponseSetBodyCopy(pResp, sBody, strlen(sBody), "application/json; charset=utf-8");
 }
 
@@ -3943,6 +6324,7 @@ static inline bool XS_HttpHandleBusSend(XS_ServerConfig* objServer, const XS_Hos
 	int64 iDataID = 0;
 	int64 iTTL = -1;
 	bool bAutoRegister = FALSE;
+	int32 iBusCode = 0;
 	xvalue objData = NULL;
 
 	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
@@ -3952,7 +6334,7 @@ static inline bool XS_HttpHandleBusSend(XS_ServerConfig* objServer, const XS_Hos
 		return FALSE;
 	}
 	if ( !(objServer->Debug || objHost->Debug) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "bus send api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "bus send api disabled");
 	}
 
 	sTarget = XS_HttpQueryDup(pReq->sQuery, "target");
@@ -3960,19 +6342,126 @@ static inline bool XS_HttpHandleBusSend(XS_ServerConfig* objServer, const XS_Hos
 	sServerName = XS_HttpQueryDup(pReq->sQuery, "server");
 	sHostName = XS_HttpQueryDup(pReq->sQuery, "host");
 	sNamespace = XS_HttpQueryDup(pReq->sQuery, "namespace");
+	if ( XS_HttpRespondBusNamespaceBadRequest(pResp, sNamespace) ) {
+		if ( sTarget ) {
+			xrtFree(sTarget);
+		}
+		if ( sTopic ) {
+			xrtFree(sTopic);
+		}
+		if ( sServerName ) {
+			xrtFree(sServerName);
+		}
+		if ( sHostName ) {
+			xrtFree(sHostName);
+		}
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		return TRUE;
+	}
 	sTag = XS_HttpQueryDup(pReq->sQuery, "tag");
 	sDataID = XS_HttpQueryDup(pReq->sQuery, "data_id");
+	if ( XS_HttpRespondBusDataIDBadRequest(pResp, sDataID) ) {
+		if ( sTarget ) {
+			xrtFree(sTarget);
+		}
+		if ( sTopic ) {
+			xrtFree(sTopic);
+		}
+		if ( sServerName ) {
+			xrtFree(sServerName);
+		}
+		if ( sHostName ) {
+			xrtFree(sHostName);
+		}
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		if ( sTag ) {
+			xrtFree(sTag);
+		}
+		if ( sDataID ) {
+			xrtFree(sDataID);
+		}
+		return TRUE;
+	}
 	sText = XS_HttpQueryDup(pReq->sQuery, "text");
 	sJson = XS_HttpQueryDup(pReq->sQuery, "json");
 	sTTL = XS_HttpQueryDup(pReq->sQuery, "ttl");
-	bPersist = XS_HttpQueryBool(pReq->sQuery, "persist", FALSE);
+	if ( XS_HttpRespondBusTTLBadRequest(pResp, sTTL) ) {
+		if ( sTarget ) {
+			xrtFree(sTarget);
+		}
+		if ( sTopic ) {
+			xrtFree(sTopic);
+		}
+		if ( sServerName ) {
+			xrtFree(sServerName);
+		}
+		if ( sHostName ) {
+			xrtFree(sHostName);
+		}
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		if ( sTag ) {
+			xrtFree(sTag);
+		}
+		if ( sDataID ) {
+			xrtFree(sDataID);
+		}
+		if ( sText ) {
+			xrtFree(sText);
+		}
+		if ( sJson ) {
+			xrtFree(sJson);
+		}
+		if ( sTTL ) {
+			xrtFree(sTTL);
+		}
+		return TRUE;
+	}
+	if ( !XS_HttpQueryBoolEx(pReq->sQuery, "persist", FALSE, &bPersist, NULL) ) {
+		if ( sTarget ) {
+			xrtFree(sTarget);
+		}
+		if ( sTopic ) {
+			xrtFree(sTopic);
+		}
+		if ( sServerName ) {
+			xrtFree(sServerName);
+		}
+		if ( sHostName ) {
+			xrtFree(sHostName);
+		}
+		if ( sNamespace ) {
+			xrtFree(sNamespace);
+		}
+		if ( sTag ) {
+			xrtFree(sTag);
+		}
+		if ( sDataID ) {
+			xrtFree(sDataID);
+		}
+		if ( sText ) {
+			xrtFree(sText);
+		}
+		if ( sJson ) {
+			xrtFree(sJson);
+		}
+		if ( sTTL ) {
+			xrtFree(sTTL);
+		}
+		return XS_HttpRespondNamedBoolBadRequestJson(pResp, "persist");
+	}
 
 	if ( sTTL && sTTL[0] != '\0' ) {
-		iTTL = _strtoi64(sTTL, NULL, 10);
+		(void)XS_HttpParseNonNegativeInt64(sTTL, &iTTL);
 	}
 
 	if ( sDataID && sDataID[0] != '\0' ) {
-		iDataID = _strtoi64(sDataID, NULL, 10);
+		(void)XS_HttpParsePositiveInt64(sDataID, &iDataID);
 	} else if ( (sNamespace && sNamespace[0] != '\0') || (sTag && sTag[0] != '\0') ) {
 		iDataID = XS_BusDataFindFirst(
 			(sNamespace && sNamespace[0] != '\0') ? sNamespace : NULL,
@@ -3991,6 +6480,21 @@ static inline bool XS_HttpHandleBusSend(XS_ServerConfig* objServer, const XS_Hos
 		const char* pTarget = (sTarget && sTarget[0] != '\0') ? sTarget : "server";
 		const char* pServer = (sServerName && sServerName[0] != '\0') ? sServerName : objServer->Name;
 		const char* pHost = (sHostName && sHostName[0] != '\0') ? sHostName : objHost->Name;
+
+		if (
+			strcmp(pTarget, "server") != 0 &&
+			strcmp(pTarget, "host") != 0 &&
+			strcmp(pTarget, "broadcast") != 0
+		) {
+			snprintf(
+				sBody,
+				sizeof(sBody),
+				"{\"result\":false,\"message\":\"invalid target\",\"target\":\"%s\"}",
+				pTarget
+			);
+			xrtHttpdResponseSetStatus(pResp, 400, "Bad Request");
+			goto ExitBusSend;
+		}
 
 		if ( iDataID <= 0 && ((sText && sText[0] != '\0') || (sJson && sJson[0] != '\0') || (sNamespace && sNamespace[0] != '\0') || (sTag && sTag[0] != '\0') || (iTTL >= 0)) ) {
 			int64 iRegisterTTL = (iTTL >= 0) ? iTTL : 60000;
@@ -4055,15 +6559,16 @@ static inline bool XS_HttpHandleBusSend(XS_ServerConfig* objServer, const XS_Hos
 			);
 			xvoUnref(objData);
 			objData = NULL;
+			iBusCode = XS_BusGetLastErrorCode();
 			if ( iDataID <= 0 ) {
 				snprintf(
 					sBody,
 					sizeof(sBody),
 					"{\"result\":false,\"message\":\"auto register failed\",\"bus_code\":%d,\"bus_error\":\"%s\"}",
-					(int)XS_BusGetLastErrorCode(),
+					(int)iBusCode,
 					XS_BusGetLastError()
 				);
-				xrtHttpdResponseSetStatus(pResp, 500, "Internal Server Error");
+				xrtHttpdResponseSetStatus(pResp, XS_HttpBusErrorStatusCode(iBusCode), XS_HttpBusErrorStatusText(iBusCode));
 				goto ExitBusSend;
 			}
 			bAutoRegister = TRUE;
@@ -4077,6 +6582,7 @@ static inline bool XS_HttpHandleBusSend(XS_ServerConfig* objServer, const XS_Hos
 		} else {
 			bSendOk = XS_BusSendToServer(pServer, sTopic, iDataID, NULL);
 		}
+		iBusCode = XS_BusGetLastErrorCode();
 
 		if ( !bSendOk && bAutoRegister && iDataID > 0 ) {
 			(void)XS_BusDataRemove(iDataID);
@@ -4085,22 +6591,39 @@ static inline bool XS_HttpHandleBusSend(XS_ServerConfig* objServer, const XS_Hos
 			(void)XS_BusDataRelease(iDataID);
 		}
 
-		snprintf(
-			sBody,
-			sizeof(sBody),
-			"{\"result\":%s,\"message\":\"%s\",\"data_id\":%lld,\"target\":\"%s\",\"topic\":\"%s\",\"server\":\"%s\",\"host\":\"%s\",\"auto_register\":%s,\"persist\":%s,\"ttl\":%lld}",
-			bSendOk ? "true" : "false",
-			bSendOk ? "message queued" : "send failed",
-			(long long)iDataID,
-			pTarget,
-			sTopic,
-			(strcmp(pTarget, "broadcast") == 0) ? "" : (pServer ? pServer : ""),
-			(strcmp(pTarget, "host") == 0) ? (pHost ? pHost : "") : "",
-			bAutoRegister ? "true" : "false",
-			bPersist ? "true" : "false",
-			(long long)((iTTL >= 0) ? iTTL : 0)
-		);
-		xrtHttpdResponseSetStatus(pResp, bSendOk ? 200 : 500, bSendOk ? "OK" : "Internal Server Error");
+		if ( bSendOk ) {
+			snprintf(
+				sBody,
+				sizeof(sBody),
+				"{\"result\":true,\"message\":\"message queued\",\"data_id\":%lld,\"target\":\"%s\",\"topic\":\"%s\",\"server\":\"%s\",\"host\":\"%s\",\"auto_register\":%s,\"persist\":%s,\"ttl\":%lld}",
+				(long long)iDataID,
+				pTarget,
+				sTopic,
+				(strcmp(pTarget, "broadcast") == 0) ? "" : (pServer ? pServer : ""),
+				(strcmp(pTarget, "host") == 0) ? (pHost ? pHost : "") : "",
+				bAutoRegister ? "true" : "false",
+				bPersist ? "true" : "false",
+				(long long)((iTTL >= 0) ? iTTL : 0)
+			);
+			xrtHttpdResponseSetStatus(pResp, 200, "OK");
+		} else {
+			snprintf(
+				sBody,
+				sizeof(sBody),
+				"{\"result\":false,\"message\":\"send failed\",\"bus_code\":%d,\"bus_error\":\"%s\",\"data_id\":%lld,\"target\":\"%s\",\"topic\":\"%s\",\"server\":\"%s\",\"host\":\"%s\",\"auto_register\":%s,\"persist\":%s,\"ttl\":%lld}",
+				(int)iBusCode,
+				XS_BusGetLastError(),
+				(long long)iDataID,
+				pTarget,
+				sTopic,
+				(strcmp(pTarget, "broadcast") == 0) ? "" : (pServer ? pServer : ""),
+				(strcmp(pTarget, "host") == 0) ? (pHost ? pHost : "") : "",
+				bAutoRegister ? "true" : "false",
+				bPersist ? "true" : "false",
+				(long long)((iTTL >= 0) ? iTTL : 0)
+			);
+			xrtHttpdResponseSetStatus(pResp, XS_HttpBusErrorStatusCode(iBusCode), XS_HttpBusErrorStatusText(iBusCode));
+		}
 	}
 
 ExitBusSend:
@@ -4139,19 +6662,54 @@ ExitBusSend:
 
 static inline bool XS_HttpHandleStatus(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
-	char sBody[8192];
+	char sBody[24576];
 	char* sHttpLastTime;
 	char* sHttpLastAppTime;
 	char* sHttpLastIdleCloseTime;
 	char* sHttpLastConnLimitCloseTime;
 	char* sHttpLastRejectTime;
 	char* sHttpLastStopCleanupTime;
+	char* sHttpLastHeaderLimitRejectTime;
+	char* sHttpLastBodyLimitRejectTime;
+	char* sHttpLastPathLimitRejectTime;
+	char* sHttpLastApiDisabledRejectTime;
+	char* sHttpLastMethodRejectTime;
+	char* sHttpLastHostNotFoundRejectTime;
+	char* sHttpLastReloadBusyRejectTime;
+	char* sHttpLastReloadFailedRejectTime;
+	char* sHttpLastCheckConfigFailedRejectTime;
+	char* sHttpLastBusBadRequestRejectTime;
+	char* sHttpLastBusNotFoundRejectTime;
+	char* sHttpLastBusLimitRejectTime;
+	char* sHttpLastBusFailedRejectTime;
 	char* sWsLastTime;
+	char* sWsLastCloseTime;
+	char* sWsLastErrorTime;
 	char* sWsLastInvalidTime;
 	char* sWsLastIdleCloseTime;
 	char* sWsLastConnLimitCloseTime;
+	char* sWsLastMessageLimitCloseTime;
+	char* sXtpLastTime;
+	char* sXtpLastInvalidTime;
+	char* sXtpLastErrorTime;
+	char* sXtpLastIdleCloseTime;
+	char* sXtpLastConnLimitCloseTime;
+	char* sXtpLastRecvLimitCloseTime;
+	char* sUdpLastTime;
+	char* sUdpLastErrorTime;
+	char* sCustomLastTime;
+	char* sCustomLastCloseTime;
+	char* sCustomLastErrorTime;
+	char* sCustomLastInvalidTime;
+	char* sCustomLastIdleCloseTime;
+	char* sCustomLastConnLimitCloseTime;
+	char* sCustomLastRecvLimitCloseTime;
 	char* sWsLastRejectTime;
 	char* sWsLastStopCleanupTime;
+	char* sXtpLastRejectTime;
+	char* sXtpLastStopCleanupTime;
+	char* sCustomLastRejectTime;
+	char* sCustomLastStopCleanupTime;
 	size_t iLen;
 	uint32 i;
 	
@@ -4173,12 +6731,47 @@ static inline bool XS_HttpHandleStatus(XS_ServerConfig* objServer, const XS_Host
 	sHttpLastConnLimitCloseTime = XS_HttpLastConnLimitCloseTimeText();
 	sHttpLastRejectTime = XS_HttpLastRejectTimeText();
 	sHttpLastStopCleanupTime = XS_HttpLastStopCleanupTimeText();
+	sHttpLastHeaderLimitRejectTime = XS_HttpLastHeaderLimitRejectTimeText();
+	sHttpLastBodyLimitRejectTime = XS_HttpLastBodyLimitRejectTimeText();
+	sHttpLastPathLimitRejectTime = XS_HttpLastPathLimitRejectTimeText();
+	sHttpLastApiDisabledRejectTime = XS_HttpLastApiDisabledRejectTimeText();
+	sHttpLastMethodRejectTime = XS_HttpLastMethodRejectTimeText();
+	sHttpLastHostNotFoundRejectTime = XS_HttpLastHostNotFoundRejectTimeText();
+	sHttpLastReloadBusyRejectTime = XS_HttpLastReloadBusyRejectTimeText();
+	sHttpLastReloadFailedRejectTime = XS_HttpLastReloadFailedRejectTimeText();
+	sHttpLastCheckConfigFailedRejectTime = XS_HttpLastCheckConfigFailedRejectTimeText();
+	sHttpLastBusBadRequestRejectTime = XS_HttpLastBusBadRequestRejectTimeText();
+	sHttpLastBusNotFoundRejectTime = XS_HttpLastBusNotFoundRejectTimeText();
+	sHttpLastBusLimitRejectTime = XS_HttpLastBusLimitRejectTimeText();
+	sHttpLastBusFailedRejectTime = XS_HttpLastBusFailedRejectTimeText();
 	sWsLastTime = XS_WsLastTimeText();
+	sWsLastCloseTime = XS_WsLastCloseTimeText();
+	sWsLastErrorTime = XS_WsLastErrorTimeText();
 	sWsLastInvalidTime = XS_WsLastInvalidTimeText();
 	sWsLastIdleCloseTime = XS_WsLastIdleCloseTimeText();
 	sWsLastConnLimitCloseTime = XS_WsLastConnLimitCloseTimeText();
+	sWsLastMessageLimitCloseTime = XS_WsLastMessageLimitCloseTimeText();
+	sXtpLastTime = XS_XtpLastTimeText();
+	sXtpLastInvalidTime = XS_XtpLastInvalidTimeText();
+	sXtpLastErrorTime = XS_XtpLastErrorTimeText();
+	sXtpLastIdleCloseTime = XS_XtpLastIdleCloseTimeText();
+	sXtpLastConnLimitCloseTime = XS_XtpLastConnLimitCloseTimeText();
+	sXtpLastRecvLimitCloseTime = XS_XtpLastRecvLimitCloseTimeText();
+	sUdpLastTime = XS_UdpLastTimeText();
+	sUdpLastErrorTime = XS_UdpLastErrorTimeText();
+	sCustomLastTime = XS_CustomLastTimeText();
+	sCustomLastCloseTime = XS_CustomLastCloseTimeText();
+	sCustomLastErrorTime = XS_CustomLastErrorTimeText();
+	sCustomLastInvalidTime = XS_CustomLastInvalidTimeText();
+	sCustomLastIdleCloseTime = XS_CustomLastIdleCloseTimeText();
+	sCustomLastConnLimitCloseTime = XS_CustomLastConnLimitCloseTimeText();
+	sCustomLastRecvLimitCloseTime = XS_CustomLastRecvLimitCloseTimeText();
 	sWsLastRejectTime = XS_WsLastRejectTimeText();
 	sWsLastStopCleanupTime = XS_WsLastStopCleanupTimeText();
+	sXtpLastRejectTime = XS_XtpLastRejectTimeText();
+	sXtpLastStopCleanupTime = XS_XtpLastStopCleanupTimeText();
+	sCustomLastRejectTime = XS_CustomLastRejectTimeText();
+	sCustomLastStopCleanupTime = XS_CustomLastStopCleanupTimeText();
 	iLen = (size_t)snprintf(
 		sBody,
 		sizeof(sBody),
@@ -4258,6 +6851,38 @@ static inline bool XS_HttpHandleStatus(XS_ServerConfig* objServer, const XS_Host
 		iLen += (size_t)snprintf(
 			sBody + iLen,
 			sizeof(sBody) - iLen,
+			"bind_ip=%s\nbind_port=%u\ntls=%s\nbind_ip_tls=%s\nbind_port_tls=%u\naddr_tls=%s\nws_protocol=%s\ntls_cert_file=%s\ntls_key_file=%s\ntls_ca_file=%s\ncompiler=%s\nmanage_api=%s\nmem_debug=%s\nruntime_server_count=%u\nhost_count=%u\n",
+			objServer->BindIP ? objServer->BindIP : "(null)",
+			(unsigned int)objServer->BindPort,
+			objServer->EnableTLS ? "true" : "false",
+			objServer->BindIPTLS ? objServer->BindIPTLS : "(null)",
+			(unsigned int)objServer->BindPortTLS,
+			objServer->AddrTLS ? objServer->AddrTLS : "(null)",
+			objServer->WsProtocol ? objServer->WsProtocol : "(none)",
+			XS_TlsConfigFileText(objServer->TlsConfig.sCertFile),
+			XS_TlsConfigFileText(objServer->TlsConfig.sKeyFile),
+			XS_TlsConfigFileText(objServer->TlsConfig.sCaFile),
+			XS_CompilerName(),
+			XS_ManageAPIEnabled(objServer, objHost) ? "true" : "false",
+			XS_MemDebugEnabled() ? "true" : "false",
+			(unsigned int)g_iXsRuntimeServerCount,
+			(unsigned int)(objServer->Hosts ? objServer->Hosts->Count : 0)
+		);
+	}
+	if ( iLen < sizeof(sBody) ) {
+		iLen += (size_t)snprintf(
+			sBody + iLen,
+			sizeof(sBody) - iLen,
+			"http_time_total_ms=%lld\nhttp_time_max_ms=%lld\nhttp_time_avg_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsHttpTimeTotalMS),
+			(long long)XS_HttpMetricGet(&g_iXsHttpTimeMaxMS),
+			(long long)((XS_HttpMetricGet(&g_iXsHttpReqCount) > 0) ? (XS_HttpMetricGet(&g_iXsHttpTimeTotalMS) / XS_HttpMetricGet(&g_iXsHttpReqCount)) : 0)
+		);
+	}
+	if ( iLen < sizeof(sBody) ) {
+		iLen += (size_t)snprintf(
+			sBody + iLen,
+			sizeof(sBody) - iLen,
 			"http_conn_current=%lld\nhttp_conn_peak=%lld\nhttp_idle_close_count=%lld\nhttp_conn_limit_close_count=%lld\nhttp_last_idle_close_time=%s\nhttp_last_idle_close_age_ms=%lld\nhttp_last_conn_limit_close_time=%s\nhttp_last_conn_limit_close_age_ms=%lld\nhttp_get_count=%lld\nhttp_post_count=%lld\nhttp_head_count=%lld\nhttp_other_count=%lld\nws_conn_current=%lld\nws_conn_peak=%lld\nws_open_count=%lld\nws_close_count=%lld\nws_text_count=%lld\nws_binary_count=%lld\nws_ping_count=%lld\nws_pong_count=%lld\nws_error_count=%lld\nws_invalid_count=%lld\nws_idle_close_count=%lld\nws_conn_limit_close_count=%lld\nws_last_invalid_reason=%s\nws_last_invalid_time=%s\nws_last_invalid_age_ms=%lld\nws_last_idle_close_time=%s\nws_last_idle_close_age_ms=%lld\nws_last_conn_limit_close_time=%s\nws_last_conn_limit_close_age_ms=%lld\nws_last_frame_type=%s\nws_last_remote=%s\nws_last_bytes=%lld\nws_last_text=%s\nws_last_time=%s\nws_last_age_ms=%lld\n",
 			(long long)XS_HttpMetricGet(&g_iXsHttpConnCurrent),
 			(long long)XS_HttpMetricGet(&g_iXsHttpConnPeak),
@@ -4302,6 +6927,19 @@ static inline bool XS_HttpHandleStatus(XS_ServerConfig* objServer, const XS_Host
 		iLen += (size_t)snprintf(
 			sBody + iLen,
 			sizeof(sBody) - iLen,
+			"ws_last_close_reason=%lld\nws_last_close_time=%s\nws_last_close_age_ms=%lld\nws_last_error_code=%lld\nws_last_error_time=%s\nws_last_error_age_ms=%lld\n",
+			(long long)g_iXsWsLastCloseReason,
+			sWsLastCloseTime ? sWsLastCloseTime : "(none)",
+			(long long)XS_WsLastCloseAgeMS(),
+			(long long)g_iXsWsLastErrorCode,
+			sWsLastErrorTime ? sWsLastErrorTime : "(none)",
+			(long long)XS_WsLastErrorAgeMS()
+		);
+	}
+	if ( iLen < sizeof(sBody) ) {
+		iLen += (size_t)snprintf(
+			sBody + iLen,
+			sizeof(sBody) - iLen,
 			"http_reject_count=%lld\nhttp_last_reject_status=%lld\nhttp_last_reject_reason=%s\nhttp_last_reject_time=%s\nhttp_last_reject_age_ms=%lld\nws_reject_count=%lld\nws_last_reject_reason=%s\nws_last_reject_time=%s\nws_last_reject_age_ms=%lld\n",
 			(long long)XS_HttpMetricGet(&g_iXsHttpRejectCount),
 			(long long)XS_HttpMetricGet(&g_iXsHttpLastRejectStatus),
@@ -4312,6 +6950,73 @@ static inline bool XS_HttpHandleStatus(XS_ServerConfig* objServer, const XS_Host
 			g_sXsWsLastRejectReason[0] ? g_sXsWsLastRejectReason : "(none)",
 			sWsLastRejectTime ? sWsLastRejectTime : "(none)",
 			(long long)XS_WsLastRejectAgeMS()
+		);
+	}
+	if ( iLen < sizeof(sBody) ) {
+		iLen += (size_t)snprintf(
+			sBody + iLen,
+			sizeof(sBody) - iLen,
+			"http_header_limit_reject_count=%lld\nhttp_last_header_limit_reject_time=%s\nhttp_last_header_limit_reject_age_ms=%lld\nhttp_body_limit_reject_count=%lld\nhttp_last_body_limit_reject_time=%s\nhttp_last_body_limit_reject_age_ms=%lld\nhttp_path_limit_reject_count=%lld\nhttp_last_path_limit_reject_time=%s\nhttp_last_path_limit_reject_age_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsHttpHeaderLimitRejectCount),
+			sHttpLastHeaderLimitRejectTime ? sHttpLastHeaderLimitRejectTime : "(none)",
+			(long long)XS_HttpLastHeaderLimitRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpBodyLimitRejectCount),
+			sHttpLastBodyLimitRejectTime ? sHttpLastBodyLimitRejectTime : "(none)",
+			(long long)XS_HttpLastBodyLimitRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpPathLimitRejectCount),
+			sHttpLastPathLimitRejectTime ? sHttpLastPathLimitRejectTime : "(none)",
+			(long long)XS_HttpLastPathLimitRejectAgeMS()
+		);
+	}
+	if ( iLen < sizeof(sBody) ) {
+		iLen += (size_t)snprintf(
+			sBody + iLen,
+			sizeof(sBody) - iLen,
+			"http_api_disabled_reject_count=%lld\nhttp_last_api_disabled_reject_time=%s\nhttp_last_api_disabled_reject_age_ms=%lld\nhttp_method_reject_count=%lld\nhttp_last_method_reject_time=%s\nhttp_last_method_reject_age_ms=%lld\nhttp_host_not_found_reject_count=%lld\nhttp_last_host_not_found_reject_time=%s\nhttp_last_host_not_found_reject_age_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsHttpApiDisabledRejectCount),
+			sHttpLastApiDisabledRejectTime ? sHttpLastApiDisabledRejectTime : "(none)",
+			(long long)XS_HttpLastApiDisabledRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpMethodRejectCount),
+			sHttpLastMethodRejectTime ? sHttpLastMethodRejectTime : "(none)",
+			(long long)XS_HttpLastMethodRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpHostNotFoundRejectCount),
+			sHttpLastHostNotFoundRejectTime ? sHttpLastHostNotFoundRejectTime : "(none)",
+			(long long)XS_HttpLastHostNotFoundRejectAgeMS()
+		);
+	}
+	if ( iLen < sizeof(sBody) ) {
+		iLen += (size_t)snprintf(
+			sBody + iLen,
+			sizeof(sBody) - iLen,
+			"http_reload_busy_reject_count=%lld\nhttp_last_reload_busy_reject_time=%s\nhttp_last_reload_busy_reject_age_ms=%lld\nhttp_reload_failed_reject_count=%lld\nhttp_last_reload_failed_reject_time=%s\nhttp_last_reload_failed_reject_age_ms=%lld\nhttp_check_config_failed_reject_count=%lld\nhttp_last_check_config_failed_reject_time=%s\nhttp_last_check_config_failed_reject_age_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsHttpReloadBusyRejectCount),
+			sHttpLastReloadBusyRejectTime ? sHttpLastReloadBusyRejectTime : "(none)",
+			(long long)XS_HttpLastReloadBusyRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpReloadFailedRejectCount),
+			sHttpLastReloadFailedRejectTime ? sHttpLastReloadFailedRejectTime : "(none)",
+			(long long)XS_HttpLastReloadFailedRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpCheckConfigFailedRejectCount),
+			sHttpLastCheckConfigFailedRejectTime ? sHttpLastCheckConfigFailedRejectTime : "(none)",
+			(long long)XS_HttpLastCheckConfigFailedRejectAgeMS()
+		);
+	}
+	if ( iLen < sizeof(sBody) ) {
+		iLen += (size_t)snprintf(
+			sBody + iLen,
+			sizeof(sBody) - iLen,
+			"http_bus_bad_request_reject_count=%lld\nhttp_last_bus_bad_request_reject_time=%s\nhttp_last_bus_bad_request_reject_age_ms=%lld\nhttp_bus_not_found_reject_count=%lld\nhttp_last_bus_not_found_reject_time=%s\nhttp_last_bus_not_found_reject_age_ms=%lld\nhttp_bus_limit_reject_count=%lld\nhttp_last_bus_limit_reject_time=%s\nhttp_last_bus_limit_reject_age_ms=%lld\nhttp_bus_failed_reject_count=%lld\nhttp_last_bus_failed_reject_time=%s\nhttp_last_bus_failed_reject_age_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsHttpBusBadRequestRejectCount),
+			sHttpLastBusBadRequestRejectTime ? sHttpLastBusBadRequestRejectTime : "(none)",
+			(long long)XS_HttpLastBusBadRequestRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpBusNotFoundRejectCount),
+			sHttpLastBusNotFoundRejectTime ? sHttpLastBusNotFoundRejectTime : "(none)",
+			(long long)XS_HttpLastBusNotFoundRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpBusLimitRejectCount),
+			sHttpLastBusLimitRejectTime ? sHttpLastBusLimitRejectTime : "(none)",
+			(long long)XS_HttpLastBusLimitRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpBusFailedRejectCount),
+			sHttpLastBusFailedRejectTime ? sHttpLastBusFailedRejectTime : "(none)",
+			(long long)XS_HttpLastBusFailedRejectAgeMS()
 		);
 	}
 	if ( iLen < sizeof(sBody) ) {
@@ -4331,7 +7036,155 @@ static inline bool XS_HttpHandleStatus(XS_ServerConfig* objServer, const XS_Host
 			(long long)XS_WsLastStopCleanupAgeMS()
 		);
 	}
+	if ( iLen < sizeof(sBody) ) {
+		iLen += (size_t)snprintf(
+			sBody + iLen,
+			sizeof(sBody) - iLen,
+			"xtp_reject_count=%lld\nxtp_last_reject_reason=%s\nxtp_last_reject_time=%s\nxtp_last_reject_age_ms=%lld\nxtp_stop_cleanup_count=%lld\nxtp_last_stop_cleanup_closed=%lld\nxtp_last_stop_cleanup_remain=%lld\nxtp_last_stop_cleanup_time=%s\nxtp_last_stop_cleanup_age_ms=%lld\ncustom_reject_count=%lld\ncustom_last_reject_reason=%s\ncustom_last_reject_time=%s\ncustom_last_reject_age_ms=%lld\ncustom_stop_cleanup_count=%lld\ncustom_last_stop_cleanup_closed=%lld\ncustom_last_stop_cleanup_remain=%lld\ncustom_last_stop_cleanup_time=%s\ncustom_last_stop_cleanup_age_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsXtpRejectCount),
+			g_sXsXtpLastRejectReason[0] ? g_sXsXtpLastRejectReason : "(none)",
+			sXtpLastRejectTime ? sXtpLastRejectTime : "(none)",
+			(long long)XS_XtpLastRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsXtpStopCleanupCount),
+			(long long)XS_HttpMetricGet(&g_iXsXtpLastStopCleanupClosed),
+			(long long)XS_HttpMetricGet(&g_iXsXtpLastStopCleanupRemain),
+			sXtpLastStopCleanupTime ? sXtpLastStopCleanupTime : "(none)",
+			(long long)XS_XtpLastStopCleanupAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsCustomRejectCount),
+			g_sXsCustomLastRejectReason[0] ? g_sXsCustomLastRejectReason : "(none)",
+			sCustomLastRejectTime ? sCustomLastRejectTime : "(none)",
+			(long long)XS_CustomLastRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsCustomStopCleanupCount),
+			(long long)XS_HttpMetricGet(&g_iXsCustomLastStopCleanupClosed),
+			(long long)XS_HttpMetricGet(&g_iXsCustomLastStopCleanupRemain),
+			sCustomLastStopCleanupTime ? sCustomLastStopCleanupTime : "(none)",
+			(long long)XS_CustomLastStopCleanupAgeMS()
+		);
+	}
+	if ( iLen < sizeof(sBody) ) {
+		iLen += (size_t)snprintf(
+			sBody + iLen,
+			sizeof(sBody) - iLen,
+			"ws_message_limit_close_count=%lld\nws_last_message_limit_close_time=%s\nws_last_message_limit_close_age_ms=%lld\nxtp_recv_limit_close_count=%lld\nxtp_last_recv_limit_close_time=%s\nxtp_last_recv_limit_close_age_ms=%lld\ncustom_recv_limit_close_count=%lld\ncustom_last_recv_limit_close_time=%s\ncustom_last_recv_limit_close_age_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsWsMessageLimitCloseCount),
+			sWsLastMessageLimitCloseTime ? sWsLastMessageLimitCloseTime : "(none)",
+			(long long)XS_WsLastMessageLimitCloseAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsXtpRecvLimitCloseCount),
+			sXtpLastRecvLimitCloseTime ? sXtpLastRecvLimitCloseTime : "(none)",
+			(long long)XS_XtpLastRecvLimitCloseAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsCustomRecvLimitCloseCount),
+			sCustomLastRecvLimitCloseTime ? sCustomLastRecvLimitCloseTime : "(none)",
+			(long long)XS_CustomLastRecvLimitCloseAgeMS()
+		);
+	}
+	if ( iLen < sizeof(sBody) ) {
+		iLen += (size_t)snprintf(
+			sBody + iLen,
+			sizeof(sBody) - iLen,
+			"xtp_conn_current=%lld\nxtp_conn_peak=%lld\nxtp_open_count=%lld\nxtp_close_count=%lld\nxtp_error_count=%lld\nxtp_msg_count=%lld\nxtp_req_count=%lld\nxtp_resp_count=%lld\nxtp_push_count=%lld\nxtp_event_count=%lld\nxtp_send_count=%lld\nxtp_recv_bytes=%lld\nxtp_send_bytes=%lld\nxtp_idle_close_count=%lld\nxtp_conn_limit_close_count=%lld\nxtp_last_msg_type=%s\nxtp_last_status=%lld\nxtp_last_msg_id=%lld\nxtp_last_flags=%lld\nxtp_last_param_count=%lld\nxtp_last_body_size=%lld\nxtp_last_remote=%s\nxtp_last_bytes=%lld\nxtp_last_cmd=%s\nxtp_last_time=%s\nxtp_last_age_ms=%lld\nxtp_last_invalid_reason=%s\nxtp_last_invalid_time=%s\nxtp_last_invalid_age_ms=%lld\nxtp_last_error_code=%lld\nxtp_last_error_time=%s\nxtp_last_error_age_ms=%lld\nxtp_last_idle_close_time=%s\nxtp_last_idle_close_age_ms=%lld\nxtp_last_conn_limit_close_time=%s\nxtp_last_conn_limit_close_age_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsXtpConnCurrent),
+			(long long)XS_HttpMetricGet(&g_iXsXtpConnPeak),
+			(long long)XS_HttpMetricGet(&g_iXsXtpOpenCount),
+			(long long)XS_HttpMetricGet(&g_iXsXtpCloseCount),
+			(long long)XS_HttpMetricGet(&g_iXsXtpErrorCount),
+			(long long)XS_HttpMetricGet(&g_iXsXtpMsgCount),
+			(long long)XS_HttpMetricGet(&g_iXsXtpReqCount),
+			(long long)XS_HttpMetricGet(&g_iXsXtpRespCount),
+			(long long)XS_HttpMetricGet(&g_iXsXtpPushCount),
+			(long long)XS_HttpMetricGet(&g_iXsXtpEventCount),
+			(long long)XS_HttpMetricGet(&g_iXsXtpSendCount),
+			(long long)XS_HttpMetricGet(&g_iXsXtpRecvBytes),
+			(long long)XS_HttpMetricGet(&g_iXsXtpSendBytes),
+			(long long)XS_HttpMetricGet(&g_iXsXtpIdleCloseCount),
+			(long long)XS_HttpMetricGet(&g_iXsXtpConnLimitCloseCount),
+			XS_XtpLastMsgTypeName()[0] ? XS_XtpLastMsgTypeName() : "(none)",
+			(long long)XS_HttpMetricGet(&g_iXsXtpLastStatus),
+			(long long)XS_HttpMetricGet(&g_iXsXtpLastMsgID),
+			(long long)XS_HttpMetricGet(&g_iXsXtpLastFlags),
+			(long long)XS_HttpMetricGet(&g_iXsXtpLastParamCount),
+			(long long)XS_HttpMetricGet(&g_iXsXtpLastBodySize),
+			g_sXsXtpLastRemote[0] ? g_sXsXtpLastRemote : "(none)",
+			(long long)g_iXsXtpLastBytes,
+			g_sXsXtpLastCmd[0] ? g_sXsXtpLastCmd : "(none)",
+			sXtpLastTime ? sXtpLastTime : "(none)",
+			(long long)XS_XtpLastAgeMS(),
+			g_sXsXtpLastInvalidReason[0] ? g_sXsXtpLastInvalidReason : "(none)",
+			sXtpLastInvalidTime ? sXtpLastInvalidTime : "(none)",
+			(long long)XS_XtpLastInvalidAgeMS(),
+			(long long)g_iXsXtpLastErrorCode,
+			sXtpLastErrorTime ? sXtpLastErrorTime : "(none)",
+			(long long)XS_XtpLastErrorAgeMS(),
+			sXtpLastIdleCloseTime ? sXtpLastIdleCloseTime : "(none)",
+			(long long)XS_XtpLastIdleCloseAgeMS(),
+			sXtpLastConnLimitCloseTime ? sXtpLastConnLimitCloseTime : "(none)",
+			(long long)XS_XtpLastConnLimitCloseAgeMS()
+		);
+	}
+	if ( iLen < sizeof(sBody) ) {
+		iLen += (size_t)snprintf(
+			sBody + iLen,
+			sizeof(sBody) - iLen,
+			"udp_recv_count=%lld\nudp_send_count=%lld\nudp_error_count=%lld\nudp_recv_bytes=%lld\nudp_send_bytes=%lld\nudp_last_from=%s\nudp_last_text=%s\nudp_last_bytes=%lld\nudp_last_time=%s\nudp_last_age_ms=%lld\nudp_last_error_code=%lld\nudp_last_error_time=%s\nudp_last_error_age_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsUdpRecvCount),
+			(long long)XS_HttpMetricGet(&g_iXsUdpSendCount),
+			(long long)XS_HttpMetricGet(&g_iXsUdpErrorCount),
+			(long long)XS_HttpMetricGet(&g_iXsUdpRecvBytes),
+			(long long)XS_HttpMetricGet(&g_iXsUdpSendBytes),
+			g_sXsUdpLastFrom[0] ? g_sXsUdpLastFrom : "(none)",
+			g_sXsUdpLastText[0] ? g_sXsUdpLastText : "(none)",
+			(long long)g_iXsUdpLastBytes,
+			sUdpLastTime ? sUdpLastTime : "(none)",
+			(long long)XS_UdpLastAgeMS(),
+			(long long)g_iXsUdpLastErrorCode,
+			sUdpLastErrorTime ? sUdpLastErrorTime : "(none)",
+			(long long)XS_UdpLastErrorAgeMS()
+		);
+	}
+	if ( iLen < sizeof(sBody) ) {
+		iLen += (size_t)snprintf(
+			sBody + iLen,
+			sizeof(sBody) - iLen,
+			"custom_conn_current=%lld\ncustom_conn_peak=%lld\ncustom_open_count=%lld\ncustom_close_count=%lld\ncustom_error_count=%lld\ncustom_invalid_count=%lld\ncustom_recv_count=%lld\ncustom_send_count=%lld\ncustom_recv_bytes=%lld\ncustom_send_bytes=%lld\ncustom_idle_close_count=%lld\ncustom_conn_limit_close_count=%lld\ncustom_last_invalid_reason=%s\ncustom_last_invalid_time=%s\ncustom_last_invalid_age_ms=%lld\ncustom_last_close_reason=%lld\ncustom_last_close_time=%s\ncustom_last_close_age_ms=%lld\ncustom_last_error_code=%lld\ncustom_last_error_time=%s\ncustom_last_error_age_ms=%lld\ncustom_last_remote=%s\ncustom_last_bytes=%lld\ncustom_last_text=%s\ncustom_last_time=%s\ncustom_last_age_ms=%lld\ncustom_last_idle_close_time=%s\ncustom_last_idle_close_age_ms=%lld\ncustom_last_conn_limit_close_time=%s\ncustom_last_conn_limit_close_age_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsCustomConnCurrent),
+			(long long)XS_HttpMetricGet(&g_iXsCustomConnPeak),
+			(long long)XS_HttpMetricGet(&g_iXsCustomOpenCount),
+			(long long)XS_HttpMetricGet(&g_iXsCustomCloseCount),
+			(long long)XS_HttpMetricGet(&g_iXsCustomErrorCount),
+			(long long)XS_HttpMetricGet(&g_iXsCustomInvalidCount),
+			(long long)XS_HttpMetricGet(&g_iXsCustomRecvCount),
+			(long long)XS_HttpMetricGet(&g_iXsCustomSendCount),
+			(long long)XS_HttpMetricGet(&g_iXsCustomRecvBytes),
+			(long long)XS_HttpMetricGet(&g_iXsCustomSendBytes),
+			(long long)XS_HttpMetricGet(&g_iXsCustomIdleCloseCount),
+			(long long)XS_HttpMetricGet(&g_iXsCustomConnLimitCloseCount),
+			g_sXsCustomLastInvalidReason[0] ? g_sXsCustomLastInvalidReason : "(none)",
+			sCustomLastInvalidTime ? sCustomLastInvalidTime : "(none)",
+			(long long)XS_CustomLastInvalidAgeMS(),
+			(long long)g_iXsCustomLastCloseReason,
+			sCustomLastCloseTime ? sCustomLastCloseTime : "(none)",
+			(long long)XS_CustomLastCloseAgeMS(),
+			(long long)g_iXsCustomLastErrorCode,
+			sCustomLastErrorTime ? sCustomLastErrorTime : "(none)",
+			(long long)XS_CustomLastErrorAgeMS(),
+			g_sXsCustomLastRemote[0] ? g_sXsCustomLastRemote : "(none)",
+			(long long)g_iXsCustomLastBytes,
+			g_sXsCustomLastText[0] ? g_sXsCustomLastText : "(none)",
+			sCustomLastTime ? sCustomLastTime : "(none)",
+			(long long)XS_CustomLastAgeMS(),
+			sCustomLastIdleCloseTime ? sCustomLastIdleCloseTime : "(none)",
+			(long long)XS_CustomLastIdleCloseAgeMS(),
+			sCustomLastConnLimitCloseTime ? sCustomLastConnLimitCloseTime : "(none)",
+			(long long)XS_CustomLastConnLimitCloseAgeMS()
+		);
+	}
 	
+	if ( objServer->EnableDefaultHost && iLen < sizeof(sBody) ) {
+		iLen += (size_t)snprintf(
+			sBody + iLen,
+			sizeof(sBody) - iLen,
+			"default=true\n"
+		);
+	}
 	if ( objServer->EnableDefaultHost && iLen < sizeof(sBody) ) {
 		iLen += (size_t)snprintf(
 			sBody + iLen,
@@ -4386,8 +7239,53 @@ static inline bool XS_HttpHandleStatus(XS_ServerConfig* objServer, const XS_Host
 	if ( sHttpLastStopCleanupTime ) {
 		xrtFree(sHttpLastStopCleanupTime);
 	}
+	if ( sHttpLastHeaderLimitRejectTime ) {
+		xrtFree(sHttpLastHeaderLimitRejectTime);
+	}
+	if ( sHttpLastBodyLimitRejectTime ) {
+		xrtFree(sHttpLastBodyLimitRejectTime);
+	}
+	if ( sHttpLastPathLimitRejectTime ) {
+		xrtFree(sHttpLastPathLimitRejectTime);
+	}
+	if ( sHttpLastApiDisabledRejectTime ) {
+		xrtFree(sHttpLastApiDisabledRejectTime);
+	}
+	if ( sHttpLastMethodRejectTime ) {
+		xrtFree(sHttpLastMethodRejectTime);
+	}
+	if ( sHttpLastHostNotFoundRejectTime ) {
+		xrtFree(sHttpLastHostNotFoundRejectTime);
+	}
+	if ( sHttpLastReloadBusyRejectTime ) {
+		xrtFree(sHttpLastReloadBusyRejectTime);
+	}
+	if ( sHttpLastReloadFailedRejectTime ) {
+		xrtFree(sHttpLastReloadFailedRejectTime);
+	}
+	if ( sHttpLastCheckConfigFailedRejectTime ) {
+		xrtFree(sHttpLastCheckConfigFailedRejectTime);
+	}
+	if ( sHttpLastBusBadRequestRejectTime ) {
+		xrtFree(sHttpLastBusBadRequestRejectTime);
+	}
+	if ( sHttpLastBusNotFoundRejectTime ) {
+		xrtFree(sHttpLastBusNotFoundRejectTime);
+	}
+	if ( sHttpLastBusLimitRejectTime ) {
+		xrtFree(sHttpLastBusLimitRejectTime);
+	}
+	if ( sHttpLastBusFailedRejectTime ) {
+		xrtFree(sHttpLastBusFailedRejectTime);
+	}
 	if ( sWsLastTime ) {
 		xrtFree(sWsLastTime);
+	}
+	if ( sWsLastCloseTime ) {
+		xrtFree(sWsLastCloseTime);
+	}
+	if ( sWsLastErrorTime ) {
+		xrtFree(sWsLastErrorTime);
 	}
 	if ( sWsLastInvalidTime ) {
 		xrtFree(sWsLastInvalidTime);
@@ -4398,11 +7296,71 @@ static inline bool XS_HttpHandleStatus(XS_ServerConfig* objServer, const XS_Host
 	if ( sWsLastConnLimitCloseTime ) {
 		xrtFree(sWsLastConnLimitCloseTime);
 	}
+	if ( sWsLastMessageLimitCloseTime ) {
+		xrtFree(sWsLastMessageLimitCloseTime);
+	}
+	if ( sXtpLastTime ) {
+		xrtFree(sXtpLastTime);
+	}
+	if ( sXtpLastInvalidTime ) {
+		xrtFree(sXtpLastInvalidTime);
+	}
+	if ( sXtpLastErrorTime ) {
+		xrtFree(sXtpLastErrorTime);
+	}
+	if ( sXtpLastIdleCloseTime ) {
+		xrtFree(sXtpLastIdleCloseTime);
+	}
+	if ( sXtpLastConnLimitCloseTime ) {
+		xrtFree(sXtpLastConnLimitCloseTime);
+	}
+	if ( sXtpLastRecvLimitCloseTime ) {
+		xrtFree(sXtpLastRecvLimitCloseTime);
+	}
+	if ( sUdpLastTime ) {
+		xrtFree(sUdpLastTime);
+	}
+	if ( sUdpLastErrorTime ) {
+		xrtFree(sUdpLastErrorTime);
+	}
+	if ( sCustomLastTime ) {
+		xrtFree(sCustomLastTime);
+	}
+	if ( sCustomLastCloseTime ) {
+		xrtFree(sCustomLastCloseTime);
+	}
+	if ( sCustomLastErrorTime ) {
+		xrtFree(sCustomLastErrorTime);
+	}
+	if ( sCustomLastInvalidTime ) {
+		xrtFree(sCustomLastInvalidTime);
+	}
+	if ( sCustomLastIdleCloseTime ) {
+		xrtFree(sCustomLastIdleCloseTime);
+	}
+	if ( sCustomLastConnLimitCloseTime ) {
+		xrtFree(sCustomLastConnLimitCloseTime);
+	}
+	if ( sCustomLastRecvLimitCloseTime ) {
+		xrtFree(sCustomLastRecvLimitCloseTime);
+	}
 	if ( sWsLastRejectTime ) {
 		xrtFree(sWsLastRejectTime);
 	}
 	if ( sWsLastStopCleanupTime ) {
 		xrtFree(sWsLastStopCleanupTime);
+	}
+	if ( sXtpLastRejectTime ) {
+		xrtFree(sXtpLastRejectTime);
+	}
+	if ( sXtpLastStopCleanupTime ) {
+		xrtFree(sXtpLastStopCleanupTime);
+	}
+	if ( sCustomLastRejectTime ) {
+		xrtFree(sCustomLastRejectTime);
+	}
+	if ( sCustomLastStopCleanupTime ) {
+		xrtFree(sCustomLastStopCleanupTime);
 	}
 
 	return XS_HttpRespondText(pResp, 200, "OK", sBody);
@@ -4430,6 +7388,7 @@ static inline bool XS_HttpHandleStatusJson(XS_ServerConfig* objServer, const XS_
 	char* sUdpLastTime;
 	char* sUdpLastErrorTime;
 	char* sCustomLastTime;
+	char* sCustomLastCloseTime;
 	char* sCustomLastErrorTime;
 	char* sCustomLastInvalidTime;
 	char* sCustomLastIdleCloseTime;
@@ -4444,7 +7403,7 @@ static inline bool XS_HttpHandleStatusJson(XS_ServerConfig* objServer, const XS_
 		return FALSE;
 	}
 	if ( !XS_ManageAPIEnabled(objServer, objHost) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "status json api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "status json api disabled");
 	}
 
 	sHttpLastTime = XS_HttpLastRequestTimeText();
@@ -4465,6 +7424,7 @@ static inline bool XS_HttpHandleStatusJson(XS_ServerConfig* objServer, const XS_
 	sUdpLastTime = XS_UdpLastTimeText();
 	sUdpLastErrorTime = XS_UdpLastErrorTimeText();
 	sCustomLastTime = XS_CustomLastTimeText();
+	sCustomLastCloseTime = XS_CustomLastCloseTimeText();
 	sCustomLastErrorTime = XS_CustomLastErrorTimeText();
 	sCustomLastInvalidTime = XS_CustomLastInvalidTimeText();
 	sCustomLastIdleCloseTime = XS_CustomLastIdleCloseTimeText();
@@ -4503,8 +7463,22 @@ static inline bool XS_HttpHandleStatusJson(XS_ServerConfig* objServer, const XS_
 	xvoTableSetInt(objRet, "http_conn_current", 17, XS_HttpMetricGet(&g_iXsHttpConnCurrent));
 	xvoTableSetInt(objRet, "http_conn_peak", 14, XS_HttpMetricGet(&g_iXsHttpConnPeak));
 	xvoTableSetInt(objRet, "http_idle_close_count", 21, XS_HttpMetricGet(&g_iXsHttpIdleCloseCount));
+	xvoTableSetInt(objRet, "http_conn_limit_close_count", 27, XS_HttpMetricGet(&g_iXsHttpConnLimitCloseCount));
+	XS_HttpAppendRequestLimitMetrics(objRet);
+	XS_HttpAppendPolicyRejectMetrics(objRet);
+	XS_HttpAppendManageRejectMetrics(objRet);
+	XS_HttpAppendBusRejectMetrics(objRet);
 	XS_HttpAppendRejectMetrics(objRet);
 	XS_HttpAppendStopCleanupMetrics(objRet);
+	XS_WsAppendMessageLimitMetrics(objRet);
+	XS_WsAppendRejectMetrics(objRet);
+	XS_WsAppendStopCleanupMetrics(objRet);
+	XS_XtpAppendRecvLimitMetrics(objRet);
+	XS_XtpAppendRejectMetrics(objRet);
+	XS_XtpAppendStopCleanupMetrics(objRet);
+	XS_CustomAppendRecvLimitMetrics(objRet);
+	XS_CustomAppendRejectMetrics(objRet);
+	XS_CustomAppendStopCleanupMetrics(objRet);
 	xvoTableSetInt(objRet, "http_get_count", 14, XS_HttpMetricGet(&g_iXsHttpMethodGetCount));
 	xvoTableSetInt(objRet, "http_post_count", 15, XS_HttpMetricGet(&g_iXsHttpMethodPostCount));
 	xvoTableSetInt(objRet, "http_head_count", 15, XS_HttpMetricGet(&g_iXsHttpMethodHeadCount));
@@ -4545,6 +7519,8 @@ static inline bool XS_HttpHandleStatusJson(XS_ServerConfig* objServer, const XS_
 	xvoTableSetInt(objRet, "http_last_duration_ms", 21, g_iXsHttpLastTimeMS);
 	xvoTableSetText(objRet, "http_last_idle_close_time", 25, (ptr)(sHttpLastIdleCloseTime ? sHttpLastIdleCloseTime : ""), 0, FALSE);
 	xvoTableSetInt(objRet, "http_last_idle_close_age_ms", 27, XS_HttpLastIdleCloseAgeMS());
+	xvoTableSetText(objRet, "http_last_conn_limit_close_time", 31, (ptr)(sHttpLastConnLimitCloseTime ? sHttpLastConnLimitCloseTime : ""), 0, FALSE);
+	xvoTableSetInt(objRet, "http_last_conn_limit_close_age_ms", 33, XS_HttpLastConnLimitCloseAgeMS());
 	xvoTableSetInt(objRet, "http_last_app_status", 20, XS_HttpMetricGet(&g_iXsHttpLastAppStatusCode));
 	xvoTableSetText(objRet, "http_last_app_method", 20, (ptr)XS_HttpLastAppMethodName(), 0, FALSE);
 	xvoTableSetText(objRet, "http_last_app_path", 18, (ptr)XS_HttpLastAppPath(), 0, FALSE);
@@ -4581,6 +7557,7 @@ static inline bool XS_HttpHandleStatusJson(XS_ServerConfig* objServer, const XS_
 	xvoTableSetInt(objRet, "ws_invalid_count", 16, XS_HttpMetricGet(&g_iXsWsInvalidCount));
 	xvoTableSetInt(objRet, "ws_idle_close_count", 19, XS_HttpMetricGet(&g_iXsWsIdleCloseCount));
 	xvoTableSetInt(objRet, "ws_conn_limit_close_count", 25, XS_HttpMetricGet(&g_iXsWsConnLimitCloseCount));
+	XS_WsAppendMessageLimitMetrics(objRet);
 	XS_WsAppendRejectMetrics(objRet);
 	XS_WsAppendStopCleanupMetrics(objRet);
 	xvoTableSetInt(objRet, "ws_last_error_code", 18, g_iXsWsLastErrorCode);
@@ -4617,6 +7594,7 @@ static inline bool XS_HttpHandleStatusJson(XS_ServerConfig* objServer, const XS_
 	xvoTableSetInt(objRet, "xtp_send_bytes", 14, XS_HttpMetricGet(&g_iXsXtpSendBytes));
 	xvoTableSetInt(objRet, "xtp_idle_close_count", 20, XS_HttpMetricGet(&g_iXsXtpIdleCloseCount));
 	xvoTableSetInt(objRet, "xtp_conn_limit_close_count", 26, XS_HttpMetricGet(&g_iXsXtpConnLimitCloseCount));
+	XS_XtpAppendRecvLimitMetrics(objRet);
 	XS_XtpAppendRejectMetrics(objRet);
 	XS_XtpAppendStopCleanupMetrics(objRet);
 	xvoTableSetText(objRet, "xtp_last_msg_type", 17, (ptr)XS_XtpLastMsgTypeName(), 0, FALSE);
@@ -4658,15 +7636,27 @@ static inline bool XS_HttpHandleStatusJson(XS_ServerConfig* objServer, const XS_
 	xvoTableSetInt(objRet, "custom_open_count", 17, XS_HttpMetricGet(&g_iXsCustomOpenCount));
 	xvoTableSetInt(objRet, "custom_close_count", 18, XS_HttpMetricGet(&g_iXsCustomCloseCount));
 	xvoTableSetInt(objRet, "custom_error_count", 18, XS_HttpMetricGet(&g_iXsCustomErrorCount));
+	xvoTableSetInt(objRet, "custom_invalid_count", 20, XS_HttpMetricGet(&g_iXsCustomInvalidCount));
+	xvoTableSetText(objRet, "custom_last_invalid_reason", 26, (ptr)g_sXsCustomLastInvalidReason, 0, FALSE);
+	xvoTableSetText(objRet, "custom_last_invalid_time", 24, (ptr)(sCustomLastInvalidTime ? sCustomLastInvalidTime : ""), 0, FALSE);
+	xvoTableSetInt(objRet, "custom_last_invalid_age_ms", 26, XS_CustomLastInvalidAgeMS());
+	xvoTableSetInt(objRet, "custom_last_close_reason", 24, g_iXsCustomLastCloseReason);
+	xvoTableSetText(objRet, "custom_last_close_time", 22, (ptr)(sCustomLastCloseTime ? sCustomLastCloseTime : ""), 0, FALSE);
+	xvoTableSetInt(objRet, "custom_last_close_age_ms", 24, XS_CustomLastCloseAgeMS());
+	xvoTableSetInt(objRet, "custom_last_error_code", 22, g_iXsCustomLastErrorCode);
+	xvoTableSetText(objRet, "custom_last_error_time", 22, (ptr)(sCustomLastErrorTime ? sCustomLastErrorTime : ""), 0, FALSE);
+	xvoTableSetInt(objRet, "custom_last_error_age_ms", 24, XS_CustomLastErrorAgeMS());
 	xvoTableSetInt(objRet, "custom_recv_count", 17, XS_HttpMetricGet(&g_iXsCustomRecvCount));
 	xvoTableSetInt(objRet, "custom_send_count", 17, XS_HttpMetricGet(&g_iXsCustomSendCount));
 	xvoTableSetInt(objRet, "custom_recv_bytes", 17, XS_HttpMetricGet(&g_iXsCustomRecvBytes));
 	xvoTableSetInt(objRet, "custom_send_bytes", 17, XS_HttpMetricGet(&g_iXsCustomSendBytes));
 	xvoTableSetInt(objRet, "custom_idle_close_count", 23, XS_HttpMetricGet(&g_iXsCustomIdleCloseCount));
 	xvoTableSetInt(objRet, "custom_conn_limit_close_count", 29, XS_HttpMetricGet(&g_iXsCustomConnLimitCloseCount));
+	XS_CustomAppendRecvLimitMetrics(objRet);
 	XS_CustomAppendRejectMetrics(objRet);
 	XS_CustomAppendStopCleanupMetrics(objRet);
 	xvoTableSetText(objRet, "custom_last_remote", 18, (ptr)g_sXsCustomLastRemote, 0, FALSE);
+	xvoTableSetInt(objRet, "custom_last_bytes", 17, g_iXsCustomLastBytes);
 	xvoTableSetText(objRet, "custom_last_text", 16, (ptr)g_sXsCustomLastText, 0, FALSE);
 	xvoTableSetText(objRet, "custom_last_time", 16, (ptr)(sCustomLastTime ? sCustomLastTime : ""), 0, FALSE);
 	xvoTableSetInt(objRet, "custom_last_age_ms", 18, XS_CustomLastAgeMS());
@@ -4758,6 +7748,9 @@ static inline bool XS_HttpHandleStatusJson(XS_ServerConfig* objServer, const XS_
 	if ( sCustomLastTime ) {
 		xrtFree(sCustomLastTime);
 	}
+	if ( sCustomLastCloseTime ) {
+		xrtFree(sCustomLastCloseTime);
+	}
 	if ( sCustomLastErrorTime ) {
 		xrtFree(sCustomLastErrorTime);
 	}
@@ -4771,7 +7764,7 @@ static inline bool XS_HttpHandleStatusJson(XS_ServerConfig* objServer, const XS_
 		xrtFree(sCustomLastConnLimitCloseTime);
 	}
 	if ( sJson == NULL ) {
-		return XS_HttpRespondText(pResp, 500, "Internal Server Error", "status json build failed");
+		return XS_HttpRespondJsonResult(pResp, 500, "Internal Server Error", FALSE, "status json build failed");
 	}
 	xrtHttpdResponseSetStatus(pResp, 200, "OK");
 	if ( !xrtHttpdResponseSetBodyCopy(pResp, sJson, strlen(sJson), "application/json; charset=utf-8") ) {
@@ -4800,6 +7793,8 @@ static inline bool XS_HttpServerHealthy(const XS_ServerConfig* objServer, const 
 
 static inline bool XS_HttpHandleHealthJson(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
+	XS_ReloadStatusSnapshot tReloadStatus;
+	XS_CheckConfigStatusSnapshot tCheckStatus;
 	xvalue objRet;
 	xvalue objBus;
 	char* sCheckTime;
@@ -4819,11 +7814,13 @@ static inline bool XS_HttpHandleHealthJson(XS_ServerConfig* objServer, const XS_
 		return FALSE;
 	}
 	if ( !(objServer->Debug || objHost->Debug) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "health json api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "health json api disabled");
 	}
 
-	sReloadTime = XS_ReloadTimeText();
-	sCheckTime = XS_CheckConfigLastTimeText();
+	XS_ConfigReloadStatusSnapshot(&tReloadStatus);
+	XS_ConfigCheckStatusSnapshot(&tCheckStatus);
+	sReloadTime = XS_ReloadTimeTextByStatus(&tReloadStatus);
+	sCheckTime = XS_CheckConfigTimeTextByStatus(&tCheckStatus);
 	sHttpLastTime = XS_HttpLastRequestTimeText();
 	sHttpLastAppTime = XS_HttpLastAppRequestTimeText();
 	sHttpLastIdleCloseTime = XS_HttpLastIdleCloseTimeText();
@@ -4846,22 +7843,23 @@ static inline bool XS_HttpHandleHealthJson(XS_ServerConfig* objServer, const XS_
 	xvoTableSetBool(objRet, "host_aware", 10, objServer->HostAware);
 	xvoTableSetBool(objRet, "script_loaded", 13, bScriptLoaded);
 	xvoTableSetInt(objRet, "host_count", 10, objServer->Hosts ? objServer->Hosts->Count : 0);
-	xvoTableSetBool(objRet, "reload_busy", 11, XS_ConfigReloadStatusBusy());
-	xvoTableSetBool(objRet, "reload_has_result", 17, XS_ConfigReloadStatusHasResult());
-	xvoTableSetBool(objRet, "reload_success", 14, XS_ConfigReloadStatusSuccess());
-	xvoTableSetText(objRet, "reload_server", 13, (ptr)XS_ConfigReloadStatusServer(), 0, FALSE);
-	xvoTableSetText(objRet, "reload_host", 11, (ptr)XS_ConfigReloadStatusHost(), 0, FALSE);
-	xvoTableSetText(objRet, "reload_message", 14, (ptr)XS_ConfigReloadStatusMessage(), 0, FALSE);
+	xvoTableSetBool(objRet, "reload_busy", 11, tReloadStatus.Busy);
+	xvoTableSetBool(objRet, "reload_has_result", 17, tReloadStatus.HasResult);
+	xvoTableSetBool(objRet, "reload_success", 14, tReloadStatus.Success);
+	xvoTableSetText(objRet, "reload_server", 13, (ptr)(tReloadStatus.sServerName[0] ? tReloadStatus.sServerName : "(all)"), 0, FALSE);
+	xvoTableSetText(objRet, "reload_host", 11, (ptr)(tReloadStatus.sHostName[0] ? tReloadStatus.sHostName : "(all)"), 0, FALSE);
+	xvoTableSetText(objRet, "reload_message", 14, (ptr)(tReloadStatus.sMessage[0] ? tReloadStatus.sMessage : "(none)"), 0, FALSE);
 	xvoTableSetText(objRet, "reload_time", 11, (ptr)(sReloadTime ? sReloadTime : ""), 0, FALSE);
-	xvoTableSetInt(objRet, "reload_age_ms", 13, XS_ReloadAgeMS());
-	xvoTableSetInt(objRet, "reload_total_count", 18, XS_ConfigReloadStatusTotalCount());
-	xvoTableSetInt(objRet, "reload_success_count", 20, XS_ConfigReloadStatusSuccessCount());
-	xvoTableSetInt(objRet, "reload_failure_count", 20, XS_ConfigReloadStatusFailureCount());
-	xvoTableSetInt(objRet, "check_total_count", 17, XS_HttpMetricGet(&g_iXsCheckConfigTotalCount));
-	xvoTableSetInt(objRet, "check_success_count", 19, XS_HttpMetricGet(&g_iXsCheckConfigSuccessCount));
-	xvoTableSetInt(objRet, "check_failure_count", 19, XS_HttpMetricGet(&g_iXsCheckConfigFailureCount));
+	xvoTableSetInt(objRet, "reload_age_ms", 13, XS_ReloadAgeMSByStatus(&tReloadStatus));
+	xvoTableSetInt(objRet, "reload_total_count", 18, tReloadStatus.iTotalCount);
+	xvoTableSetInt(objRet, "reload_success_count", 20, tReloadStatus.iSuccessCount);
+	xvoTableSetInt(objRet, "reload_failure_count", 20, tReloadStatus.iFailureCount);
+	xvoTableSetInt(objRet, "check_total_count", 17, tCheckStatus.iTotalCount);
+	xvoTableSetInt(objRet, "check_success_count", 19, tCheckStatus.iSuccessCount);
+	xvoTableSetInt(objRet, "check_failure_count", 19, tCheckStatus.iFailureCount);
 	xvoTableSetText(objRet, "check_last_time", 15, (ptr)(sCheckTime ? sCheckTime : ""), 0, FALSE);
-	xvoTableSetInt(objRet, "check_last_age_ms", 17, XS_CheckConfigLastAgeMS());
+	xvoTableSetInt(objRet, "check_last_age_ms", 17, XS_CheckConfigAgeMSByStatus(&tCheckStatus));
+	XS_HttpAppendCheckConfigSnapshotByStatus(objRet, &tCheckStatus);
 	xvoTableSetInt(objRet, "http_req_count", 14, XS_HttpMetricGet(&g_iXsHttpReqCount));
 	xvoTableSetInt(objRet, "http_manage_req_count", 21, XS_HttpMetricGet(&g_iXsHttpManageReqCount));
 	xvoTableSetInt(objRet, "http_app_req_count", 18, XS_HttpMetricGet(&g_iXsHttpAppReqCount));
@@ -4873,8 +7871,21 @@ static inline bool XS_HttpHandleHealthJson(XS_ServerConfig* objServer, const XS_
 	xvoTableSetInt(objRet, "http_conn_peak", 14, XS_HttpMetricGet(&g_iXsHttpConnPeak));
 	xvoTableSetInt(objRet, "http_idle_close_count", 21, XS_HttpMetricGet(&g_iXsHttpIdleCloseCount));
 	xvoTableSetInt(objRet, "http_conn_limit_close_count", 27, XS_HttpMetricGet(&g_iXsHttpConnLimitCloseCount));
+	XS_HttpAppendRequestLimitMetrics(objRet);
+	XS_HttpAppendPolicyRejectMetrics(objRet);
+	XS_HttpAppendManageRejectMetrics(objRet);
+	XS_HttpAppendBusRejectMetrics(objRet);
 	XS_HttpAppendRejectMetrics(objRet);
 	XS_HttpAppendStopCleanupMetrics(objRet);
+	XS_WsAppendMessageLimitMetrics(objRet);
+	XS_WsAppendRejectMetrics(objRet);
+	XS_WsAppendStopCleanupMetrics(objRet);
+	XS_XtpAppendRecvLimitMetrics(objRet);
+	XS_XtpAppendRejectMetrics(objRet);
+	XS_XtpAppendStopCleanupMetrics(objRet);
+	XS_CustomAppendRecvLimitMetrics(objRet);
+	XS_CustomAppendRejectMetrics(objRet);
+	XS_CustomAppendStopCleanupMetrics(objRet);
 	xvoTableSetInt(objRet, "http_get_count", 14, XS_HttpMetricGet(&g_iXsHttpMethodGetCount));
 	xvoTableSetInt(objRet, "http_post_count", 15, XS_HttpMetricGet(&g_iXsHttpMethodPostCount));
 	xvoTableSetInt(objRet, "http_head_count", 15, XS_HttpMetricGet(&g_iXsHttpMethodHeadCount));
@@ -4942,10 +7953,64 @@ static inline bool XS_HttpHandleHealthJson(XS_ServerConfig* objServer, const XS_
 	xvoTableSetInt(objRet, "http_last_app_age_ms", 20, XS_HttpLastAppRequestAgeMS());
 	xvoTableSetInt(objRet, "http_last_app_duration_ms", 25, g_iXsHttpLastAppTimeMS);
 
-	objBus = XS_BusBuildStatusValue();
+	objBus = XS_BusBuildNamespaceStatsValue();
 	if ( objBus ) {
 		xvoTableSetInt(objRet, "bus_queue_count", 15, xvoTableGetInt(objBus, "queue_count", 11));
 		xvoTableSetInt(objRet, "bus_data_count", 14, xvoTableGetInt(objBus, "data_count", 10));
+		xvoTableSetInt(objRet, "bus_namespace_count", sizeof("bus_namespace_count") - 1, xvoTableGetInt(objBus, "namespace_count", sizeof("namespace_count") - 1));
+		xvoTableSetInt(objRet, "bus_namespace_item_count", sizeof("bus_namespace_item_count") - 1, xvoTableGetInt(objBus, "namespace_item_count", sizeof("namespace_item_count") - 1));
+		xvoTableSetInt(objRet, "bus_data_limit", sizeof("bus_data_limit") - 1, xvoTableGetInt(objBus, "data_limit", sizeof("data_limit") - 1));
+		xvoTableSetInt(objRet, "bus_queue_limit", sizeof("bus_queue_limit") - 1, xvoTableGetInt(objBus, "queue_limit", sizeof("queue_limit") - 1));
+		xvoTableSetInt(objRet, "bus_namespace_limit", sizeof("bus_namespace_limit") - 1, xvoTableGetInt(objBus, "namespace_limit", sizeof("namespace_limit") - 1));
+		xvoTableSetInt(objRet, "bus_namespace_data_limit", sizeof("bus_namespace_data_limit") - 1, xvoTableGetInt(objBus, "namespace_data_limit", sizeof("namespace_data_limit") - 1));
+		xvoTableSetInt(objRet, "bus_namespace_limit_remaining", sizeof("bus_namespace_limit_remaining") - 1, xvoTableGetInt(objBus, "namespace_limit_remaining", sizeof("namespace_limit_remaining") - 1));
+		xvoTableSetBool(objRet, "bus_namespace_limit_reached", sizeof("bus_namespace_limit_reached") - 1, xvoGetBool(xvoTableGetValue(objBus, "namespace_limit_reached", sizeof("namespace_limit_reached") - 1)));
+		xvoTableSetInt(objRet, "bus_readonly_namespace_count", sizeof("bus_readonly_namespace_count") - 1, xvoTableGetInt(objBus, "readonly_namespace_count", sizeof("readonly_namespace_count") - 1));
+		xvoTableSetInt(objRet, "bus_disabled_namespace_count", sizeof("bus_disabled_namespace_count") - 1, xvoTableGetInt(objBus, "disabled_namespace_count", sizeof("disabled_namespace_count") - 1));
+		xvoTableSetInt(objRet, "bus_ttl_required_namespace_count", sizeof("bus_ttl_required_namespace_count") - 1, xvoTableGetInt(objBus, "ttl_required_namespace_count", sizeof("ttl_required_namespace_count") - 1));
+		xvoTableSetInt(objRet, "bus_tag_required_namespace_count", sizeof("bus_tag_required_namespace_count") - 1, xvoTableGetInt(objBus, "tag_required_namespace_count", sizeof("tag_required_namespace_count") - 1));
+		xvoTableSetText(objRet, "bus_readonly_namespaces", sizeof("bus_readonly_namespaces") - 1, (ptr)xvoGetText(xvoTableGetValue(objBus, "readonly_namespaces", sizeof("readonly_namespaces") - 1)), 0, FALSE);
+		xvoTableSetText(objRet, "bus_disabled_namespaces", sizeof("bus_disabled_namespaces") - 1, (ptr)xvoGetText(xvoTableGetValue(objBus, "disabled_namespaces", sizeof("disabled_namespaces") - 1)), 0, FALSE);
+		xvoTableSetText(objRet, "bus_ttl_required_namespaces", sizeof("bus_ttl_required_namespaces") - 1, (ptr)xvoGetText(xvoTableGetValue(objBus, "ttl_required_namespaces", sizeof("ttl_required_namespaces") - 1)), 0, FALSE);
+		xvoTableSetText(objRet, "bus_tag_required_namespaces", sizeof("bus_tag_required_namespaces") - 1, (ptr)xvoGetText(xvoTableGetValue(objBus, "tag_required_namespaces", sizeof("tag_required_namespaces") - 1)), 0, FALSE);
+		xvoTableSetInt(objRet, "bus_data_limit_reject_count", sizeof("bus_data_limit_reject_count") - 1, xvoTableGetInt(objBus, "data_limit_reject_count", sizeof("data_limit_reject_count") - 1));
+		xvoTableSetText(objRet, "bus_last_data_limit_reject_time", sizeof("bus_last_data_limit_reject_time") - 1, (ptr)xvoGetText(xvoTableGetValue(objBus, "last_data_limit_reject_time", sizeof("last_data_limit_reject_time") - 1)), 0, FALSE);
+		xvoTableSetInt(objRet, "bus_last_data_limit_reject_age_ms", sizeof("bus_last_data_limit_reject_age_ms") - 1, xvoTableGetInt(objBus, "last_data_limit_reject_age_ms", sizeof("last_data_limit_reject_age_ms") - 1));
+		xvoTableSetInt(objRet, "bus_last_data_limit_count", sizeof("bus_last_data_limit_count") - 1, xvoTableGetInt(objBus, "last_data_limit_count", sizeof("last_data_limit_count") - 1));
+		xvoTableSetInt(objRet, "bus_queue_limit_reject_count", sizeof("bus_queue_limit_reject_count") - 1, xvoTableGetInt(objBus, "queue_limit_reject_count", sizeof("queue_limit_reject_count") - 1));
+		xvoTableSetText(objRet, "bus_last_queue_limit_reject_time", sizeof("bus_last_queue_limit_reject_time") - 1, (ptr)xvoGetText(xvoTableGetValue(objBus, "last_queue_limit_reject_time", sizeof("last_queue_limit_reject_time") - 1)), 0, FALSE);
+		xvoTableSetInt(objRet, "bus_last_queue_limit_reject_age_ms", sizeof("bus_last_queue_limit_reject_age_ms") - 1, xvoTableGetInt(objBus, "last_queue_limit_reject_age_ms", sizeof("last_queue_limit_reject_age_ms") - 1));
+		xvoTableSetInt(objRet, "bus_last_queue_limit_count", sizeof("bus_last_queue_limit_count") - 1, xvoTableGetInt(objBus, "last_queue_limit_count", sizeof("last_queue_limit_count") - 1));
+		xvoTableSetInt(objRet, "bus_namespace_limit_reject_count", sizeof("bus_namespace_limit_reject_count") - 1, xvoTableGetInt(objBus, "namespace_limit_reject_count", sizeof("namespace_limit_reject_count") - 1));
+		xvoTableSetText(objRet, "bus_last_namespace_limit_reject_time", sizeof("bus_last_namespace_limit_reject_time") - 1, (ptr)xvoGetText(xvoTableGetValue(objBus, "last_namespace_limit_reject_time", sizeof("last_namespace_limit_reject_time") - 1)), 0, FALSE);
+		xvoTableSetInt(objRet, "bus_last_namespace_limit_reject_age_ms", sizeof("bus_last_namespace_limit_reject_age_ms") - 1, xvoTableGetInt(objBus, "last_namespace_limit_reject_age_ms", sizeof("last_namespace_limit_reject_age_ms") - 1));
+		xvoTableSetInt(objRet, "bus_last_namespace_limit_count", sizeof("bus_last_namespace_limit_count") - 1, xvoTableGetInt(objBus, "last_namespace_limit_count", sizeof("last_namespace_limit_count") - 1));
+		xvoTableSetText(objRet, "bus_last_namespace_limit_namespace", sizeof("bus_last_namespace_limit_namespace") - 1, (ptr)xvoGetText(xvoTableGetValue(objBus, "last_namespace_limit_namespace", sizeof("last_namespace_limit_namespace") - 1)), 0, FALSE);
+		xvoTableSetInt(objRet, "bus_namespace_data_limit_reject_count", sizeof("bus_namespace_data_limit_reject_count") - 1, xvoTableGetInt(objBus, "namespace_data_limit_reject_count", sizeof("namespace_data_limit_reject_count") - 1));
+		xvoTableSetText(objRet, "bus_last_namespace_data_limit_reject_time", sizeof("bus_last_namespace_data_limit_reject_time") - 1, (ptr)xvoGetText(xvoTableGetValue(objBus, "last_namespace_data_limit_reject_time", sizeof("last_namespace_data_limit_reject_time") - 1)), 0, FALSE);
+		xvoTableSetInt(objRet, "bus_last_namespace_data_limit_reject_age_ms", sizeof("bus_last_namespace_data_limit_reject_age_ms") - 1, xvoTableGetInt(objBus, "last_namespace_data_limit_reject_age_ms", sizeof("last_namespace_data_limit_reject_age_ms") - 1));
+		xvoTableSetInt(objRet, "bus_last_namespace_data_limit_count", sizeof("bus_last_namespace_data_limit_count") - 1, xvoTableGetInt(objBus, "last_namespace_data_limit_count", sizeof("last_namespace_data_limit_count") - 1));
+		xvoTableSetText(objRet, "bus_last_namespace_data_limit_namespace", sizeof("bus_last_namespace_data_limit_namespace") - 1, (ptr)xvoGetText(xvoTableGetValue(objBus, "last_namespace_data_limit_namespace", sizeof("last_namespace_data_limit_namespace") - 1)), 0, FALSE);
+		xvoTableSetInt(objRet, "bus_readonly_namespace_reject_count", sizeof("bus_readonly_namespace_reject_count") - 1, xvoTableGetInt(objBus, "readonly_namespace_reject_count", sizeof("readonly_namespace_reject_count") - 1));
+		xvoTableSetText(objRet, "bus_last_readonly_namespace_reject_time", sizeof("bus_last_readonly_namespace_reject_time") - 1, (ptr)xvoGetText(xvoTableGetValue(objBus, "last_readonly_namespace_reject_time", sizeof("last_readonly_namespace_reject_time") - 1)), 0, FALSE);
+		xvoTableSetInt(objRet, "bus_last_readonly_namespace_reject_age_ms", sizeof("bus_last_readonly_namespace_reject_age_ms") - 1, xvoTableGetInt(objBus, "last_readonly_namespace_reject_age_ms", sizeof("last_readonly_namespace_reject_age_ms") - 1));
+		xvoTableSetText(objRet, "bus_last_readonly_namespace", sizeof("bus_last_readonly_namespace") - 1, (ptr)xvoGetText(xvoTableGetValue(objBus, "last_readonly_namespace", sizeof("last_readonly_namespace") - 1)), 0, FALSE);
+		xvoTableSetText(objRet, "bus_last_readonly_namespace_action", sizeof("bus_last_readonly_namespace_action") - 1, (ptr)xvoGetText(xvoTableGetValue(objBus, "last_readonly_namespace_action", sizeof("last_readonly_namespace_action") - 1)), 0, FALSE);
+		xvoTableSetInt(objRet, "bus_disabled_namespace_reject_count", sizeof("bus_disabled_namespace_reject_count") - 1, xvoTableGetInt(objBus, "disabled_namespace_reject_count", sizeof("disabled_namespace_reject_count") - 1));
+		xvoTableSetText(objRet, "bus_last_disabled_namespace_reject_time", sizeof("bus_last_disabled_namespace_reject_time") - 1, (ptr)xvoGetText(xvoTableGetValue(objBus, "last_disabled_namespace_reject_time", sizeof("last_disabled_namespace_reject_time") - 1)), 0, FALSE);
+		xvoTableSetInt(objRet, "bus_last_disabled_namespace_reject_age_ms", sizeof("bus_last_disabled_namespace_reject_age_ms") - 1, xvoTableGetInt(objBus, "last_disabled_namespace_reject_age_ms", sizeof("last_disabled_namespace_reject_age_ms") - 1));
+		xvoTableSetText(objRet, "bus_last_disabled_namespace", sizeof("bus_last_disabled_namespace") - 1, (ptr)xvoGetText(xvoTableGetValue(objBus, "last_disabled_namespace", sizeof("last_disabled_namespace") - 1)), 0, FALSE);
+		xvoTableSetText(objRet, "bus_last_disabled_namespace_action", sizeof("bus_last_disabled_namespace_action") - 1, (ptr)xvoGetText(xvoTableGetValue(objBus, "last_disabled_namespace_action", sizeof("last_disabled_namespace_action") - 1)), 0, FALSE);
+		xvoTableSetInt(objRet, "bus_ttl_required_namespace_reject_count", sizeof("bus_ttl_required_namespace_reject_count") - 1, xvoTableGetInt(objBus, "ttl_required_namespace_reject_count", sizeof("ttl_required_namespace_reject_count") - 1));
+		xvoTableSetText(objRet, "bus_last_ttl_required_namespace_reject_time", sizeof("bus_last_ttl_required_namespace_reject_time") - 1, (ptr)xvoGetText(xvoTableGetValue(objBus, "last_ttl_required_namespace_reject_time", sizeof("last_ttl_required_namespace_reject_time") - 1)), 0, FALSE);
+		xvoTableSetInt(objRet, "bus_last_ttl_required_namespace_reject_age_ms", sizeof("bus_last_ttl_required_namespace_reject_age_ms") - 1, xvoTableGetInt(objBus, "last_ttl_required_namespace_reject_age_ms", sizeof("last_ttl_required_namespace_reject_age_ms") - 1));
+		xvoTableSetText(objRet, "bus_last_ttl_required_namespace", sizeof("bus_last_ttl_required_namespace") - 1, (ptr)xvoGetText(xvoTableGetValue(objBus, "last_ttl_required_namespace", sizeof("last_ttl_required_namespace") - 1)), 0, FALSE);
+		xvoTableSetText(objRet, "bus_last_ttl_required_namespace_action", sizeof("bus_last_ttl_required_namespace_action") - 1, (ptr)xvoGetText(xvoTableGetValue(objBus, "last_ttl_required_namespace_action", sizeof("last_ttl_required_namespace_action") - 1)), 0, FALSE);
+		xvoTableSetInt(objRet, "bus_tag_required_namespace_reject_count", sizeof("bus_tag_required_namespace_reject_count") - 1, xvoTableGetInt(objBus, "tag_required_namespace_reject_count", sizeof("tag_required_namespace_reject_count") - 1));
+		xvoTableSetText(objRet, "bus_last_tag_required_namespace_reject_time", sizeof("bus_last_tag_required_namespace_reject_time") - 1, (ptr)xvoGetText(xvoTableGetValue(objBus, "last_tag_required_namespace_reject_time", sizeof("last_tag_required_namespace_reject_time") - 1)), 0, FALSE);
+		xvoTableSetInt(objRet, "bus_last_tag_required_namespace_reject_age_ms", sizeof("bus_last_tag_required_namespace_reject_age_ms") - 1, xvoTableGetInt(objBus, "last_tag_required_namespace_reject_age_ms", sizeof("last_tag_required_namespace_reject_age_ms") - 1));
+		xvoTableSetText(objRet, "bus_last_tag_required_namespace", sizeof("bus_last_tag_required_namespace") - 1, (ptr)xvoGetText(xvoTableGetValue(objBus, "last_tag_required_namespace", sizeof("last_tag_required_namespace") - 1)), 0, FALSE);
+		xvoTableSetText(objRet, "bus_last_tag_required_namespace_action", sizeof("bus_last_tag_required_namespace_action") - 1, (ptr)xvoGetText(xvoTableGetValue(objBus, "last_tag_required_namespace_action", sizeof("last_tag_required_namespace_action") - 1)), 0, FALSE);
 		xvoTableSetInt(objRet, "bus_total_queued", 16, xvoTableGetInt(objBus, "total_queued", 12));
 		xvoTableSetInt(objRet, "bus_total_delivered", 19, xvoTableGetInt(objBus, "total_delivered", 15));
 		xvoTableSetInt(objRet, "bus_total_dropped", 17, xvoTableGetInt(objBus, "total_dropped", 13));
@@ -4953,10 +8018,79 @@ static inline bool XS_HttpHandleHealthJson(XS_ServerConfig* objServer, const XS_
 		xvoTableSetText(objRet, "bus_last_queue_time_text", 24, (ptr)xvoGetText(xvoTableGetValue(objBus, "last_queue_time_text", 20)), 0, FALSE);
 		xvoTableSetInt(objRet, "bus_last_dispatch_time", 22, xvoTableGetInt(objBus, "last_dispatch_time", 18));
 		xvoTableSetText(objRet, "bus_last_dispatch_time_text", 27, (ptr)xvoGetText(xvoTableGetValue(objBus, "last_dispatch_time_text", 23)), 0, FALSE);
+		xvoTableSetInt(objRet, "bus_sweep_interval_ms", sizeof("bus_sweep_interval_ms") - 1, xvoTableGetInt(objBus, "sweep_interval_ms", sizeof("sweep_interval_ms") - 1));
+		xvoTableSetInt(objRet, "bus_sweep_batch_limit", sizeof("bus_sweep_batch_limit") - 1, xvoTableGetInt(objBus, "sweep_batch_limit", sizeof("sweep_batch_limit") - 1));
+		xvoTableSetInt(objRet, "bus_sweep_count", sizeof("bus_sweep_count") - 1, xvoTableGetInt(objBus, "sweep_count", sizeof("sweep_count") - 1));
+		xvoTableSetInt(objRet, "bus_sweep_removed_count", sizeof("bus_sweep_removed_count") - 1, xvoTableGetInt(objBus, "sweep_removed_count", sizeof("sweep_removed_count") - 1));
+		xvoTableSetInt(objRet, "bus_last_sweep_time", sizeof("bus_last_sweep_time") - 1, xvoTableGetInt(objBus, "last_sweep_time", sizeof("last_sweep_time") - 1));
+		xvoTableSetText(objRet, "bus_last_sweep_time_text", sizeof("bus_last_sweep_time_text") - 1, (ptr)xvoGetText(xvoTableGetValue(objBus, "last_sweep_time_text", sizeof("last_sweep_time_text") - 1)), 0, FALSE);
+		xvoTableSetInt(objRet, "bus_last_sweep_age_ms", sizeof("bus_last_sweep_age_ms") - 1, xvoTableGetInt(objBus, "last_sweep_age_ms", sizeof("last_sweep_age_ms") - 1));
+		xvoTableSetInt(objRet, "bus_last_sweep_removed", sizeof("bus_last_sweep_removed") - 1, xvoTableGetInt(objBus, "last_sweep_removed", sizeof("last_sweep_removed") - 1));
+		xvoTableSetInt(objRet, "bus_last_sweep_remain", sizeof("bus_last_sweep_remain") - 1, xvoTableGetInt(objBus, "last_sweep_remain", sizeof("last_sweep_remain") - 1));
+		xvoTableSetInt(objRet, "bus_cleanup_count", sizeof("bus_cleanup_count") - 1, xvoTableGetInt(objBus, "cleanup_count", sizeof("cleanup_count") - 1));
+		xvoTableSetInt(objRet, "bus_last_cleanup_time", sizeof("bus_last_cleanup_time") - 1, xvoTableGetInt(objBus, "last_cleanup_time", sizeof("last_cleanup_time") - 1));
+		xvoTableSetText(objRet, "bus_last_cleanup_time_text", sizeof("bus_last_cleanup_time_text") - 1, (ptr)xvoGetText(xvoTableGetValue(objBus, "last_cleanup_time_text", sizeof("last_cleanup_time_text") - 1)), 0, FALSE);
+		xvoTableSetInt(objRet, "bus_last_cleanup_age_ms", sizeof("bus_last_cleanup_age_ms") - 1, xvoTableGetInt(objBus, "last_cleanup_age_ms", sizeof("last_cleanup_age_ms") - 1));
+		xvoTableSetInt(objRet, "bus_last_cleanup_removed", sizeof("bus_last_cleanup_removed") - 1, xvoTableGetInt(objBus, "last_cleanup_removed", sizeof("last_cleanup_removed") - 1));
+		xvoTableSetInt(objRet, "bus_last_cleanup_remain", sizeof("bus_last_cleanup_remain") - 1, xvoTableGetInt(objBus, "last_cleanup_remain", sizeof("last_cleanup_remain") - 1));
 		xvoUnref(objBus);
 	} else {
 		xvoTableSetInt(objRet, "bus_queue_count", 15, 0);
 		xvoTableSetInt(objRet, "bus_data_count", 14, 0);
+		xvoTableSetInt(objRet, "bus_namespace_count", sizeof("bus_namespace_count") - 1, 0);
+		xvoTableSetInt(objRet, "bus_namespace_item_count", sizeof("bus_namespace_item_count") - 1, 0);
+		xvoTableSetInt(objRet, "bus_data_limit", sizeof("bus_data_limit") - 1, 0);
+		xvoTableSetInt(objRet, "bus_queue_limit", sizeof("bus_queue_limit") - 1, 0);
+		xvoTableSetInt(objRet, "bus_namespace_limit", sizeof("bus_namespace_limit") - 1, 0);
+		xvoTableSetInt(objRet, "bus_namespace_data_limit", sizeof("bus_namespace_data_limit") - 1, 0);
+		xvoTableSetInt(objRet, "bus_namespace_limit_remaining", sizeof("bus_namespace_limit_remaining") - 1, 0);
+		xvoTableSetBool(objRet, "bus_namespace_limit_reached", sizeof("bus_namespace_limit_reached") - 1, FALSE);
+		xvoTableSetInt(objRet, "bus_readonly_namespace_count", sizeof("bus_readonly_namespace_count") - 1, 0);
+		xvoTableSetInt(objRet, "bus_disabled_namespace_count", sizeof("bus_disabled_namespace_count") - 1, 0);
+		xvoTableSetInt(objRet, "bus_ttl_required_namespace_count", sizeof("bus_ttl_required_namespace_count") - 1, 0);
+		xvoTableSetInt(objRet, "bus_tag_required_namespace_count", sizeof("bus_tag_required_namespace_count") - 1, 0);
+		xvoTableSetText(objRet, "bus_readonly_namespaces", sizeof("bus_readonly_namespaces") - 1, "", 0, FALSE);
+		xvoTableSetText(objRet, "bus_disabled_namespaces", sizeof("bus_disabled_namespaces") - 1, "", 0, FALSE);
+		xvoTableSetText(objRet, "bus_ttl_required_namespaces", sizeof("bus_ttl_required_namespaces") - 1, "", 0, FALSE);
+		xvoTableSetText(objRet, "bus_tag_required_namespaces", sizeof("bus_tag_required_namespaces") - 1, "", 0, FALSE);
+		xvoTableSetInt(objRet, "bus_data_limit_reject_count", sizeof("bus_data_limit_reject_count") - 1, 0);
+		xvoTableSetText(objRet, "bus_last_data_limit_reject_time", sizeof("bus_last_data_limit_reject_time") - 1, "", 0, FALSE);
+		xvoTableSetInt(objRet, "bus_last_data_limit_reject_age_ms", sizeof("bus_last_data_limit_reject_age_ms") - 1, -1);
+		xvoTableSetInt(objRet, "bus_last_data_limit_count", sizeof("bus_last_data_limit_count") - 1, 0);
+		xvoTableSetInt(objRet, "bus_queue_limit_reject_count", sizeof("bus_queue_limit_reject_count") - 1, 0);
+		xvoTableSetText(objRet, "bus_last_queue_limit_reject_time", sizeof("bus_last_queue_limit_reject_time") - 1, "", 0, FALSE);
+		xvoTableSetInt(objRet, "bus_last_queue_limit_reject_age_ms", sizeof("bus_last_queue_limit_reject_age_ms") - 1, -1);
+		xvoTableSetInt(objRet, "bus_last_queue_limit_count", sizeof("bus_last_queue_limit_count") - 1, 0);
+		xvoTableSetInt(objRet, "bus_namespace_limit_reject_count", sizeof("bus_namespace_limit_reject_count") - 1, 0);
+		xvoTableSetText(objRet, "bus_last_namespace_limit_reject_time", sizeof("bus_last_namespace_limit_reject_time") - 1, "", 0, FALSE);
+		xvoTableSetInt(objRet, "bus_last_namespace_limit_reject_age_ms", sizeof("bus_last_namespace_limit_reject_age_ms") - 1, -1);
+		xvoTableSetInt(objRet, "bus_last_namespace_limit_count", sizeof("bus_last_namespace_limit_count") - 1, 0);
+		xvoTableSetText(objRet, "bus_last_namespace_limit_namespace", sizeof("bus_last_namespace_limit_namespace") - 1, "", 0, FALSE);
+		xvoTableSetInt(objRet, "bus_namespace_data_limit_reject_count", sizeof("bus_namespace_data_limit_reject_count") - 1, 0);
+		xvoTableSetText(objRet, "bus_last_namespace_data_limit_reject_time", sizeof("bus_last_namespace_data_limit_reject_time") - 1, "", 0, FALSE);
+		xvoTableSetInt(objRet, "bus_last_namespace_data_limit_reject_age_ms", sizeof("bus_last_namespace_data_limit_reject_age_ms") - 1, -1);
+		xvoTableSetInt(objRet, "bus_last_namespace_data_limit_count", sizeof("bus_last_namespace_data_limit_count") - 1, 0);
+		xvoTableSetText(objRet, "bus_last_namespace_data_limit_namespace", sizeof("bus_last_namespace_data_limit_namespace") - 1, "", 0, FALSE);
+		xvoTableSetInt(objRet, "bus_readonly_namespace_reject_count", sizeof("bus_readonly_namespace_reject_count") - 1, 0);
+		xvoTableSetText(objRet, "bus_last_readonly_namespace_reject_time", sizeof("bus_last_readonly_namespace_reject_time") - 1, "", 0, FALSE);
+		xvoTableSetInt(objRet, "bus_last_readonly_namespace_reject_age_ms", sizeof("bus_last_readonly_namespace_reject_age_ms") - 1, -1);
+		xvoTableSetText(objRet, "bus_last_readonly_namespace", sizeof("bus_last_readonly_namespace") - 1, "", 0, FALSE);
+		xvoTableSetText(objRet, "bus_last_readonly_namespace_action", sizeof("bus_last_readonly_namespace_action") - 1, "", 0, FALSE);
+		xvoTableSetInt(objRet, "bus_disabled_namespace_reject_count", sizeof("bus_disabled_namespace_reject_count") - 1, 0);
+		xvoTableSetText(objRet, "bus_last_disabled_namespace_reject_time", sizeof("bus_last_disabled_namespace_reject_time") - 1, "", 0, FALSE);
+		xvoTableSetInt(objRet, "bus_last_disabled_namespace_reject_age_ms", sizeof("bus_last_disabled_namespace_reject_age_ms") - 1, -1);
+		xvoTableSetText(objRet, "bus_last_disabled_namespace", sizeof("bus_last_disabled_namespace") - 1, "", 0, FALSE);
+		xvoTableSetText(objRet, "bus_last_disabled_namespace_action", sizeof("bus_last_disabled_namespace_action") - 1, "", 0, FALSE);
+		xvoTableSetInt(objRet, "bus_ttl_required_namespace_reject_count", sizeof("bus_ttl_required_namespace_reject_count") - 1, 0);
+		xvoTableSetText(objRet, "bus_last_ttl_required_namespace_reject_time", sizeof("bus_last_ttl_required_namespace_reject_time") - 1, "", 0, FALSE);
+		xvoTableSetInt(objRet, "bus_last_ttl_required_namespace_reject_age_ms", sizeof("bus_last_ttl_required_namespace_reject_age_ms") - 1, -1);
+		xvoTableSetText(objRet, "bus_last_ttl_required_namespace", sizeof("bus_last_ttl_required_namespace") - 1, "", 0, FALSE);
+		xvoTableSetText(objRet, "bus_last_ttl_required_namespace_action", sizeof("bus_last_ttl_required_namespace_action") - 1, "", 0, FALSE);
+		xvoTableSetInt(objRet, "bus_tag_required_namespace_reject_count", sizeof("bus_tag_required_namespace_reject_count") - 1, 0);
+		xvoTableSetText(objRet, "bus_last_tag_required_namespace_reject_time", sizeof("bus_last_tag_required_namespace_reject_time") - 1, "", 0, FALSE);
+		xvoTableSetInt(objRet, "bus_last_tag_required_namespace_reject_age_ms", sizeof("bus_last_tag_required_namespace_reject_age_ms") - 1, -1);
+		xvoTableSetText(objRet, "bus_last_tag_required_namespace", sizeof("bus_last_tag_required_namespace") - 1, "", 0, FALSE);
+		xvoTableSetText(objRet, "bus_last_tag_required_namespace_action", sizeof("bus_last_tag_required_namespace_action") - 1, "", 0, FALSE);
 		xvoTableSetInt(objRet, "bus_total_queued", 16, 0);
 		xvoTableSetInt(objRet, "bus_total_delivered", 19, 0);
 		xvoTableSetInt(objRet, "bus_total_dropped", 17, 0);
@@ -4964,6 +8098,21 @@ static inline bool XS_HttpHandleHealthJson(XS_ServerConfig* objServer, const XS_
 		xvoTableSetText(objRet, "bus_last_queue_time_text", 24, "", 0, FALSE);
 		xvoTableSetInt(objRet, "bus_last_dispatch_time", 22, 0);
 		xvoTableSetText(objRet, "bus_last_dispatch_time_text", 27, "", 0, FALSE);
+		xvoTableSetInt(objRet, "bus_sweep_interval_ms", sizeof("bus_sweep_interval_ms") - 1, 0);
+		xvoTableSetInt(objRet, "bus_sweep_batch_limit", sizeof("bus_sweep_batch_limit") - 1, 0);
+		xvoTableSetInt(objRet, "bus_sweep_count", sizeof("bus_sweep_count") - 1, 0);
+		xvoTableSetInt(objRet, "bus_sweep_removed_count", sizeof("bus_sweep_removed_count") - 1, 0);
+		xvoTableSetInt(objRet, "bus_last_sweep_time", sizeof("bus_last_sweep_time") - 1, 0);
+		xvoTableSetText(objRet, "bus_last_sweep_time_text", sizeof("bus_last_sweep_time_text") - 1, "", 0, FALSE);
+		xvoTableSetInt(objRet, "bus_last_sweep_age_ms", sizeof("bus_last_sweep_age_ms") - 1, -1);
+		xvoTableSetInt(objRet, "bus_last_sweep_removed", sizeof("bus_last_sweep_removed") - 1, 0);
+		xvoTableSetInt(objRet, "bus_last_sweep_remain", sizeof("bus_last_sweep_remain") - 1, 0);
+		xvoTableSetInt(objRet, "bus_cleanup_count", sizeof("bus_cleanup_count") - 1, 0);
+		xvoTableSetInt(objRet, "bus_last_cleanup_time", sizeof("bus_last_cleanup_time") - 1, 0);
+		xvoTableSetText(objRet, "bus_last_cleanup_time_text", sizeof("bus_last_cleanup_time_text") - 1, "", 0, FALSE);
+		xvoTableSetInt(objRet, "bus_last_cleanup_age_ms", sizeof("bus_last_cleanup_age_ms") - 1, -1);
+		xvoTableSetInt(objRet, "bus_last_cleanup_removed", sizeof("bus_last_cleanup_removed") - 1, 0);
+		xvoTableSetInt(objRet, "bus_last_cleanup_remain", sizeof("bus_last_cleanup_remain") - 1, 0);
 	}
 
 	sJson = xrtStringifyJSON(objRet, FALSE, NULL);
@@ -4987,7 +8136,7 @@ static inline bool XS_HttpHandleHealthJson(XS_ServerConfig* objServer, const XS_
 		xrtFree(sHttpLastConnLimitCloseTime);
 	}
 	if ( sJson == NULL ) {
-		return XS_HttpRespondText(pResp, 500, "Internal Server Error", "health json build failed");
+		return XS_HttpRespondJsonResult(pResp, 500, "Internal Server Error", FALSE, "health json build failed");
 	}
 	xrtHttpdResponseSetStatus(pResp, 200, "OK");
 	if ( !xrtHttpdResponseSetBodyCopy(pResp, sJson, strlen(sJson), "application/json; charset=utf-8") ) {
@@ -5000,13 +8149,26 @@ static inline bool XS_HttpHandleHealthJson(XS_ServerConfig* objServer, const XS_
 
 static inline bool XS_HttpHandleMetrics(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
-	char sBody[3072];
+	char sBody[6144];
 	char* sHttpLastTime;
 	char* sHttpLastAppTime;
 	char* sHttpLastIdleCloseTime;
 	char* sHttpLastConnLimitCloseTime;
 	char* sHttpLastRejectTime;
 	char* sHttpLastStopCleanupTime;
+	char* sHttpLastHeaderLimitRejectTime;
+	char* sHttpLastBodyLimitRejectTime;
+	char* sHttpLastPathLimitRejectTime;
+	char* sHttpLastApiDisabledRejectTime;
+	char* sHttpLastMethodRejectTime;
+	char* sHttpLastHostNotFoundRejectTime;
+	char* sHttpLastReloadBusyRejectTime;
+	char* sHttpLastReloadFailedRejectTime;
+	char* sHttpLastCheckConfigFailedRejectTime;
+	char* sHttpLastBusBadRequestRejectTime;
+	char* sHttpLastBusNotFoundRejectTime;
+	char* sHttpLastBusLimitRejectTime;
+	char* sHttpLastBusFailedRejectTime;
 
 	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
 		return FALSE;
@@ -5024,6 +8186,19 @@ static inline bool XS_HttpHandleMetrics(XS_ServerConfig* objServer, const XS_Hos
 	sHttpLastConnLimitCloseTime = XS_HttpLastConnLimitCloseTimeText();
 	sHttpLastRejectTime = XS_HttpLastRejectTimeText();
 	sHttpLastStopCleanupTime = XS_HttpLastStopCleanupTimeText();
+	sHttpLastHeaderLimitRejectTime = XS_HttpLastHeaderLimitRejectTimeText();
+	sHttpLastBodyLimitRejectTime = XS_HttpLastBodyLimitRejectTimeText();
+	sHttpLastPathLimitRejectTime = XS_HttpLastPathLimitRejectTimeText();
+	sHttpLastApiDisabledRejectTime = XS_HttpLastApiDisabledRejectTimeText();
+	sHttpLastMethodRejectTime = XS_HttpLastMethodRejectTimeText();
+	sHttpLastHostNotFoundRejectTime = XS_HttpLastHostNotFoundRejectTimeText();
+	sHttpLastReloadBusyRejectTime = XS_HttpLastReloadBusyRejectTimeText();
+	sHttpLastReloadFailedRejectTime = XS_HttpLastReloadFailedRejectTimeText();
+	sHttpLastCheckConfigFailedRejectTime = XS_HttpLastCheckConfigFailedRejectTimeText();
+	sHttpLastBusBadRequestRejectTime = XS_HttpLastBusBadRequestRejectTimeText();
+	sHttpLastBusNotFoundRejectTime = XS_HttpLastBusNotFoundRejectTimeText();
+	sHttpLastBusLimitRejectTime = XS_HttpLastBusLimitRejectTimeText();
+	sHttpLastBusFailedRejectTime = XS_HttpLastBusFailedRejectTimeText();
 	snprintf(
 		sBody,
 		sizeof(sBody),
@@ -5104,6 +8279,73 @@ static inline bool XS_HttpHandleMetrics(XS_ServerConfig* objServer, const XS_Hos
 			(long long)XS_HttpLastStopCleanupAgeMS()
 		);
 	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"http_header_limit_reject_count=%lld\nhttp_last_header_limit_reject_time=%s\nhttp_last_header_limit_reject_age_ms=%lld\nhttp_body_limit_reject_count=%lld\nhttp_last_body_limit_reject_time=%s\nhttp_last_body_limit_reject_age_ms=%lld\nhttp_path_limit_reject_count=%lld\nhttp_last_path_limit_reject_time=%s\nhttp_last_path_limit_reject_age_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsHttpHeaderLimitRejectCount),
+			sHttpLastHeaderLimitRejectTime ? sHttpLastHeaderLimitRejectTime : "(none)",
+			(long long)XS_HttpLastHeaderLimitRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpBodyLimitRejectCount),
+			sHttpLastBodyLimitRejectTime ? sHttpLastBodyLimitRejectTime : "(none)",
+			(long long)XS_HttpLastBodyLimitRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpPathLimitRejectCount),
+			sHttpLastPathLimitRejectTime ? sHttpLastPathLimitRejectTime : "(none)",
+			(long long)XS_HttpLastPathLimitRejectAgeMS()
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"http_api_disabled_reject_count=%lld\nhttp_last_api_disabled_reject_time=%s\nhttp_last_api_disabled_reject_age_ms=%lld\nhttp_method_reject_count=%lld\nhttp_last_method_reject_time=%s\nhttp_last_method_reject_age_ms=%lld\nhttp_host_not_found_reject_count=%lld\nhttp_last_host_not_found_reject_time=%s\nhttp_last_host_not_found_reject_age_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsHttpApiDisabledRejectCount),
+			sHttpLastApiDisabledRejectTime ? sHttpLastApiDisabledRejectTime : "(none)",
+			(long long)XS_HttpLastApiDisabledRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpMethodRejectCount),
+			sHttpLastMethodRejectTime ? sHttpLastMethodRejectTime : "(none)",
+			(long long)XS_HttpLastMethodRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpHostNotFoundRejectCount),
+			sHttpLastHostNotFoundRejectTime ? sHttpLastHostNotFoundRejectTime : "(none)",
+			(long long)XS_HttpLastHostNotFoundRejectAgeMS()
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"http_reload_busy_reject_count=%lld\nhttp_last_reload_busy_reject_time=%s\nhttp_last_reload_busy_reject_age_ms=%lld\nhttp_reload_failed_reject_count=%lld\nhttp_last_reload_failed_reject_time=%s\nhttp_last_reload_failed_reject_age_ms=%lld\nhttp_check_config_failed_reject_count=%lld\nhttp_last_check_config_failed_reject_time=%s\nhttp_last_check_config_failed_reject_age_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsHttpReloadBusyRejectCount),
+			sHttpLastReloadBusyRejectTime ? sHttpLastReloadBusyRejectTime : "(none)",
+			(long long)XS_HttpLastReloadBusyRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpReloadFailedRejectCount),
+			sHttpLastReloadFailedRejectTime ? sHttpLastReloadFailedRejectTime : "(none)",
+			(long long)XS_HttpLastReloadFailedRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpCheckConfigFailedRejectCount),
+			sHttpLastCheckConfigFailedRejectTime ? sHttpLastCheckConfigFailedRejectTime : "(none)",
+			(long long)XS_HttpLastCheckConfigFailedRejectAgeMS()
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"http_bus_bad_request_reject_count=%lld\nhttp_last_bus_bad_request_reject_time=%s\nhttp_last_bus_bad_request_reject_age_ms=%lld\nhttp_bus_not_found_reject_count=%lld\nhttp_last_bus_not_found_reject_time=%s\nhttp_last_bus_not_found_reject_age_ms=%lld\nhttp_bus_limit_reject_count=%lld\nhttp_last_bus_limit_reject_time=%s\nhttp_last_bus_limit_reject_age_ms=%lld\nhttp_bus_failed_reject_count=%lld\nhttp_last_bus_failed_reject_time=%s\nhttp_last_bus_failed_reject_age_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsHttpBusBadRequestRejectCount),
+			sHttpLastBusBadRequestRejectTime ? sHttpLastBusBadRequestRejectTime : "(none)",
+			(long long)XS_HttpLastBusBadRequestRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpBusNotFoundRejectCount),
+			sHttpLastBusNotFoundRejectTime ? sHttpLastBusNotFoundRejectTime : "(none)",
+			(long long)XS_HttpLastBusNotFoundRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpBusLimitRejectCount),
+			sHttpLastBusLimitRejectTime ? sHttpLastBusLimitRejectTime : "(none)",
+			(long long)XS_HttpLastBusLimitRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpBusFailedRejectCount),
+			sHttpLastBusFailedRejectTime ? sHttpLastBusFailedRejectTime : "(none)",
+			(long long)XS_HttpLastBusFailedRejectAgeMS()
+		);
+	}
 	if ( sHttpLastTime ) {
 		xrtFree(sHttpLastTime);
 	}
@@ -5121,6 +8363,45 @@ static inline bool XS_HttpHandleMetrics(XS_ServerConfig* objServer, const XS_Hos
 	}
 	if ( sHttpLastStopCleanupTime ) {
 		xrtFree(sHttpLastStopCleanupTime);
+	}
+	if ( sHttpLastHeaderLimitRejectTime ) {
+		xrtFree(sHttpLastHeaderLimitRejectTime);
+	}
+	if ( sHttpLastBodyLimitRejectTime ) {
+		xrtFree(sHttpLastBodyLimitRejectTime);
+	}
+	if ( sHttpLastPathLimitRejectTime ) {
+		xrtFree(sHttpLastPathLimitRejectTime);
+	}
+	if ( sHttpLastApiDisabledRejectTime ) {
+		xrtFree(sHttpLastApiDisabledRejectTime);
+	}
+	if ( sHttpLastMethodRejectTime ) {
+		xrtFree(sHttpLastMethodRejectTime);
+	}
+	if ( sHttpLastHostNotFoundRejectTime ) {
+		xrtFree(sHttpLastHostNotFoundRejectTime);
+	}
+	if ( sHttpLastReloadBusyRejectTime ) {
+		xrtFree(sHttpLastReloadBusyRejectTime);
+	}
+	if ( sHttpLastReloadFailedRejectTime ) {
+		xrtFree(sHttpLastReloadFailedRejectTime);
+	}
+	if ( sHttpLastCheckConfigFailedRejectTime ) {
+		xrtFree(sHttpLastCheckConfigFailedRejectTime);
+	}
+	if ( sHttpLastBusBadRequestRejectTime ) {
+		xrtFree(sHttpLastBusBadRequestRejectTime);
+	}
+	if ( sHttpLastBusNotFoundRejectTime ) {
+		xrtFree(sHttpLastBusNotFoundRejectTime);
+	}
+	if ( sHttpLastBusLimitRejectTime ) {
+		xrtFree(sHttpLastBusLimitRejectTime);
+	}
+	if ( sHttpLastBusFailedRejectTime ) {
+		xrtFree(sHttpLastBusFailedRejectTime);
 	}
 	return XS_HttpRespondText(pResp, 200, "OK", sBody);
 }
@@ -5141,7 +8422,7 @@ static inline bool XS_HttpHandleMetricsJson(XS_ServerConfig* objServer, const XS
 		return FALSE;
 	}
 	if ( !XS_ManageAPIEnabled(objServer, objHost) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "http metrics json api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "http metrics json api disabled");
 	}
 
 	sHttpLastTime = XS_HttpLastRequestTimeText();
@@ -5150,6 +8431,8 @@ static inline bool XS_HttpHandleMetricsJson(XS_ServerConfig* objServer, const XS
 	sHttpLastConnLimitCloseTime = XS_HttpLastConnLimitCloseTimeText();
 	objRet = xvoCreateTable();
 	xvoTableSetInt(objRet, "http_req_count", 14, XS_HttpMetricGet(&g_iXsHttpReqCount));
+	xvoTableSetInt(objRet, "http_manage_req_count", 21, XS_HttpMetricGet(&g_iXsHttpManageReqCount));
+	xvoTableSetInt(objRet, "http_app_req_count", 18, XS_HttpMetricGet(&g_iXsHttpAppReqCount));
 	xvoTableSetInt(objRet, "http_2xx_count", 14, XS_HttpMetricGet(&g_iXsHttpResp2xxCount));
 	xvoTableSetInt(objRet, "http_3xx_count", 14, XS_HttpMetricGet(&g_iXsHttpResp3xxCount));
 	xvoTableSetInt(objRet, "http_4xx_count", 14, XS_HttpMetricGet(&g_iXsHttpResp4xxCount));
@@ -5158,6 +8441,10 @@ static inline bool XS_HttpHandleMetricsJson(XS_ServerConfig* objServer, const XS
 	xvoTableSetInt(objRet, "http_conn_peak", 14, XS_HttpMetricGet(&g_iXsHttpConnPeak));
 	xvoTableSetInt(objRet, "http_idle_close_count", 21, XS_HttpMetricGet(&g_iXsHttpIdleCloseCount));
 	xvoTableSetInt(objRet, "http_conn_limit_close_count", 27, XS_HttpMetricGet(&g_iXsHttpConnLimitCloseCount));
+	XS_HttpAppendRequestLimitMetrics(objRet);
+	XS_HttpAppendPolicyRejectMetrics(objRet);
+	XS_HttpAppendManageRejectMetrics(objRet);
+	XS_HttpAppendBusRejectMetrics(objRet);
 	XS_HttpAppendRejectMetrics(objRet);
 	XS_HttpAppendStopCleanupMetrics(objRet);
 	xvoTableSetInt(objRet, "http_get_count", 14, XS_HttpMetricGet(&g_iXsHttpMethodGetCount));
@@ -5179,6 +8466,15 @@ static inline bool XS_HttpHandleMetricsJson(XS_ServerConfig* objServer, const XS
 	xvoTableSetText(objRet, "http_last_path", 14, (ptr)XS_HttpLastPath(), 0, FALSE);
 	xvoTableSetText(objRet, "http_last_target", 16, (ptr)XS_HttpLastTarget(), 0, FALSE);
 	xvoTableSetText(objRet, "http_last_remote", 16, (ptr)XS_HttpLastRemote(), 0, FALSE);
+	xvoTableSetText(objRet, "http_last_host", 14, (ptr)g_sXsHttpLastHost, 0, FALSE);
+	xvoTableSetText(objRet, "http_last_user_agent", 20, (ptr)g_sXsHttpLastUserAgent, 0, FALSE);
+	xvoTableSetText(objRet, "http_last_referer", 17, (ptr)g_sXsHttpLastReferer, 0, FALSE);
+	xvoTableSetText(objRet, "http_last_origin", 16, (ptr)g_sXsHttpLastOrigin, 0, FALSE);
+	xvoTableSetText(objRet, "http_last_accept", 16, (ptr)g_sXsHttpLastAccept, 0, FALSE);
+	xvoTableSetText(objRet, "http_last_accept_encoding", 25, (ptr)g_sXsHttpLastAcceptEncoding, 0, FALSE);
+	xvoTableSetText(objRet, "http_last_content_type", 22, (ptr)g_sXsHttpLastContentType, 0, FALSE);
+	xvoTableSetInt(objRet, "http_last_header_count", 22, g_iXsHttpLastHeaderCount);
+	xvoTableSetInt(objRet, "http_last_query_len", 19, g_iXsHttpLastQueryLen);
 	xvoTableSetInt(objRet, "http_last_body_len", 18, g_iXsHttpLastBodyLen);
 	xvoTableSetText(objRet, "http_last_time", 14, (ptr)(sHttpLastTime ? sHttpLastTime : ""), 0, FALSE);
 	xvoTableSetInt(objRet, "http_last_age_ms", 16, XS_HttpLastRequestAgeMS());
@@ -5192,6 +8488,15 @@ static inline bool XS_HttpHandleMetricsJson(XS_ServerConfig* objServer, const XS
 	xvoTableSetText(objRet, "http_last_app_path", 18, (ptr)XS_HttpLastAppPath(), 0, FALSE);
 	xvoTableSetText(objRet, "http_last_app_target", 20, (ptr)XS_HttpLastAppTarget(), 0, FALSE);
 	xvoTableSetText(objRet, "http_last_app_remote", 20, (ptr)XS_HttpLastAppRemote(), 0, FALSE);
+	xvoTableSetText(objRet, "http_last_app_host", 18, (ptr)g_sXsHttpLastAppHost, 0, FALSE);
+	xvoTableSetText(objRet, "http_last_app_user_agent", 24, (ptr)g_sXsHttpLastAppUserAgent, 0, FALSE);
+	xvoTableSetText(objRet, "http_last_app_referer", 21, (ptr)g_sXsHttpLastAppReferer, 0, FALSE);
+	xvoTableSetText(objRet, "http_last_app_origin", 20, (ptr)g_sXsHttpLastAppOrigin, 0, FALSE);
+	xvoTableSetText(objRet, "http_last_app_accept", 20, (ptr)g_sXsHttpLastAppAccept, 0, FALSE);
+	xvoTableSetText(objRet, "http_last_app_accept_encoding", 29, (ptr)g_sXsHttpLastAppAcceptEncoding, 0, FALSE);
+	xvoTableSetText(objRet, "http_last_app_content_type", 26, (ptr)g_sXsHttpLastAppContentType, 0, FALSE);
+	xvoTableSetInt(objRet, "http_last_app_header_count", 26, g_iXsHttpLastAppHeaderCount);
+	xvoTableSetInt(objRet, "http_last_app_query_len", 23, g_iXsHttpLastAppQueryLen);
 	xvoTableSetInt(objRet, "http_last_app_body_len", 22, g_iXsHttpLastAppBodyLen);
 	xvoTableSetText(objRet, "http_last_app_time", 18, (ptr)(sHttpLastAppTime ? sHttpLastAppTime : ""), 0, FALSE);
 	xvoTableSetInt(objRet, "http_last_app_age_ms", 20, XS_HttpLastAppRequestAgeMS());
@@ -5212,7 +8517,7 @@ static inline bool XS_HttpHandleMetricsJson(XS_ServerConfig* objServer, const XS
 		xrtFree(sHttpLastConnLimitCloseTime);
 	}
 	if ( sJson == NULL ) {
-		return XS_HttpRespondText(pResp, 500, "Internal Server Error", "http metrics json build failed");
+		return XS_HttpRespondJsonResult(pResp, 500, "Internal Server Error", FALSE, "http metrics json build failed");
 	}
 	xrtHttpdResponseSetStatus(pResp, 200, "OK");
 	if ( !xrtHttpdResponseSetBodyCopy(pResp, sJson, strlen(sJson), "application/json; charset=utf-8") ) {
@@ -5225,7 +8530,7 @@ static inline bool XS_HttpHandleMetricsJson(XS_ServerConfig* objServer, const XS
 
 static inline bool XS_HttpHandleMetricsClear(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
-	char sBody[1536];
+	char sBody[4096];
 
 	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
 		return FALSE;
@@ -5264,6 +8569,34 @@ static inline bool XS_HttpHandleMetricsClear(XS_ServerConfig* objServer, const X
 		(long long)((XS_HttpMetricGet(&g_iXsHttpReqCount) > 0) ? (XS_HttpMetricGet(&g_iXsHttpTimeTotalMS) / XS_HttpMetricGet(&g_iXsHttpReqCount)) : 0),
 		(long long)XS_HttpMetricGet(&g_iXsHttpLastStatusCode)
 	);
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"http_header_limit_reject_count=0\nhttp_last_header_limit_reject_time=(none)\nhttp_last_header_limit_reject_age_ms=-1\nhttp_body_limit_reject_count=0\nhttp_last_body_limit_reject_time=(none)\nhttp_last_body_limit_reject_age_ms=-1\nhttp_path_limit_reject_count=0\nhttp_last_path_limit_reject_time=(none)\nhttp_last_path_limit_reject_age_ms=-1\n"
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"http_api_disabled_reject_count=0\nhttp_last_api_disabled_reject_time=(none)\nhttp_last_api_disabled_reject_age_ms=-1\nhttp_method_reject_count=0\nhttp_last_method_reject_time=(none)\nhttp_last_method_reject_age_ms=-1\nhttp_host_not_found_reject_count=0\nhttp_last_host_not_found_reject_time=(none)\nhttp_last_host_not_found_reject_age_ms=-1\n"
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"http_reload_busy_reject_count=0\nhttp_last_reload_busy_reject_time=(none)\nhttp_last_reload_busy_reject_age_ms=-1\nhttp_reload_failed_reject_count=0\nhttp_last_reload_failed_reject_time=(none)\nhttp_last_reload_failed_reject_age_ms=-1\nhttp_check_config_failed_reject_count=0\nhttp_last_check_config_failed_reject_time=(none)\nhttp_last_check_config_failed_reject_age_ms=-1\n"
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"http_bus_bad_request_reject_count=0\nhttp_last_bus_bad_request_reject_time=(none)\nhttp_last_bus_bad_request_reject_age_ms=-1\nhttp_bus_not_found_reject_count=0\nhttp_last_bus_not_found_reject_time=(none)\nhttp_last_bus_not_found_reject_age_ms=-1\nhttp_bus_limit_reject_count=0\nhttp_last_bus_limit_reject_time=(none)\nhttp_last_bus_limit_reject_age_ms=-1\nhttp_bus_failed_reject_count=0\nhttp_last_bus_failed_reject_time=(none)\nhttp_last_bus_failed_reject_age_ms=-1\n"
+		);
+	}
 	return XS_HttpRespondText(pResp, 200, "OK", sBody);
 }
 
@@ -5276,6 +8609,7 @@ static inline bool XS_HttpHandleWsMetrics(XS_ServerConfig* objServer, const XS_H
 	char* sLastInvalidTime;
 	char* sLastIdleCloseTime;
 	char* sLastConnLimitCloseTime;
+	char* sLastMessageLimitCloseTime;
 	char* sLastRejectTime;
 	char* sLastStopCleanupTime;
 
@@ -5295,12 +8629,13 @@ static inline bool XS_HttpHandleWsMetrics(XS_ServerConfig* objServer, const XS_H
 	sLastInvalidTime = XS_WsLastInvalidTimeText();
 	sLastIdleCloseTime = XS_WsLastIdleCloseTimeText();
 	sLastConnLimitCloseTime = XS_WsLastConnLimitCloseTimeText();
+	sLastMessageLimitCloseTime = XS_WsLastMessageLimitCloseTimeText();
 	sLastRejectTime = XS_WsLastRejectTimeText();
 	sLastStopCleanupTime = XS_WsLastStopCleanupTimeText();
 	snprintf(
 		sBody,
 		sizeof(sBody),
-		"ws_message_limit=%u\nws_conn_current=%lld\nws_conn_peak=%lld\nws_open_count=%lld\nws_close_count=%lld\nws_text_count=%lld\nws_binary_count=%lld\nws_ping_count=%lld\nws_pong_count=%lld\nws_error_count=%lld\nws_invalid_count=%lld\nws_idle_close_count=%lld\nws_conn_limit_close_count=%lld\nws_last_error_code=%lld\nws_last_invalid_reason=%s\nws_last_invalid_time=%s\nws_last_invalid_age_ms=%lld\nws_last_close_reason=%lld\nws_last_close_time=%s\nws_last_close_age_ms=%lld\nws_last_idle_close_time=%s\nws_last_idle_close_age_ms=%lld\nws_last_conn_limit_close_time=%s\nws_last_conn_limit_close_age_ms=%lld\nws_last_frame_type=%s\nws_last_remote=%s\nws_last_bytes=%lld\nws_last_text=%s\nws_last_time=%s\nws_last_age_ms=%lld\nws_last_error_time=%s\nws_last_error_age_ms=%lld\n",
+		"ws_message_limit=%u\nws_conn_current=%lld\nws_conn_peak=%lld\nws_open_count=%lld\nws_close_count=%lld\nws_text_count=%lld\nws_binary_count=%lld\nws_ping_count=%lld\nws_pong_count=%lld\nws_error_count=%lld\nws_invalid_count=%lld\nws_idle_close_count=%lld\nws_conn_limit_close_count=%lld\nws_message_limit_close_count=%lld\nws_last_error_code=%lld\nws_last_invalid_reason=%s\nws_last_invalid_time=%s\nws_last_invalid_age_ms=%lld\nws_last_close_reason=%lld\nws_last_close_time=%s\nws_last_close_age_ms=%lld\nws_last_idle_close_time=%s\nws_last_idle_close_age_ms=%lld\nws_last_conn_limit_close_time=%s\nws_last_conn_limit_close_age_ms=%lld\nws_last_message_limit_close_time=%s\nws_last_message_limit_close_age_ms=%lld\nws_last_frame_type=%s\nws_last_remote=%s\nws_last_bytes=%lld\nws_last_text=%s\nws_last_time=%s\nws_last_age_ms=%lld\nws_last_error_time=%s\nws_last_error_age_ms=%lld\n",
 		objServer->WsMessageLimit,
 		(long long)XS_HttpMetricGet(&g_iXsWsConnCurrent),
 		(long long)XS_HttpMetricGet(&g_iXsWsConnPeak),
@@ -5314,6 +8649,7 @@ static inline bool XS_HttpHandleWsMetrics(XS_ServerConfig* objServer, const XS_H
 		(long long)XS_HttpMetricGet(&g_iXsWsInvalidCount),
 		(long long)XS_HttpMetricGet(&g_iXsWsIdleCloseCount),
 		(long long)XS_HttpMetricGet(&g_iXsWsConnLimitCloseCount),
+		(long long)XS_HttpMetricGet(&g_iXsWsMessageLimitCloseCount),
 		(long long)g_iXsWsLastErrorCode,
 		g_sXsWsLastInvalidReason[0] ? g_sXsWsLastInvalidReason : "(none)",
 		sLastInvalidTime ? sLastInvalidTime : "(none)",
@@ -5325,6 +8661,8 @@ static inline bool XS_HttpHandleWsMetrics(XS_ServerConfig* objServer, const XS_H
 		(long long)XS_WsLastIdleCloseAgeMS(),
 		sLastConnLimitCloseTime ? sLastConnLimitCloseTime : "(none)",
 		(long long)XS_WsLastConnLimitCloseAgeMS(),
+		sLastMessageLimitCloseTime ? sLastMessageLimitCloseTime : "(none)",
+		(long long)XS_WsLastMessageLimitCloseAgeMS(),
 		XS_WsLastFrameTypeName()[0] ? XS_WsLastFrameTypeName() : "(none)",
 		g_sXsWsLastRemote[0] ? g_sXsWsLastRemote : "(none)",
 		(long long)XS_HttpMetricGet(&g_iXsWsLastBytes),
@@ -5368,6 +8706,9 @@ static inline bool XS_HttpHandleWsMetrics(XS_ServerConfig* objServer, const XS_H
 	if ( sLastConnLimitCloseTime ) {
 		xrtFree(sLastConnLimitCloseTime);
 	}
+	if ( sLastMessageLimitCloseTime ) {
+		xrtFree(sLastMessageLimitCloseTime);
+	}
 	if ( sLastRejectTime ) {
 		xrtFree(sLastRejectTime);
 	}
@@ -5395,7 +8736,7 @@ static inline bool XS_HttpHandleWsMetricsJson(XS_ServerConfig* objServer, const 
 		return FALSE;
 	}
 	if ( !XS_ManageAPIEnabled(objServer, objHost) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "ws metrics json api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "ws metrics json api disabled");
 	}
 
 	sLastTime = XS_WsLastTimeText();
@@ -5418,6 +8759,7 @@ static inline bool XS_HttpHandleWsMetricsJson(XS_ServerConfig* objServer, const 
 	xvoTableSetInt(objRet, "ws_invalid_count", 16, XS_HttpMetricGet(&g_iXsWsInvalidCount));
 	xvoTableSetInt(objRet, "ws_idle_close_count", 19, XS_HttpMetricGet(&g_iXsWsIdleCloseCount));
 	xvoTableSetInt(objRet, "ws_conn_limit_close_count", 25, XS_HttpMetricGet(&g_iXsWsConnLimitCloseCount));
+	XS_WsAppendMessageLimitMetrics(objRet);
 	XS_WsAppendRejectMetrics(objRet);
 	XS_WsAppendStopCleanupMetrics(objRet);
 	xvoTableSetInt(objRet, "ws_last_error_code", 18, g_iXsWsLastErrorCode);
@@ -5461,7 +8803,7 @@ static inline bool XS_HttpHandleWsMetricsJson(XS_ServerConfig* objServer, const 
 		xrtFree(sLastConnLimitCloseTime);
 	}
 	if ( sJson == NULL ) {
-		return XS_HttpRespondText(pResp, 500, "Internal Server Error", "ws metrics json build failed");
+		return XS_HttpRespondJsonResult(pResp, 500, "Internal Server Error", FALSE, "ws metrics json build failed");
 	}
 	xrtHttpdResponseSetStatus(pResp, 200, "OK");
 	if ( !xrtHttpdResponseSetBodyCopy(pResp, sJson, strlen(sJson), "application/json; charset=utf-8") ) {
@@ -5474,7 +8816,7 @@ static inline bool XS_HttpHandleWsMetricsJson(XS_ServerConfig* objServer, const 
 
 static inline bool XS_HttpHandleWsMetricsClear(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
-	char sBody[1024];
+	char sBody[1280];
 
 	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
 		return FALSE;
@@ -5490,7 +8832,7 @@ static inline bool XS_HttpHandleWsMetricsClear(XS_ServerConfig* objServer, const
 	snprintf(
 		sBody,
 		sizeof(sBody),
-		"ws_message_limit=%u\nws_conn_current=%lld\nws_conn_peak=%lld\nws_open_count=%lld\nws_close_count=%lld\nws_text_count=%lld\nws_binary_count=%lld\nws_ping_count=%lld\nws_pong_count=%lld\nws_error_count=%lld\nws_invalid_count=0\nws_idle_close_count=0\nws_conn_limit_close_count=0\nws_reject_count=0\nws_stop_cleanup_count=0\nws_last_reject_reason=(none)\nws_last_reject_time=(none)\nws_last_reject_age_ms=-1\nws_last_stop_cleanup_closed=0\nws_last_stop_cleanup_remain=0\nws_last_stop_cleanup_time=(none)\nws_last_stop_cleanup_age_ms=-1\nws_last_error_code=0\nws_last_invalid_reason=(none)\nws_last_invalid_time=(none)\nws_last_invalid_age_ms=-1\nws_last_close_reason=0\nws_last_close_time=(none)\nws_last_close_age_ms=-1\nws_last_idle_close_time=(none)\nws_last_idle_close_age_ms=-1\nws_last_conn_limit_close_time=(none)\nws_last_conn_limit_close_age_ms=-1\nws_last_frame_type=(none)\nws_last_remote=(none)\nws_last_bytes=0\nws_last_text=(none)\nws_last_time=(none)\nws_last_age_ms=-1\nws_last_error_time=(none)\nws_last_error_age_ms=-1\n",
+		"ws_message_limit=%u\nws_conn_current=%lld\nws_conn_peak=%lld\nws_open_count=%lld\nws_close_count=%lld\nws_text_count=%lld\nws_binary_count=%lld\nws_ping_count=%lld\nws_pong_count=%lld\nws_error_count=%lld\nws_invalid_count=0\nws_idle_close_count=0\nws_conn_limit_close_count=0\nws_message_limit_close_count=0\nws_reject_count=0\nws_stop_cleanup_count=0\nws_last_reject_reason=(none)\nws_last_reject_time=(none)\nws_last_reject_age_ms=-1\nws_last_stop_cleanup_closed=0\nws_last_stop_cleanup_remain=0\nws_last_stop_cleanup_time=(none)\nws_last_stop_cleanup_age_ms=-1\nws_last_error_code=0\nws_last_invalid_reason=(none)\nws_last_invalid_time=(none)\nws_last_invalid_age_ms=-1\nws_last_close_reason=0\nws_last_close_time=(none)\nws_last_close_age_ms=-1\nws_last_idle_close_time=(none)\nws_last_idle_close_age_ms=-1\nws_last_conn_limit_close_time=(none)\nws_last_conn_limit_close_age_ms=-1\nws_last_message_limit_close_time=(none)\nws_last_message_limit_close_age_ms=-1\nws_last_frame_type=(none)\nws_last_remote=(none)\nws_last_bytes=0\nws_last_text=(none)\nws_last_time=(none)\nws_last_age_ms=-1\nws_last_error_time=(none)\nws_last_error_age_ms=-1\n",
 		objServer->WsMessageLimit,
 		(long long)XS_HttpMetricGet(&g_iXsWsConnCurrent),
 		(long long)XS_HttpMetricGet(&g_iXsWsConnPeak),
@@ -5513,6 +8855,7 @@ static inline bool XS_HttpHandleXtpMetrics(XS_ServerConfig* objServer, const XS_
 	char* sLastErrorTime;
 	char* sLastIdleCloseTime;
 	char* sLastConnLimitCloseTime;
+	char* sLastRecvLimitCloseTime;
 	char* sLastRejectTime;
 	char* sLastStopCleanupTime;
 
@@ -5531,12 +8874,13 @@ static inline bool XS_HttpHandleXtpMetrics(XS_ServerConfig* objServer, const XS_
 	sLastErrorTime = XS_XtpLastErrorTimeText();
 	sLastIdleCloseTime = XS_XtpLastIdleCloseTimeText();
 	sLastConnLimitCloseTime = XS_XtpLastConnLimitCloseTimeText();
+	sLastRecvLimitCloseTime = XS_XtpLastRecvLimitCloseTimeText();
 	sLastRejectTime = XS_XtpLastRejectTimeText();
 	sLastStopCleanupTime = XS_XtpLastStopCleanupTimeText();
 	snprintf(
 		sBody,
 		sizeof(sBody),
-		"xtp_conn_current=%lld\nxtp_conn_peak=%lld\nxtp_open_count=%lld\nxtp_close_count=%lld\nxtp_error_count=%lld\nxtp_invalid_count=%lld\nxtp_msg_count=%lld\nxtp_req_count=%lld\nxtp_resp_count=%lld\nxtp_push_count=%lld\nxtp_event_count=%lld\nxtp_send_count=%lld\nxtp_recv_bytes=%lld\nxtp_send_bytes=%lld\nxtp_last_msg_type=%s\nxtp_last_status=%lld\nxtp_last_msg_id=%lld\nxtp_last_flags=%lld\nxtp_last_param_count=%lld\nxtp_last_body_size=%lld\nxtp_last_remote=%s\nxtp_last_bytes=%lld\nxtp_last_cmd=%s\nxtp_last_time=%s\nxtp_last_age_ms=%lld\nxtp_last_invalid_reason=%s\nxtp_last_invalid_time=%s\nxtp_last_invalid_age_ms=%lld\nxtp_last_error_code=%lld\nxtp_last_error_time=%s\nxtp_last_error_age_ms=%lld\nxtp_idle_close_count=%lld\nxtp_conn_limit_close_count=%lld\nxtp_last_idle_close_time=%s\nxtp_last_idle_close_age_ms=%lld\nxtp_last_conn_limit_close_time=%s\nxtp_last_conn_limit_close_age_ms=%lld\n",
+		"xtp_conn_current=%lld\nxtp_conn_peak=%lld\nxtp_open_count=%lld\nxtp_close_count=%lld\nxtp_error_count=%lld\nxtp_invalid_count=%lld\nxtp_msg_count=%lld\nxtp_req_count=%lld\nxtp_resp_count=%lld\nxtp_push_count=%lld\nxtp_event_count=%lld\nxtp_send_count=%lld\nxtp_recv_bytes=%lld\nxtp_send_bytes=%lld\nxtp_last_msg_type=%s\nxtp_last_status=%lld\nxtp_last_msg_id=%lld\nxtp_last_flags=%lld\nxtp_last_param_count=%lld\nxtp_last_body_size=%lld\nxtp_last_remote=%s\nxtp_last_bytes=%lld\nxtp_last_cmd=%s\nxtp_last_time=%s\nxtp_last_age_ms=%lld\nxtp_last_invalid_reason=%s\nxtp_last_invalid_time=%s\nxtp_last_invalid_age_ms=%lld\nxtp_last_error_code=%lld\nxtp_last_error_time=%s\nxtp_last_error_age_ms=%lld\nxtp_idle_close_count=%lld\nxtp_conn_limit_close_count=%lld\nxtp_recv_limit_close_count=%lld\nxtp_last_idle_close_time=%s\nxtp_last_idle_close_age_ms=%lld\nxtp_last_conn_limit_close_time=%s\nxtp_last_conn_limit_close_age_ms=%lld\nxtp_last_recv_limit_close_time=%s\nxtp_last_recv_limit_close_age_ms=%lld\n",
 		(long long)XS_HttpMetricGet(&g_iXsXtpConnCurrent),
 		(long long)XS_HttpMetricGet(&g_iXsXtpConnPeak),
 		(long long)XS_HttpMetricGet(&g_iXsXtpOpenCount),
@@ -5570,10 +8914,13 @@ static inline bool XS_HttpHandleXtpMetrics(XS_ServerConfig* objServer, const XS_
 		(long long)XS_XtpLastErrorAgeMS(),
 		(long long)XS_HttpMetricGet(&g_iXsXtpIdleCloseCount),
 		(long long)XS_HttpMetricGet(&g_iXsXtpConnLimitCloseCount),
+		(long long)XS_HttpMetricGet(&g_iXsXtpRecvLimitCloseCount),
 		sLastIdleCloseTime ? sLastIdleCloseTime : "(none)",
 		(long long)XS_XtpLastIdleCloseAgeMS(),
 		sLastConnLimitCloseTime ? sLastConnLimitCloseTime : "(none)",
-		(long long)XS_XtpLastConnLimitCloseAgeMS()
+		(long long)XS_XtpLastConnLimitCloseAgeMS(),
+		sLastRecvLimitCloseTime ? sLastRecvLimitCloseTime : "(none)",
+		(long long)XS_XtpLastRecvLimitCloseAgeMS()
 	);
 	if ( strlen(sBody) < sizeof(sBody) ) {
 		snprintf(
@@ -5606,6 +8953,9 @@ static inline bool XS_HttpHandleXtpMetrics(XS_ServerConfig* objServer, const XS_
 	if ( sLastConnLimitCloseTime ) {
 		xrtFree(sLastConnLimitCloseTime);
 	}
+	if ( sLastRecvLimitCloseTime ) {
+		xrtFree(sLastRecvLimitCloseTime);
+	}
 	if ( sLastRejectTime ) {
 		xrtFree(sLastRejectTime);
 	}
@@ -5632,7 +8982,7 @@ static inline bool XS_HttpHandleXtpMetricsJson(XS_ServerConfig* objServer, const
 		return FALSE;
 	}
 	if ( !XS_ManageAPIEnabled(objServer, objHost) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "xtp metrics json api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "xtp metrics json api disabled");
 	}
 
 	sLastTime = XS_XtpLastTimeText();
@@ -5657,6 +9007,7 @@ static inline bool XS_HttpHandleXtpMetricsJson(XS_ServerConfig* objServer, const
 	xvoTableSetInt(objRet, "xtp_send_bytes", 14, XS_HttpMetricGet(&g_iXsXtpSendBytes));
 	xvoTableSetInt(objRet, "xtp_idle_close_count", 20, XS_HttpMetricGet(&g_iXsXtpIdleCloseCount));
 	xvoTableSetInt(objRet, "xtp_conn_limit_close_count", 26, XS_HttpMetricGet(&g_iXsXtpConnLimitCloseCount));
+	XS_XtpAppendRecvLimitMetrics(objRet);
 	XS_XtpAppendRejectMetrics(objRet);
 	XS_XtpAppendStopCleanupMetrics(objRet);
 	xvoTableSetText(objRet, "xtp_last_msg_type", 17, (ptr)XS_XtpLastMsgTypeName(), 0, FALSE);
@@ -5699,7 +9050,7 @@ static inline bool XS_HttpHandleXtpMetricsJson(XS_ServerConfig* objServer, const
 		xrtFree(sLastConnLimitCloseTime);
 	}
 	if ( sJson == NULL ) {
-		return XS_HttpRespondText(pResp, 500, "Internal Server Error", "xtp metrics json build failed");
+		return XS_HttpRespondJsonResult(pResp, 500, "Internal Server Error", FALSE, "xtp metrics json build failed");
 	}
 	xrtHttpdResponseSetStatus(pResp, 200, "OK");
 	if ( !xrtHttpdResponseSetBodyCopy(pResp, sJson, strlen(sJson), "application/json; charset=utf-8") ) {
@@ -5712,7 +9063,7 @@ static inline bool XS_HttpHandleXtpMetricsJson(XS_ServerConfig* objServer, const
 
 static inline bool XS_HttpHandleXtpMetricsClear(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
-	char sBody[1280];
+	char sBody[1536];
 
 	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
 		return FALSE;
@@ -5728,7 +9079,7 @@ static inline bool XS_HttpHandleXtpMetricsClear(XS_ServerConfig* objServer, cons
 	snprintf(
 		sBody,
 		sizeof(sBody),
-		"xtp_conn_current=0\nxtp_conn_peak=0\nxtp_open_count=0\nxtp_close_count=0\nxtp_error_count=0\nxtp_invalid_count=0\nxtp_msg_count=0\nxtp_req_count=0\nxtp_resp_count=0\nxtp_push_count=0\nxtp_event_count=0\nxtp_send_count=0\nxtp_recv_bytes=0\nxtp_send_bytes=0\nxtp_last_msg_type=(none)\nxtp_last_status=0\nxtp_last_msg_id=0\nxtp_last_flags=0\nxtp_last_param_count=0\nxtp_last_body_size=0\nxtp_last_remote=(none)\nxtp_last_bytes=0\nxtp_last_cmd=(none)\nxtp_last_time=(none)\nxtp_last_age_ms=-1\nxtp_last_invalid_reason=(none)\nxtp_last_invalid_time=(none)\nxtp_last_invalid_age_ms=-1\nxtp_last_error_code=0\nxtp_last_error_time=(none)\nxtp_last_error_age_ms=-1\nxtp_idle_close_count=0\nxtp_conn_limit_close_count=0\nxtp_reject_count=0\nxtp_stop_cleanup_count=0\nxtp_last_reject_reason=(none)\nxtp_last_reject_time=(none)\nxtp_last_reject_age_ms=-1\nxtp_last_stop_cleanup_closed=0\nxtp_last_stop_cleanup_remain=0\nxtp_last_stop_cleanup_time=(none)\nxtp_last_stop_cleanup_age_ms=-1\nxtp_last_idle_close_time=(none)\nxtp_last_idle_close_age_ms=-1\nxtp_last_conn_limit_close_time=(none)\nxtp_last_conn_limit_close_age_ms=-1\n"
+		"xtp_conn_current=0\nxtp_conn_peak=0\nxtp_open_count=0\nxtp_close_count=0\nxtp_error_count=0\nxtp_invalid_count=0\nxtp_msg_count=0\nxtp_req_count=0\nxtp_resp_count=0\nxtp_push_count=0\nxtp_event_count=0\nxtp_send_count=0\nxtp_recv_bytes=0\nxtp_send_bytes=0\nxtp_last_msg_type=(none)\nxtp_last_status=0\nxtp_last_msg_id=0\nxtp_last_flags=0\nxtp_last_param_count=0\nxtp_last_body_size=0\nxtp_last_remote=(none)\nxtp_last_bytes=0\nxtp_last_cmd=(none)\nxtp_last_time=(none)\nxtp_last_age_ms=-1\nxtp_last_invalid_reason=(none)\nxtp_last_invalid_time=(none)\nxtp_last_invalid_age_ms=-1\nxtp_last_error_code=0\nxtp_last_error_time=(none)\nxtp_last_error_age_ms=-1\nxtp_idle_close_count=0\nxtp_conn_limit_close_count=0\nxtp_recv_limit_close_count=0\nxtp_reject_count=0\nxtp_stop_cleanup_count=0\nxtp_last_reject_reason=(none)\nxtp_last_reject_time=(none)\nxtp_last_reject_age_ms=-1\nxtp_last_stop_cleanup_closed=0\nxtp_last_stop_cleanup_remain=0\nxtp_last_stop_cleanup_time=(none)\nxtp_last_stop_cleanup_age_ms=-1\nxtp_last_idle_close_time=(none)\nxtp_last_idle_close_age_ms=-1\nxtp_last_conn_limit_close_time=(none)\nxtp_last_conn_limit_close_age_ms=-1\nxtp_last_recv_limit_close_time=(none)\nxtp_last_recv_limit_close_age_ms=-1\n"
 	);
 	return XS_HttpRespondText(pResp, 200, "OK", sBody);
 }
@@ -5792,7 +9143,7 @@ static inline bool XS_HttpHandleUdpMetricsJson(XS_ServerConfig* objServer, const
 		return FALSE;
 	}
 	if ( !XS_ManageAPIEnabled(objServer, objHost) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "udp metrics json api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "udp metrics json api disabled");
 	}
 
 	sLastTime = XS_UdpLastTimeText();
@@ -5821,7 +9172,7 @@ static inline bool XS_HttpHandleUdpMetricsJson(XS_ServerConfig* objServer, const
 		xrtFree(sLastErrorTime);
 	}
 	if ( sJson == NULL ) {
-		return XS_HttpRespondText(pResp, 500, "Internal Server Error", "udp metrics json build failed");
+		return XS_HttpRespondJsonResult(pResp, 500, "Internal Server Error", FALSE, "udp metrics json build failed");
 	}
 	xrtHttpdResponseSetStatus(pResp, 200, "OK");
 	if ( !xrtHttpdResponseSetBodyCopy(pResp, sJson, strlen(sJson), "application/json; charset=utf-8") ) {
@@ -5859,10 +9210,12 @@ static inline bool XS_HttpHandleCustomMetrics(XS_ServerConfig* objServer, const 
 {
 	char sBody[1536];
 	char* sLastTime;
+	char* sLastCloseTime;
 	char* sLastErrorTime;
 	char* sLastInvalidTime;
 	char* sLastIdleCloseTime;
 	char* sLastConnLimitCloseTime;
+	char* sLastRecvLimitCloseTime;
 	char* sLastRejectTime;
 	char* sLastStopCleanupTime;
 
@@ -5877,16 +9230,18 @@ static inline bool XS_HttpHandleCustomMetrics(XS_ServerConfig* objServer, const 
 	}
 
 	sLastTime = XS_CustomLastTimeText();
+	sLastCloseTime = XS_CustomLastCloseTimeText();
 	sLastErrorTime = XS_CustomLastErrorTimeText();
 	sLastInvalidTime = XS_CustomLastInvalidTimeText();
 	sLastIdleCloseTime = XS_CustomLastIdleCloseTimeText();
 	sLastConnLimitCloseTime = XS_CustomLastConnLimitCloseTimeText();
+	sLastRecvLimitCloseTime = XS_CustomLastRecvLimitCloseTimeText();
 	sLastRejectTime = XS_CustomLastRejectTimeText();
 	sLastStopCleanupTime = XS_CustomLastStopCleanupTimeText();
 	snprintf(
 		sBody,
 		sizeof(sBody),
-		"custom_conn_current=%lld\ncustom_conn_peak=%lld\ncustom_open_count=%lld\ncustom_close_count=%lld\ncustom_error_count=%lld\ncustom_invalid_count=%lld\ncustom_last_invalid_reason=%s\ncustom_last_invalid_time=%s\ncustom_last_invalid_age_ms=%lld\ncustom_last_close_reason=%lld\ncustom_last_error_code=%lld\ncustom_last_error_time=%s\ncustom_last_error_age_ms=%lld\ncustom_recv_count=%lld\ncustom_send_count=%lld\ncustom_recv_bytes=%lld\ncustom_send_bytes=%lld\ncustom_last_remote=%s\ncustom_last_bytes=%lld\ncustom_last_text=%s\ncustom_last_time=%s\ncustom_last_age_ms=%lld\ncustom_idle_close_count=%lld\ncustom_conn_limit_close_count=%lld\ncustom_last_idle_close_time=%s\ncustom_last_idle_close_age_ms=%lld\ncustom_last_conn_limit_close_time=%s\ncustom_last_conn_limit_close_age_ms=%lld\n",
+		"custom_conn_current=%lld\ncustom_conn_peak=%lld\ncustom_open_count=%lld\ncustom_close_count=%lld\ncustom_error_count=%lld\ncustom_invalid_count=%lld\ncustom_last_invalid_reason=%s\ncustom_last_invalid_time=%s\ncustom_last_invalid_age_ms=%lld\ncustom_last_close_reason=%lld\ncustom_last_close_time=%s\ncustom_last_close_age_ms=%lld\ncustom_last_error_code=%lld\ncustom_last_error_time=%s\ncustom_last_error_age_ms=%lld\ncustom_recv_count=%lld\ncustom_send_count=%lld\ncustom_recv_bytes=%lld\ncustom_send_bytes=%lld\ncustom_last_remote=%s\ncustom_last_bytes=%lld\ncustom_last_text=%s\ncustom_last_time=%s\ncustom_last_age_ms=%lld\ncustom_idle_close_count=%lld\ncustom_conn_limit_close_count=%lld\ncustom_recv_limit_close_count=%lld\ncustom_last_idle_close_time=%s\ncustom_last_idle_close_age_ms=%lld\ncustom_last_conn_limit_close_time=%s\ncustom_last_conn_limit_close_age_ms=%lld\ncustom_last_recv_limit_close_time=%s\ncustom_last_recv_limit_close_age_ms=%lld\n",
 		(long long)XS_HttpMetricGet(&g_iXsCustomConnCurrent),
 		(long long)XS_HttpMetricGet(&g_iXsCustomConnPeak),
 		(long long)XS_HttpMetricGet(&g_iXsCustomOpenCount),
@@ -5897,6 +9252,8 @@ static inline bool XS_HttpHandleCustomMetrics(XS_ServerConfig* objServer, const 
 		sLastInvalidTime ? sLastInvalidTime : "(none)",
 		(long long)XS_CustomLastInvalidAgeMS(),
 		(long long)g_iXsCustomLastCloseReason,
+		sLastCloseTime ? sLastCloseTime : "(none)",
+		(long long)XS_CustomLastCloseAgeMS(),
 		(long long)g_iXsCustomLastErrorCode,
 		sLastErrorTime ? sLastErrorTime : "(none)",
 		(long long)XS_CustomLastErrorAgeMS(),
@@ -5911,10 +9268,13 @@ static inline bool XS_HttpHandleCustomMetrics(XS_ServerConfig* objServer, const 
 		(long long)XS_CustomLastAgeMS(),
 		(long long)XS_HttpMetricGet(&g_iXsCustomIdleCloseCount),
 		(long long)XS_HttpMetricGet(&g_iXsCustomConnLimitCloseCount),
+		(long long)XS_HttpMetricGet(&g_iXsCustomRecvLimitCloseCount),
 		sLastIdleCloseTime ? sLastIdleCloseTime : "(none)",
 		(long long)XS_CustomLastIdleCloseAgeMS(),
 		sLastConnLimitCloseTime ? sLastConnLimitCloseTime : "(none)",
-		(long long)XS_CustomLastConnLimitCloseAgeMS()
+		(long long)XS_CustomLastConnLimitCloseAgeMS(),
+		sLastRecvLimitCloseTime ? sLastRecvLimitCloseTime : "(none)",
+		(long long)XS_CustomLastRecvLimitCloseAgeMS()
 	);
 	if ( strlen(sBody) < sizeof(sBody) ) {
 		snprintf(
@@ -5935,6 +9295,9 @@ static inline bool XS_HttpHandleCustomMetrics(XS_ServerConfig* objServer, const 
 	if ( sLastTime ) {
 		xrtFree(sLastTime);
 	}
+	if ( sLastCloseTime ) {
+		xrtFree(sLastCloseTime);
+	}
 	if ( sLastErrorTime ) {
 		xrtFree(sLastErrorTime);
 	}
@@ -5946,6 +9309,9 @@ static inline bool XS_HttpHandleCustomMetrics(XS_ServerConfig* objServer, const 
 	}
 	if ( sLastConnLimitCloseTime ) {
 		xrtFree(sLastConnLimitCloseTime);
+	}
+	if ( sLastRecvLimitCloseTime ) {
+		xrtFree(sLastRecvLimitCloseTime);
 	}
 	if ( sLastRejectTime ) {
 		xrtFree(sLastRejectTime);
@@ -5960,6 +9326,7 @@ static inline bool XS_HttpHandleCustomMetricsJson(XS_ServerConfig* objServer, co
 {
 	xvalue objRet;
 	char* sLastTime;
+	char* sLastCloseTime;
 	char* sLastErrorTime;
 	char* sLastInvalidTime;
 	char* sLastIdleCloseTime;
@@ -5973,10 +9340,11 @@ static inline bool XS_HttpHandleCustomMetricsJson(XS_ServerConfig* objServer, co
 		return FALSE;
 	}
 	if ( !XS_ManageAPIEnabled(objServer, objHost) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "custom metrics json api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "custom metrics json api disabled");
 	}
 
 	sLastTime = XS_CustomLastTimeText();
+	sLastCloseTime = XS_CustomLastCloseTimeText();
 	sLastErrorTime = XS_CustomLastErrorTimeText();
 	sLastInvalidTime = XS_CustomLastInvalidTimeText();
 	sLastIdleCloseTime = XS_CustomLastIdleCloseTimeText();
@@ -5992,6 +9360,8 @@ static inline bool XS_HttpHandleCustomMetricsJson(XS_ServerConfig* objServer, co
 	xvoTableSetText(objRet, "custom_last_invalid_time", 24, (ptr)(sLastInvalidTime ? sLastInvalidTime : ""), 0, FALSE);
 	xvoTableSetInt(objRet, "custom_last_invalid_age_ms", 26, XS_CustomLastInvalidAgeMS());
 	xvoTableSetInt(objRet, "custom_last_close_reason", 24, g_iXsCustomLastCloseReason);
+	xvoTableSetText(objRet, "custom_last_close_time", 22, (ptr)(sLastCloseTime ? sLastCloseTime : ""), 0, FALSE);
+	xvoTableSetInt(objRet, "custom_last_close_age_ms", 24, XS_CustomLastCloseAgeMS());
 	xvoTableSetInt(objRet, "custom_last_error_code", 22, g_iXsCustomLastErrorCode);
 	xvoTableSetText(objRet, "custom_last_error_time", 22, (ptr)(sLastErrorTime ? sLastErrorTime : ""), 0, FALSE);
 	xvoTableSetInt(objRet, "custom_last_error_age_ms", 24, XS_CustomLastErrorAgeMS());
@@ -6001,6 +9371,7 @@ static inline bool XS_HttpHandleCustomMetricsJson(XS_ServerConfig* objServer, co
 	xvoTableSetInt(objRet, "custom_send_bytes", 17, XS_HttpMetricGet(&g_iXsCustomSendBytes));
 	xvoTableSetInt(objRet, "custom_idle_close_count", 23, XS_HttpMetricGet(&g_iXsCustomIdleCloseCount));
 	xvoTableSetInt(objRet, "custom_conn_limit_close_count", 29, XS_HttpMetricGet(&g_iXsCustomConnLimitCloseCount));
+	XS_CustomAppendRecvLimitMetrics(objRet);
 	XS_CustomAppendRejectMetrics(objRet);
 	XS_CustomAppendStopCleanupMetrics(objRet);
 	xvoTableSetText(objRet, "custom_last_remote", 18, (ptr)g_sXsCustomLastRemote, 0, FALSE);
@@ -6018,6 +9389,9 @@ static inline bool XS_HttpHandleCustomMetricsJson(XS_ServerConfig* objServer, co
 	if ( sLastTime ) {
 		xrtFree(sLastTime);
 	}
+	if ( sLastCloseTime ) {
+		xrtFree(sLastCloseTime);
+	}
 	if ( sLastErrorTime ) {
 		xrtFree(sLastErrorTime);
 	}
@@ -6031,7 +9405,7 @@ static inline bool XS_HttpHandleCustomMetricsJson(XS_ServerConfig* objServer, co
 		xrtFree(sLastConnLimitCloseTime);
 	}
 	if ( sJson == NULL ) {
-		return XS_HttpRespondText(pResp, 500, "Internal Server Error", "custom metrics json build failed");
+		return XS_HttpRespondJsonResult(pResp, 500, "Internal Server Error", FALSE, "custom metrics json build failed");
 	}
 	xrtHttpdResponseSetStatus(pResp, 200, "OK");
 	if ( !xrtHttpdResponseSetBodyCopy(pResp, sJson, strlen(sJson), "application/json; charset=utf-8") ) {
@@ -6044,7 +9418,7 @@ static inline bool XS_HttpHandleCustomMetricsJson(XS_ServerConfig* objServer, co
 
 static inline bool XS_HttpHandleCustomMetricsClear(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
-	char sBody[1024];
+	char sBody[1280];
 
 	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
 		return FALSE;
@@ -6060,13 +9434,15 @@ static inline bool XS_HttpHandleCustomMetricsClear(XS_ServerConfig* objServer, c
 	snprintf(
 		sBody,
 		sizeof(sBody),
-		"custom_conn_current=0\ncustom_conn_peak=0\ncustom_open_count=0\ncustom_close_count=0\ncustom_error_count=0\ncustom_invalid_count=0\ncustom_last_invalid_reason=(none)\ncustom_last_invalid_time=(none)\ncustom_last_invalid_age_ms=-1\ncustom_last_close_reason=0\ncustom_last_error_code=0\ncustom_last_error_time=(none)\ncustom_last_error_age_ms=-1\ncustom_recv_count=0\ncustom_send_count=0\ncustom_recv_bytes=0\ncustom_send_bytes=0\ncustom_last_remote=(none)\ncustom_last_bytes=0\ncustom_last_text=(none)\ncustom_last_time=(none)\ncustom_last_age_ms=-1\ncustom_idle_close_count=0\ncustom_conn_limit_close_count=0\ncustom_reject_count=0\ncustom_stop_cleanup_count=0\ncustom_last_reject_reason=(none)\ncustom_last_reject_time=(none)\ncustom_last_reject_age_ms=-1\ncustom_last_stop_cleanup_closed=0\ncustom_last_stop_cleanup_remain=0\ncustom_last_stop_cleanup_time=(none)\ncustom_last_stop_cleanup_age_ms=-1\ncustom_last_idle_close_time=(none)\ncustom_last_idle_close_age_ms=-1\ncustom_last_conn_limit_close_time=(none)\ncustom_last_conn_limit_close_age_ms=-1\n"
+		"custom_conn_current=0\ncustom_conn_peak=0\ncustom_open_count=0\ncustom_close_count=0\ncustom_error_count=0\ncustom_invalid_count=0\ncustom_last_invalid_reason=(none)\ncustom_last_invalid_time=(none)\ncustom_last_invalid_age_ms=-1\ncustom_last_close_reason=0\ncustom_last_close_time=(none)\ncustom_last_close_age_ms=-1\ncustom_last_error_code=0\ncustom_last_error_time=(none)\ncustom_last_error_age_ms=-1\ncustom_recv_count=0\ncustom_send_count=0\ncustom_recv_bytes=0\ncustom_send_bytes=0\ncustom_last_remote=(none)\ncustom_last_bytes=0\ncustom_last_text=(none)\ncustom_last_time=(none)\ncustom_last_age_ms=-1\ncustom_idle_close_count=0\ncustom_conn_limit_close_count=0\ncustom_recv_limit_close_count=0\ncustom_reject_count=0\ncustom_stop_cleanup_count=0\ncustom_last_reject_reason=(none)\ncustom_last_reject_time=(none)\ncustom_last_reject_age_ms=-1\ncustom_last_stop_cleanup_closed=0\ncustom_last_stop_cleanup_remain=0\ncustom_last_stop_cleanup_time=(none)\ncustom_last_stop_cleanup_age_ms=-1\ncustom_last_idle_close_time=(none)\ncustom_last_idle_close_age_ms=-1\ncustom_last_conn_limit_close_time=(none)\ncustom_last_conn_limit_close_age_ms=-1\ncustom_last_recv_limit_close_time=(none)\ncustom_last_recv_limit_close_age_ms=-1\n"
 	);
 	return XS_HttpRespondText(pResp, 200, "OK", sBody);
 }
 
 static inline bool XS_HttpHandleDashboardJson(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
+	XS_ReloadStatusSnapshot tReloadStatus;
+	XS_CheckConfigStatusSnapshot tCheckStatus;
 	XS_Config objCfgCheck;
 	xvalue objRet;
 	xvalue objStatus;
@@ -6085,6 +9461,7 @@ static inline bool XS_HttpHandleDashboardJson(XS_ServerConfig* objServer, const 
 	char* sConfigMTime;
 	char* sBusQueueTime;
 	char* sBusDispatchTime;
+	char* sBusLastSweepTime;
 	char* sHttpLastTime;
 	char* sHttpLastAppTime;
 	char* sHttpLastIdleCloseTime;
@@ -6103,6 +9480,7 @@ static inline bool XS_HttpHandleDashboardJson(XS_ServerConfig* objServer, const 
 	char* sUdpLastTime;
 	char* sUdpLastErrorTime;
 	char* sCustomLastTime;
+	char* sCustomLastCloseTime;
 	char* sCustomLastErrorTime;
 	char* sCustomLastInvalidTime;
 	char* sCustomLastIdleCloseTime;
@@ -6119,7 +9497,7 @@ static inline bool XS_HttpHandleDashboardJson(XS_ServerConfig* objServer, const 
 		return FALSE;
 	}
 	if ( !XS_ManageAPIEnabled(objServer, objHost) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "dashboard json api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "dashboard json api disabled");
 	}
 	memset(&objCfgCheck, 0, sizeof(objCfgCheck));
 	sConfigBase = (g_sXsConfigFile && g_sXsConfigFile[0]) ? xrtPathGetDir(g_sXsConfigFile, 0) : NULL;
@@ -6131,8 +9509,10 @@ static inline bool XS_HttpHandleDashboardJson(XS_ServerConfig* objServer, const 
 	sBusDispatchTime = NULL;
 	iAppSize = XS_FileSizeValue(xCore.AppFile ? (char*)xCore.AppFile : NULL);
 	iConfigSize = XS_FileSizeValue(g_sXsConfigFile);
-	sReloadTime = XS_ReloadTimeText();
-	sCheckTime = XS_CheckConfigLastTimeText();
+	XS_ConfigReloadStatusSnapshot(&tReloadStatus);
+	XS_ConfigCheckStatusSnapshot(&tCheckStatus);
+	sReloadTime = XS_ReloadTimeTextByStatus(&tReloadStatus);
+	sCheckTime = XS_CheckConfigTimeTextByStatus(&tCheckStatus);
 	sHttpLastTime = XS_HttpLastRequestTimeText();
 	sHttpLastAppTime = XS_HttpLastAppRequestTimeText();
 	sHttpLastIdleCloseTime = XS_HttpLastIdleCloseTimeText();
@@ -6151,6 +9531,7 @@ static inline bool XS_HttpHandleDashboardJson(XS_ServerConfig* objServer, const 
 	sUdpLastTime = XS_UdpLastTimeText();
 	sUdpLastErrorTime = XS_UdpLastErrorTimeText();
 	sCustomLastTime = XS_CustomLastTimeText();
+	sCustomLastCloseTime = XS_CustomLastCloseTimeText();
 	sCustomLastErrorTime = XS_CustomLastErrorTimeText();
 	sCustomLastInvalidTime = XS_CustomLastInvalidTimeText();
 	sCustomLastIdleCloseTime = XS_CustomLastIdleCloseTimeText();
@@ -6185,6 +9566,7 @@ static inline bool XS_HttpHandleDashboardJson(XS_ServerConfig* objServer, const 
 	xvoTableSetInt(objStatus, "ws_invalid_count", 16, XS_HttpMetricGet(&g_iXsWsInvalidCount));
 	xvoTableSetInt(objStatus, "ws_idle_close_count", 19, XS_HttpMetricGet(&g_iXsWsIdleCloseCount));
 	xvoTableSetInt(objStatus, "ws_conn_limit_close_count", 25, XS_HttpMetricGet(&g_iXsWsConnLimitCloseCount));
+	XS_WsAppendMessageLimitMetrics(objStatus);
 	XS_WsAppendRejectMetrics(objStatus);
 	XS_WsAppendStopCleanupMetrics(objStatus);
 	xvoTableSetInt(objStatus, "ws_last_error_code", 18, g_iXsWsLastErrorCode);
@@ -6222,6 +9604,7 @@ static inline bool XS_HttpHandleDashboardJson(XS_ServerConfig* objServer, const 
 	xvoTableSetInt(objStatus, "xtp_send_bytes", 14, XS_HttpMetricGet(&g_iXsXtpSendBytes));
 	xvoTableSetInt(objStatus, "xtp_idle_close_count", 20, XS_HttpMetricGet(&g_iXsXtpIdleCloseCount));
 	xvoTableSetInt(objStatus, "xtp_conn_limit_close_count", 26, XS_HttpMetricGet(&g_iXsXtpConnLimitCloseCount));
+	XS_XtpAppendRecvLimitMetrics(objStatus);
 	XS_XtpAppendRejectMetrics(objStatus);
 	XS_XtpAppendStopCleanupMetrics(objStatus);
 	xvoTableSetText(objStatus, "xtp_last_msg_type", 17, (ptr)XS_XtpLastMsgTypeName(), 0, FALSE);
@@ -6268,6 +9651,8 @@ static inline bool XS_HttpHandleDashboardJson(XS_ServerConfig* objServer, const 
 	xvoTableSetText(objStatus, "custom_last_invalid_time", 24, (ptr)(sCustomLastInvalidTime ? sCustomLastInvalidTime : ""), 0, FALSE);
 	xvoTableSetInt(objStatus, "custom_last_invalid_age_ms", 26, XS_CustomLastInvalidAgeMS());
 	xvoTableSetInt(objStatus, "custom_last_close_reason", 24, g_iXsCustomLastCloseReason);
+	xvoTableSetText(objStatus, "custom_last_close_time", 22, (ptr)(sCustomLastCloseTime ? sCustomLastCloseTime : ""), 0, FALSE);
+	xvoTableSetInt(objStatus, "custom_last_close_age_ms", 24, XS_CustomLastCloseAgeMS());
 	xvoTableSetInt(objStatus, "custom_last_error_code", 22, g_iXsCustomLastErrorCode);
 	xvoTableSetText(objStatus, "custom_last_error_time", 22, (ptr)(sCustomLastErrorTime ? sCustomLastErrorTime : ""), 0, FALSE);
 	xvoTableSetInt(objStatus, "custom_last_error_age_ms", 24, XS_CustomLastErrorAgeMS());
@@ -6277,6 +9662,7 @@ static inline bool XS_HttpHandleDashboardJson(XS_ServerConfig* objServer, const 
 	xvoTableSetInt(objStatus, "custom_send_bytes", 17, XS_HttpMetricGet(&g_iXsCustomSendBytes));
 	xvoTableSetInt(objStatus, "custom_idle_close_count", 23, XS_HttpMetricGet(&g_iXsCustomIdleCloseCount));
 	xvoTableSetInt(objStatus, "custom_conn_limit_close_count", 29, XS_HttpMetricGet(&g_iXsCustomConnLimitCloseCount));
+	XS_CustomAppendRecvLimitMetrics(objStatus);
 	XS_CustomAppendRejectMetrics(objStatus);
 	XS_CustomAppendStopCleanupMetrics(objStatus);
 	xvoTableSetText(objStatus, "custom_last_remote", 18, (ptr)g_sXsCustomLastRemote, 0, FALSE);
@@ -6322,6 +9708,10 @@ static inline bool XS_HttpHandleDashboardJson(XS_ServerConfig* objServer, const 
 	xvoTableSetInt(objStatus, "http_conn_peak", 14, XS_HttpMetricGet(&g_iXsHttpConnPeak));
 	xvoTableSetInt(objStatus, "http_idle_close_count", 21, XS_HttpMetricGet(&g_iXsHttpIdleCloseCount));
 	xvoTableSetInt(objStatus, "http_conn_limit_close_count", 27, XS_HttpMetricGet(&g_iXsHttpConnLimitCloseCount));
+	XS_HttpAppendRequestLimitMetrics(objStatus);
+	XS_HttpAppendPolicyRejectMetrics(objStatus);
+	XS_HttpAppendManageRejectMetrics(objStatus);
+	XS_HttpAppendBusRejectMetrics(objStatus);
 	XS_HttpAppendRejectMetrics(objStatus);
 	XS_HttpAppendStopCleanupMetrics(objStatus);
 	xvoTableSetInt(objStatus, "http_get_count", 14, XS_HttpMetricGet(&g_iXsHttpMethodGetCount));
@@ -6398,21 +9788,24 @@ static inline bool XS_HttpHandleDashboardJson(XS_ServerConfig* objServer, const 
 	xvoTableSetBool(objStatus, "script_loaded", 13, objServer->EnableDefaultHost ? (objServer->DefaultHost.pScriptState != NULL) : FALSE);
 
 	objHealth = xvoCreateTable();
-	xvoTableSetBool(objHealth, "ok", 2, !XS_ConfigReloadStatusBusy());
-	xvoTableSetBool(objHealth, "reload_busy", 11, XS_ConfigReloadStatusBusy());
-	xvoTableSetBool(objHealth, "reload_has_result", 17, XS_ConfigReloadStatusHasResult());
-	xvoTableSetBool(objHealth, "reload_success", 14, XS_ConfigReloadStatusSuccess());
-	xvoTableSetText(objHealth, "reload_message", 14, (ptr)XS_ConfigReloadStatusMessage(), 0, FALSE);
+	xvoTableSetBool(objHealth, "ok", 2, !tReloadStatus.Busy);
+	xvoTableSetBool(objHealth, "reload_busy", 11, tReloadStatus.Busy);
+	xvoTableSetBool(objHealth, "reload_has_result", 17, tReloadStatus.HasResult);
+	xvoTableSetBool(objHealth, "reload_success", 14, tReloadStatus.Success);
+	xvoTableSetText(objHealth, "reload_server", 13, (ptr)(tReloadStatus.sServerName[0] ? tReloadStatus.sServerName : "(all)"), 0, FALSE);
+	xvoTableSetText(objHealth, "reload_host", 11, (ptr)(tReloadStatus.sHostName[0] ? tReloadStatus.sHostName : "(all)"), 0, FALSE);
+	xvoTableSetText(objHealth, "reload_message", 14, (ptr)(tReloadStatus.sMessage[0] ? tReloadStatus.sMessage : "(none)"), 0, FALSE);
 	xvoTableSetText(objHealth, "reload_time", 11, (ptr)(sReloadTime ? sReloadTime : ""), 0, FALSE);
-	xvoTableSetInt(objHealth, "reload_age_ms", 13, XS_ReloadAgeMS());
-	xvoTableSetInt(objHealth, "reload_total_count", 18, XS_ConfigReloadStatusTotalCount());
-	xvoTableSetInt(objHealth, "reload_success_count", 20, XS_ConfigReloadStatusSuccessCount());
-	xvoTableSetInt(objHealth, "reload_failure_count", 20, XS_ConfigReloadStatusFailureCount());
-	xvoTableSetInt(objHealth, "check_total_count", 17, XS_HttpMetricGet(&g_iXsCheckConfigTotalCount));
-	xvoTableSetInt(objHealth, "check_success_count", 19, XS_HttpMetricGet(&g_iXsCheckConfigSuccessCount));
-	xvoTableSetInt(objHealth, "check_failure_count", 19, XS_HttpMetricGet(&g_iXsCheckConfigFailureCount));
+	xvoTableSetInt(objHealth, "reload_age_ms", 13, XS_ReloadAgeMSByStatus(&tReloadStatus));
+	xvoTableSetInt(objHealth, "reload_total_count", 18, tReloadStatus.iTotalCount);
+	xvoTableSetInt(objHealth, "reload_success_count", 20, tReloadStatus.iSuccessCount);
+	xvoTableSetInt(objHealth, "reload_failure_count", 20, tReloadStatus.iFailureCount);
+	xvoTableSetInt(objHealth, "check_total_count", 17, tCheckStatus.iTotalCount);
+	xvoTableSetInt(objHealth, "check_success_count", 19, tCheckStatus.iSuccessCount);
+	xvoTableSetInt(objHealth, "check_failure_count", 19, tCheckStatus.iFailureCount);
 	xvoTableSetText(objHealth, "check_last_time", 15, (ptr)(sCheckTime ? sCheckTime : ""), 0, FALSE);
-	xvoTableSetInt(objHealth, "check_last_age_ms", 17, XS_CheckConfigLastAgeMS());
+	xvoTableSetInt(objHealth, "check_last_age_ms", 17, XS_CheckConfigAgeMSByStatus(&tCheckStatus));
+	XS_HttpAppendCheckConfigSnapshotByStatus(objHealth, &tCheckStatus);
 	xvoTableSetInt(objHealth, "http_req_count", 14, XS_HttpMetricGet(&g_iXsHttpReqCount));
 	xvoTableSetInt(objHealth, "http_manage_req_count", 21, XS_HttpMetricGet(&g_iXsHttpManageReqCount));
 	xvoTableSetInt(objHealth, "http_app_req_count", 18, XS_HttpMetricGet(&g_iXsHttpAppReqCount));
@@ -6424,6 +9817,10 @@ static inline bool XS_HttpHandleDashboardJson(XS_ServerConfig* objServer, const 
 	xvoTableSetInt(objHealth, "http_conn_peak", 14, XS_HttpMetricGet(&g_iXsHttpConnPeak));
 	xvoTableSetInt(objHealth, "http_idle_close_count", 21, XS_HttpMetricGet(&g_iXsHttpIdleCloseCount));
 	xvoTableSetInt(objHealth, "http_conn_limit_close_count", 27, XS_HttpMetricGet(&g_iXsHttpConnLimitCloseCount));
+	XS_HttpAppendRequestLimitMetrics(objHealth);
+	XS_HttpAppendPolicyRejectMetrics(objHealth);
+	XS_HttpAppendManageRejectMetrics(objHealth);
+	XS_HttpAppendBusRejectMetrics(objHealth);
 	XS_HttpAppendRejectMetrics(objHealth);
 	XS_HttpAppendStopCleanupMetrics(objHealth);
 	xvoTableSetInt(objHealth, "http_time_total_ms", 18, XS_HttpMetricGet(&g_iXsHttpTimeTotalMS));
@@ -6490,31 +9887,32 @@ static inline bool XS_HttpHandleDashboardJson(XS_ServerConfig* objServer, const 
 	xvoTableSetInt(objHealth, "http_last_app_duration_ms", 25, g_iXsHttpLastAppTimeMS);
 
 	objReload = xvoCreateTable();
-	xvoTableSetBool(objReload, "busy", 4, XS_ConfigReloadStatusBusy());
-	xvoTableSetBool(objReload, "has_result", 10, XS_ConfigReloadStatusHasResult());
-	xvoTableSetBool(objReload, "success", 7, XS_ConfigReloadStatusSuccess());
-	xvoTableSetText(objReload, "server", 6, (ptr)XS_ConfigReloadStatusServer(), 0, FALSE);
-	xvoTableSetText(objReload, "host", 4, (ptr)XS_ConfigReloadStatusHost(), 0, FALSE);
-	xvoTableSetText(objReload, "message", 7, (ptr)XS_ConfigReloadStatusMessage(), 0, FALSE);
+	xvoTableSetBool(objReload, "busy", 4, tReloadStatus.Busy);
+	xvoTableSetBool(objReload, "has_result", 10, tReloadStatus.HasResult);
+	xvoTableSetBool(objReload, "success", 7, tReloadStatus.Success);
+	xvoTableSetText(objReload, "server", 6, (ptr)(tReloadStatus.sServerName[0] ? tReloadStatus.sServerName : "(all)"), 0, FALSE);
+	xvoTableSetText(objReload, "host", 4, (ptr)(tReloadStatus.sHostName[0] ? tReloadStatus.sHostName : "(all)"), 0, FALSE);
+	xvoTableSetText(objReload, "message", 7, (ptr)(tReloadStatus.sMessage[0] ? tReloadStatus.sMessage : "(none)"), 0, FALSE);
 	xvoTableSetText(objReload, "reload_time", 11, (ptr)(sReloadTime ? sReloadTime : ""), 0, FALSE);
-	xvoTableSetInt(objReload, "reload_age_ms", 13, XS_ReloadAgeMS());
-	xvoTableSetInt(objReload, "reload_total_count", 18, XS_ConfigReloadStatusTotalCount());
-	xvoTableSetInt(objReload, "reload_success_count", 20, XS_ConfigReloadStatusSuccessCount());
-	xvoTableSetInt(objReload, "reload_failure_count", 20, XS_ConfigReloadStatusFailureCount());
+	xvoTableSetInt(objReload, "reload_age_ms", 13, XS_ReloadAgeMSByStatus(&tReloadStatus));
+	xvoTableSetInt(objReload, "reload_total_count", 18, tReloadStatus.iTotalCount);
+	xvoTableSetInt(objReload, "reload_success_count", 20, tReloadStatus.iSuccessCount);
+	xvoTableSetInt(objReload, "reload_failure_count", 20, tReloadStatus.iFailureCount);
 
 	objCheck = xvoCreateTable();
-	xvoTableSetBool(objCheck, "result", 6, bConfigOK);
-	xvoTableSetText(objCheck, "file", 4, (ptr)(g_sXsConfigFile ? g_sXsConfigFile : ""), 0, FALSE);
-	xvoTableSetText(objCheck, "base", 4, (ptr)(sCheckBase ? sCheckBase : ""), 0, FALSE);
-	xvoTableSetInt(objCheck, "server_count", 12, (bConfigOK && objCfgCheck.Servers) ? objCfgCheck.Servers->Count : 0);
-	xvoTableSetText(objCheck, "message", 7, bConfigOK ? "config check passed" : "config check failed", 0, FALSE);
-	xvoTableSetInt(objCheck, "check_total_count", 17, XS_HttpMetricGet(&g_iXsCheckConfigTotalCount));
-	xvoTableSetInt(objCheck, "check_success_count", 19, XS_HttpMetricGet(&g_iXsCheckConfigSuccessCount));
-	xvoTableSetInt(objCheck, "check_failure_count", 19, XS_HttpMetricGet(&g_iXsCheckConfigFailureCount));
+	xvoTableSetBool(objCheck, "has_result", 10, tCheckStatus.HasResult);
+	xvoTableSetBool(objCheck, "result", 6, tCheckStatus.LastResult);
+	xvoTableSetText(objCheck, "file", 4, (ptr)tCheckStatus.sLastFile, 0, FALSE);
+	xvoTableSetText(objCheck, "base", 4, (ptr)tCheckStatus.sLastBase, 0, FALSE);
+	xvoTableSetInt(objCheck, "server_count", 12, tCheckStatus.iLastServerCount);
+	xvoTableSetText(objCheck, "message", 7, (ptr)tCheckStatus.sLastMessage, 0, FALSE);
+	xvoTableSetInt(objCheck, "check_total_count", 17, tCheckStatus.iTotalCount);
+	xvoTableSetInt(objCheck, "check_success_count", 19, tCheckStatus.iSuccessCount);
+	xvoTableSetInt(objCheck, "check_failure_count", 19, tCheckStatus.iFailureCount);
 	xvoTableSetText(objCheck, "check_last_time", 15, (ptr)(sCheckTime ? sCheckTime : ""), 0, FALSE);
-	xvoTableSetInt(objCheck, "check_last_age_ms", 17, XS_CheckConfigLastAgeMS());
+	xvoTableSetInt(objCheck, "check_last_age_ms", 17, XS_CheckConfigAgeMSByStatus(&tCheckStatus));
 
-	objBus = XS_BusBuildStatusValue();
+	objBus = XS_BusBuildNamespaceStatsValue();
 	if ( objBus == NULL ) {
 		xvoUnref(objStatus);
 		xvoUnref(objHealth);
@@ -6614,7 +10012,7 @@ static inline bool XS_HttpHandleDashboardJson(XS_ServerConfig* objServer, const 
 		if ( sStartTime ) {
 			xrtFree(sStartTime);
 		}
-		return XS_HttpRespondText(pResp, 500, "Internal Server Error", "dashboard bus build failed");
+		return XS_HttpRespondJsonResult(pResp, 500, "Internal Server Error", FALSE, "dashboard bus build failed");
 	}
 
 	objRet = xvoCreateTable();
@@ -6693,6 +10091,9 @@ static inline bool XS_HttpHandleDashboardJson(XS_ServerConfig* objServer, const 
 	if ( sCustomLastTime ) {
 		xrtFree(sCustomLastTime);
 	}
+	if ( sCustomLastCloseTime ) {
+		xrtFree(sCustomLastCloseTime);
+	}
 	if ( sCustomLastErrorTime ) {
 		xrtFree(sCustomLastErrorTime);
 	}
@@ -6711,9 +10112,6 @@ static inline bool XS_HttpHandleDashboardJson(XS_ServerConfig* objServer, const 
 	if ( sConfigMTime ) {
 		xrtFree(sConfigMTime);
 	}
-	if ( sCheckBase ) {
-		xrtFree(sCheckBase);
-	}
 	if ( sConfigBase ) {
 		xrtFree(sConfigBase);
 	}
@@ -6721,7 +10119,7 @@ static inline bool XS_HttpHandleDashboardJson(XS_ServerConfig* objServer, const 
 		xrtFree(sStartTime);
 	}
 	if ( sJson == NULL ) {
-		return XS_HttpRespondText(pResp, 500, "Internal Server Error", "dashboard json build failed");
+		return XS_HttpRespondJsonResult(pResp, 500, "Internal Server Error", FALSE, "dashboard json build failed");
 	}
 	xrtHttpdResponseSetStatus(pResp, 200, "OK");
 	if ( !xrtHttpdResponseSetBodyCopy(pResp, sJson, strlen(sJson), "application/json; charset=utf-8") ) {
@@ -6734,7 +10132,9 @@ static inline bool XS_HttpHandleDashboardJson(XS_ServerConfig* objServer, const 
 
 static inline bool XS_HttpHandleHealth(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
-	char sBody[5120];
+	XS_ReloadStatusSnapshot tReloadStatus;
+	XS_CheckConfigStatusSnapshot tCheckStatus;
+	char sBody[16384];
 	char* sCheckTime;
 	char* sHttpLastTime;
 	char* sHttpLastAppTime;
@@ -6742,9 +10142,33 @@ static inline bool XS_HttpHandleHealth(XS_ServerConfig* objServer, const XS_Host
 	char* sHttpLastConnLimitCloseTime;
 	char* sHttpLastRejectTime;
 	char* sHttpLastStopCleanupTime;
+	char* sHttpLastHeaderLimitRejectTime;
+	char* sHttpLastBodyLimitRejectTime;
+	char* sHttpLastPathLimitRejectTime;
+	char* sHttpLastApiDisabledRejectTime;
+	char* sHttpLastMethodRejectTime;
+	char* sHttpLastHostNotFoundRejectTime;
+	char* sHttpLastReloadBusyRejectTime;
+	char* sHttpLastReloadFailedRejectTime;
+	char* sHttpLastCheckConfigFailedRejectTime;
+	char* sHttpLastBusBadRequestRejectTime;
+	char* sHttpLastBusNotFoundRejectTime;
+	char* sHttpLastBusLimitRejectTime;
+	char* sHttpLastBusFailedRejectTime;
+	char* sWsLastMessageLimitCloseTime;
+	char* sWsLastRejectTime;
+	char* sWsLastStopCleanupTime;
+	char* sXtpLastRecvLimitCloseTime;
+	char* sXtpLastRejectTime;
+	char* sXtpLastStopCleanupTime;
+	char* sCustomLastRecvLimitCloseTime;
+	char* sCustomLastRejectTime;
+	char* sCustomLastStopCleanupTime;
 	char* sReloadTime;
 	char* sBusQueueTime;
 	char* sBusDispatchTime;
+	char* sBusLastSweepTime;
+	char* sBusLastCleanupTime;
 	xvalue objBus;
 	int64 iBusQueueCount;
 	int64 iBusDataCount;
@@ -6753,7 +10177,19 @@ static inline bool XS_HttpHandleHealth(XS_ServerConfig* objServer, const XS_Host
 	int64 iBusTotalDropped;
 	int64 tBusLastQueue;
 	int64 tBusLastDispatch;
+	int64 iBusSweepIntervalMS;
+	int64 iBusSweepBatchLimit;
+	int64 iBusSweepCount;
+	int64 iBusSweepRemovedCount;
+	int64 tBusLastSweep;
+	int64 iBusLastSweepRemoved;
+	int64 iBusLastSweepRemain;
+	int64 iBusCleanupCount;
+	int64 tBusLastCleanup;
+	int64 iBusLastCleanupRemoved;
+	int64 iBusLastCleanupRemain;
 	bool bOk;
+	bool bScriptLoaded;
 
 	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
 		return FALSE;
@@ -6766,17 +10202,50 @@ static inline bool XS_HttpHandleHealth(XS_ServerConfig* objServer, const XS_Host
 	}
 
 	bOk = XS_HttpServerHealthy(objServer, objHost);
-	sCheckTime = XS_CheckConfigLastTimeText();
+	bScriptLoaded = FALSE;
+	if ( objServer->EnableDefaultHost && objServer->DefaultHost.pScriptState ) {
+		bScriptLoaded = TRUE;
+	}
+	if ( !bScriptLoaded && objHost->pScriptState ) {
+		bScriptLoaded = TRUE;
+	}
+	XS_ConfigReloadStatusSnapshot(&tReloadStatus);
+	XS_ConfigCheckStatusSnapshot(&tCheckStatus);
+	sCheckTime = XS_CheckConfigTimeTextByStatus(&tCheckStatus);
 	sHttpLastTime = XS_HttpLastRequestTimeText();
 	sHttpLastAppTime = XS_HttpLastAppRequestTimeText();
 	sHttpLastIdleCloseTime = XS_HttpLastIdleCloseTimeText();
 	sHttpLastConnLimitCloseTime = XS_HttpLastConnLimitCloseTimeText();
 	sHttpLastRejectTime = XS_HttpLastRejectTimeText();
 	sHttpLastStopCleanupTime = XS_HttpLastStopCleanupTimeText();
-	sReloadTime = XS_ReloadTimeText();
+	sHttpLastHeaderLimitRejectTime = XS_HttpLastHeaderLimitRejectTimeText();
+	sHttpLastBodyLimitRejectTime = XS_HttpLastBodyLimitRejectTimeText();
+	sHttpLastPathLimitRejectTime = XS_HttpLastPathLimitRejectTimeText();
+	sHttpLastApiDisabledRejectTime = XS_HttpLastApiDisabledRejectTimeText();
+	sHttpLastMethodRejectTime = XS_HttpLastMethodRejectTimeText();
+	sHttpLastHostNotFoundRejectTime = XS_HttpLastHostNotFoundRejectTimeText();
+	sHttpLastReloadBusyRejectTime = XS_HttpLastReloadBusyRejectTimeText();
+	sHttpLastReloadFailedRejectTime = XS_HttpLastReloadFailedRejectTimeText();
+	sHttpLastCheckConfigFailedRejectTime = XS_HttpLastCheckConfigFailedRejectTimeText();
+	sHttpLastBusBadRequestRejectTime = XS_HttpLastBusBadRequestRejectTimeText();
+	sHttpLastBusNotFoundRejectTime = XS_HttpLastBusNotFoundRejectTimeText();
+	sHttpLastBusLimitRejectTime = XS_HttpLastBusLimitRejectTimeText();
+	sHttpLastBusFailedRejectTime = XS_HttpLastBusFailedRejectTimeText();
+	sWsLastMessageLimitCloseTime = XS_WsLastMessageLimitCloseTimeText();
+	sWsLastRejectTime = XS_WsLastRejectTimeText();
+	sWsLastStopCleanupTime = XS_WsLastStopCleanupTimeText();
+	sXtpLastRecvLimitCloseTime = XS_XtpLastRecvLimitCloseTimeText();
+	sXtpLastRejectTime = XS_XtpLastRejectTimeText();
+	sXtpLastStopCleanupTime = XS_XtpLastStopCleanupTimeText();
+	sCustomLastRecvLimitCloseTime = XS_CustomLastRecvLimitCloseTimeText();
+	sCustomLastRejectTime = XS_CustomLastRejectTimeText();
+	sCustomLastStopCleanupTime = XS_CustomLastStopCleanupTimeText();
+	sReloadTime = XS_ReloadTimeTextByStatus(&tReloadStatus);
 	sBusQueueTime = NULL;
 	sBusDispatchTime = NULL;
-	objBus = XS_BusBuildStatusValue();
+	sBusLastSweepTime = NULL;
+	sBusLastCleanupTime = NULL;
+	objBus = XS_BusBuildNamespaceStatsValue();
 	iBusQueueCount = 0;
 	iBusDataCount = 0;
 	iBusTotalQueued = 0;
@@ -6784,6 +10253,17 @@ static inline bool XS_HttpHandleHealth(XS_ServerConfig* objServer, const XS_Host
 	iBusTotalDropped = 0;
 	tBusLastQueue = 0;
 	tBusLastDispatch = 0;
+	iBusSweepIntervalMS = 0;
+	iBusSweepBatchLimit = 0;
+	iBusSweepCount = 0;
+	iBusSweepRemovedCount = 0;
+	tBusLastSweep = 0;
+	iBusLastSweepRemoved = 0;
+	iBusLastSweepRemain = 0;
+	iBusCleanupCount = 0;
+	tBusLastCleanup = 0;
+	iBusLastCleanupRemoved = 0;
+	iBusLastCleanupRemain = 0;
 	if ( objBus ) {
 		iBusQueueCount = xvoTableGetInt(objBus, "queue_count", 11);
 		iBusDataCount = xvoTableGetInt(objBus, "data_count", 10);
@@ -6792,30 +10272,42 @@ static inline bool XS_HttpHandleHealth(XS_ServerConfig* objServer, const XS_Host
 		iBusTotalDropped = xvoTableGetInt(objBus, "total_dropped", 13);
 		tBusLastQueue = xvoTableGetInt(objBus, "last_queue_time", 15);
 		tBusLastDispatch = xvoTableGetInt(objBus, "last_dispatch_time", 18);
+		iBusSweepIntervalMS = xvoTableGetInt(objBus, "sweep_interval_ms", sizeof("sweep_interval_ms") - 1);
+		iBusSweepBatchLimit = xvoTableGetInt(objBus, "sweep_batch_limit", sizeof("sweep_batch_limit") - 1);
+		iBusSweepCount = xvoTableGetInt(objBus, "sweep_count", sizeof("sweep_count") - 1);
+		iBusSweepRemovedCount = xvoTableGetInt(objBus, "sweep_removed_count", sizeof("sweep_removed_count") - 1);
+		tBusLastSweep = xvoTableGetInt(objBus, "last_sweep_time", sizeof("last_sweep_time") - 1);
+		iBusLastSweepRemoved = xvoTableGetInt(objBus, "last_sweep_removed", sizeof("last_sweep_removed") - 1);
+		iBusLastSweepRemain = xvoTableGetInt(objBus, "last_sweep_remain", sizeof("last_sweep_remain") - 1);
+		iBusCleanupCount = xvoTableGetInt(objBus, "cleanup_count", sizeof("cleanup_count") - 1);
+		tBusLastCleanup = xvoTableGetInt(objBus, "last_cleanup_time", sizeof("last_cleanup_time") - 1);
+		iBusLastCleanupRemoved = xvoTableGetInt(objBus, "last_cleanup_removed", sizeof("last_cleanup_removed") - 1);
+		iBusLastCleanupRemain = xvoTableGetInt(objBus, "last_cleanup_remain", sizeof("last_cleanup_remain") - 1);
 		sBusQueueTime = (tBusLastQueue > 0) ? xrtTimeToStr(tBusLastQueue, XRT_TIME_FORMAT_DATETIME) : NULL;
 		sBusDispatchTime = (tBusLastDispatch > 0) ? xrtTimeToStr(tBusLastDispatch, XRT_TIME_FORMAT_DATETIME) : NULL;
-		xvoUnref(objBus);
+		sBusLastSweepTime = (tBusLastSweep > 0) ? xrtTimeToStr(tBusLastSweep, XRT_TIME_FORMAT_DATETIME) : NULL;
+		sBusLastCleanupTime = (tBusLastCleanup > 0) ? xrtTimeToStr(tBusLastCleanup, XRT_TIME_FORMAT_DATETIME) : NULL;
 	}
 	snprintf(
 		sBody,
 		sizeof(sBody),
-		"ok=%s\nserver=%s\nclass=%s\naddr=%s\nreload_busy=%s\nreload_message=%s\nreload_time=%s\nreload_age_ms=%lld\nreload_total_count=%lld\nreload_success_count=%lld\nreload_failure_count=%lld\ncheck_total_count=%lld\ncheck_success_count=%lld\ncheck_failure_count=%lld\ncheck_last_time=%s\ncheck_last_age_ms=%lld\nbus_queue_count=%lld\nbus_data_count=%lld\nbus_total_queued=%lld\nbus_total_delivered=%lld\nbus_total_dropped=%lld\nbus_last_queue_time=%lld\nbus_last_queue_time_text=%s\nbus_last_dispatch_time=%lld\nbus_last_dispatch_time_text=%s\nhttp_req_count=%lld\nhttp_manage_req_count=%lld\nhttp_app_req_count=%lld\nhttp_2xx_count=%lld\nhttp_3xx_count=%lld\nhttp_4xx_count=%lld\nhttp_5xx_count=%lld\nhttp_conn_current=%lld\nhttp_conn_peak=%lld\nhttp_time_total_ms=%lld\nhttp_time_max_ms=%lld\nhttp_time_avg_ms=%lld\nhttp_last_method=%s\nhttp_last_status=%lld\nhttp_last_path=%s\nhttp_last_target=%s\nhttp_last_remote=%s\nhttp_last_body_len=%lld\nhttp_last_header_count=%lld\nhttp_last_query_len=%lld\nhttp_last_time=%s\nhttp_last_age_ms=%lld\nhttp_last_duration_ms=%lld\nhttp_last_app_method=%s\nhttp_last_app_status=%lld\nhttp_last_app_path=%s\nhttp_last_app_target=%s\nhttp_last_app_remote=%s\nhttp_last_app_body_len=%lld\nhttp_last_app_header_count=%lld\nhttp_last_app_query_len=%lld\nhttp_last_app_time=%s\nhttp_last_app_age_ms=%lld\nhttp_last_app_duration_ms=%lld\n",
+		"ok=%s\nserver=%s\nclass=%s\naddr=%s\nreload_busy=%s\nreload_message=%s\nreload_time=%s\nreload_age_ms=%lld\nreload_total_count=%lld\nreload_success_count=%lld\nreload_failure_count=%lld\ncheck_total_count=%lld\ncheck_success_count=%lld\ncheck_failure_count=%lld\ncheck_last_time=%s\ncheck_last_age_ms=%lld\nbus_queue_count=%lld\nbus_data_count=%lld\nbus_total_queued=%lld\nbus_total_delivered=%lld\nbus_total_dropped=%lld\nbus_last_queue_time=%lld\nbus_last_queue_time_text=%s\nbus_last_dispatch_time=%lld\nbus_last_dispatch_time_text=%s\nbus_sweep_interval_ms=%lld\nbus_sweep_batch_limit=%lld\nbus_sweep_count=%lld\nbus_sweep_removed_count=%lld\nbus_last_sweep_time=%lld\nbus_last_sweep_time_text=%s\nbus_last_sweep_age_ms=%lld\nbus_last_sweep_removed=%lld\nbus_last_sweep_remain=%lld\nbus_cleanup_count=%lld\nbus_last_cleanup_time=%lld\nbus_last_cleanup_time_text=%s\nbus_last_cleanup_age_ms=%lld\nbus_last_cleanup_removed=%lld\nbus_last_cleanup_remain=%lld\nhttp_req_count=%lld\nhttp_manage_req_count=%lld\nhttp_app_req_count=%lld\nhttp_2xx_count=%lld\nhttp_3xx_count=%lld\nhttp_4xx_count=%lld\nhttp_5xx_count=%lld\nhttp_conn_current=%lld\nhttp_conn_peak=%lld\nhttp_time_total_ms=%lld\nhttp_time_max_ms=%lld\nhttp_time_avg_ms=%lld\nhttp_last_method=%s\nhttp_last_status=%lld\nhttp_last_path=%s\nhttp_last_target=%s\nhttp_last_remote=%s\nhttp_last_body_len=%lld\nhttp_last_header_count=%lld\nhttp_last_query_len=%lld\nhttp_last_time=%s\nhttp_last_age_ms=%lld\nhttp_last_duration_ms=%lld\nhttp_last_app_method=%s\nhttp_last_app_status=%lld\nhttp_last_app_path=%s\nhttp_last_app_target=%s\nhttp_last_app_remote=%s\nhttp_last_app_body_len=%lld\nhttp_last_app_header_count=%lld\nhttp_last_app_query_len=%lld\nhttp_last_app_time=%s\nhttp_last_app_age_ms=%lld\nhttp_last_app_duration_ms=%lld\n",
 		bOk ? "true" : "false",
 		objServer->Name ? objServer->Name : "(null)",
 		XS_ServerClassName(objServer->Class),
 		objServer->Addr ? objServer->Addr : "(null)",
-		XS_ConfigReloadStatusBusy() ? "true" : "false",
-		XS_ConfigReloadStatusMessage(),
+		tReloadStatus.Busy ? "true" : "false",
+		tReloadStatus.sMessage[0] ? tReloadStatus.sMessage : "(none)",
 		sReloadTime ? sReloadTime : "(none)",
-		(long long)XS_ReloadAgeMS(),
-		(long long)XS_ConfigReloadStatusTotalCount(),
-		(long long)XS_ConfigReloadStatusSuccessCount(),
-		(long long)XS_ConfigReloadStatusFailureCount(),
-		(long long)XS_HttpMetricGet(&g_iXsCheckConfigTotalCount),
-		(long long)XS_HttpMetricGet(&g_iXsCheckConfigSuccessCount),
-		(long long)XS_HttpMetricGet(&g_iXsCheckConfigFailureCount),
+		(long long)XS_ReloadAgeMSByStatus(&tReloadStatus),
+		(long long)tReloadStatus.iTotalCount,
+		(long long)tReloadStatus.iSuccessCount,
+		(long long)tReloadStatus.iFailureCount,
+		(long long)tCheckStatus.iTotalCount,
+		(long long)tCheckStatus.iSuccessCount,
+		(long long)tCheckStatus.iFailureCount,
 		sCheckTime ? sCheckTime : "(none)",
-		(long long)XS_CheckConfigLastAgeMS(),
+		(long long)XS_CheckConfigAgeMSByStatus(&tCheckStatus),
 		(long long)iBusQueueCount,
 		(long long)iBusDataCount,
 		(long long)iBusTotalQueued,
@@ -6825,6 +10317,21 @@ static inline bool XS_HttpHandleHealth(XS_ServerConfig* objServer, const XS_Host
 		sBusQueueTime ? sBusQueueTime : "(none)",
 		(long long)tBusLastDispatch,
 		sBusDispatchTime ? sBusDispatchTime : "(none)",
+		(long long)iBusSweepIntervalMS,
+		(long long)iBusSweepBatchLimit,
+		(long long)iBusSweepCount,
+		(long long)iBusSweepRemovedCount,
+		(long long)tBusLastSweep,
+		sBusLastSweepTime ? sBusLastSweepTime : "(none)",
+		(long long)((tBusLastSweep > 0) ? ((xrtNow() - tBusLastSweep) * 1000) : -1),
+		(long long)iBusLastSweepRemoved,
+		(long long)iBusLastSweepRemain,
+		(long long)iBusCleanupCount,
+		(long long)tBusLastCleanup,
+		sBusLastCleanupTime ? sBusLastCleanupTime : "(none)",
+		(long long)((tBusLastCleanup > 0) ? ((xrtNow() - tBusLastCleanup) * 1000) : -1),
+		(long long)iBusLastCleanupRemoved,
+		(long long)iBusLastCleanupRemain,
 		(long long)XS_HttpMetricGet(&g_iXsHttpReqCount),
 		(long long)XS_HttpMetricGet(&g_iXsHttpManageReqCount),
 		(long long)XS_HttpMetricGet(&g_iXsHttpAppReqCount),
@@ -6864,6 +10371,78 @@ static inline bool XS_HttpHandleHealth(XS_ServerConfig* objServer, const XS_Host
 		snprintf(
 			sBody + strlen(sBody),
 			sizeof(sBody) - strlen(sBody),
+			"check_has_result=%s\ncheck_last_result=%s\ncheck_last_file=%s\ncheck_last_base=%s\ncheck_last_server_count=%lld\ncheck_last_message=%s\n",
+			tCheckStatus.HasResult ? "true" : "false",
+			tCheckStatus.HasResult ? (tCheckStatus.LastResult ? "true" : "false") : "(none)",
+			tCheckStatus.sLastFile[0] ? tCheckStatus.sLastFile : "(none)",
+			tCheckStatus.sLastBase[0] ? tCheckStatus.sLastBase : "(none)",
+			(long long)tCheckStatus.iLastServerCount,
+			tCheckStatus.sLastMessage[0] ? tCheckStatus.sLastMessage : "(none)"
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"debug=%s\nhost_aware=%s\nhost_count=%u\nscript_loaded=%s\nreload_has_result=%s\nreload_success=%s\nreload_server=%s\nreload_host=%s\n",
+			objServer->Debug ? "true" : "false",
+			objServer->HostAware ? "true" : "false",
+			(unsigned int)(objServer->Hosts ? objServer->Hosts->Count : 0),
+			bScriptLoaded ? "true" : "false",
+			tReloadStatus.HasResult ? "true" : "false",
+			tReloadStatus.Success ? "true" : "false",
+			tReloadStatus.sServerName[0] ? tReloadStatus.sServerName : "(all)",
+			tReloadStatus.sHostName[0] ? tReloadStatus.sHostName : "(all)"
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"http_get_count=%lld\nhttp_post_count=%lld\nhttp_head_count=%lld\nhttp_other_count=%lld\nhttp_last_version=%s\nhttp_last_host=%s\nhttp_last_user_agent=%s\nhttp_last_referer=%s\nhttp_last_origin=%s\nhttp_last_accept=%s\nhttp_last_accept_encoding=%s\nhttp_last_cookie=%s\nhttp_last_forwarded_for=%s\nhttp_last_real_ip=%s\nhttp_last_connection=%s\nhttp_last_cache_control=%s\nhttp_last_content_type=%s\n",
+			(long long)XS_HttpMetricGet(&g_iXsHttpMethodGetCount),
+			(long long)XS_HttpMetricGet(&g_iXsHttpMethodPostCount),
+			(long long)XS_HttpMetricGet(&g_iXsHttpMethodHeadCount),
+			(long long)XS_HttpMetricGet(&g_iXsHttpMethodOtherCount),
+			g_sXsHttpLastVersion[0] ? g_sXsHttpLastVersion : "(none)",
+			g_sXsHttpLastHost[0] ? g_sXsHttpLastHost : "(none)",
+			g_sXsHttpLastUserAgent[0] ? g_sXsHttpLastUserAgent : "(none)",
+			g_sXsHttpLastReferer[0] ? g_sXsHttpLastReferer : "(none)",
+			g_sXsHttpLastOrigin[0] ? g_sXsHttpLastOrigin : "(none)",
+			g_sXsHttpLastAccept[0] ? g_sXsHttpLastAccept : "(none)",
+			g_sXsHttpLastAcceptEncoding[0] ? g_sXsHttpLastAcceptEncoding : "(none)",
+			g_sXsHttpLastCookie[0] ? g_sXsHttpLastCookie : "(none)",
+			g_sXsHttpLastForwardedFor[0] ? g_sXsHttpLastForwardedFor : "(none)",
+			g_sXsHttpLastRealIP[0] ? g_sXsHttpLastRealIP : "(none)",
+			g_sXsHttpLastConnection[0] ? g_sXsHttpLastConnection : "(none)",
+			g_sXsHttpLastCacheControl[0] ? g_sXsHttpLastCacheControl : "(none)",
+			g_sXsHttpLastContentType[0] ? g_sXsHttpLastContentType : "(none)"
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"http_last_app_version=%s\nhttp_last_app_host=%s\nhttp_last_app_user_agent=%s\nhttp_last_app_referer=%s\nhttp_last_app_origin=%s\nhttp_last_app_accept=%s\nhttp_last_app_accept_encoding=%s\nhttp_last_app_cookie=%s\nhttp_last_app_forwarded_for=%s\nhttp_last_app_real_ip=%s\nhttp_last_app_connection=%s\nhttp_last_app_cache_control=%s\nhttp_last_app_content_type=%s\n",
+			g_sXsHttpLastAppVersion[0] ? g_sXsHttpLastAppVersion : "(none)",
+			g_sXsHttpLastAppHost[0] ? g_sXsHttpLastAppHost : "(none)",
+			g_sXsHttpLastAppUserAgent[0] ? g_sXsHttpLastAppUserAgent : "(none)",
+			g_sXsHttpLastAppReferer[0] ? g_sXsHttpLastAppReferer : "(none)",
+			g_sXsHttpLastAppOrigin[0] ? g_sXsHttpLastAppOrigin : "(none)",
+			g_sXsHttpLastAppAccept[0] ? g_sXsHttpLastAppAccept : "(none)",
+			g_sXsHttpLastAppAcceptEncoding[0] ? g_sXsHttpLastAppAcceptEncoding : "(none)",
+			g_sXsHttpLastAppCookie[0] ? g_sXsHttpLastAppCookie : "(none)",
+			g_sXsHttpLastAppForwardedFor[0] ? g_sXsHttpLastAppForwardedFor : "(none)",
+			g_sXsHttpLastAppRealIP[0] ? g_sXsHttpLastAppRealIP : "(none)",
+			g_sXsHttpLastAppConnection[0] ? g_sXsHttpLastAppConnection : "(none)",
+			g_sXsHttpLastAppCacheControl[0] ? g_sXsHttpLastAppCacheControl : "(none)",
+			g_sXsHttpLastAppContentType[0] ? g_sXsHttpLastAppContentType : "(none)"
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
 			"http_idle_close_count=%lld\nhttp_conn_limit_close_count=%lld\nhttp_reject_count=%lld\nhttp_stop_cleanup_count=%lld\nhttp_last_reject_status=%lld\nhttp_last_reject_reason=%s\nhttp_last_reject_time=%s\nhttp_last_reject_age_ms=%lld\nhttp_last_stop_cleanup_closed=%lld\nhttp_last_stop_cleanup_remain=%lld\nhttp_last_stop_cleanup_time=%s\nhttp_last_stop_cleanup_age_ms=%lld\nhttp_last_idle_close_time=%s\nhttp_last_idle_close_age_ms=%lld\nhttp_last_conn_limit_close_time=%s\nhttp_last_conn_limit_close_age_ms=%lld\n",
 			(long long)XS_HttpMetricGet(&g_iXsHttpIdleCloseCount),
 			(long long)XS_HttpMetricGet(&g_iXsHttpConnLimitCloseCount),
@@ -6882,6 +10461,194 @@ static inline bool XS_HttpHandleHealth(XS_ServerConfig* objServer, const XS_Host
 			sHttpLastConnLimitCloseTime ? sHttpLastConnLimitCloseTime : "(none)",
 			(long long)XS_HttpLastConnLimitCloseAgeMS()
 		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"http_header_limit_reject_count=%lld\nhttp_last_header_limit_reject_time=%s\nhttp_last_header_limit_reject_age_ms=%lld\nhttp_body_limit_reject_count=%lld\nhttp_last_body_limit_reject_time=%s\nhttp_last_body_limit_reject_age_ms=%lld\nhttp_path_limit_reject_count=%lld\nhttp_last_path_limit_reject_time=%s\nhttp_last_path_limit_reject_age_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsHttpHeaderLimitRejectCount),
+			sHttpLastHeaderLimitRejectTime ? sHttpLastHeaderLimitRejectTime : "(none)",
+			(long long)XS_HttpLastHeaderLimitRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpBodyLimitRejectCount),
+			sHttpLastBodyLimitRejectTime ? sHttpLastBodyLimitRejectTime : "(none)",
+			(long long)XS_HttpLastBodyLimitRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpPathLimitRejectCount),
+			sHttpLastPathLimitRejectTime ? sHttpLastPathLimitRejectTime : "(none)",
+			(long long)XS_HttpLastPathLimitRejectAgeMS()
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"http_api_disabled_reject_count=%lld\nhttp_last_api_disabled_reject_time=%s\nhttp_last_api_disabled_reject_age_ms=%lld\nhttp_method_reject_count=%lld\nhttp_last_method_reject_time=%s\nhttp_last_method_reject_age_ms=%lld\nhttp_host_not_found_reject_count=%lld\nhttp_last_host_not_found_reject_time=%s\nhttp_last_host_not_found_reject_age_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsHttpApiDisabledRejectCount),
+			sHttpLastApiDisabledRejectTime ? sHttpLastApiDisabledRejectTime : "(none)",
+			(long long)XS_HttpLastApiDisabledRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpMethodRejectCount),
+			sHttpLastMethodRejectTime ? sHttpLastMethodRejectTime : "(none)",
+			(long long)XS_HttpLastMethodRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpHostNotFoundRejectCount),
+			sHttpLastHostNotFoundRejectTime ? sHttpLastHostNotFoundRejectTime : "(none)",
+			(long long)XS_HttpLastHostNotFoundRejectAgeMS()
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"http_reload_busy_reject_count=%lld\nhttp_last_reload_busy_reject_time=%s\nhttp_last_reload_busy_reject_age_ms=%lld\nhttp_reload_failed_reject_count=%lld\nhttp_last_reload_failed_reject_time=%s\nhttp_last_reload_failed_reject_age_ms=%lld\nhttp_check_config_failed_reject_count=%lld\nhttp_last_check_config_failed_reject_time=%s\nhttp_last_check_config_failed_reject_age_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsHttpReloadBusyRejectCount),
+			sHttpLastReloadBusyRejectTime ? sHttpLastReloadBusyRejectTime : "(none)",
+			(long long)XS_HttpLastReloadBusyRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpReloadFailedRejectCount),
+			sHttpLastReloadFailedRejectTime ? sHttpLastReloadFailedRejectTime : "(none)",
+			(long long)XS_HttpLastReloadFailedRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpCheckConfigFailedRejectCount),
+			sHttpLastCheckConfigFailedRejectTime ? sHttpLastCheckConfigFailedRejectTime : "(none)",
+			(long long)XS_HttpLastCheckConfigFailedRejectAgeMS()
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"http_bus_bad_request_reject_count=%lld\nhttp_last_bus_bad_request_reject_time=%s\nhttp_last_bus_bad_request_reject_age_ms=%lld\nhttp_bus_not_found_reject_count=%lld\nhttp_last_bus_not_found_reject_time=%s\nhttp_last_bus_not_found_reject_age_ms=%lld\nhttp_bus_limit_reject_count=%lld\nhttp_last_bus_limit_reject_time=%s\nhttp_last_bus_limit_reject_age_ms=%lld\nhttp_bus_failed_reject_count=%lld\nhttp_last_bus_failed_reject_time=%s\nhttp_last_bus_failed_reject_age_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsHttpBusBadRequestRejectCount),
+			sHttpLastBusBadRequestRejectTime ? sHttpLastBusBadRequestRejectTime : "(none)",
+			(long long)XS_HttpLastBusBadRequestRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpBusNotFoundRejectCount),
+			sHttpLastBusNotFoundRejectTime ? sHttpLastBusNotFoundRejectTime : "(none)",
+			(long long)XS_HttpLastBusNotFoundRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpBusLimitRejectCount),
+			sHttpLastBusLimitRejectTime ? sHttpLastBusLimitRejectTime : "(none)",
+			(long long)XS_HttpLastBusLimitRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpBusFailedRejectCount),
+			sHttpLastBusFailedRejectTime ? sHttpLastBusFailedRejectTime : "(none)",
+			(long long)XS_HttpLastBusFailedRejectAgeMS()
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"bus_namespace_count=%lld\nbus_namespace_item_count=%lld\nbus_data_limit=%lld\nbus_queue_limit=%lld\nbus_namespace_limit=%lld\nbus_namespace_data_limit=%lld\nbus_namespace_limit_remaining=%lld\nbus_namespace_limit_reached=%s\nbus_readonly_namespace_count=%lld\nbus_disabled_namespace_count=%lld\nbus_ttl_required_namespace_count=%lld\nbus_tag_required_namespace_count=%lld\nbus_readonly_namespaces=%s\nbus_disabled_namespaces=%s\nbus_ttl_required_namespaces=%s\nbus_tag_required_namespaces=%s\nbus_data_limit_reject_count=%lld\nbus_last_data_limit_reject_time=%s\nbus_last_data_limit_reject_age_ms=%lld\nbus_last_data_limit_count=%lld\nbus_queue_limit_reject_count=%lld\nbus_last_queue_limit_reject_time=%s\nbus_last_queue_limit_reject_age_ms=%lld\nbus_last_queue_limit_count=%lld\n",
+			(long long)(objBus ? xvoTableGetInt(objBus, "namespace_count", sizeof("namespace_count") - 1) : 0),
+			(long long)(objBus ? xvoTableGetInt(objBus, "namespace_item_count", sizeof("namespace_item_count") - 1) : 0),
+			(long long)(objBus ? xvoTableGetInt(objBus, "data_limit", sizeof("data_limit") - 1) : 0),
+			(long long)(objBus ? xvoTableGetInt(objBus, "queue_limit", sizeof("queue_limit") - 1) : 0),
+			(long long)(objBus ? xvoTableGetInt(objBus, "namespace_limit", sizeof("namespace_limit") - 1) : 0),
+			(long long)(objBus ? xvoTableGetInt(objBus, "namespace_data_limit", sizeof("namespace_data_limit") - 1) : 0),
+			(long long)(objBus ? xvoTableGetInt(objBus, "namespace_limit_remaining", sizeof("namespace_limit_remaining") - 1) : 0),
+			(objBus && xvoGetBool(xvoTableGetValue(objBus, "namespace_limit_reached", sizeof("namespace_limit_reached") - 1))) ? "true" : "false",
+			(long long)(objBus ? xvoTableGetInt(objBus, "readonly_namespace_count", sizeof("readonly_namespace_count") - 1) : 0),
+			(long long)(objBus ? xvoTableGetInt(objBus, "disabled_namespace_count", sizeof("disabled_namespace_count") - 1) : 0),
+			(long long)(objBus ? xvoTableGetInt(objBus, "ttl_required_namespace_count", sizeof("ttl_required_namespace_count") - 1) : 0),
+			(long long)(objBus ? xvoTableGetInt(objBus, "tag_required_namespace_count", sizeof("tag_required_namespace_count") - 1) : 0),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "readonly_namespaces", sizeof("readonly_namespaces") - 1)) : (str)"",
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "disabled_namespaces", sizeof("disabled_namespaces") - 1)) : (str)"",
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "ttl_required_namespaces", sizeof("ttl_required_namespaces") - 1)) : (str)"",
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "tag_required_namespaces", sizeof("tag_required_namespaces") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "data_limit_reject_count", sizeof("data_limit_reject_count") - 1) : 0),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_data_limit_reject_time", sizeof("last_data_limit_reject_time") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "last_data_limit_reject_age_ms", sizeof("last_data_limit_reject_age_ms") - 1) : -1),
+			(long long)(objBus ? xvoTableGetInt(objBus, "last_data_limit_count", sizeof("last_data_limit_count") - 1) : 0),
+			(long long)(objBus ? xvoTableGetInt(objBus, "queue_limit_reject_count", sizeof("queue_limit_reject_count") - 1) : 0),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_queue_limit_reject_time", sizeof("last_queue_limit_reject_time") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "last_queue_limit_reject_age_ms", sizeof("last_queue_limit_reject_age_ms") - 1) : -1),
+			(long long)(objBus ? xvoTableGetInt(objBus, "last_queue_limit_count", sizeof("last_queue_limit_count") - 1) : 0)
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"bus_namespace_limit_reject_count=%lld\nbus_last_namespace_limit_reject_time=%s\nbus_last_namespace_limit_reject_age_ms=%lld\nbus_last_namespace_limit_count=%lld\nbus_last_namespace_limit_namespace=%s\nbus_namespace_data_limit_reject_count=%lld\nbus_last_namespace_data_limit_reject_time=%s\nbus_last_namespace_data_limit_reject_age_ms=%lld\nbus_last_namespace_data_limit_count=%lld\nbus_last_namespace_data_limit_namespace=%s\nbus_readonly_namespace_reject_count=%lld\nbus_last_readonly_namespace_reject_time=%s\nbus_last_readonly_namespace_reject_age_ms=%lld\nbus_last_readonly_namespace=%s\nbus_last_readonly_namespace_action=%s\nbus_disabled_namespace_reject_count=%lld\nbus_last_disabled_namespace_reject_time=%s\nbus_last_disabled_namespace_reject_age_ms=%lld\nbus_last_disabled_namespace=%s\nbus_last_disabled_namespace_action=%s\nbus_ttl_required_namespace_reject_count=%lld\nbus_last_ttl_required_namespace_reject_time=%s\nbus_last_ttl_required_namespace_reject_age_ms=%lld\nbus_last_ttl_required_namespace=%s\nbus_last_ttl_required_namespace_action=%s\nbus_tag_required_namespace_reject_count=%lld\nbus_last_tag_required_namespace_reject_time=%s\nbus_last_tag_required_namespace_reject_age_ms=%lld\nbus_last_tag_required_namespace=%s\nbus_last_tag_required_namespace_action=%s\n",
+			(long long)(objBus ? xvoTableGetInt(objBus, "namespace_limit_reject_count", sizeof("namespace_limit_reject_count") - 1) : 0),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_namespace_limit_reject_time", sizeof("last_namespace_limit_reject_time") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "last_namespace_limit_reject_age_ms", sizeof("last_namespace_limit_reject_age_ms") - 1) : -1),
+			(long long)(objBus ? xvoTableGetInt(objBus, "last_namespace_limit_count", sizeof("last_namespace_limit_count") - 1) : 0),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_namespace_limit_namespace", sizeof("last_namespace_limit_namespace") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "namespace_data_limit_reject_count", sizeof("namespace_data_limit_reject_count") - 1) : 0),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_namespace_data_limit_reject_time", sizeof("last_namespace_data_limit_reject_time") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "last_namespace_data_limit_reject_age_ms", sizeof("last_namespace_data_limit_reject_age_ms") - 1) : -1),
+			(long long)(objBus ? xvoTableGetInt(objBus, "last_namespace_data_limit_count", sizeof("last_namespace_data_limit_count") - 1) : 0),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_namespace_data_limit_namespace", sizeof("last_namespace_data_limit_namespace") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "readonly_namespace_reject_count", sizeof("readonly_namespace_reject_count") - 1) : 0),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_readonly_namespace_reject_time", sizeof("last_readonly_namespace_reject_time") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "last_readonly_namespace_reject_age_ms", sizeof("last_readonly_namespace_reject_age_ms") - 1) : -1),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_readonly_namespace", sizeof("last_readonly_namespace") - 1)) : (str)"",
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_readonly_namespace_action", sizeof("last_readonly_namespace_action") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "disabled_namespace_reject_count", sizeof("disabled_namespace_reject_count") - 1) : 0),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_disabled_namespace_reject_time", sizeof("last_disabled_namespace_reject_time") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "last_disabled_namespace_reject_age_ms", sizeof("last_disabled_namespace_reject_age_ms") - 1) : -1),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_disabled_namespace", sizeof("last_disabled_namespace") - 1)) : (str)"",
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_disabled_namespace_action", sizeof("last_disabled_namespace_action") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "ttl_required_namespace_reject_count", sizeof("ttl_required_namespace_reject_count") - 1) : 0),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_ttl_required_namespace_reject_time", sizeof("last_ttl_required_namespace_reject_time") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "last_ttl_required_namespace_reject_age_ms", sizeof("last_ttl_required_namespace_reject_age_ms") - 1) : -1),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_ttl_required_namespace", sizeof("last_ttl_required_namespace") - 1)) : (str)"",
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_ttl_required_namespace_action", sizeof("last_ttl_required_namespace_action") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "tag_required_namespace_reject_count", sizeof("tag_required_namespace_reject_count") - 1) : 0),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_tag_required_namespace_reject_time", sizeof("last_tag_required_namespace_reject_time") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "last_tag_required_namespace_reject_age_ms", sizeof("last_tag_required_namespace_reject_age_ms") - 1) : -1),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_tag_required_namespace", sizeof("last_tag_required_namespace") - 1)) : (str)"",
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_tag_required_namespace_action", sizeof("last_tag_required_namespace_action") - 1)) : (str)""
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"ws_reject_count=%lld\nws_last_reject_reason=%s\nws_last_reject_time=%s\nws_last_reject_age_ms=%lld\nws_stop_cleanup_count=%lld\nws_last_stop_cleanup_closed=%lld\nws_last_stop_cleanup_remain=%lld\nws_last_stop_cleanup_time=%s\nws_last_stop_cleanup_age_ms=%lld\nxtp_reject_count=%lld\nxtp_last_reject_reason=%s\nxtp_last_reject_time=%s\nxtp_last_reject_age_ms=%lld\nxtp_stop_cleanup_count=%lld\nxtp_last_stop_cleanup_closed=%lld\nxtp_last_stop_cleanup_remain=%lld\nxtp_last_stop_cleanup_time=%s\nxtp_last_stop_cleanup_age_ms=%lld\ncustom_reject_count=%lld\ncustom_last_reject_reason=%s\ncustom_last_reject_time=%s\ncustom_last_reject_age_ms=%lld\ncustom_stop_cleanup_count=%lld\ncustom_last_stop_cleanup_closed=%lld\ncustom_last_stop_cleanup_remain=%lld\ncustom_last_stop_cleanup_time=%s\ncustom_last_stop_cleanup_age_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsWsRejectCount),
+			g_sXsWsLastRejectReason[0] ? g_sXsWsLastRejectReason : "(none)",
+			sWsLastRejectTime ? sWsLastRejectTime : "(none)",
+			(long long)XS_WsLastRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsWsStopCleanupCount),
+			(long long)XS_HttpMetricGet(&g_iXsWsLastStopCleanupClosed),
+			(long long)XS_HttpMetricGet(&g_iXsWsLastStopCleanupRemain),
+			sWsLastStopCleanupTime ? sWsLastStopCleanupTime : "(none)",
+			(long long)XS_WsLastStopCleanupAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsXtpRejectCount),
+			g_sXsXtpLastRejectReason[0] ? g_sXsXtpLastRejectReason : "(none)",
+			sXtpLastRejectTime ? sXtpLastRejectTime : "(none)",
+			(long long)XS_XtpLastRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsXtpStopCleanupCount),
+			(long long)XS_HttpMetricGet(&g_iXsXtpLastStopCleanupClosed),
+			(long long)XS_HttpMetricGet(&g_iXsXtpLastStopCleanupRemain),
+			sXtpLastStopCleanupTime ? sXtpLastStopCleanupTime : "(none)",
+			(long long)XS_XtpLastStopCleanupAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsCustomRejectCount),
+			g_sXsCustomLastRejectReason[0] ? g_sXsCustomLastRejectReason : "(none)",
+			sCustomLastRejectTime ? sCustomLastRejectTime : "(none)",
+			(long long)XS_CustomLastRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsCustomStopCleanupCount),
+			(long long)XS_HttpMetricGet(&g_iXsCustomLastStopCleanupClosed),
+			(long long)XS_HttpMetricGet(&g_iXsCustomLastStopCleanupRemain),
+			sCustomLastStopCleanupTime ? sCustomLastStopCleanupTime : "(none)",
+			(long long)XS_CustomLastStopCleanupAgeMS()
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"ws_message_limit_close_count=%lld\nws_last_message_limit_close_time=%s\nws_last_message_limit_close_age_ms=%lld\nxtp_recv_limit_close_count=%lld\nxtp_last_recv_limit_close_time=%s\nxtp_last_recv_limit_close_age_ms=%lld\ncustom_recv_limit_close_count=%lld\ncustom_last_recv_limit_close_time=%s\ncustom_last_recv_limit_close_age_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsWsMessageLimitCloseCount),
+			sWsLastMessageLimitCloseTime ? sWsLastMessageLimitCloseTime : "(none)",
+			(long long)XS_WsLastMessageLimitCloseAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsXtpRecvLimitCloseCount),
+			sXtpLastRecvLimitCloseTime ? sXtpLastRecvLimitCloseTime : "(none)",
+			(long long)XS_XtpLastRecvLimitCloseAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsCustomRecvLimitCloseCount),
+			sCustomLastRecvLimitCloseTime ? sCustomLastRecvLimitCloseTime : "(none)",
+			(long long)XS_CustomLastRecvLimitCloseAgeMS()
+		);
+	}
+	if ( objBus ) {
+		xvoUnref(objBus);
 	}
 	if ( sCheckTime ) {
 		xrtFree(sCheckTime);
@@ -6904,6 +10671,72 @@ static inline bool XS_HttpHandleHealth(XS_ServerConfig* objServer, const XS_Host
 	if ( sHttpLastStopCleanupTime ) {
 		xrtFree(sHttpLastStopCleanupTime);
 	}
+	if ( sHttpLastHeaderLimitRejectTime ) {
+		xrtFree(sHttpLastHeaderLimitRejectTime);
+	}
+	if ( sHttpLastBodyLimitRejectTime ) {
+		xrtFree(sHttpLastBodyLimitRejectTime);
+	}
+	if ( sHttpLastPathLimitRejectTime ) {
+		xrtFree(sHttpLastPathLimitRejectTime);
+	}
+	if ( sHttpLastApiDisabledRejectTime ) {
+		xrtFree(sHttpLastApiDisabledRejectTime);
+	}
+	if ( sHttpLastMethodRejectTime ) {
+		xrtFree(sHttpLastMethodRejectTime);
+	}
+	if ( sHttpLastHostNotFoundRejectTime ) {
+		xrtFree(sHttpLastHostNotFoundRejectTime);
+	}
+	if ( sHttpLastReloadBusyRejectTime ) {
+		xrtFree(sHttpLastReloadBusyRejectTime);
+	}
+	if ( sHttpLastReloadFailedRejectTime ) {
+		xrtFree(sHttpLastReloadFailedRejectTime);
+	}
+	if ( sHttpLastCheckConfigFailedRejectTime ) {
+		xrtFree(sHttpLastCheckConfigFailedRejectTime);
+	}
+	if ( sHttpLastBusBadRequestRejectTime ) {
+		xrtFree(sHttpLastBusBadRequestRejectTime);
+	}
+	if ( sHttpLastBusNotFoundRejectTime ) {
+		xrtFree(sHttpLastBusNotFoundRejectTime);
+	}
+	if ( sHttpLastBusLimitRejectTime ) {
+		xrtFree(sHttpLastBusLimitRejectTime);
+	}
+	if ( sHttpLastBusFailedRejectTime ) {
+		xrtFree(sHttpLastBusFailedRejectTime);
+	}
+	if ( sWsLastMessageLimitCloseTime ) {
+		xrtFree(sWsLastMessageLimitCloseTime);
+	}
+	if ( sWsLastRejectTime ) {
+		xrtFree(sWsLastRejectTime);
+	}
+	if ( sWsLastStopCleanupTime ) {
+		xrtFree(sWsLastStopCleanupTime);
+	}
+	if ( sXtpLastRecvLimitCloseTime ) {
+		xrtFree(sXtpLastRecvLimitCloseTime);
+	}
+	if ( sXtpLastRejectTime ) {
+		xrtFree(sXtpLastRejectTime);
+	}
+	if ( sXtpLastStopCleanupTime ) {
+		xrtFree(sXtpLastStopCleanupTime);
+	}
+	if ( sCustomLastRecvLimitCloseTime ) {
+		xrtFree(sCustomLastRecvLimitCloseTime);
+	}
+	if ( sCustomLastRejectTime ) {
+		xrtFree(sCustomLastRejectTime);
+	}
+	if ( sCustomLastStopCleanupTime ) {
+		xrtFree(sCustomLastStopCleanupTime);
+	}
 	if ( sReloadTime ) {
 		xrtFree(sReloadTime);
 	}
@@ -6913,16 +10746,23 @@ static inline bool XS_HttpHandleHealth(XS_ServerConfig* objServer, const XS_Host
 	if ( sBusDispatchTime ) {
 		xrtFree(sBusDispatchTime);
 	}
+	if ( sBusLastSweepTime ) {
+		xrtFree(sBusLastSweepTime);
+	}
+	if ( sBusLastCleanupTime ) {
+		xrtFree(sBusLastCleanupTime);
+	}
 	return XS_HttpRespondText(pResp, bOk ? 200 : 503, bOk ? "OK" : "Service Unavailable", sBody);
 }
 
 static inline bool XS_HttpHandleDashboard(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
-	char sBody[14336];
-	XS_Config objCfgCheck;
+	XS_ReloadStatusSnapshot tReloadStatus;
+	XS_CheckConfigStatusSnapshot tCheckStatus;
+	char sBody[32768];
 	char* sConfigBase;
-	char* sCheckBase;
 	char* sCheckTime;
+	char* sReloadTime;
 	char* sStartTime;
 	char* sCurrentDir;
 	char* sConfigName;
@@ -6930,18 +10770,35 @@ static inline bool XS_HttpHandleDashboard(XS_ServerConfig* objServer, const XS_H
 	char* sConfigMTime;
 	char* sBusQueueTime;
 	char* sBusDispatchTime;
+	char* sBusLastSweepTime;
+	char* sBusLastCleanupTime;
+	char* sBusItems;
 	char* sHttpLastTime;
 	char* sHttpLastAppTime;
 	char* sHttpLastIdleCloseTime;
 	char* sHttpLastConnLimitCloseTime;
 	char* sHttpLastRejectTime;
 	char* sHttpLastStopCleanupTime;
+	char* sHttpLastHeaderLimitRejectTime;
+	char* sHttpLastBodyLimitRejectTime;
+	char* sHttpLastPathLimitRejectTime;
+	char* sHttpLastApiDisabledRejectTime;
+	char* sHttpLastMethodRejectTime;
+	char* sHttpLastHostNotFoundRejectTime;
+	char* sHttpLastReloadBusyRejectTime;
+	char* sHttpLastReloadFailedRejectTime;
+	char* sHttpLastCheckConfigFailedRejectTime;
+	char* sHttpLastBusBadRequestRejectTime;
+	char* sHttpLastBusNotFoundRejectTime;
+	char* sHttpLastBusLimitRejectTime;
+	char* sHttpLastBusFailedRejectTime;
 	char* sWsLastTime;
 	char* sWsLastCloseTime;
 	char* sWsLastErrorTime;
 	char* sWsLastInvalidTime;
 	char* sWsLastIdleCloseTime;
 	char* sWsLastConnLimitCloseTime;
+	char* sWsLastMessageLimitCloseTime;
 	char* sWsLastRejectTime;
 	char* sWsLastStopCleanupTime;
 	char* sXtpLastTime;
@@ -6949,15 +10806,18 @@ static inline bool XS_HttpHandleDashboard(XS_ServerConfig* objServer, const XS_H
 	char* sXtpLastErrorTime;
 	char* sXtpLastIdleCloseTime;
 	char* sXtpLastConnLimitCloseTime;
+	char* sXtpLastRecvLimitCloseTime;
 	char* sXtpLastRejectTime;
 	char* sXtpLastStopCleanupTime;
 	char* sUdpLastTime;
 	char* sUdpLastErrorTime;
 	char* sCustomLastTime;
+	char* sCustomLastCloseTime;
 	char* sCustomLastErrorTime;
 	char* sCustomLastInvalidTime;
 	char* sCustomLastIdleCloseTime;
 	char* sCustomLastConnLimitCloseTime;
+	char* sCustomLastRecvLimitCloseTime;
 	char* sCustomLastRejectTime;
 	char* sCustomLastStopCleanupTime;
 	int64 iAppSize;
@@ -6970,9 +10830,19 @@ static inline bool XS_HttpHandleDashboard(XS_ServerConfig* objServer, const XS_H
 	int64 iBusTotalDropped;
 	int64 tBusLastQueue;
 	int64 tBusLastDispatch;
+	int64 iBusSweepIntervalMS;
+	int64 iBusSweepBatchLimit;
+	int64 iBusSweepCount;
+	int64 iBusSweepRemovedCount;
+	int64 tBusLastSweep;
+	int64 iBusLastSweepRemoved;
+	int64 iBusLastSweepRemain;
+	int64 iBusCleanupCount;
+	int64 tBusLastCleanup;
+	int64 iBusLastCleanupRemoved;
+	int64 iBusLastCleanupRemain;
 	bool bOk;
 	bool bScriptLoaded;
-	bool bConfigOK;
 
 	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
 		return FALSE;
@@ -6983,7 +10853,6 @@ static inline bool XS_HttpHandleDashboard(XS_ServerConfig* objServer, const XS_H
 	if ( !XS_ManageAPIEnabled(objServer, objHost) ) {
 		return XS_HttpRespondText(pResp, 403, "Forbidden", "dashboard api disabled");
 	}
-	memset(&objCfgCheck, 0, sizeof(objCfgCheck));
 	sConfigBase = (g_sXsConfigFile && g_sXsConfigFile[0]) ? xrtPathGetDir(g_sXsConfigFile, 0) : NULL;
 	sCurrentDir = XS_CurrentWorkDir();
 	sConfigName = XS_ConfigFileName();
@@ -6991,19 +10860,36 @@ static inline bool XS_HttpHandleDashboard(XS_ServerConfig* objServer, const XS_H
 	sConfigMTime = XS_FileChangeTimeText(g_sXsConfigFile);
 	iAppSize = XS_FileSizeValue(xCore.AppFile ? (char*)xCore.AppFile : NULL);
 	iConfigSize = XS_FileSizeValue(g_sXsConfigFile);
-	sCheckTime = XS_CheckConfigLastTimeText();
+	XS_ConfigReloadStatusSnapshot(&tReloadStatus);
+	XS_ConfigCheckStatusSnapshot(&tCheckStatus);
+	sCheckTime = XS_CheckConfigTimeTextByStatus(&tCheckStatus);
+	sReloadTime = XS_ReloadTimeTextByStatus(&tReloadStatus);
 	sHttpLastTime = XS_HttpLastRequestTimeText();
 	sHttpLastAppTime = XS_HttpLastAppRequestTimeText();
 	sHttpLastIdleCloseTime = XS_HttpLastIdleCloseTimeText();
 	sHttpLastConnLimitCloseTime = XS_HttpLastConnLimitCloseTimeText();
 	sHttpLastRejectTime = XS_HttpLastRejectTimeText();
 	sHttpLastStopCleanupTime = XS_HttpLastStopCleanupTimeText();
+	sHttpLastHeaderLimitRejectTime = XS_HttpLastHeaderLimitRejectTimeText();
+	sHttpLastBodyLimitRejectTime = XS_HttpLastBodyLimitRejectTimeText();
+	sHttpLastPathLimitRejectTime = XS_HttpLastPathLimitRejectTimeText();
+	sHttpLastApiDisabledRejectTime = XS_HttpLastApiDisabledRejectTimeText();
+	sHttpLastMethodRejectTime = XS_HttpLastMethodRejectTimeText();
+	sHttpLastHostNotFoundRejectTime = XS_HttpLastHostNotFoundRejectTimeText();
+	sHttpLastReloadBusyRejectTime = XS_HttpLastReloadBusyRejectTimeText();
+	sHttpLastReloadFailedRejectTime = XS_HttpLastReloadFailedRejectTimeText();
+	sHttpLastCheckConfigFailedRejectTime = XS_HttpLastCheckConfigFailedRejectTimeText();
+	sHttpLastBusBadRequestRejectTime = XS_HttpLastBusBadRequestRejectTimeText();
+	sHttpLastBusNotFoundRejectTime = XS_HttpLastBusNotFoundRejectTimeText();
+	sHttpLastBusLimitRejectTime = XS_HttpLastBusLimitRejectTimeText();
+	sHttpLastBusFailedRejectTime = XS_HttpLastBusFailedRejectTimeText();
 	sWsLastTime = XS_WsLastTimeText();
 	sWsLastCloseTime = XS_WsLastCloseTimeText();
 	sWsLastErrorTime = XS_WsLastErrorTimeText();
 	sWsLastInvalidTime = XS_WsLastInvalidTimeText();
 	sWsLastIdleCloseTime = XS_WsLastIdleCloseTimeText();
 	sWsLastConnLimitCloseTime = XS_WsLastConnLimitCloseTimeText();
+	sWsLastMessageLimitCloseTime = XS_WsLastMessageLimitCloseTimeText();
 	sWsLastRejectTime = XS_WsLastRejectTimeText();
 	sWsLastStopCleanupTime = XS_WsLastStopCleanupTimeText();
 	sXtpLastTime = XS_XtpLastTimeText();
@@ -7011,24 +10897,28 @@ static inline bool XS_HttpHandleDashboard(XS_ServerConfig* objServer, const XS_H
 	sXtpLastErrorTime = XS_XtpLastErrorTimeText();
 	sXtpLastIdleCloseTime = XS_XtpLastIdleCloseTimeText();
 	sXtpLastConnLimitCloseTime = XS_XtpLastConnLimitCloseTimeText();
+	sXtpLastRecvLimitCloseTime = XS_XtpLastRecvLimitCloseTimeText();
 	sXtpLastRejectTime = XS_XtpLastRejectTimeText();
 	sXtpLastStopCleanupTime = XS_XtpLastStopCleanupTimeText();
 	sUdpLastTime = XS_UdpLastTimeText();
 	sUdpLastErrorTime = XS_UdpLastErrorTimeText();
 	sCustomLastTime = XS_CustomLastTimeText();
+	sCustomLastCloseTime = XS_CustomLastCloseTimeText();
 	sCustomLastErrorTime = XS_CustomLastErrorTimeText();
 	sCustomLastInvalidTime = XS_CustomLastInvalidTimeText();
 	sCustomLastIdleCloseTime = XS_CustomLastIdleCloseTimeText();
 	sCustomLastConnLimitCloseTime = XS_CustomLastConnLimitCloseTimeText();
+	sCustomLastRecvLimitCloseTime = XS_CustomLastRecvLimitCloseTimeText();
 	sCustomLastRejectTime = XS_CustomLastRejectTimeText();
 	sCustomLastStopCleanupTime = XS_CustomLastStopCleanupTimeText();
 	sBusQueueTime = NULL;
 	sBusDispatchTime = NULL;
-	bConfigOK = (g_sXsConfigFile && g_sXsConfigFile[0]) ? XS_LoadConfig(&objCfgCheck, g_sXsConfigFile) : FALSE;
-	sCheckBase = (bConfigOK && objCfgCheck.BaseDir) ? XS_CopyText(objCfgCheck.BaseDir) : NULL;
+	sBusLastSweepTime = NULL;
+	sBusLastCleanupTime = NULL;
+	sBusItems = NULL;
 	sStartTime = g_tXsStartTime ? xrtTimeToStr(g_tXsStartTime, XRT_TIME_FORMAT_DATETIME) : NULL;
 
-	objBus = XS_BusBuildStatusValue();
+	objBus = XS_BusBuildNamespaceStatsValue();
 	iBusQueueCount = 0;
 	iBusDataCount = 0;
 	iBusTotalQueued = 0;
@@ -7036,6 +10926,17 @@ static inline bool XS_HttpHandleDashboard(XS_ServerConfig* objServer, const XS_H
 	iBusTotalDropped = 0;
 	tBusLastQueue = 0;
 	tBusLastDispatch = 0;
+	iBusSweepIntervalMS = 0;
+	iBusSweepBatchLimit = 0;
+	iBusSweepCount = 0;
+	iBusSweepRemovedCount = 0;
+	tBusLastSweep = 0;
+	iBusLastSweepRemoved = 0;
+	iBusLastSweepRemain = 0;
+	iBusCleanupCount = 0;
+	tBusLastCleanup = 0;
+	iBusLastCleanupRemoved = 0;
+	iBusLastCleanupRemain = 0;
 	if ( objBus ) {
 		iBusQueueCount = xvoTableGetInt(objBus, "queue_count", 11);
 		iBusDataCount = xvoTableGetInt(objBus, "data_count", 10);
@@ -7044,9 +10945,22 @@ static inline bool XS_HttpHandleDashboard(XS_ServerConfig* objServer, const XS_H
 		iBusTotalDropped = xvoTableGetInt(objBus, "total_dropped", 13);
 		tBusLastQueue = xvoTableGetInt(objBus, "last_queue_time", 15);
 		tBusLastDispatch = xvoTableGetInt(objBus, "last_dispatch_time", 18);
+		iBusSweepIntervalMS = xvoTableGetInt(objBus, "sweep_interval_ms", sizeof("sweep_interval_ms") - 1);
+		iBusSweepBatchLimit = xvoTableGetInt(objBus, "sweep_batch_limit", sizeof("sweep_batch_limit") - 1);
+		iBusSweepCount = xvoTableGetInt(objBus, "sweep_count", sizeof("sweep_count") - 1);
+		iBusSweepRemovedCount = xvoTableGetInt(objBus, "sweep_removed_count", sizeof("sweep_removed_count") - 1);
+		tBusLastSweep = xvoTableGetInt(objBus, "last_sweep_time", sizeof("last_sweep_time") - 1);
+		iBusLastSweepRemoved = xvoTableGetInt(objBus, "last_sweep_removed", sizeof("last_sweep_removed") - 1);
+		iBusLastSweepRemain = xvoTableGetInt(objBus, "last_sweep_remain", sizeof("last_sweep_remain") - 1);
+		iBusCleanupCount = xvoTableGetInt(objBus, "cleanup_count", sizeof("cleanup_count") - 1);
+		tBusLastCleanup = xvoTableGetInt(objBus, "last_cleanup_time", sizeof("last_cleanup_time") - 1);
+		iBusLastCleanupRemoved = xvoTableGetInt(objBus, "last_cleanup_removed", sizeof("last_cleanup_removed") - 1);
+		iBusLastCleanupRemain = xvoTableGetInt(objBus, "last_cleanup_remain", sizeof("last_cleanup_remain") - 1);
 		sBusQueueTime = (tBusLastQueue > 0) ? xrtTimeToStr(tBusLastQueue, XRT_TIME_FORMAT_DATETIME) : NULL;
 		sBusDispatchTime = (tBusLastDispatch > 0) ? xrtTimeToStr(tBusLastDispatch, XRT_TIME_FORMAT_DATETIME) : NULL;
-		xvoUnref(objBus);
+		sBusLastSweepTime = (tBusLastSweep > 0) ? xrtTimeToStr(tBusLastSweep, XRT_TIME_FORMAT_DATETIME) : NULL;
+		sBusLastCleanupTime = (tBusLastCleanup > 0) ? xrtTimeToStr(tBusLastCleanup, XRT_TIME_FORMAT_DATETIME) : NULL;
+		sBusItems = xrtStringifyJSON(xvoTableGetValue(objBus, "items", 5), FALSE, NULL);
 	}
 
 	bScriptLoaded = FALSE;
@@ -7061,7 +10975,7 @@ static inline bool XS_HttpHandleDashboard(XS_ServerConfig* objServer, const XS_H
 	snprintf(
 		sBody,
 		sizeof(sBody),
-		"ok=%s\nserver=%s\nclass=%s\naddr=%s\nbind_ip=%s\nbind_port=%u\ntls=%s\nbind_ip_tls=%s\nbind_port_tls=%u\naddr_tls=%s\nidle_timeout=%u\nconn_limit=%u\nws_protocol=%s\nws_message_limit=%u\nws_conn_current=%lld\nws_conn_peak=%lld\nws_open_count=%lld\nws_close_count=%lld\nws_text_count=%lld\nws_binary_count=%lld\nws_ping_count=%lld\nws_pong_count=%lld\nws_error_count=%lld\nws_invalid_count=%lld\nws_idle_close_count=%lld\nws_conn_limit_close_count=%lld\nws_last_error_code=%lld\nws_last_invalid_reason=%s\nws_last_invalid_time=%s\nws_last_invalid_age_ms=%lld\nws_last_close_reason=%lld\nws_last_close_time=%s\nws_last_close_age_ms=%lld\nws_last_idle_close_time=%s\nws_last_idle_close_age_ms=%lld\nws_last_conn_limit_close_time=%s\nws_last_conn_limit_close_age_ms=%lld\nws_last_frame_type=%s\nws_last_remote=%s\nws_last_bytes=%lld\nws_last_text=%s\nws_last_time=%s\nws_last_age_ms=%lld\nws_last_error_time=%s\nws_last_error_age_ms=%lld\nxtp_conn_current=%lld\nxtp_conn_peak=%lld\nxtp_open_count=%lld\nxtp_close_count=%lld\nxtp_error_count=%lld\nxtp_invalid_count=%lld\nxtp_msg_count=%lld\nxtp_req_count=%lld\nxtp_resp_count=%lld\nxtp_push_count=%lld\nxtp_event_count=%lld\nxtp_send_count=%lld\nxtp_recv_bytes=%lld\nxtp_send_bytes=%lld\nxtp_last_msg_type=%s\nxtp_last_status=%lld\nxtp_last_msg_id=%lld\nxtp_last_flags=%lld\nxtp_last_param_count=%lld\nxtp_last_body_size=%lld\nxtp_last_remote=%s\nxtp_last_bytes=%lld\nxtp_last_cmd=%s\nxtp_last_time=%s\nxtp_last_age_ms=%lld\nxtp_last_invalid_reason=%s\nxtp_last_invalid_time=%s\nxtp_last_invalid_age_ms=%lld\nxtp_last_error_code=%lld\nxtp_last_error_time=%s\nxtp_last_error_age_ms=%lld\nxtp_idle_close_count=%lld\nxtp_conn_limit_close_count=%lld\nxtp_last_idle_close_time=%s\nxtp_last_idle_close_age_ms=%lld\nxtp_last_conn_limit_close_time=%s\nxtp_last_conn_limit_close_age_ms=%lld\nudp_recv_count=%lld\nudp_send_count=%lld\nudp_error_count=%lld\nudp_last_error_code=%lld\nudp_recv_bytes=%lld\nudp_send_bytes=%lld\nudp_last_from=%s\nudp_last_text=%s\nudp_last_bytes=%lld\nudp_last_time=%s\nudp_last_age_ms=%lld\nudp_last_error_time=%s\nudp_last_error_age_ms=%lld\ncustom_conn_current=%lld\ncustom_conn_peak=%lld\ncustom_open_count=%lld\ncustom_close_count=%lld\ncustom_error_count=%lld\ncustom_invalid_count=%lld\ncustom_last_invalid_reason=%s\ncustom_last_invalid_time=%s\ncustom_last_invalid_age_ms=%lld\ncustom_last_close_reason=%lld\ncustom_last_error_code=%lld\ncustom_last_error_time=%s\ncustom_last_error_age_ms=%lld\ncustom_recv_count=%lld\ncustom_send_count=%lld\ncustom_recv_bytes=%lld\ncustom_send_bytes=%lld\ncustom_last_remote=%s\ncustom_last_bytes=%lld\ncustom_last_text=%s\ncustom_last_time=%s\ncustom_last_age_ms=%lld\ncustom_idle_close_count=%lld\ncustom_conn_limit_close_count=%lld\ncustom_last_idle_close_time=%s\ncustom_last_idle_close_age_ms=%lld\ncustom_last_conn_limit_close_time=%s\ncustom_last_conn_limit_close_age_ms=%lld\ntls_cert_file=%s\ntls_key_file=%s\ntls_ca_file=%s\ncurrent_dir=%s\napp_file=%s\napp_mtime=%s\napp_size=%lld\napp_path=%s\nbuild=%s\ncompiler=%s\nplatform=%s\narch=%s\nmem_debug=%s\npid=%llu\nstart_time=%s\nuptime_ms=%lld\nengine_workers=%u\nruntime_server_count=%u\nhttp_req_count=%lld\nhttp_manage_req_count=%lld\nhttp_app_req_count=%lld\nhttp_2xx_count=%lld\nhttp_3xx_count=%lld\nhttp_4xx_count=%lld\nhttp_5xx_count=%lld\nhttp_last_method=%s\nhttp_last_status=%lld\nhttp_last_path=%s\nhttp_last_target=%s\nhttp_last_remote=%s\nhttp_last_body_len=%lld\nhttp_last_header_count=%lld\nhttp_last_query_len=%lld\nhttp_last_time=%s\nhttp_last_age_ms=%lld\nhttp_last_duration_ms=%lld\nhttp_idle_close_count=%lld\nhttp_conn_limit_close_count=%lld\nhttp_last_idle_close_time=%s\nhttp_last_idle_close_age_ms=%lld\nhttp_last_conn_limit_close_time=%s\nhttp_last_conn_limit_close_age_ms=%lld\nhttp_last_app_method=%s\nhttp_last_app_status=%lld\nhttp_last_app_path=%s\nhttp_last_app_target=%s\nhttp_last_app_remote=%s\nhttp_last_app_body_len=%lld\nhttp_last_app_header_count=%lld\nhttp_last_app_query_len=%lld\nhttp_last_app_time=%s\nhttp_last_app_age_ms=%lld\nhttp_last_app_duration_ms=%lld\nmanage_api=%s\nconfig_file=%s\nconfig_name=%s\nconfig_mtime=%s\nconfig_size=%lld\nconfig_base=%s\nconfig_check=%s\nconfig_check_base=%s\nconfig_check_server_count=%u\ncheck_last_time=%s\ncheck_last_age_ms=%lld\nhost_aware=%s\ndefault_host=%s\nhost_count=%u\nscript_loaded=%s\nreload_busy=%s\nreload_has_result=%s\nreload_success=%s\nreload_server=%s\nreload_host=%s\nreload_message=%s\nbus_queue_count=%lld\nbus_data_count=%lld\nbus_total_queued=%lld\nbus_total_delivered=%lld\nbus_total_dropped=%lld\nbus_last_queue_time=%lld\nbus_last_queue_time_text=%s\nbus_last_dispatch_time=%lld\nbus_last_dispatch_time_text=%s\n",
+		"ok=%s\nserver=%s\nclass=%s\naddr=%s\nbind_ip=%s\nbind_port=%u\ntls=%s\nbind_ip_tls=%s\nbind_port_tls=%u\naddr_tls=%s\nidle_timeout=%u\nconn_limit=%u\nws_protocol=%s\nws_message_limit=%u\nws_conn_current=%lld\nws_conn_peak=%lld\nws_open_count=%lld\nws_close_count=%lld\nws_text_count=%lld\nws_binary_count=%lld\nws_ping_count=%lld\nws_pong_count=%lld\nws_error_count=%lld\nws_invalid_count=%lld\nws_idle_close_count=%lld\nws_conn_limit_close_count=%lld\nws_last_error_code=%lld\nws_last_invalid_reason=%s\nws_last_invalid_time=%s\nws_last_invalid_age_ms=%lld\nws_last_close_reason=%lld\nws_last_close_time=%s\nws_last_close_age_ms=%lld\nws_last_idle_close_time=%s\nws_last_idle_close_age_ms=%lld\nws_last_conn_limit_close_time=%s\nws_last_conn_limit_close_age_ms=%lld\nws_last_frame_type=%s\nws_last_remote=%s\nws_last_bytes=%lld\nws_last_text=%s\nws_last_time=%s\nws_last_age_ms=%lld\nws_last_error_time=%s\nws_last_error_age_ms=%lld\nxtp_conn_current=%lld\nxtp_conn_peak=%lld\nxtp_open_count=%lld\nxtp_close_count=%lld\nxtp_error_count=%lld\nxtp_invalid_count=%lld\nxtp_msg_count=%lld\nxtp_req_count=%lld\nxtp_resp_count=%lld\nxtp_push_count=%lld\nxtp_event_count=%lld\nxtp_send_count=%lld\nxtp_recv_bytes=%lld\nxtp_send_bytes=%lld\nxtp_last_msg_type=%s\nxtp_last_status=%lld\nxtp_last_msg_id=%lld\nxtp_last_flags=%lld\nxtp_last_param_count=%lld\nxtp_last_body_size=%lld\nxtp_last_remote=%s\nxtp_last_bytes=%lld\nxtp_last_cmd=%s\nxtp_last_time=%s\nxtp_last_age_ms=%lld\nxtp_last_invalid_reason=%s\nxtp_last_invalid_time=%s\nxtp_last_invalid_age_ms=%lld\nxtp_last_error_code=%lld\nxtp_last_error_time=%s\nxtp_last_error_age_ms=%lld\nxtp_idle_close_count=%lld\nxtp_conn_limit_close_count=%lld\nxtp_last_idle_close_time=%s\nxtp_last_idle_close_age_ms=%lld\nxtp_last_conn_limit_close_time=%s\nxtp_last_conn_limit_close_age_ms=%lld\nudp_recv_count=%lld\nudp_send_count=%lld\nudp_error_count=%lld\nudp_last_error_code=%lld\nudp_recv_bytes=%lld\nudp_send_bytes=%lld\nudp_last_from=%s\nudp_last_text=%s\nudp_last_bytes=%lld\nudp_last_time=%s\nudp_last_age_ms=%lld\nudp_last_error_time=%s\nudp_last_error_age_ms=%lld\ncustom_conn_current=%lld\ncustom_conn_peak=%lld\ncustom_open_count=%lld\ncustom_close_count=%lld\ncustom_error_count=%lld\ncustom_invalid_count=%lld\ncustom_last_invalid_reason=%s\ncustom_last_invalid_time=%s\ncustom_last_invalid_age_ms=%lld\ncustom_last_close_reason=%lld\ncustom_last_close_time=%s\ncustom_last_close_age_ms=%lld\ncustom_last_error_code=%lld\ncustom_last_error_time=%s\ncustom_last_error_age_ms=%lld\ncustom_recv_count=%lld\ncustom_send_count=%lld\ncustom_recv_bytes=%lld\ncustom_send_bytes=%lld\ncustom_last_remote=%s\ncustom_last_bytes=%lld\ncustom_last_text=%s\ncustom_last_time=%s\ncustom_last_age_ms=%lld\ncustom_idle_close_count=%lld\ncustom_conn_limit_close_count=%lld\ncustom_last_idle_close_time=%s\ncustom_last_idle_close_age_ms=%lld\ncustom_last_conn_limit_close_time=%s\ncustom_last_conn_limit_close_age_ms=%lld\ntls_cert_file=%s\ntls_key_file=%s\ntls_ca_file=%s\ncurrent_dir=%s\napp_file=%s\napp_mtime=%s\napp_size=%lld\napp_path=%s\nbuild=%s\ncompiler=%s\nplatform=%s\narch=%s\nmem_debug=%s\npid=%llu\nstart_time=%s\nuptime_ms=%lld\nengine_workers=%u\nruntime_server_count=%u\nhttp_req_count=%lld\nhttp_manage_req_count=%lld\nhttp_app_req_count=%lld\nhttp_2xx_count=%lld\nhttp_3xx_count=%lld\nhttp_4xx_count=%lld\nhttp_5xx_count=%lld\nhttp_last_method=%s\nhttp_last_status=%lld\nhttp_last_path=%s\nhttp_last_target=%s\nhttp_last_remote=%s\nhttp_last_body_len=%lld\nhttp_last_header_count=%lld\nhttp_last_query_len=%lld\nhttp_last_time=%s\nhttp_last_age_ms=%lld\nhttp_last_duration_ms=%lld\nhttp_idle_close_count=%lld\nhttp_conn_limit_close_count=%lld\nhttp_last_idle_close_time=%s\nhttp_last_idle_close_age_ms=%lld\nhttp_last_conn_limit_close_time=%s\nhttp_last_conn_limit_close_age_ms=%lld\nhttp_last_app_method=%s\nhttp_last_app_status=%lld\nhttp_last_app_path=%s\nhttp_last_app_target=%s\nhttp_last_app_remote=%s\nhttp_last_app_body_len=%lld\nhttp_last_app_header_count=%lld\nhttp_last_app_query_len=%lld\nhttp_last_app_time=%s\nhttp_last_app_age_ms=%lld\nhttp_last_app_duration_ms=%lld\nmanage_api=%s\ndebug=%s\nconfig_file=%s\nconfig_name=%s\nconfig_mtime=%s\nconfig_size=%lld\nconfig_base=%s\ncheck_result=%s\ncheck_file=%s\ncheck_base=%s\ncheck_server_count=%lld\ncheck_message=%s\ncheck_last_time=%s\ncheck_last_age_ms=%lld\nhost_aware=%s\ndefault_host=%s\nhost_count=%u\nscript_loaded=%s\nreload_busy=%s\nreload_has_result=%s\nreload_success=%s\nreload_server=%s\nreload_host=%s\nreload_message=%s\nbus_queue_count=%lld\nbus_data_count=%lld\nbus_total_queued=%lld\nbus_total_delivered=%lld\nbus_total_dropped=%lld\nbus_last_queue_time=%lld\nbus_last_queue_time_text=%s\nbus_last_dispatch_time=%lld\nbus_last_dispatch_time_text=%s\nbus_sweep_interval_ms=%lld\nbus_sweep_batch_limit=%lld\nbus_sweep_count=%lld\nbus_sweep_removed_count=%lld\nbus_last_sweep_time=%lld\nbus_last_sweep_time_text=%s\nbus_last_sweep_age_ms=%lld\nbus_last_sweep_removed=%lld\nbus_last_sweep_remain=%lld\nbus_cleanup_count=%lld\nbus_last_cleanup_time=%lld\nbus_last_cleanup_time_text=%s\nbus_last_cleanup_age_ms=%lld\nbus_last_cleanup_removed=%lld\nbus_last_cleanup_remain=%lld\n",
 		bOk ? "true" : "false",
 		objServer->Name ? objServer->Name : "(null)",
 		XS_ServerClassName(objServer->Class),
@@ -7167,6 +11081,8 @@ static inline bool XS_HttpHandleDashboard(XS_ServerConfig* objServer, const XS_H
 		sCustomLastInvalidTime ? sCustomLastInvalidTime : "(none)",
 		(long long)XS_CustomLastInvalidAgeMS(),
 		(long long)g_iXsCustomLastCloseReason,
+		sCustomLastCloseTime ? sCustomLastCloseTime : "(none)",
+		(long long)XS_CustomLastCloseAgeMS(),
 		(long long)g_iXsCustomLastErrorCode,
 		sCustomLastErrorTime ? sCustomLastErrorTime : "(none)",
 		(long long)XS_CustomLastErrorAgeMS(),
@@ -7239,26 +11155,29 @@ static inline bool XS_HttpHandleDashboard(XS_ServerConfig* objServer, const XS_H
 		(long long)XS_HttpLastAppRequestAgeMS(),
 		(long long)g_iXsHttpLastAppTimeMS,
 		XS_ManageAPIEnabled(objServer, objHost) ? "true" : "false",
+		objServer->Debug ? "true" : "false",
 		g_sXsConfigFile ? g_sXsConfigFile : "(null)",
 		sConfigName ? sConfigName : "(null)",
 		sConfigMTime ? sConfigMTime : "(null)",
 		(long long)iConfigSize,
 		sConfigBase ? sConfigBase : "(null)",
-		bConfigOK ? "true" : "false",
-		sCheckBase ? sCheckBase : "(null)",
-		(unsigned int)((bConfigOK && objCfgCheck.Servers) ? objCfgCheck.Servers->Count : 0),
+		tCheckStatus.LastResult ? "true" : "false",
+		tCheckStatus.sLastFile[0] ? tCheckStatus.sLastFile : "(none)",
+		tCheckStatus.sLastBase[0] ? tCheckStatus.sLastBase : "(none)",
+		(long long)tCheckStatus.iLastServerCount,
+		tCheckStatus.sLastMessage[0] ? tCheckStatus.sLastMessage : "(none)",
 		sCheckTime ? sCheckTime : "(none)",
-		(long long)XS_CheckConfigLastAgeMS(),
+		(long long)XS_CheckConfigAgeMSByStatus(&tCheckStatus),
 		objServer->HostAware ? "true" : "false",
 		objServer->EnableDefaultHost ? "true" : "false",
 		(unsigned int)(objServer->Hosts ? objServer->Hosts->Count : 0),
 		bScriptLoaded ? "true" : "false",
-		XS_ConfigReloadStatusBusy() ? "true" : "false",
-		XS_ConfigReloadStatusHasResult() ? "true" : "false",
-		XS_ConfigReloadStatusSuccess() ? "true" : "false",
-		XS_ConfigReloadStatusServer(),
-		XS_ConfigReloadStatusHost(),
-		XS_ConfigReloadStatusMessage(),
+		tReloadStatus.Busy ? "true" : "false",
+		tReloadStatus.HasResult ? "true" : "false",
+		tReloadStatus.Success ? "true" : "false",
+		tReloadStatus.sServerName[0] ? tReloadStatus.sServerName : "(all)",
+		tReloadStatus.sHostName[0] ? tReloadStatus.sHostName : "(all)",
+		tReloadStatus.sMessage[0] ? tReloadStatus.sMessage : "(none)",
 		(long long)iBusQueueCount,
 		(long long)iBusDataCount,
 		(long long)iBusTotalQueued,
@@ -7267,8 +11186,106 @@ static inline bool XS_HttpHandleDashboard(XS_ServerConfig* objServer, const XS_H
 		(long long)tBusLastQueue,
 		sBusQueueTime ? sBusQueueTime : "(none)",
 		(long long)tBusLastDispatch,
-		sBusDispatchTime ? sBusDispatchTime : "(none)"
+		sBusDispatchTime ? sBusDispatchTime : "(none)",
+		(long long)iBusSweepIntervalMS,
+		(long long)iBusSweepBatchLimit,
+		(long long)iBusSweepCount,
+		(long long)iBusSweepRemovedCount,
+		(long long)tBusLastSweep,
+		sBusLastSweepTime ? sBusLastSweepTime : "(none)",
+		(long long)((tBusLastSweep > 0) ? ((xrtNow() - tBusLastSweep) * 1000) : -1),
+		(long long)iBusLastSweepRemoved,
+		(long long)iBusLastSweepRemain,
+		(long long)iBusCleanupCount,
+		(long long)tBusLastCleanup,
+		sBusLastCleanupTime ? sBusLastCleanupTime : "(none)",
+		(long long)((tBusLastCleanup > 0) ? ((xrtNow() - tBusLastCleanup) * 1000) : -1),
+		(long long)iBusLastCleanupRemoved,
+		(long long)iBusLastCleanupRemain
 	);
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"reload_time=%s\nreload_age_ms=%lld\nreload_total_count=%lld\nreload_success_count=%lld\nreload_failure_count=%lld\n",
+			sReloadTime ? sReloadTime : "(none)",
+			(long long)XS_ReloadAgeMSByStatus(&tReloadStatus),
+			(long long)tReloadStatus.iTotalCount,
+			(long long)tReloadStatus.iSuccessCount,
+			(long long)tReloadStatus.iFailureCount
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"http_get_count=%lld\nhttp_post_count=%lld\nhttp_head_count=%lld\nhttp_other_count=%lld\nhttp_time_total_ms=%lld\nhttp_time_max_ms=%lld\nhttp_time_avg_ms=%lld\nhttp_last_version=%s\nhttp_last_host=%s\nhttp_last_user_agent=%s\nhttp_last_referer=%s\nhttp_last_origin=%s\nhttp_last_accept=%s\nhttp_last_accept_encoding=%s\nhttp_last_cookie=%s\nhttp_last_forwarded_for=%s\nhttp_last_real_ip=%s\nhttp_last_connection=%s\nhttp_last_cache_control=%s\nhttp_last_content_type=%s\nhttp_last_app_version=%s\nhttp_last_app_host=%s\nhttp_last_app_user_agent=%s\nhttp_last_app_referer=%s\nhttp_last_app_origin=%s\nhttp_last_app_accept=%s\nhttp_last_app_accept_encoding=%s\nhttp_last_app_cookie=%s\nhttp_last_app_forwarded_for=%s\nhttp_last_app_real_ip=%s\nhttp_last_app_connection=%s\nhttp_last_app_cache_control=%s\nhttp_last_app_content_type=%s\n",
+			(long long)XS_HttpMetricGet(&g_iXsHttpMethodGetCount),
+			(long long)XS_HttpMetricGet(&g_iXsHttpMethodPostCount),
+			(long long)XS_HttpMetricGet(&g_iXsHttpMethodHeadCount),
+			(long long)XS_HttpMetricGet(&g_iXsHttpMethodOtherCount),
+			(long long)XS_HttpMetricGet(&g_iXsHttpTimeTotalMS),
+			(long long)XS_HttpMetricGet(&g_iXsHttpTimeMaxMS),
+			(long long)((XS_HttpMetricGet(&g_iXsHttpReqCount) > 0) ? (XS_HttpMetricGet(&g_iXsHttpTimeTotalMS) / XS_HttpMetricGet(&g_iXsHttpReqCount)) : 0),
+			g_sXsHttpLastVersion[0] ? g_sXsHttpLastVersion : "(none)",
+			g_sXsHttpLastHost[0] ? g_sXsHttpLastHost : "(none)",
+			g_sXsHttpLastUserAgent[0] ? g_sXsHttpLastUserAgent : "(none)",
+			g_sXsHttpLastReferer[0] ? g_sXsHttpLastReferer : "(none)",
+			g_sXsHttpLastOrigin[0] ? g_sXsHttpLastOrigin : "(none)",
+			g_sXsHttpLastAccept[0] ? g_sXsHttpLastAccept : "(none)",
+			g_sXsHttpLastAcceptEncoding[0] ? g_sXsHttpLastAcceptEncoding : "(none)",
+			g_sXsHttpLastCookie[0] ? g_sXsHttpLastCookie : "(none)",
+			g_sXsHttpLastForwardedFor[0] ? g_sXsHttpLastForwardedFor : "(none)",
+			g_sXsHttpLastRealIP[0] ? g_sXsHttpLastRealIP : "(none)",
+			g_sXsHttpLastConnection[0] ? g_sXsHttpLastConnection : "(none)",
+			g_sXsHttpLastCacheControl[0] ? g_sXsHttpLastCacheControl : "(none)",
+			g_sXsHttpLastContentType[0] ? g_sXsHttpLastContentType : "(none)",
+			g_sXsHttpLastAppVersion[0] ? g_sXsHttpLastAppVersion : "(none)",
+			g_sXsHttpLastAppHost[0] ? g_sXsHttpLastAppHost : "(none)",
+			g_sXsHttpLastAppUserAgent[0] ? g_sXsHttpLastAppUserAgent : "(none)",
+			g_sXsHttpLastAppReferer[0] ? g_sXsHttpLastAppReferer : "(none)",
+			g_sXsHttpLastAppOrigin[0] ? g_sXsHttpLastAppOrigin : "(none)",
+			g_sXsHttpLastAppAccept[0] ? g_sXsHttpLastAppAccept : "(none)",
+			g_sXsHttpLastAppAcceptEncoding[0] ? g_sXsHttpLastAppAcceptEncoding : "(none)",
+			g_sXsHttpLastAppCookie[0] ? g_sXsHttpLastAppCookie : "(none)",
+			g_sXsHttpLastAppForwardedFor[0] ? g_sXsHttpLastAppForwardedFor : "(none)",
+			g_sXsHttpLastAppRealIP[0] ? g_sXsHttpLastAppRealIP : "(none)",
+			g_sXsHttpLastAppConnection[0] ? g_sXsHttpLastAppConnection : "(none)",
+			g_sXsHttpLastAppCacheControl[0] ? g_sXsHttpLastAppCacheControl : "(none)",
+			g_sXsHttpLastAppContentType[0] ? g_sXsHttpLastAppContentType : "(none)"
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"bus_items=%s\n",
+			sBusItems ? sBusItems : "[]"
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"check_total_count=%lld\ncheck_success_count=%lld\ncheck_failure_count=%lld\n",
+			(long long)tCheckStatus.iTotalCount,
+			(long long)tCheckStatus.iSuccessCount,
+			(long long)tCheckStatus.iFailureCount
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"check_has_result=%s\ncheck_last_result=%s\ncheck_last_file=%s\ncheck_last_base=%s\ncheck_last_server_count=%lld\ncheck_last_message=%s\n",
+			tCheckStatus.HasResult ? "true" : "false",
+			tCheckStatus.HasResult ? (tCheckStatus.LastResult ? "true" : "false") : "(none)",
+			tCheckStatus.sLastFile[0] ? tCheckStatus.sLastFile : "(none)",
+			tCheckStatus.sLastBase[0] ? tCheckStatus.sLastBase : "(none)",
+			(long long)tCheckStatus.iLastServerCount,
+			tCheckStatus.sLastMessage[0] ? tCheckStatus.sLastMessage : "(none)"
+		);
+	}
 	if ( strlen(sBody) < sizeof(sBody) ) {
 		snprintf(
 			sBody + strlen(sBody),
@@ -7318,7 +11335,160 @@ static inline bool XS_HttpHandleDashboard(XS_ServerConfig* objServer, const XS_H
 			(long long)XS_CustomLastStopCleanupAgeMS()
 		);
 	}
-	XS_FreeConfig(&objCfgCheck);
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"http_header_limit_reject_count=%lld\nhttp_last_header_limit_reject_time=%s\nhttp_last_header_limit_reject_age_ms=%lld\nhttp_body_limit_reject_count=%lld\nhttp_last_body_limit_reject_time=%s\nhttp_last_body_limit_reject_age_ms=%lld\nhttp_path_limit_reject_count=%lld\nhttp_last_path_limit_reject_time=%s\nhttp_last_path_limit_reject_age_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsHttpHeaderLimitRejectCount),
+			sHttpLastHeaderLimitRejectTime ? sHttpLastHeaderLimitRejectTime : "(none)",
+			(long long)XS_HttpLastHeaderLimitRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpBodyLimitRejectCount),
+			sHttpLastBodyLimitRejectTime ? sHttpLastBodyLimitRejectTime : "(none)",
+			(long long)XS_HttpLastBodyLimitRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpPathLimitRejectCount),
+			sHttpLastPathLimitRejectTime ? sHttpLastPathLimitRejectTime : "(none)",
+			(long long)XS_HttpLastPathLimitRejectAgeMS()
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"http_api_disabled_reject_count=%lld\nhttp_last_api_disabled_reject_time=%s\nhttp_last_api_disabled_reject_age_ms=%lld\nhttp_method_reject_count=%lld\nhttp_last_method_reject_time=%s\nhttp_last_method_reject_age_ms=%lld\nhttp_host_not_found_reject_count=%lld\nhttp_last_host_not_found_reject_time=%s\nhttp_last_host_not_found_reject_age_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsHttpApiDisabledRejectCount),
+			sHttpLastApiDisabledRejectTime ? sHttpLastApiDisabledRejectTime : "(none)",
+			(long long)XS_HttpLastApiDisabledRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpMethodRejectCount),
+			sHttpLastMethodRejectTime ? sHttpLastMethodRejectTime : "(none)",
+			(long long)XS_HttpLastMethodRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpHostNotFoundRejectCount),
+			sHttpLastHostNotFoundRejectTime ? sHttpLastHostNotFoundRejectTime : "(none)",
+			(long long)XS_HttpLastHostNotFoundRejectAgeMS()
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"http_reload_busy_reject_count=%lld\nhttp_last_reload_busy_reject_time=%s\nhttp_last_reload_busy_reject_age_ms=%lld\nhttp_reload_failed_reject_count=%lld\nhttp_last_reload_failed_reject_time=%s\nhttp_last_reload_failed_reject_age_ms=%lld\nhttp_check_config_failed_reject_count=%lld\nhttp_last_check_config_failed_reject_time=%s\nhttp_last_check_config_failed_reject_age_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsHttpReloadBusyRejectCount),
+			sHttpLastReloadBusyRejectTime ? sHttpLastReloadBusyRejectTime : "(none)",
+			(long long)XS_HttpLastReloadBusyRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpReloadFailedRejectCount),
+			sHttpLastReloadFailedRejectTime ? sHttpLastReloadFailedRejectTime : "(none)",
+			(long long)XS_HttpLastReloadFailedRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpCheckConfigFailedRejectCount),
+			sHttpLastCheckConfigFailedRejectTime ? sHttpLastCheckConfigFailedRejectTime : "(none)",
+			(long long)XS_HttpLastCheckConfigFailedRejectAgeMS()
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"http_bus_bad_request_reject_count=%lld\nhttp_last_bus_bad_request_reject_time=%s\nhttp_last_bus_bad_request_reject_age_ms=%lld\nhttp_bus_not_found_reject_count=%lld\nhttp_last_bus_not_found_reject_time=%s\nhttp_last_bus_not_found_reject_age_ms=%lld\nhttp_bus_limit_reject_count=%lld\nhttp_last_bus_limit_reject_time=%s\nhttp_last_bus_limit_reject_age_ms=%lld\nhttp_bus_failed_reject_count=%lld\nhttp_last_bus_failed_reject_time=%s\nhttp_last_bus_failed_reject_age_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsHttpBusBadRequestRejectCount),
+			sHttpLastBusBadRequestRejectTime ? sHttpLastBusBadRequestRejectTime : "(none)",
+			(long long)XS_HttpLastBusBadRequestRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpBusNotFoundRejectCount),
+			sHttpLastBusNotFoundRejectTime ? sHttpLastBusNotFoundRejectTime : "(none)",
+			(long long)XS_HttpLastBusNotFoundRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpBusLimitRejectCount),
+			sHttpLastBusLimitRejectTime ? sHttpLastBusLimitRejectTime : "(none)",
+			(long long)XS_HttpLastBusLimitRejectAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsHttpBusFailedRejectCount),
+			sHttpLastBusFailedRejectTime ? sHttpLastBusFailedRejectTime : "(none)",
+			(long long)XS_HttpLastBusFailedRejectAgeMS()
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"bus_namespace_count=%lld\nbus_namespace_item_count=%lld\nbus_data_limit=%lld\nbus_queue_limit=%lld\nbus_namespace_limit=%lld\nbus_namespace_data_limit=%lld\nbus_namespace_limit_remaining=%lld\nbus_namespace_limit_reached=%s\nbus_readonly_namespace_count=%lld\nbus_disabled_namespace_count=%lld\nbus_ttl_required_namespace_count=%lld\nbus_tag_required_namespace_count=%lld\nbus_readonly_namespaces=%s\nbus_disabled_namespaces=%s\nbus_ttl_required_namespaces=%s\nbus_tag_required_namespaces=%s\nbus_data_limit_reject_count=%lld\nbus_last_data_limit_reject_time=%s\nbus_last_data_limit_reject_age_ms=%lld\nbus_last_data_limit_count=%lld\nbus_queue_limit_reject_count=%lld\nbus_last_queue_limit_reject_time=%s\nbus_last_queue_limit_reject_age_ms=%lld\nbus_last_queue_limit_count=%lld\n",
+			(long long)(objBus ? xvoTableGetInt(objBus, "namespace_count", sizeof("namespace_count") - 1) : 0),
+			(long long)(objBus ? xvoTableGetInt(objBus, "namespace_item_count", sizeof("namespace_item_count") - 1) : 0),
+			(long long)(objBus ? xvoTableGetInt(objBus, "data_limit", sizeof("data_limit") - 1) : 0),
+			(long long)(objBus ? xvoTableGetInt(objBus, "queue_limit", sizeof("queue_limit") - 1) : 0),
+			(long long)(objBus ? xvoTableGetInt(objBus, "namespace_limit", sizeof("namespace_limit") - 1) : 0),
+			(long long)(objBus ? xvoTableGetInt(objBus, "namespace_data_limit", sizeof("namespace_data_limit") - 1) : 0),
+			(long long)(objBus ? xvoTableGetInt(objBus, "namespace_limit_remaining", sizeof("namespace_limit_remaining") - 1) : 0),
+			(objBus && xvoGetBool(xvoTableGetValue(objBus, "namespace_limit_reached", sizeof("namespace_limit_reached") - 1))) ? "true" : "false",
+			(long long)(objBus ? xvoTableGetInt(objBus, "readonly_namespace_count", sizeof("readonly_namespace_count") - 1) : 0),
+			(long long)(objBus ? xvoTableGetInt(objBus, "disabled_namespace_count", sizeof("disabled_namespace_count") - 1) : 0),
+			(long long)(objBus ? xvoTableGetInt(objBus, "ttl_required_namespace_count", sizeof("ttl_required_namespace_count") - 1) : 0),
+			(long long)(objBus ? xvoTableGetInt(objBus, "tag_required_namespace_count", sizeof("tag_required_namespace_count") - 1) : 0),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "readonly_namespaces", sizeof("readonly_namespaces") - 1)) : (str)"",
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "disabled_namespaces", sizeof("disabled_namespaces") - 1)) : (str)"",
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "ttl_required_namespaces", sizeof("ttl_required_namespaces") - 1)) : (str)"",
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "tag_required_namespaces", sizeof("tag_required_namespaces") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "data_limit_reject_count", sizeof("data_limit_reject_count") - 1) : 0),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_data_limit_reject_time", sizeof("last_data_limit_reject_time") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "last_data_limit_reject_age_ms", sizeof("last_data_limit_reject_age_ms") - 1) : -1),
+			(long long)(objBus ? xvoTableGetInt(objBus, "last_data_limit_count", sizeof("last_data_limit_count") - 1) : 0),
+			(long long)(objBus ? xvoTableGetInt(objBus, "queue_limit_reject_count", sizeof("queue_limit_reject_count") - 1) : 0),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_queue_limit_reject_time", sizeof("last_queue_limit_reject_time") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "last_queue_limit_reject_age_ms", sizeof("last_queue_limit_reject_age_ms") - 1) : -1),
+			(long long)(objBus ? xvoTableGetInt(objBus, "last_queue_limit_count", sizeof("last_queue_limit_count") - 1) : 0)
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"bus_namespace_limit_reject_count=%lld\nbus_last_namespace_limit_reject_time=%s\nbus_last_namespace_limit_reject_age_ms=%lld\nbus_last_namespace_limit_count=%lld\nbus_last_namespace_limit_namespace=%s\nbus_namespace_data_limit_reject_count=%lld\nbus_last_namespace_data_limit_reject_time=%s\nbus_last_namespace_data_limit_reject_age_ms=%lld\nbus_last_namespace_data_limit_count=%lld\nbus_last_namespace_data_limit_namespace=%s\nbus_readonly_namespace_reject_count=%lld\nbus_last_readonly_namespace_reject_time=%s\nbus_last_readonly_namespace_reject_age_ms=%lld\nbus_last_readonly_namespace=%s\nbus_last_readonly_namespace_action=%s\nbus_disabled_namespace_reject_count=%lld\nbus_last_disabled_namespace_reject_time=%s\nbus_last_disabled_namespace_reject_age_ms=%lld\nbus_last_disabled_namespace=%s\nbus_last_disabled_namespace_action=%s\nbus_ttl_required_namespace_reject_count=%lld\nbus_last_ttl_required_namespace_reject_time=%s\nbus_last_ttl_required_namespace_reject_age_ms=%lld\nbus_last_ttl_required_namespace=%s\nbus_last_ttl_required_namespace_action=%s\nbus_tag_required_namespace_reject_count=%lld\nbus_last_tag_required_namespace_reject_time=%s\nbus_last_tag_required_namespace_reject_age_ms=%lld\nbus_last_tag_required_namespace=%s\nbus_last_tag_required_namespace_action=%s\n",
+			(long long)(objBus ? xvoTableGetInt(objBus, "namespace_limit_reject_count", sizeof("namespace_limit_reject_count") - 1) : 0),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_namespace_limit_reject_time", sizeof("last_namespace_limit_reject_time") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "last_namespace_limit_reject_age_ms", sizeof("last_namespace_limit_reject_age_ms") - 1) : -1),
+			(long long)(objBus ? xvoTableGetInt(objBus, "last_namespace_limit_count", sizeof("last_namespace_limit_count") - 1) : 0),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_namespace_limit_namespace", sizeof("last_namespace_limit_namespace") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "namespace_data_limit_reject_count", sizeof("namespace_data_limit_reject_count") - 1) : 0),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_namespace_data_limit_reject_time", sizeof("last_namespace_data_limit_reject_time") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "last_namespace_data_limit_reject_age_ms", sizeof("last_namespace_data_limit_reject_age_ms") - 1) : -1),
+			(long long)(objBus ? xvoTableGetInt(objBus, "last_namespace_data_limit_count", sizeof("last_namespace_data_limit_count") - 1) : 0),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_namespace_data_limit_namespace", sizeof("last_namespace_data_limit_namespace") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "readonly_namespace_reject_count", sizeof("readonly_namespace_reject_count") - 1) : 0),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_readonly_namespace_reject_time", sizeof("last_readonly_namespace_reject_time") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "last_readonly_namespace_reject_age_ms", sizeof("last_readonly_namespace_reject_age_ms") - 1) : -1),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_readonly_namespace", sizeof("last_readonly_namespace") - 1)) : (str)"",
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_readonly_namespace_action", sizeof("last_readonly_namespace_action") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "disabled_namespace_reject_count", sizeof("disabled_namespace_reject_count") - 1) : 0),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_disabled_namespace_reject_time", sizeof("last_disabled_namespace_reject_time") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "last_disabled_namespace_reject_age_ms", sizeof("last_disabled_namespace_reject_age_ms") - 1) : -1),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_disabled_namespace", sizeof("last_disabled_namespace") - 1)) : (str)"",
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_disabled_namespace_action", sizeof("last_disabled_namespace_action") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "ttl_required_namespace_reject_count", sizeof("ttl_required_namespace_reject_count") - 1) : 0),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_ttl_required_namespace_reject_time", sizeof("last_ttl_required_namespace_reject_time") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "last_ttl_required_namespace_reject_age_ms", sizeof("last_ttl_required_namespace_reject_age_ms") - 1) : -1),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_ttl_required_namespace", sizeof("last_ttl_required_namespace") - 1)) : (str)"",
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_ttl_required_namespace_action", sizeof("last_ttl_required_namespace_action") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "tag_required_namespace_reject_count", sizeof("tag_required_namespace_reject_count") - 1) : 0),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_tag_required_namespace_reject_time", sizeof("last_tag_required_namespace_reject_time") - 1)) : (str)"",
+			(long long)(objBus ? xvoTableGetInt(objBus, "last_tag_required_namespace_reject_age_ms", sizeof("last_tag_required_namespace_reject_age_ms") - 1) : -1),
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_tag_required_namespace", sizeof("last_tag_required_namespace") - 1)) : (str)"",
+			objBus ? xvoGetText(xvoTableGetValue(objBus, "last_tag_required_namespace_action", sizeof("last_tag_required_namespace_action") - 1)) : (str)""
+		);
+	}
+	if ( strlen(sBody) < sizeof(sBody) ) {
+		snprintf(
+			sBody + strlen(sBody),
+			sizeof(sBody) - strlen(sBody),
+			"ws_message_limit_close_count=%lld\nws_last_message_limit_close_time=%s\nws_last_message_limit_close_age_ms=%lld\nxtp_recv_limit_close_count=%lld\nxtp_last_recv_limit_close_time=%s\nxtp_last_recv_limit_close_age_ms=%lld\ncustom_recv_limit_close_count=%lld\ncustom_last_recv_limit_close_time=%s\ncustom_last_recv_limit_close_age_ms=%lld\n",
+			(long long)XS_HttpMetricGet(&g_iXsWsMessageLimitCloseCount),
+			sWsLastMessageLimitCloseTime ? sWsLastMessageLimitCloseTime : "(none)",
+			(long long)XS_WsLastMessageLimitCloseAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsXtpRecvLimitCloseCount),
+			sXtpLastRecvLimitCloseTime ? sXtpLastRecvLimitCloseTime : "(none)",
+			(long long)XS_XtpLastRecvLimitCloseAgeMS(),
+			(long long)XS_HttpMetricGet(&g_iXsCustomRecvLimitCloseCount),
+			sCustomLastRecvLimitCloseTime ? sCustomLastRecvLimitCloseTime : "(none)",
+			(long long)XS_CustomLastRecvLimitCloseAgeMS()
+		);
+	}
+	if ( objBus ) {
+		xvoUnref(objBus);
+	}
 	if ( sCurrentDir ) {
 		xrtFree(sCurrentDir);
 	}
@@ -7333,6 +11503,12 @@ static inline bool XS_HttpHandleDashboard(XS_ServerConfig* objServer, const XS_H
 	}
 	if ( sCheckTime ) {
 		xrtFree(sCheckTime);
+	}
+	if ( sReloadTime ) {
+		xrtFree(sReloadTime);
+	}
+	if ( sBusItems ) {
+		xrtFree(sBusItems);
 	}
 	if ( sHttpLastTime ) {
 		xrtFree(sHttpLastTime);
@@ -7352,6 +11528,45 @@ static inline bool XS_HttpHandleDashboard(XS_ServerConfig* objServer, const XS_H
 	if ( sHttpLastStopCleanupTime ) {
 		xrtFree(sHttpLastStopCleanupTime);
 	}
+	if ( sHttpLastHeaderLimitRejectTime ) {
+		xrtFree(sHttpLastHeaderLimitRejectTime);
+	}
+	if ( sHttpLastBodyLimitRejectTime ) {
+		xrtFree(sHttpLastBodyLimitRejectTime);
+	}
+	if ( sHttpLastPathLimitRejectTime ) {
+		xrtFree(sHttpLastPathLimitRejectTime);
+	}
+	if ( sHttpLastApiDisabledRejectTime ) {
+		xrtFree(sHttpLastApiDisabledRejectTime);
+	}
+	if ( sHttpLastMethodRejectTime ) {
+		xrtFree(sHttpLastMethodRejectTime);
+	}
+	if ( sHttpLastHostNotFoundRejectTime ) {
+		xrtFree(sHttpLastHostNotFoundRejectTime);
+	}
+	if ( sHttpLastReloadBusyRejectTime ) {
+		xrtFree(sHttpLastReloadBusyRejectTime);
+	}
+	if ( sHttpLastReloadFailedRejectTime ) {
+		xrtFree(sHttpLastReloadFailedRejectTime);
+	}
+	if ( sHttpLastCheckConfigFailedRejectTime ) {
+		xrtFree(sHttpLastCheckConfigFailedRejectTime);
+	}
+	if ( sHttpLastBusBadRequestRejectTime ) {
+		xrtFree(sHttpLastBusBadRequestRejectTime);
+	}
+	if ( sHttpLastBusNotFoundRejectTime ) {
+		xrtFree(sHttpLastBusNotFoundRejectTime);
+	}
+	if ( sHttpLastBusLimitRejectTime ) {
+		xrtFree(sHttpLastBusLimitRejectTime);
+	}
+	if ( sHttpLastBusFailedRejectTime ) {
+		xrtFree(sHttpLastBusFailedRejectTime);
+	}
 	if ( sWsLastTime ) {
 		xrtFree(sWsLastTime);
 	}
@@ -7369,6 +11584,9 @@ static inline bool XS_HttpHandleDashboard(XS_ServerConfig* objServer, const XS_H
 	}
 	if ( sWsLastConnLimitCloseTime ) {
 		xrtFree(sWsLastConnLimitCloseTime);
+	}
+	if ( sWsLastMessageLimitCloseTime ) {
+		xrtFree(sWsLastMessageLimitCloseTime);
 	}
 	if ( sWsLastRejectTime ) {
 		xrtFree(sWsLastRejectTime);
@@ -7394,6 +11612,9 @@ static inline bool XS_HttpHandleDashboard(XS_ServerConfig* objServer, const XS_H
 	if ( sCustomLastTime ) {
 		xrtFree(sCustomLastTime);
 	}
+	if ( sCustomLastCloseTime ) {
+		xrtFree(sCustomLastCloseTime);
+	}
 	if ( sCustomLastErrorTime ) {
 		xrtFree(sCustomLastErrorTime);
 	}
@@ -7405,6 +11626,9 @@ static inline bool XS_HttpHandleDashboard(XS_ServerConfig* objServer, const XS_H
 	}
 	if ( sXtpLastConnLimitCloseTime ) {
 		xrtFree(sXtpLastConnLimitCloseTime);
+	}
+	if ( sXtpLastRecvLimitCloseTime ) {
+		xrtFree(sXtpLastRecvLimitCloseTime);
 	}
 	if ( sXtpLastRejectTime ) {
 		xrtFree(sXtpLastRejectTime);
@@ -7418,6 +11642,9 @@ static inline bool XS_HttpHandleDashboard(XS_ServerConfig* objServer, const XS_H
 	if ( sCustomLastConnLimitCloseTime ) {
 		xrtFree(sCustomLastConnLimitCloseTime);
 	}
+	if ( sCustomLastRecvLimitCloseTime ) {
+		xrtFree(sCustomLastRecvLimitCloseTime);
+	}
 	if ( sCustomLastRejectTime ) {
 		xrtFree(sCustomLastRejectTime);
 	}
@@ -7430,8 +11657,11 @@ static inline bool XS_HttpHandleDashboard(XS_ServerConfig* objServer, const XS_H
 	if ( sBusDispatchTime ) {
 		xrtFree(sBusDispatchTime);
 	}
-	if ( sCheckBase ) {
-		xrtFree(sCheckBase);
+	if ( sBusLastSweepTime ) {
+		xrtFree(sBusLastSweepTime);
+	}
+	if ( sBusLastCleanupTime ) {
+		xrtFree(sBusLastCleanupTime);
 	}
 	if ( sConfigBase ) {
 		xrtFree(sConfigBase);
@@ -7444,9 +11674,11 @@ static inline bool XS_HttpHandleDashboard(XS_ServerConfig* objServer, const XS_H
 
 static inline bool XS_HttpHandleCheckConfig(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
+	XS_CheckConfigStatusSnapshot tCheckStatus;
 	XS_Config objCfgCheck;
 	const char* sFilePath;
 	char* sFileArg;
+	char* sFileResolved;
 	char* sLastTime;
 	char sBody[1536];
 	bool bOK;
@@ -7462,8 +11694,16 @@ static inline bool XS_HttpHandleCheckConfig(XS_ServerConfig* objServer, const XS
 	}
 
 	sFileArg = XS_HttpQueryDup(pReq->sQuery, "file");
-	sFilePath = (sFileArg && sFileArg[0]) ? sFileArg : g_sXsConfigFile;
+	sFileResolved = NULL;
+	if ( sFileArg && sFileArg[0] ) {
+		sFileResolved = XS_ConfigNormalizeRuntimePath(sFileArg);
+	}
+	sFilePath = (sFileResolved && sFileResolved[0]) ? sFileResolved : ((sFileArg && sFileArg[0]) ? sFileArg : g_sXsConfigFile);
 	if ( sFilePath == NULL || sFilePath[0] == '\0' ) {
+		XS_CheckConfigRecordResultEx(FALSE, "", "", 0, "config file not set");
+		if ( sFileResolved ) {
+			xrtFree(sFileResolved);
+		}
 		if ( sFileArg ) {
 			xrtFree(sFileArg);
 		}
@@ -7472,25 +11712,36 @@ static inline bool XS_HttpHandleCheckConfig(XS_ServerConfig* objServer, const XS
 
 	memset(&objCfgCheck, 0, sizeof(objCfgCheck));
 	bOK = XS_LoadConfig(&objCfgCheck, sFilePath);
-	XS_CheckConfigRecordResult(bOK);
-	sLastTime = XS_CheckConfigLastTimeText();
+	XS_CheckConfigRecordResultEx(
+		bOK,
+		sFilePath,
+		(bOK && objCfgCheck.BaseDir) ? objCfgCheck.BaseDir : "",
+		(int64)((bOK && objCfgCheck.Servers) ? objCfgCheck.Servers->Count : 0),
+		bOK ? "config check passed" : "config check failed"
+	);
+	XS_ConfigCheckStatusSnapshot(&tCheckStatus);
+	sLastTime = XS_CheckConfigTimeTextByStatus(&tCheckStatus);
 	snprintf(
 		sBody,
 		sizeof(sBody),
-		"result=%s\nfile=%s\nbase=%s\nserver_count=%u\ncheck_total_count=%lld\ncheck_success_count=%lld\ncheck_failure_count=%lld\ncheck_last_time=%s\ncheck_last_age_ms=%lld\n",
-		bOK ? "true" : "false",
-		sFilePath,
-		(bOK && objCfgCheck.BaseDir) ? objCfgCheck.BaseDir : "(none)",
-		(unsigned int)((bOK && objCfgCheck.Servers) ? objCfgCheck.Servers->Count : 0),
-		(long long)XS_HttpMetricGet(&g_iXsCheckConfigTotalCount),
-		(long long)XS_HttpMetricGet(&g_iXsCheckConfigSuccessCount),
-		(long long)XS_HttpMetricGet(&g_iXsCheckConfigFailureCount),
+		"result=%s\nfile=%s\nbase=%s\nserver_count=%u\nmessage=%s\ncheck_total_count=%lld\ncheck_success_count=%lld\ncheck_failure_count=%lld\ncheck_last_time=%s\ncheck_last_age_ms=%lld\n",
+		tCheckStatus.LastResult ? "true" : "false",
+		tCheckStatus.sLastFile[0] ? tCheckStatus.sLastFile : "(none)",
+		tCheckStatus.sLastBase[0] ? tCheckStatus.sLastBase : "(none)",
+		(unsigned int)tCheckStatus.iLastServerCount,
+		tCheckStatus.sLastMessage[0] ? tCheckStatus.sLastMessage : "(none)",
+		(long long)tCheckStatus.iTotalCount,
+		(long long)tCheckStatus.iSuccessCount,
+		(long long)tCheckStatus.iFailureCount,
 		sLastTime ? sLastTime : "(none)",
-		(long long)XS_CheckConfigLastAgeMS()
+		(long long)XS_CheckConfigAgeMSByStatus(&tCheckStatus)
 	);
 	XS_FreeConfig(&objCfgCheck);
 	if ( sLastTime ) {
 		xrtFree(sLastTime);
+	}
+	if ( sFileResolved ) {
+		xrtFree(sFileResolved);
 	}
 	if ( sFileArg ) {
 		xrtFree(sFileArg);
@@ -7500,10 +11751,12 @@ static inline bool XS_HttpHandleCheckConfig(XS_ServerConfig* objServer, const XS
 
 static inline bool XS_HttpHandleCheckConfigJson(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
+	XS_CheckConfigStatusSnapshot tCheckStatus;
 	XS_Config objCfgCheck;
 	xvalue objRet;
 	const char* sFilePath;
 	char* sFileArg;
+	char* sFileResolved;
 	char* sLastTime;
 	char* sJson;
 	bool bOK;
@@ -7515,34 +11768,49 @@ static inline bool XS_HttpHandleCheckConfigJson(XS_ServerConfig* objServer, cons
 		return FALSE;
 	}
 	if ( !(objServer->Debug || objHost->Debug) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "check config json api disabled");
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "check config json api disabled");
 	}
 
 	sFileArg = XS_HttpQueryDup(pReq->sQuery, "file");
-	sFilePath = (sFileArg && sFileArg[0]) ? sFileArg : g_sXsConfigFile;
+	sFileResolved = NULL;
+	if ( sFileArg && sFileArg[0] ) {
+		sFileResolved = XS_ConfigNormalizeRuntimePath(sFileArg);
+	}
+	sFilePath = (sFileResolved && sFileResolved[0]) ? sFileResolved : ((sFileArg && sFileArg[0]) ? sFileArg : g_sXsConfigFile);
 	if ( sFilePath == NULL || sFilePath[0] == '\0' ) {
+		XS_CheckConfigRecordResultEx(FALSE, "", "", 0, "config file not set");
+		if ( sFileResolved ) {
+			xrtFree(sFileResolved);
+		}
 		if ( sFileArg ) {
 			xrtFree(sFileArg);
 		}
-		return XS_HttpRespondText(pResp, 500, "Internal Server Error", "config file not set");
+		return XS_HttpRespondJsonResult(pResp, 500, "Internal Server Error", FALSE, "config file not set");
 	}
 
 	memset(&objCfgCheck, 0, sizeof(objCfgCheck));
 	bOK = XS_LoadConfig(&objCfgCheck, sFilePath);
-	XS_CheckConfigRecordResult(bOK);
-	sLastTime = XS_CheckConfigLastTimeText();
+	XS_CheckConfigRecordResultEx(
+		bOK,
+		sFilePath,
+		(bOK && objCfgCheck.BaseDir) ? objCfgCheck.BaseDir : "",
+		(int64)((bOK && objCfgCheck.Servers) ? objCfgCheck.Servers->Count : 0),
+		bOK ? "config check passed" : "config check failed"
+	);
+	XS_ConfigCheckStatusSnapshot(&tCheckStatus);
+	sLastTime = XS_CheckConfigTimeTextByStatus(&tCheckStatus);
 
 	objRet = xvoCreateTable();
-	xvoTableSetBool(objRet, "result", 6, bOK);
-	xvoTableSetText(objRet, "file", 4, (ptr)sFilePath, 0, FALSE);
-	xvoTableSetText(objRet, "base", 4, (ptr)((bOK && objCfgCheck.BaseDir) ? objCfgCheck.BaseDir : ""), 0, FALSE);
-	xvoTableSetInt(objRet, "server_count", 12, (bOK && objCfgCheck.Servers) ? objCfgCheck.Servers->Count : 0);
-	xvoTableSetText(objRet, "message", 7, bOK ? "config check passed" : "config check failed", 0, FALSE);
-	xvoTableSetInt(objRet, "check_total_count", 17, XS_HttpMetricGet(&g_iXsCheckConfigTotalCount));
-	xvoTableSetInt(objRet, "check_success_count", 19, XS_HttpMetricGet(&g_iXsCheckConfigSuccessCount));
-	xvoTableSetInt(objRet, "check_failure_count", 19, XS_HttpMetricGet(&g_iXsCheckConfigFailureCount));
+	xvoTableSetBool(objRet, "result", 6, tCheckStatus.LastResult);
+	xvoTableSetText(objRet, "file", 4, (ptr)tCheckStatus.sLastFile, 0, FALSE);
+	xvoTableSetText(objRet, "base", 4, (ptr)tCheckStatus.sLastBase, 0, FALSE);
+	xvoTableSetInt(objRet, "server_count", 12, tCheckStatus.iLastServerCount);
+	xvoTableSetText(objRet, "message", 7, (ptr)tCheckStatus.sLastMessage, 0, FALSE);
+	xvoTableSetInt(objRet, "check_total_count", 17, tCheckStatus.iTotalCount);
+	xvoTableSetInt(objRet, "check_success_count", 19, tCheckStatus.iSuccessCount);
+	xvoTableSetInt(objRet, "check_failure_count", 19, tCheckStatus.iFailureCount);
 	xvoTableSetText(objRet, "check_last_time", 15, (ptr)(sLastTime ? sLastTime : ""), 0, FALSE);
-	xvoTableSetInt(objRet, "check_last_age_ms", 17, XS_CheckConfigLastAgeMS());
+	xvoTableSetInt(objRet, "check_last_age_ms", 17, XS_CheckConfigAgeMSByStatus(&tCheckStatus));
 
 	sJson = xrtStringifyJSON(objRet, FALSE, NULL);
 	xvoUnref(objRet);
@@ -7550,11 +11818,14 @@ static inline bool XS_HttpHandleCheckConfigJson(XS_ServerConfig* objServer, cons
 	if ( sLastTime ) {
 		xrtFree(sLastTime);
 	}
+	if ( sFileResolved ) {
+		xrtFree(sFileResolved);
+	}
 	if ( sFileArg ) {
 		xrtFree(sFileArg);
 	}
 	if ( sJson == NULL ) {
-		return XS_HttpRespondText(pResp, 500, "Internal Server Error", "check config json build failed");
+		return XS_HttpRespondJsonResult(pResp, 500, "Internal Server Error", FALSE, "check config json build failed");
 	}
 	xrtHttpdResponseSetStatus(pResp, bOK ? 200 : 500, bOK ? "OK" : "Internal Server Error");
 	if ( !xrtHttpdResponseSetBodyCopy(pResp, sJson, strlen(sJson), "application/json; charset=utf-8") ) {
@@ -7567,7 +11838,9 @@ static inline bool XS_HttpHandleCheckConfigJson(XS_ServerConfig* objServer, cons
 
 static inline bool XS_HttpHandleCheckConfigClear(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
-	char sBody[256];
+	XS_CheckConfigStatusSnapshot tCheckStatus;
+	char sBody[512];
+	char* sLastTime;
 
 	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
 		return FALSE;
@@ -7580,14 +11853,26 @@ static inline bool XS_HttpHandleCheckConfigClear(XS_ServerConfig* objServer, con
 	}
 
 	XS_CheckConfigClearStats();
+	XS_ConfigCheckStatusSnapshot(&tCheckStatus);
+	sLastTime = XS_CheckConfigTimeTextByStatus(&tCheckStatus);
 	snprintf(
 		sBody,
 		sizeof(sBody),
-		"check_total_count=%lld\ncheck_success_count=%lld\ncheck_failure_count=%lld\ncheck_last_time=(none)\ncheck_last_age_ms=-1\n",
-		(long long)XS_HttpMetricGet(&g_iXsCheckConfigTotalCount),
-		(long long)XS_HttpMetricGet(&g_iXsCheckConfigSuccessCount),
-		(long long)XS_HttpMetricGet(&g_iXsCheckConfigFailureCount)
+		"result=%s\nfile=%s\nbase=%s\nserver_count=%u\nmessage=%s\ncheck_total_count=%lld\ncheck_success_count=%lld\ncheck_failure_count=%lld\ncheck_last_time=%s\ncheck_last_age_ms=%lld\n",
+		tCheckStatus.LastResult ? "true" : "false",
+		tCheckStatus.sLastFile[0] ? tCheckStatus.sLastFile : "(none)",
+		tCheckStatus.sLastBase[0] ? tCheckStatus.sLastBase : "(none)",
+		(unsigned int)tCheckStatus.iLastServerCount,
+		tCheckStatus.sLastMessage[0] ? tCheckStatus.sLastMessage : "(none)",
+		(long long)tCheckStatus.iTotalCount,
+		(long long)tCheckStatus.iSuccessCount,
+		(long long)tCheckStatus.iFailureCount,
+		sLastTime ? sLastTime : "(none)",
+		(long long)XS_CheckConfigAgeMSByStatus(&tCheckStatus)
 	);
+	if ( sLastTime ) {
+		xrtFree(sLastTime);
+	}
 	return XS_HttpRespondText(pResp, 200, "OK", sBody);
 }
 
@@ -7660,7 +11945,11 @@ static bool XS_HttpOnRequest(ptr pOwner, xhttpdserver* pServer, xhttpdconn* pCon
 	
 	objHost = XS_HttpLocateHost(objServer, pReq);
 	if ( objHost == NULL ) {
-		bRet = XS_HttpRespondText(pResp, 404, "Not Found", "host not found");
+		if ( XS_HttpPathExpectsJSONError(pReq->sPath) ) {
+			bRet = XS_HttpRespondJsonResult(pResp, 404, "Not Found", FALSE, "host not found");
+		} else {
+			bRet = XS_HttpRespondText(pResp, 404, "Not Found", "host not found");
+		}
 		goto end;
 	}
 
@@ -7845,6 +12134,14 @@ static bool XS_HttpOnRequest(ptr pOwner, xhttpdserver* pServer, xhttpdconn* pCon
 		bRet = TRUE;
 		goto end;
 	}
+	if ( XS_HttpHandleBusSweep(objServer, objHost, pReq, pResp) ) {
+		bRet = TRUE;
+		goto end;
+	}
+	if ( XS_HttpHandleBusLimits(objServer, objHost, pReq, pResp) ) {
+		bRet = TRUE;
+		goto end;
+	}
 	if ( XS_HttpHandleBusRegister(objServer, objHost, pReq, pResp) ) {
 		bRet = TRUE;
 		goto end;
@@ -7859,6 +12156,15 @@ static bool XS_HttpOnRequest(ptr pOwner, xhttpdserver* pServer, xhttpdconn* pCon
 	}
 	if ( XS_HttpHandleStatusJson(objServer, objHost, pReq, pResp) ) {
 		bRet = TRUE;
+		goto end;
+	}
+
+	if ( XS_HttpPathReservedManage(pReq->sPath) ) {
+		if ( XS_HttpPathExpectsJSONError(pReq->sPath) ) {
+			bRet = XS_HttpRespondJsonResult(pResp, 404, "Not Found", FALSE, "manage api not found");
+		} else {
+			bRet = XS_HttpRespondText(pResp, 404, "Not Found", "manage api not found");
+		}
 		goto end;
 	}
 	
@@ -7991,7 +12297,9 @@ static inline bool XS_ParseBindAddr(const char* sAddr, xnetaddr* pAddr)
 		sHost[iHostLen] = '\0';
 	}
 	
-	iPort = (uint16)atoi(pColon + 1);
+	if ( !XS_ParsePortText(pColon + 1, &iPort) ) {
+		return FALSE;
+	}
 	if ( xrtNetAddrParse(pAddr, sHost, iPort) != XRT_NET_OK ) {
 		return FALSE;
 	}

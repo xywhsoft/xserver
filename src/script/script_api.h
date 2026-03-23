@@ -2311,12 +2311,12 @@ static inline xvalue XS_ScriptDataGet(int64 iID)
 
 static inline int XS_ScriptDataRetain(int64 iID)
 {
-	return XS_BusDataRetain(iID) ? 1 : 0;
+	return XS_BusDataRetainManaged(iID) ? 1 : 0;
 }
 
 static inline int XS_ScriptDataRelease(int64 iID)
 {
-	return XS_BusDataRelease(iID) ? 1 : 0;
+	return XS_BusDataReleaseManaged(iID) ? 1 : 0;
 }
 
 static inline int XS_ScriptDataRemove(int64 iID)

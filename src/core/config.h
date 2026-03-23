@@ -550,8 +550,10 @@ static inline bool XS_LoadConfig(XS_Config* objCfg, const char* sFilePath)
 {
 	xvalue objRoot;
 	uint32 i;
+	int iErrorCountBase;
 	
 	XS_InitConfig(objCfg);
+	iErrorCountBase = g_objXsErrorState.ErrorCount;
 	objCfg->FilePath = XS_CopyText(sFilePath);
 	objCfg->BaseDir = xrtPathGetDir((char*)sFilePath, 0);
 	objRoot = xrtParseJSON_File((char*)sFilePath);
@@ -585,7 +587,7 @@ static inline bool XS_LoadConfig(XS_Config* objCfg, const char* sFilePath)
 		return FALSE;
 	}
 	
-	return !XS_HasErrors();
+	return g_objXsErrorState.ErrorCount == iErrorCountBase;
 }
 
 static inline void XS_PrintConfigSummary(XS_Config* objCfg)

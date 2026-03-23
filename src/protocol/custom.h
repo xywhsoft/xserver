@@ -154,6 +154,12 @@ static inline void XS_CustomRecordConnLimitClose(void)
 	XS_CustomRecordRejectEvent("conn_limit");
 }
 
+static inline void XS_CustomRecordRecvLimitClose(void)
+{
+	g_iXsCustomRecvLimitCloseCount++;
+	g_tXsCustomLastRecvLimitCloseTime = xrtNow();
+}
+
 static uint32 XS_CustomIdleThread(ptr pArg)
 {
 	XS_CustomHandle* objHandle = (XS_CustomHandle*)pArg;
@@ -210,6 +216,9 @@ static inline void XS_CustomRecordInvalid(const char* sReason)
 {
 	g_iXsCustomInvalidCount++;
 	g_tXsCustomLastInvalidTime = xrtNow();
+	if ( sReason && strcmp(sReason, "recv limit exceeded") == 0 ) {
+		XS_CustomRecordRecvLimitClose();
+	}
 	XS_CustomRecordRejectEvent(sReason);
 	if ( sReason ) {
 		strncpy(g_sXsCustomLastInvalidReason, sReason, sizeof(g_sXsCustomLastInvalidReason) - 1);
@@ -427,6 +436,7 @@ static void XS_CustomOnClose(ptr pOwner, xnetstream* pStream, xnet_result iReaso
 	
 	g_iXsCustomCloseCount++;
 	g_iXsCustomLastCloseReason = (int64)iReason;
+	g_tXsCustomLastCloseTime = xrtNow();
 	g_iXsCustomConnCurrent--;
 	if ( g_iXsCustomConnCurrent < 0 ) {
 		g_iXsCustomConnCurrent = 0;
@@ -449,12 +459,30 @@ static void XS_CustomOnClose(ptr pOwner, xnetstream* pStream, xnet_result iReaso
 static void XS_CustomOnError(ptr pOwner, xnetstream* pStream, int iSysErr)
 {
 	XS_CustomConnContext* objCtx = (XS_CustomConnContext*)pOwner;
+	uint32 iInternalError = pStream ? xrtNetStreamTakeInternalError(pStream) : XNET_STREAM_INTERNAL_ERROR_NONE;
 	if ( objCtx == NULL && pStream != NULL ) {
 		objCtx = (XS_CustomConnContext*)xrtNetStreamGetUserData(pStream);
 	}
 	XS_ServerConfig* objServer = objCtx ? objCtx->pServer : NULL;
 
+	if ( iInternalError == XNET_STREAM_INTERNAL_ERROR_RECV_LIMIT ) {
+		XS_CustomRecordRemote(pStream);
+		XS_CustomRecordInvalid("recv limit exceeded");
+		if ( objCtx ) {
+			objCtx->bClosing = TRUE;
+		}
+		XS_LogWarn(
+			"custom transport recv limit exceeded: server=%s stream=%p limit=%u",
+			objServer && objServer->Name ? objServer->Name : "(null)",
+			(void*)pStream,
+			(unsigned)(pStream ? pStream->iRecvLimit : 0u)
+		);
+		return;
+	}
 	if ( objCtx && objCtx->bClosing ) {
+		return;
+	}
+	if ( iSysErr == -1 ) {
 		return;
 	}
 	

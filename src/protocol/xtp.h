@@ -272,6 +272,12 @@ static inline void XS_XtpRecordConnLimitClose(void)
 	XS_XtpRecordRejectEvent("conn_limit");
 }
 
+static inline void XS_XtpRecordRecvLimitClose(void)
+{
+	g_iXsXtpRecvLimitCloseCount++;
+	g_tXsXtpLastRecvLimitCloseTime = xrtNow();
+}
+
 static inline int64 XS_XtpMetricGet(const volatile int64* pValue)
 {
 	return XS_HttpMetricGet(pValue);
@@ -291,6 +297,12 @@ static inline void XS_XtpRecordInvalid(const char* sReason)
 {
 	XS_XtpMetricAdd(&g_iXsXtpInvalidCount, 1);
 	g_tXsXtpLastInvalidTime = xrtNow();
+	if (
+		(sReason && strcmp(sReason, "recv limit exceeded") == 0) ||
+		(sReason && strcmp(sReason, "pack limit exceeded") == 0)
+	) {
+		XS_XtpRecordRecvLimitClose();
+	}
 	XS_XtpRecordRejectEvent(sReason);
 	if ( sReason && sReason[0] ) {
 		strncpy(g_sXsXtpLastInvalidReason, sReason, sizeof(g_sXsXtpLastInvalidReason) - 1);
@@ -3133,12 +3145,25 @@ static void XS_XtpOnClose(ptr pOwner, xnetstream* pStream, xnet_result iReason)
 static void XS_XtpOnError(ptr pOwner, xnetstream* pStream, int iSysErr)
 {
 	XS_XtpConnContext* objCtx = (XS_XtpConnContext*)pOwner;
+	uint32 iInternalError = pStream ? xrtNetStreamTakeInternalError(pStream) : XNET_STREAM_INTERNAL_ERROR_NONE;
 	if ( objCtx == NULL && pStream != NULL ) {
 		objCtx = (XS_XtpConnContext*)xrtNetStreamGetUserData(pStream);
 	}
 	XS_ServerConfig* objServer = objCtx ? objCtx->pServer : NULL;
 
 	if ( objCtx == NULL ) {
+		return;
+	}
+	if ( iInternalError == XNET_STREAM_INTERNAL_ERROR_RECV_LIMIT ) {
+		XS_XtpRecordRemote(pStream);
+		XS_XtpRecordInvalid("recv limit exceeded");
+		objCtx->bClosing = TRUE;
+		XS_LogWarn(
+			"xtp transport recv limit exceeded: server=%s stream=%p limit=%u",
+			objServer && objServer->Name ? objServer->Name : "(null)",
+			(void*)pStream,
+			(unsigned)(pStream ? pStream->iRecvLimit : 0u)
+		);
 		return;
 	}
 	if ( objCtx && objCtx->bClosing ) {

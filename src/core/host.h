@@ -30,6 +30,7 @@ typedef struct XS_HostConfig {
 	char* DevFile;
 	xtlsconfig TlsConfig;
 	ptr pScriptState;
+	volatile long iScriptReloading;
 	XS_ScriptServiceProc procServiceInit;
 	XS_ScriptServiceProc procServiceStart;
 	XS_ScriptServiceProc procServiceStop;

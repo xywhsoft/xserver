@@ -93,7 +93,8 @@ Edit `release/xs.json`:
     "class": "http",
     "name": "My HTTP Server",
     "desc": "Main web server",
-    "addr": "http://0.0.0.0:80",
+    "ip": "0.0.0.0",
+    "port": 80,
     "tls": false,
     "host_default": {
       "enabled": true,
