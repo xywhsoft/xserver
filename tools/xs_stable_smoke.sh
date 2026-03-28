@@ -1,0 +1,2956 @@
+#!/bin/sh
+
+set -eu
+
+PORT=8085
+XTP_PORT=9096
+WAIT_SECS=10
+CONFIG="${1:-xs_manage_test.json}"
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+RELEASE_DIR="$REPO_ROOT/release"
+TOOL_DIR="$REPO_ROOT/tools"
+INDEX_FILE="$RELEASE_DIR/wwwroot/index.html"
+BODY_FILE="$TOOL_DIR/.xs_stable_smoke_body.tmp"
+ROOT_MEM_REPORT="$REPO_ROOT/xrt_mem_report_auto.json"
+RELEASE_MEM_REPORT="$RELEASE_DIR/xrt_mem_report_auto.json"
+OS_NAME=$(uname -s 2>/dev/null || echo unknown)
+
+case "$OS_NAME" in
+	MINGW*|MSYS*|CYGWIN*|Windows_NT)
+	powershell -ExecutionPolicy Bypass -File "$TOOL_DIR/xs_stable_smoke.ps1" "$CONFIG"
+	exit $?
+	;;
+esac
+
+XS_BIN="xs"
+XSDBG_BIN="xsdbg"
+CLIENT_EXT=""
+CLIENT_LIBS=""
+
+proc_fetch_status() {
+	curl -s -o "$BODY_FILE" -w "%{http_code}" "$1"
+}
+
+proc_fetch_status_method() {
+	s_method="$1"
+	s_url="$2"
+	if [ "$s_method" = "HEAD" ]; then
+		curl -s -I -o "$BODY_FILE" -w "%{http_code}" "$s_url"
+		return
+	fi
+	curl -s -X "$s_method" -o "$BODY_FILE" -w "%{http_code}" "$s_url"
+}
+
+proc_fetch_allow_method() {
+	proc_fetch_header_method "$1" "$2" "Allow"
+}
+
+proc_fetch_header_method() {
+	s_method="$1"
+	s_url="$2"
+	s_header_name="$3"
+
+	if [ "$s_method" = "HEAD" ]; then
+		curl -s -I -D - -o /dev/null "$s_url" | tr -d '\r' | grep -i "^$s_header_name:" | tail -n 1 | sed -E 's/^[^:]+:[[:space:]]*//'
+		return
+	fi
+
+	curl -s -X "$s_method" -D - -o /dev/null "$s_url" | tr -d '\r' | grep -i "^$s_header_name:" | tail -n 1 | sed -E 's/^[^:]+:[[:space:]]*//'
+}
+
+proc_fetch_body() {
+	cat "$BODY_FILE"
+}
+
+proc_fetch_body_method() {
+	s_method="$1"
+	s_url="$2"
+
+	if [ "$s_method" = "GET" ]; then
+		curl -s "$s_url"
+		return
+	fi
+
+	curl -s -X "$s_method" "$s_url"
+}
+
+proc_get_file_hash() {
+	s_path="$1"
+	if [ ! -f "$s_path" ]; then
+		echo "(missing)"
+		return
+	fi
+
+	sha256sum "$s_path" | awk '{print $1}'
+}
+
+proc_wait_ready() {
+	i=0
+	while [ "$i" -lt $((WAIT_SECS * 5)) ]; do
+		if [ "$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/status_json" || true)" = "200" ]; then
+			return 0
+		fi
+		i=$((i + 1))
+		sleep 0.2
+	done
+	return 1
+}
+
+proc_wait_not_ready() {
+	i=0
+	while [ "$i" -lt $((WAIT_SECS * 5)) ]; do
+		if [ "$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/status_json" || true)" != "200" ]; then
+			return 0
+		fi
+		i=$((i + 1))
+		sleep 0.2
+	done
+	return 1
+}
+
+proc_wait_reload_idle() {
+	i=0
+	while [ "$i" -lt $((WAIT_SECS * 5)) ]; do
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_status_json" || true)
+		s_body=$(proc_fetch_body 2>/dev/null || true)
+		if [ "$i_status" = "200" ] && ! printf "%s" "$s_body" | grep -F '"busy":true' >/dev/null 2>&1; then
+			return 0
+		fi
+		i=$((i + 1))
+		sleep 0.2
+	done
+	return 1
+}
+
+proc_wait_body_contains() {
+	s_url="$1"
+	s_expect_text="$2"
+	i=0
+
+	while [ "$i" -lt $((WAIT_SECS * 5)) ]; do
+		i_status=$(proc_fetch_status "$s_url" || true)
+		s_body=$(proc_fetch_body 2>/dev/null || true)
+		if [ "$i_status" = "200" ] && printf "%s" "$s_body" | grep -F "$s_expect_text" >/dev/null 2>&1; then
+			return 0
+		fi
+		i=$((i + 1))
+		sleep 0.2
+	done
+
+	return 1
+}
+
+proc_cleanup_servers() {
+	if [ -n "$CLIENT_EXT" ]; then
+		taskkill //F //T //IM "$XS_BIN" >/dev/null 2>&1 || true
+		taskkill //F //T //IM "$XSDBG_BIN" >/dev/null 2>&1 || true
+	fi
+
+	proc_wait_not_ready >/dev/null 2>&1 || sleep 1
+	rm -f "$BODY_FILE"
+}
+
+proc_cleanup_generated_files() {
+	rm -f \
+		"$TOOL_DIR"/xtp_smoke_client \
+		"$TOOL_DIR"/ws_smoke_client \
+		"$TOOL_DIR"/custom_smoke_client \
+		"$TOOL_DIR"/xtp_smoke_client*.exe \
+		"$TOOL_DIR"/ws_smoke_client*.exe \
+		"$TOOL_DIR"/custom_smoke_client*.exe \
+		"$BODY_FILE"
+}
+
+proc_stop_server() {
+	i_pid="$1"
+
+	if [ -n "$CLIENT_EXT" ]; then
+		taskkill //F //T //IM "$XS_BIN" >/dev/null 2>&1 || true
+		taskkill //F //T //IM "$XSDBG_BIN" >/dev/null 2>&1 || true
+	elif [ -n "$i_pid" ]; then
+		kill "$i_pid" >/dev/null 2>&1 || true
+	fi
+
+	proc_wait_not_ready >/dev/null 2>&1 || sleep 1
+	rm -f "$BODY_FILE"
+}
+
+proc_build_c_client() {
+	s_source="$1"
+	s_output="$2"
+
+	gcc "$TOOL_DIR/$s_source" -O2 -s $CLIENT_LIBS -o "$TOOL_DIR/$s_output$CLIENT_EXT"
+	echo "$TOOL_DIR/$s_output$CLIENT_EXT"
+}
+
+proc_build_xtp_smoke_client() {
+	proc_build_c_client "xtp_smoke_client.c" "xtp_smoke_client"
+}
+
+proc_build_ws_smoke_client() {
+	proc_build_c_client "ws_smoke_client.c" "ws_smoke_client"
+}
+
+proc_build_custom_smoke_client() {
+	proc_build_c_client "custom_smoke_client.c" "custom_smoke_client"
+}
+
+proc_run_client_retry() {
+	s_client_exe="$1"
+	i_max_try="$2"
+	shift 2
+
+	i_try=0
+	s_out=""
+	while [ "$i_try" -lt "$i_max_try" ]; do
+		if s_out=$("$s_client_exe" "$@" 2>&1); then
+			printf "%s" "$s_out"
+			return 0
+		fi
+
+		i_try=$((i_try + 1))
+		if [ "$i_try" -lt "$i_max_try" ]; then
+			sleep 0.2
+		fi
+	done
+
+	printf "%s" "$s_out"
+	return 1
+}
+
+proc_run_helper_case() {
+	s_exe_name="$1"
+	s_config="$2"
+	s_client_exe="$3"
+	s_check_name="$4"
+	shift 4
+
+	s_exe_path="$RELEASE_DIR/$s_exe_name"
+	i_case_exit=0
+
+	if [ ! -f "$s_exe_path" ]; then
+		echo "FAIL $s_exe_name $s_check_name : executable not found"
+		return 1
+	fi
+
+	(
+		cd "$RELEASE_DIR"
+		proc_cleanup_servers
+		"$s_exe_path" "$s_config" >/dev/null 2>&1 &
+		i_pid=$!
+		trap 'proc_stop_server "$i_pid"' EXIT INT TERM
+
+		if ! proc_wait_ready; then
+			echo "FAIL $s_exe_name $s_check_name : timeout"
+			return 1
+		fi
+
+		sleep 1
+		"$s_client_exe" "$@"
+	)
+}
+
+proc_check() {
+	s_name="$1"
+	i_actual="$2"
+	i_expect="$3"
+	s_body="$4"
+	s_expect_text="${5:-}"
+
+	if [ "$i_actual" != "$i_expect" ]; then
+		echo "FAIL $s_name : expected $i_expect, got $i_actual"
+		return 1
+	fi
+
+	if [ -n "$s_expect_text" ] && ! printf "%s" "$s_body" | grep -F "$s_expect_text" >/dev/null 2>&1; then
+		echo "FAIL $s_name : missing text '$s_expect_text'"
+		return 1
+	fi
+
+	echo "OK   $s_name : $i_actual"
+	return 0
+}
+
+proc_check_line_with_marker() {
+	s_name="$1"
+	s_path_text="$2"
+	s_marker_text="$3"
+
+	if grep -F "$s_path_text" "$INDEX_FILE" | grep -F "$s_marker_text" >/dev/null 2>&1; then
+		echo "OK   $s_name : static"
+		return 0
+	fi
+
+	echo "FAIL $s_name : missing '$s_marker_text' on '$s_path_text'"
+	return 1
+}
+
+proc_check_security_headers() {
+	s_name="$1"
+	s_method="$2"
+	s_url="$3"
+
+	s_body=$(proc_fetch_header_method "$s_method" "$s_url" "Cache-Control")
+	proc_check "$s_name cache" "200" "200" "$s_body" 'no-store' || return 1
+	s_body=$(proc_fetch_header_method "$s_method" "$s_url" "X-Frame-Options")
+	proc_check "$s_name frame" "200" "200" "$s_body" 'DENY' || return 1
+	s_body=$(proc_fetch_header_method "$s_method" "$s_url" "Referrer-Policy")
+	proc_check "$s_name referrer" "200" "200" "$s_body" 'no-referrer' || return 1
+	s_body=$(proc_fetch_header_method "$s_method" "$s_url" "X-Content-Type-Options")
+	proc_check "$s_name nosniff" "200" "200" "$s_body" 'nosniff' || return 1
+
+	return 0
+}
+
+proc_check_disabled_endpoint() {
+	s_exe_name="$1"
+	s_name="$2"
+	s_method="$3"
+	s_path="$4"
+	i_expect_status="$5"
+	s_content_type="$6"
+	s_expect_body="${7:-}"
+	s_url="http://127.0.0.1:$PORT$s_path"
+
+	i_status=$(proc_fetch_status_method "$s_method" "$s_url")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name $s_name" "$i_status" "$i_expect_status" "$s_body" || return 1
+
+	if [ -n "$s_expect_body" ]; then
+		s_body=$(proc_fetch_body_method "$s_method" "$s_url")
+		proc_check "$s_exe_name $s_name body" "$i_expect_status" "$i_expect_status" "$s_body" "$s_expect_body" || return 1
+	fi
+
+	s_body=$(proc_fetch_header_method "$s_method" "$s_url" "Content-Type")
+	proc_check "$s_exe_name $s_name type" "200" "200" "$s_body" "$s_content_type" || return 1
+	proc_check_security_headers "$s_exe_name $s_name" "$s_method" "$s_url" || return 1
+	return 0
+}
+
+proc_check_method_reject() {
+	s_exe_name="$1"
+	s_name="$2"
+	s_method="$3"
+	s_path="$4"
+	i_expect_status="$5"
+	s_allow="$6"
+	s_content_type="$7"
+	s_url="http://127.0.0.1:$PORT$s_path"
+
+	i_status=$(proc_fetch_status_method "$s_method" "$s_url")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name $s_name" "$i_status" "$i_expect_status" "$s_body" || return 1
+	s_body=$(proc_fetch_allow_method "$s_method" "$s_url")
+	proc_check "$s_exe_name $s_name allow" "200" "200" "$s_body" "$s_allow" || return 1
+	s_body=$(proc_fetch_header_method "$s_method" "$s_url" "Content-Type")
+	proc_check "$s_exe_name $s_name type" "200" "200" "$s_body" "$s_content_type" || return 1
+	proc_check_security_headers "$s_exe_name $s_name" "$s_method" "$s_url" || return 1
+	return 0
+}
+
+proc_run_static_homepage_audit() {
+	i_case_exit=0
+
+	if [ ! -f "$INDEX_FILE" ]; then
+		echo "FAIL static homepage audit : index.html not found"
+		return 1
+	fi
+
+	proc_check_line_with_marker "homepage dashboard link" "/__xs/dashboard" 'data-debug-manage="true"' || i_case_exit=1
+	proc_check_line_with_marker "homepage dashboard_json link" "/__xs/dashboard_json" 'data-debug-manage="true"' || i_case_exit=1
+	proc_check_line_with_marker "homepage http_metrics_json link" "/__xs/http_metrics_json" 'data-debug-manage="true"' || i_case_exit=1
+	proc_check_line_with_marker "homepage http_metrics_clear link" "/__xs/http_metrics_clear" 'data-debug-manage="true"' || i_case_exit=1
+	proc_check_line_with_marker "homepage ws_metrics_json link" "/__xs/ws_metrics_json" 'data-debug-manage="true"' || i_case_exit=1
+	proc_check_line_with_marker "homepage ws_metrics_clear link" "/__xs/ws_metrics_clear" 'data-debug-manage="true"' || i_case_exit=1
+	proc_check_line_with_marker "homepage xtp_metrics_json link" "/__xs/xtp_metrics_json" 'data-debug-manage="true"' || i_case_exit=1
+	proc_check_line_with_marker "homepage xtp_metrics_clear link" "/__xs/xtp_metrics_clear" 'data-debug-manage="true"' || i_case_exit=1
+	proc_check_line_with_marker "homepage udp_metrics_json link" "/__xs/udp_metrics_json" 'data-debug-manage="true"' || i_case_exit=1
+	proc_check_line_with_marker "homepage udp_metrics_clear link" "/__xs/udp_metrics_clear" 'data-debug-manage="true"' || i_case_exit=1
+	proc_check_line_with_marker "homepage custom_metrics_json link" "/__xs/custom_metrics_json" 'data-debug-manage="true"' || i_case_exit=1
+	proc_check_line_with_marker "homepage custom_metrics_clear link" "/__xs/custom_metrics_clear" 'data-debug-manage="true"' || i_case_exit=1
+	proc_check_line_with_marker "homepage bus_status link" "/__xs/bus/status" 'data-bus-manage="true"' || i_case_exit=1
+	proc_check_line_with_marker "homepage reload_reset link" "/__xs/reload_reset" 'data-debug-manage="true"' || i_case_exit=1
+	proc_check_line_with_marker "homepage check_config_clear link" "/__xs/check_config_clear" 'data-debug-manage="true"' || i_case_exit=1
+
+	return "$i_case_exit"
+}
+
+proc_run_case() {
+	s_exe_name="$1"
+	b_debug="$2"
+	s_exe_path="$RELEASE_DIR/$s_exe_name"
+	i_case_exit=0
+	arr_metrics_clear='http_metrics_clear|/__xs/http_metrics_clear|http metrics clear api only available in xsdbg
+ws_metrics_clear|/__xs/ws_metrics_clear|ws metrics clear api only available in xsdbg
+xtp_metrics_clear|/__xs/xtp_metrics_clear|xtp metrics clear api only available in xsdbg
+udp_metrics_clear|/__xs/udp_metrics_clear|udp metrics clear api only available in xsdbg
+custom_metrics_clear|/__xs/custom_metrics_clear|custom metrics clear api only available in xsdbg'
+	arr_metrics_text='http_metrics|/__xs/http_metrics|http_req_count=
+ws_metrics|/__xs/ws_metrics|ws_open_count=
+xtp_metrics|/__xs/xtp_metrics|xtp_open_count=
+udp_metrics|/__xs/udp_metrics|udp_recv_count=
+custom_metrics|/__xs/custom_metrics|custom_open_count='
+arr_metrics_json='http_metrics_json|/__xs/http_metrics_json|"http_req_count"
+ws_metrics_json|/__xs/ws_metrics_json|"ws_open_count"
+xtp_metrics_json|/__xs/xtp_metrics_json|"xtp_open_count"
+udp_metrics_json|/__xs/udp_metrics_json|"udp_recv_count"
+custom_metrics_json|/__xs/custom_metrics_json|"custom_open_count"'
+	arr_metrics_clear_text='http_metrics_clear|/__xs/http_metrics_clear|http_req_count=
+ws_metrics_clear|/__xs/ws_metrics_clear|ws_open_count=
+xtp_metrics_clear|/__xs/xtp_metrics_clear|xtp_open_count=
+udp_metrics_clear|/__xs/udp_metrics_clear|udp_recv_count=
+custom_metrics_clear|/__xs/custom_metrics_clear|custom_open_count='
+	arr_debug_disabled_text='dashboard|/__xs/dashboard|dashboard api only available in xsdbg
+http_metrics|/__xs/http_metrics|http metrics api only available in xsdbg
+ws_metrics|/__xs/ws_metrics|ws metrics api only available in xsdbg
+xtp_metrics|/__xs/xtp_metrics|xtp metrics api only available in xsdbg
+udp_metrics|/__xs/udp_metrics|udp metrics api only available in xsdbg
+custom_metrics|/__xs/custom_metrics|custom metrics api only available in xsdbg
+http_metrics_clear|/__xs/http_metrics_clear|http metrics clear api only available in xsdbg
+ws_metrics_clear|/__xs/ws_metrics_clear|ws metrics clear api only available in xsdbg
+xtp_metrics_clear|/__xs/xtp_metrics_clear|xtp metrics clear api only available in xsdbg
+udp_metrics_clear|/__xs/udp_metrics_clear|udp metrics clear api only available in xsdbg
+custom_metrics_clear|/__xs/custom_metrics_clear|custom metrics clear api only available in xsdbg
+reload_clear|/__xs/reload_clear|config reload clear api only available in xsdbg
+reload_reset|/__xs/reload_reset|config reload reset api only available in xsdbg
+check_config_clear|/__xs/check_config_clear|check config clear api only available in xsdbg'
+	arr_debug_disabled_json='dashboard_json|/__xs/dashboard_json|dashboard json api only available in xsdbg
+http_metrics_json|/__xs/http_metrics_json|http metrics json api only available in xsdbg
+ws_metrics_json|/__xs/ws_metrics_json|ws metrics json api only available in xsdbg
+xtp_metrics_json|/__xs/xtp_metrics_json|xtp metrics json api only available in xsdbg
+udp_metrics_json|/__xs/udp_metrics_json|udp metrics json api only available in xsdbg
+custom_metrics_json|/__xs/custom_metrics_json|custom metrics json api only available in xsdbg'
+	arr_debug_readonly_text='dashboard|/__xs/dashboard|GET, HEAD|text/plain
+http_metrics|/__xs/http_metrics|GET, HEAD|text/plain
+ws_metrics|/__xs/ws_metrics|GET, HEAD|text/plain
+xtp_metrics|/__xs/xtp_metrics|GET, HEAD|text/plain
+udp_metrics|/__xs/udp_metrics|GET, HEAD|text/plain
+custom_metrics|/__xs/custom_metrics|GET, HEAD|text/plain'
+	arr_debug_readonly_json='dashboard_json|/__xs/dashboard_json|GET, HEAD|application/json
+http_metrics_json|/__xs/http_metrics_json|GET, HEAD|application/json
+ws_metrics_json|/__xs/ws_metrics_json|GET, HEAD|application/json
+xtp_metrics_json|/__xs/xtp_metrics_json|GET, HEAD|application/json
+udp_metrics_json|/__xs/udp_metrics_json|GET, HEAD|application/json
+custom_metrics_json|/__xs/custom_metrics_json|GET, HEAD|application/json'
+	arr_debug_get_only='http_metrics_clear|/__xs/http_metrics_clear|GET|text/plain
+ws_metrics_clear|/__xs/ws_metrics_clear|GET|text/plain
+xtp_metrics_clear|/__xs/xtp_metrics_clear|GET|text/plain
+udp_metrics_clear|/__xs/udp_metrics_clear|GET|text/plain
+custom_metrics_clear|/__xs/custom_metrics_clear|GET|text/plain
+reload_clear|/__xs/reload_clear|GET|text/plain
+reload_reset|/__xs/reload_reset|GET|text/plain
+check_config_clear|/__xs/check_config_clear|GET|text/plain'
+	s_metric_name=""
+	s_metric_path=""
+	s_metric_prod=""
+	s_metric_allow=""
+	s_metric_type=""
+
+	if [ ! -f "$s_exe_path" ]; then
+		echo "FAIL $s_exe_name : executable not found"
+		return 1
+	fi
+
+	(
+		cd "$RELEASE_DIR"
+		proc_cleanup_servers
+		"$s_exe_path" "$CONFIG" >/dev/null 2>&1 &
+		i_pid=$!
+		trap 'proc_stop_server "$i_pid"' EXIT INT TERM
+
+		if ! proc_wait_ready; then
+			echo "FAIL $s_exe_name : server not ready within ${WAIT_SECS}s"
+			return 1
+		fi
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/status_json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name status_json" "$i_status" "200" "$s_body" '"manage_api":true' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/status_json" "Content-Type")
+		proc_check "$s_exe_name status_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/status_json" "Cache-Control")
+		proc_check "$s_exe_name status_json cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/status_json" "X-Frame-Options")
+		proc_check "$s_exe_name status_json frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/status_json" "Referrer-Policy")
+		proc_check "$s_exe_name status_json referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/status_json" "X-Content-Type-Options")
+		proc_check "$s_exe_name status_json nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/status")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name status" "$i_status" "200" "$s_body" 'manage_api=true' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/status" "Content-Type")
+		proc_check "$s_exe_name status type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/status" "Cache-Control")
+		proc_check "$s_exe_name status cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/status" "X-Frame-Options")
+		proc_check "$s_exe_name status frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/status" "Referrer-Policy")
+		proc_check "$s_exe_name status referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/status" "X-Content-Type-Options")
+		proc_check "$s_exe_name status nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/health_json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name health_json" "$i_status" "200" "$s_body" '"ok":true' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/health_json" "Content-Type")
+		proc_check "$s_exe_name health_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/health")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name health" "$i_status" "200" "$s_body" 'ok=true' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/health" "Content-Type")
+		proc_check "$s_exe_name health type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_status_json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name reload_status_json" "$i_status" "200" "$s_body" '"busy":false' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_status_json" "Content-Type")
+		proc_check "$s_exe_name reload_status_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_status")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name reload_status" "$i_status" "200" "$s_body" 'busy=false' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_status" "Content-Type")
+		proc_check "$s_exe_name reload_status type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name reload" "$i_status" "200" "$s_body" 'result=true' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload" "Content-Type")
+		proc_check "$s_exe_name reload type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload" "Cache-Control")
+		proc_check "$s_exe_name reload cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload" "X-Frame-Options")
+		proc_check "$s_exe_name reload frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload" "Referrer-Policy")
+		proc_check "$s_exe_name reload referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload" "X-Content-Type-Options")
+		proc_check "$s_exe_name reload nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+
+		if ! proc_wait_reload_idle; then
+			echo "FAIL $s_exe_name reload_idle_after_text : timeout"
+			i_case_exit=1
+		fi
+
+		i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/reload")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name post_reload" "$i_status" "200" "$s_body" 'result=true' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/reload" "Content-Type")
+		proc_check "$s_exe_name post_reload type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/reload" "Cache-Control")
+		proc_check "$s_exe_name post_reload cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/reload" "X-Frame-Options")
+		proc_check "$s_exe_name post_reload frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/reload" "Referrer-Policy")
+		proc_check "$s_exe_name post_reload referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/reload" "X-Content-Type-Options")
+		proc_check "$s_exe_name post_reload nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+
+		if ! proc_wait_reload_idle; then
+			echo "FAIL $s_exe_name reload_idle_after_text_post : timeout"
+			i_case_exit=1
+		fi
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_config")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name reload_config" "$i_status" "200" "$s_body" 'result=true' || i_case_exit=1
+		proc_check "$s_exe_name reload_config body" "$i_status" "200" "$s_body" 'config reload queued' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_config" "Content-Type")
+		proc_check "$s_exe_name reload_config type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_config" "Cache-Control")
+		proc_check "$s_exe_name reload_config cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_config" "X-Frame-Options")
+		proc_check "$s_exe_name reload_config frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_config" "Referrer-Policy")
+		proc_check "$s_exe_name reload_config referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_config" "X-Content-Type-Options")
+		proc_check "$s_exe_name reload_config nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+
+		if ! proc_wait_reload_idle; then
+			echo "FAIL $s_exe_name reload_config_idle_after_text : timeout"
+			i_case_exit=1
+		fi
+
+		if ! proc_wait_reload_idle; then
+			echo "FAIL $s_exe_name reload_config_text_post_idle_wait : timeout"
+			i_case_exit=1
+		else
+			i_try=0
+			b_reload_config_text_ok=false
+			while [ "$i_try" -lt 10 ]; do
+				i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/reload_config")
+				s_body=$(proc_fetch_body)
+				if [ "$i_status" = "200" ]; then
+					proc_check "$s_exe_name post_reload_config" "$i_status" "200" "$s_body" 'result=true' || i_case_exit=1
+					proc_check "$s_exe_name post_reload_config body" "$i_status" "200" "$s_body" 'config reload queued' || i_case_exit=1
+					s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/reload_config" "Content-Type")
+					proc_check "$s_exe_name post_reload_config type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+					s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/reload_config" "Cache-Control")
+					proc_check "$s_exe_name post_reload_config cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+					s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/reload_config" "X-Frame-Options")
+					proc_check "$s_exe_name post_reload_config frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+					s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/reload_config" "Referrer-Policy")
+					proc_check "$s_exe_name post_reload_config referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+					s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/reload_config" "X-Content-Type-Options")
+					proc_check "$s_exe_name post_reload_config nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+					b_reload_config_text_ok=true
+					break
+				fi
+				if [ "$i_status" != "409" ]; then
+					proc_check "$s_exe_name post_reload_config" "$i_status" "200" "$s_body" || i_case_exit=1
+					break
+				fi
+				i_try=$((i_try + 1))
+				sleep 0.2
+			done
+
+			if [ "$b_reload_config_text_ok" != "true" ] && [ "$i_try" -ge 10 ]; then
+				echo "FAIL $s_exe_name post_reload_config : remained busy after retries"
+				i_case_exit=1
+			fi
+		fi
+
+		if ! proc_wait_reload_idle; then
+			echo "FAIL $s_exe_name reload_config_idle_after_text_post : timeout"
+			i_case_exit=1
+		fi
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/check_config_json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name check_config_json" "$i_status" "200" "$s_body" '"check_total_count":' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/check_config_json" "Content-Type")
+		proc_check "$s_exe_name check_config_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/check_config")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name check_config" "$i_status" "200" "$s_body" 'check_total_count=' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/check_config" "Content-Type")
+		proc_check "$s_exe_name check_config type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+
+		i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/status_json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name post_status_json" "$i_status" "405" "$s_body" || i_case_exit=1
+		s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/status_json")
+		proc_check "$s_exe_name post_status_json allow" "200" "200" "$s_body" 'GET, HEAD' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/status_json" "Content-Type")
+		proc_check "$s_exe_name post_status_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name post_status_json" "POST" "http://127.0.0.1:$PORT/__xs/status_json" || i_case_exit=1
+
+		i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/status")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name post_status" "$i_status" "405" "$s_body" || i_case_exit=1
+		s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/status")
+		proc_check "$s_exe_name post_status allow" "200" "200" "$s_body" 'GET, HEAD' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/status" "Content-Type")
+		proc_check "$s_exe_name post_status type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name post_status" "POST" "http://127.0.0.1:$PORT/__xs/status" || i_case_exit=1
+
+		i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/health_json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name post_health_json" "$i_status" "405" "$s_body" || i_case_exit=1
+		s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/health_json")
+		proc_check "$s_exe_name post_health_json allow" "200" "200" "$s_body" 'GET, HEAD' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/health_json" "Content-Type")
+		proc_check "$s_exe_name post_health_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name post_health_json" "POST" "http://127.0.0.1:$PORT/__xs/health_json" || i_case_exit=1
+
+		i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/health")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name post_health" "$i_status" "405" "$s_body" || i_case_exit=1
+		s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/health")
+		proc_check "$s_exe_name post_health allow" "200" "200" "$s_body" 'GET, HEAD' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/health" "Content-Type")
+		proc_check "$s_exe_name post_health type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name post_health" "POST" "http://127.0.0.1:$PORT/__xs/health" || i_case_exit=1
+
+		i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/reload_status_json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name post_reload_status_json" "$i_status" "405" "$s_body" || i_case_exit=1
+		s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/reload_status_json")
+		proc_check "$s_exe_name post_reload_status_json allow" "200" "200" "$s_body" 'GET, HEAD' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/reload_status_json" "Content-Type")
+		proc_check "$s_exe_name post_reload_status_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name post_reload_status_json" "POST" "http://127.0.0.1:$PORT/__xs/reload_status_json" || i_case_exit=1
+
+		i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/reload_status")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name post_reload_status" "$i_status" "405" "$s_body" || i_case_exit=1
+		s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/reload_status")
+		proc_check "$s_exe_name post_reload_status allow" "200" "200" "$s_body" 'GET, HEAD' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/reload_status" "Content-Type")
+		proc_check "$s_exe_name post_reload_status type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name post_reload_status" "POST" "http://127.0.0.1:$PORT/__xs/reload_status" || i_case_exit=1
+
+		i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/check_config_json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name post_check_config_json" "$i_status" "405" "$s_body" || i_case_exit=1
+		s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/check_config_json")
+		proc_check "$s_exe_name post_check_config_json allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/check_config_json" "Content-Type")
+		proc_check "$s_exe_name post_check_config_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name post_check_config_json" "POST" "http://127.0.0.1:$PORT/__xs/check_config_json" || i_case_exit=1
+
+		i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/check_config")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name post_check_config" "$i_status" "405" "$s_body" || i_case_exit=1
+		s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/check_config")
+		proc_check "$s_exe_name post_check_config allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/check_config" "Content-Type")
+		proc_check "$s_exe_name post_check_config type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name post_check_config" "POST" "http://127.0.0.1:$PORT/__xs/check_config" || i_case_exit=1
+
+		i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/status_json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name head_status_json" "$i_status" "200" "$s_body" || i_case_exit=1
+		s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/status_json" "Content-Type")
+		proc_check "$s_exe_name head_status_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name head_status_json" "HEAD" "http://127.0.0.1:$PORT/__xs/status_json" || i_case_exit=1
+
+		i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/status")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name head_status" "$i_status" "200" "$s_body" || i_case_exit=1
+		s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/status" "Content-Type")
+		proc_check "$s_exe_name head_status type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name head_status" "HEAD" "http://127.0.0.1:$PORT/__xs/status" || i_case_exit=1
+
+		i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/health_json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name head_health_json" "$i_status" "200" "$s_body" || i_case_exit=1
+		s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/health_json" "Content-Type")
+		proc_check "$s_exe_name head_health_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name head_health_json" "HEAD" "http://127.0.0.1:$PORT/__xs/health_json" || i_case_exit=1
+
+		i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/health")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name head_health" "$i_status" "200" "$s_body" || i_case_exit=1
+		s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/health" "Content-Type")
+		proc_check "$s_exe_name head_health type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name head_health" "HEAD" "http://127.0.0.1:$PORT/__xs/health" || i_case_exit=1
+
+		i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_status_json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name head_reload_status_json" "$i_status" "200" "$s_body" || i_case_exit=1
+		s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_status_json" "Content-Type")
+		proc_check "$s_exe_name head_reload_status_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name head_reload_status_json" "HEAD" "http://127.0.0.1:$PORT/__xs/reload_status_json" || i_case_exit=1
+
+		i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_status")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name head_reload_status" "$i_status" "200" "$s_body" || i_case_exit=1
+		s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_status" "Content-Type")
+		proc_check "$s_exe_name head_reload_status type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name head_reload_status" "HEAD" "http://127.0.0.1:$PORT/__xs/reload_status" || i_case_exit=1
+
+		i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/check_config")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name head_check_config" "$i_status" "405" "$s_body" || i_case_exit=1
+		s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT/__xs/check_config")
+		proc_check "$s_exe_name head_check_config allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/check_config" "Content-Type")
+		proc_check "$s_exe_name head_check_config type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name head_check_config" "HEAD" "http://127.0.0.1:$PORT/__xs/check_config" || i_case_exit=1
+
+		i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/check_config_json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name head_check_config_json" "$i_status" "405" "$s_body" || i_case_exit=1
+		s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT/__xs/check_config_json")
+		proc_check "$s_exe_name head_check_config_json allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/check_config_json" "Content-Type")
+		proc_check "$s_exe_name head_check_config_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name head_check_config_json" "HEAD" "http://127.0.0.1:$PORT/__xs/check_config_json" || i_case_exit=1
+
+		i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name head_reload_json" "$i_status" "405" "$s_body" || i_case_exit=1
+		s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_json")
+		proc_check "$s_exe_name head_reload_json allow" "200" "200" "$s_body" 'GET, POST' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_json" "Content-Type")
+		proc_check "$s_exe_name head_reload_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name head_reload_json" "HEAD" "http://127.0.0.1:$PORT/__xs/reload_json" || i_case_exit=1
+
+		i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name head_reload" "$i_status" "405" "$s_body" || i_case_exit=1
+		s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload")
+		proc_check "$s_exe_name head_reload allow" "200" "200" "$s_body" 'GET, POST' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload" "Content-Type")
+		proc_check "$s_exe_name head_reload type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name head_reload" "HEAD" "http://127.0.0.1:$PORT/__xs/reload" || i_case_exit=1
+
+		i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_config_json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name head_reload_config_json" "$i_status" "405" "$s_body" || i_case_exit=1
+		s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_config_json")
+		proc_check "$s_exe_name head_reload_config_json allow" "200" "200" "$s_body" 'GET, POST' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_config_json" "Content-Type")
+		proc_check "$s_exe_name head_reload_config_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name head_reload_config_json" "HEAD" "http://127.0.0.1:$PORT/__xs/reload_config_json" || i_case_exit=1
+
+		i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_config")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name head_reload_config" "$i_status" "405" "$s_body" || i_case_exit=1
+		s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_config")
+		proc_check "$s_exe_name head_reload_config allow" "200" "200" "$s_body" 'GET, POST' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_config" "Content-Type")
+		proc_check "$s_exe_name head_reload_config type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name head_reload_config" "HEAD" "http://127.0.0.1:$PORT/__xs/reload_config" || i_case_exit=1
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/unknown")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name unknown_manage" "$i_status" "404" "$s_body" || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/unknown" "Content-Type")
+		proc_check "$s_exe_name unknown_manage type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name unknown_manage" "GET" "http://127.0.0.1:$PORT/__xs/unknown" || i_case_exit=1
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/unknown_json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name unknown_manage_json" "$i_status" "404" "$s_body" || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/unknown_json" "Content-Type")
+		proc_check "$s_exe_name unknown_manage_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name unknown_manage_json" "GET" "http://127.0.0.1:$PORT/__xs/unknown_json" || i_case_exit=1
+
+		proc_check_disabled_endpoint "$s_exe_name" "manage_root" "GET" "/__xs" "404" "text/plain" 'manage api not found' || i_case_exit=1
+		proc_check_disabled_endpoint "$s_exe_name" "head_manage_root" "HEAD" "/__xs" "404" "text/plain" || i_case_exit=1
+		proc_check_disabled_endpoint "$s_exe_name" "post_manage_root" "POST" "/__xs" "404" "text/plain" 'manage api not found' || i_case_exit=1
+		proc_check_disabled_endpoint "$s_exe_name" "head_unknown_manage" "HEAD" "/__xs/unknown" "404" "text/plain" || i_case_exit=1
+		proc_check_disabled_endpoint "$s_exe_name" "post_unknown_manage" "POST" "/__xs/unknown" "404" "text/plain" 'manage api not found' || i_case_exit=1
+		proc_check_disabled_endpoint "$s_exe_name" "head_unknown_manage_json" "HEAD" "/__xs/unknown_json" "404" "application/json" || i_case_exit=1
+		proc_check_disabled_endpoint "$s_exe_name" "post_unknown_manage_json" "POST" "/__xs/unknown_json" "404" "application/json" 'manage api not found' || i_case_exit=1
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name root" "$i_status" "200" "$s_body" || i_case_exit=1
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name json_route" "$i_status" "200" "$s_body" '"path":"/json"' || i_case_exit=1
+
+		if ! proc_wait_reload_idle; then
+			echo "FAIL $s_exe_name reload_idle_wait : timeout"
+			i_case_exit=1
+		else
+			i_try=0
+			b_reload_ok=false
+			while [ "$i_try" -lt 10 ]; do
+				i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_json")
+				s_body=$(proc_fetch_body)
+				if [ "$i_status" = "200" ]; then
+					proc_check "$s_exe_name reload_json" "$i_status" "200" "$s_body" '"result":true' || i_case_exit=1
+					s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_json" "Content-Type")
+					proc_check "$s_exe_name reload_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+					s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_json" "Cache-Control")
+					proc_check "$s_exe_name reload_json cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+					s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_json" "X-Frame-Options")
+					proc_check "$s_exe_name reload_json frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+					s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_json" "Referrer-Policy")
+					proc_check "$s_exe_name reload_json referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+					s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_json" "X-Content-Type-Options")
+					proc_check "$s_exe_name reload_json nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+					b_reload_ok=true
+					break
+				fi
+				if [ "$i_status" != "409" ]; then
+					proc_check "$s_exe_name reload_json" "$i_status" "200" "$s_body" || i_case_exit=1
+					break
+				fi
+				i_try=$((i_try + 1))
+				sleep 0.2
+			done
+
+			if [ "$b_reload_ok" != "true" ] && [ "$i_try" -ge 10 ]; then
+				echo "FAIL $s_exe_name reload_json : remained busy after retries"
+				i_case_exit=1
+			fi
+		fi
+
+		if ! proc_wait_reload_idle; then
+			echo "FAIL $s_exe_name reload_post_idle_wait : timeout"
+			i_case_exit=1
+		else
+			i_try=0
+			b_reload_ok=false
+			while [ "$i_try" -lt 10 ]; do
+				i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/reload_json")
+				s_body=$(proc_fetch_body)
+				if [ "$i_status" = "200" ]; then
+					proc_check "$s_exe_name post_reload_json" "$i_status" "200" "$s_body" '"result":true' || i_case_exit=1
+					b_reload_ok=true
+					break
+				fi
+				if [ "$i_status" != "409" ]; then
+					proc_check "$s_exe_name post_reload_json" "$i_status" "200" "$s_body" || i_case_exit=1
+					break
+				fi
+				i_try=$((i_try + 1))
+				sleep 0.2
+			done
+
+			if [ "$b_reload_ok" != "true" ] && [ "$i_try" -ge 10 ]; then
+				echo "FAIL $s_exe_name post_reload_json : remained busy after retries"
+				i_case_exit=1
+			fi
+		fi
+
+		if ! proc_wait_reload_idle; then
+			echo "FAIL $s_exe_name reload_idle_after : timeout"
+			i_case_exit=1
+		fi
+
+		if ! proc_wait_body_contains "http://127.0.0.1:$PORT/__xs/reload_status_json" '"busy":false'; then
+			echo "FAIL $s_exe_name reload_status_after : missing text '\"busy\":false'"
+			i_case_exit=1
+		else
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_status_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name reload_status_after" "$i_status" "200" "$s_body" '"busy":false' || i_case_exit=1
+		fi
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name json_route_after_reload" "$i_status" "200" "$s_body" '"path":"/json"' || i_case_exit=1
+
+		if ! proc_wait_reload_idle; then
+			echo "FAIL $s_exe_name reload_config_idle_wait : timeout"
+			i_case_exit=1
+		else
+			i_try=0
+			b_reload_config_ok=false
+			while [ "$i_try" -lt 10 ]; do
+				i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_config_json")
+				s_body=$(proc_fetch_body)
+				if [ "$i_status" = "200" ]; then
+					proc_check "$s_exe_name reload_config_json" "$i_status" "200" "$s_body" '"result":true' || i_case_exit=1
+					proc_check "$s_exe_name reload_config_json body" "$i_status" "200" "$s_body" 'config reload queued' || i_case_exit=1
+					s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_config_json" "Content-Type")
+					proc_check "$s_exe_name reload_config_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+					s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_config_json" "Cache-Control")
+					proc_check "$s_exe_name reload_config_json cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+					s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_config_json" "X-Frame-Options")
+					proc_check "$s_exe_name reload_config_json frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+					s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_config_json" "Referrer-Policy")
+					proc_check "$s_exe_name reload_config_json referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+					s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_config_json" "X-Content-Type-Options")
+					proc_check "$s_exe_name reload_config_json nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+					b_reload_config_ok=true
+					break
+				fi
+				if [ "$i_status" != "409" ]; then
+					proc_check "$s_exe_name reload_config_json" "$i_status" "200" "$s_body" || i_case_exit=1
+					break
+				fi
+				i_try=$((i_try + 1))
+				sleep 0.2
+			done
+
+			if [ "$b_reload_config_ok" != "true" ] && [ "$i_try" -ge 10 ]; then
+				echo "FAIL $s_exe_name reload_config_json : remained busy after retries"
+				i_case_exit=1
+			fi
+		fi
+
+		if ! proc_wait_reload_idle; then
+			echo "FAIL $s_exe_name reload_config_post_idle_wait : timeout"
+			i_case_exit=1
+		else
+			i_try=0
+			b_reload_config_ok=false
+			while [ "$i_try" -lt 10 ]; do
+				i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/reload_config_json")
+				s_body=$(proc_fetch_body)
+				if [ "$i_status" = "200" ]; then
+					proc_check "$s_exe_name post_reload_config_json" "$i_status" "200" "$s_body" '"result":true' || i_case_exit=1
+					proc_check "$s_exe_name post_reload_config_json body" "$i_status" "200" "$s_body" 'config reload queued' || i_case_exit=1
+					b_reload_config_ok=true
+					break
+				fi
+				if [ "$i_status" != "409" ]; then
+					proc_check "$s_exe_name post_reload_config_json" "$i_status" "200" "$s_body" || i_case_exit=1
+					break
+				fi
+				i_try=$((i_try + 1))
+				sleep 0.2
+			done
+
+			if [ "$b_reload_config_ok" != "true" ] && [ "$i_try" -ge 10 ]; then
+				echo "FAIL $s_exe_name post_reload_config_json : remained busy after retries"
+				i_case_exit=1
+			fi
+		fi
+
+		if ! proc_wait_reload_idle; then
+			echo "FAIL $s_exe_name reload_config_idle_after : timeout"
+			i_case_exit=1
+		fi
+
+		if ! proc_wait_body_contains "http://127.0.0.1:$PORT/__xs/reload_status_json" '"busy":false'; then
+			echo "FAIL $s_exe_name reload_status_after_config : missing text '\"busy\":false'"
+			i_case_exit=1
+		else
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_status_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name reload_status_after_config" "$i_status" "200" "$s_body" '"busy":false' || i_case_exit=1
+		fi
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name json_route_after_config_reload" "$i_status" "200" "$s_body" '"path":"/json"' || i_case_exit=1
+
+		if [ "$b_debug" = "true" ]; then
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/dashboard")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name dashboard" "$i_status" "200" "$s_body" 'http_req_count=' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/dashboard" "Content-Type")
+			proc_check "$s_exe_name dashboard type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name dashboard" "GET" "http://127.0.0.1:$PORT/__xs/dashboard" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/dashboard")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name head_dashboard" "$i_status" "200" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/dashboard" "Content-Type")
+			proc_check "$s_exe_name head_dashboard type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name head_dashboard" "HEAD" "http://127.0.0.1:$PORT/__xs/dashboard" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/dashboard_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name dashboard_json" "$i_status" "200" "$s_body" '"status"' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/dashboard_json" "Content-Type")
+			proc_check "$s_exe_name dashboard_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/dashboard_json" "Cache-Control")
+			proc_check "$s_exe_name dashboard_json cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/dashboard_json" "X-Frame-Options")
+			proc_check "$s_exe_name dashboard_json frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/dashboard_json" "Referrer-Policy")
+			proc_check "$s_exe_name dashboard_json referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/dashboard_json" "X-Content-Type-Options")
+			proc_check "$s_exe_name dashboard_json nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/dashboard_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name head_dashboard_json" "$i_status" "200" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/dashboard_json" "Content-Type")
+			proc_check "$s_exe_name head_dashboard_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name head_dashboard_json" "HEAD" "http://127.0.0.1:$PORT/__xs/dashboard_json" || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "bus_root" "GET" "/__xs/bus" "404" "application/json" 'manage api not found' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "head_bus_root" "HEAD" "/__xs/bus" "404" "application/json" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "post_bus_root" "POST" "/__xs/bus" "404" "application/json" 'manage api not found' || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/bus/status")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name bus_status" "$i_status" "200" "$s_body" '"data_count"' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/bus/status" "Content-Type")
+			proc_check "$s_exe_name bus_status type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/bus/status" "Cache-Control")
+			proc_check "$s_exe_name bus_status cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/bus/status" "X-Frame-Options")
+			proc_check "$s_exe_name bus_status frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/bus/status" "Referrer-Policy")
+			proc_check "$s_exe_name bus_status referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/bus/status" "X-Content-Type-Options")
+			proc_check "$s_exe_name bus_status nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/status")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name head_bus_status" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/status")
+			proc_check "$s_exe_name head_bus_status allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/status" "Content-Type")
+			proc_check "$s_exe_name head_bus_status type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name head_bus_status" "HEAD" "http://127.0.0.1:$PORT/__xs/bus/status" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/bus/status")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name post_bus_status" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/bus/status")
+			proc_check "$s_exe_name post_bus_status allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/bus/status" "Content-Type")
+			proc_check "$s_exe_name post_bus_status type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name post_bus_status" "POST" "http://127.0.0.1:$PORT/__xs/bus/status" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/bus/namespaces")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name bus_namespaces" "$i_status" "200" "$s_body" '"items"' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/bus/namespaces" "Content-Type")
+			proc_check "$s_exe_name bus_namespaces type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name bus_namespaces" "GET" "http://127.0.0.1:$PORT/__xs/bus/namespaces" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/namespaces")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name head_bus_namespaces" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/namespaces")
+			proc_check "$s_exe_name head_bus_namespaces allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/namespaces" "Content-Type")
+			proc_check "$s_exe_name head_bus_namespaces type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name head_bus_namespaces" "HEAD" "http://127.0.0.1:$PORT/__xs/bus/namespaces" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/bus/namespaces")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name post_bus_namespaces" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/bus/namespaces")
+			proc_check "$s_exe_name post_bus_namespaces allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/bus/namespaces" "Content-Type")
+			proc_check "$s_exe_name post_bus_namespaces type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name post_bus_namespaces" "POST" "http://127.0.0.1:$PORT/__xs/bus/namespaces" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/bus/registry")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name bus_registry" "$i_status" "200" "$s_body" '"items"' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/bus/registry" "Content-Type")
+			proc_check "$s_exe_name bus_registry type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name bus_registry" "GET" "http://127.0.0.1:$PORT/__xs/bus/registry" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/registry")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name head_bus_registry" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/registry")
+			proc_check "$s_exe_name head_bus_registry allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/registry" "Content-Type")
+			proc_check "$s_exe_name head_bus_registry type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name head_bus_registry" "HEAD" "http://127.0.0.1:$PORT/__xs/bus/registry" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/bus/registry")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name post_bus_registry" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/bus/registry")
+			proc_check "$s_exe_name post_bus_registry allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/bus/registry" "Content-Type")
+			proc_check "$s_exe_name post_bus_registry type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name post_bus_registry" "POST" "http://127.0.0.1:$PORT/__xs/bus/registry" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/bus/limits")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name bus_limits" "$i_status" "200" "$s_body" '"data_limit"' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/bus/limits" "Content-Type")
+			proc_check "$s_exe_name bus_limits type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name bus_limits" "GET" "http://127.0.0.1:$PORT/__xs/bus/limits" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/limits")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name head_bus_limits" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/limits")
+			proc_check "$s_exe_name head_bus_limits allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/limits" "Content-Type")
+			proc_check "$s_exe_name head_bus_limits type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name head_bus_limits" "HEAD" "http://127.0.0.1:$PORT/__xs/bus/limits" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/bus/limits")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name post_bus_limits" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/bus/limits")
+			proc_check "$s_exe_name post_bus_limits allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/bus/limits" "Content-Type")
+			proc_check "$s_exe_name post_bus_limits type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name post_bus_limits" "POST" "http://127.0.0.1:$PORT/__xs/bus/limits" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name bus_send" "$i_status" "200" "$s_body" '"result":true' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello" "Content-Type")
+			proc_check "$s_exe_name bus_send type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name bus_send" "GET" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name head_bus_send" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello")
+			proc_check "$s_exe_name head_bus_send allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello" "Content-Type")
+			proc_check "$s_exe_name head_bus_send type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name head_bus_send" "HEAD" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name post_bus_send" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello")
+			proc_check "$s_exe_name post_bus_send allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello" "Content-Type")
+			proc_check "$s_exe_name post_bus_send type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name post_bus_send" "POST" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/bus/reset")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name bus_reset" "$i_status" "200" "$s_body" '"sweep_count"' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/bus/reset" "Content-Type")
+			proc_check "$s_exe_name bus_reset type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name bus_reset" "GET" "http://127.0.0.1:$PORT/__xs/bus/reset" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/reset")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name head_bus_reset" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/reset")
+			proc_check "$s_exe_name head_bus_reset allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/reset" "Content-Type")
+			proc_check "$s_exe_name head_bus_reset type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name head_bus_reset" "HEAD" "http://127.0.0.1:$PORT/__xs/bus/reset" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/bus/reset")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name post_bus_reset" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/bus/reset")
+			proc_check "$s_exe_name post_bus_reset allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/bus/reset" "Content-Type")
+			proc_check "$s_exe_name post_bus_reset type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name post_bus_reset" "POST" "http://127.0.0.1:$PORT/__xs/bus/reset" || i_case_exit=1
+
+			while IFS='|' read -r s_metric_name s_metric_path s_metric_token; do
+				i_status=$(proc_fetch_status "http://127.0.0.1:$PORT$s_metric_path")
+				s_body=$(proc_fetch_body)
+				proc_check "$s_exe_name $s_metric_name" "$i_status" "200" "$s_body" "$s_metric_token" || i_case_exit=1
+				s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT$s_metric_path" "Content-Type")
+				proc_check "$s_exe_name $s_metric_name type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+				proc_check_security_headers "$s_exe_name $s_metric_name" "GET" "http://127.0.0.1:$PORT$s_metric_path" || i_case_exit=1
+			done <<EOF
+$arr_metrics_clear_text
+EOF
+
+			while IFS='|' read -r s_metric_name s_metric_path s_metric_token; do
+				i_status=$(proc_fetch_status "http://127.0.0.1:$PORT$s_metric_path")
+				s_body=$(proc_fetch_body)
+				proc_check "$s_exe_name $s_metric_name" "$i_status" "200" "$s_body" "$s_metric_token" || i_case_exit=1
+				s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT$s_metric_path" "Content-Type")
+				proc_check "$s_exe_name $s_metric_name type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+				proc_check_security_headers "$s_exe_name $s_metric_name" "GET" "http://127.0.0.1:$PORT$s_metric_path" || i_case_exit=1
+
+				i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT$s_metric_path")
+				s_body=$(proc_fetch_body)
+				proc_check "$s_exe_name head_$s_metric_name" "$i_status" "200" "$s_body" || i_case_exit=1
+				s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT$s_metric_path" "Content-Type")
+				proc_check "$s_exe_name head_$s_metric_name type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+				proc_check_security_headers "$s_exe_name head_$s_metric_name" "HEAD" "http://127.0.0.1:$PORT$s_metric_path" || i_case_exit=1
+			done <<EOF
+$arr_metrics_text
+EOF
+
+			while IFS='|' read -r s_metric_name s_metric_path s_metric_token; do
+				i_status=$(proc_fetch_status "http://127.0.0.1:$PORT$s_metric_path")
+				s_body=$(proc_fetch_body)
+				proc_check "$s_exe_name $s_metric_name" "$i_status" "200" "$s_body" "$s_metric_token" || i_case_exit=1
+				s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT$s_metric_path" "Content-Type")
+				proc_check "$s_exe_name $s_metric_name type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+				proc_check_security_headers "$s_exe_name $s_metric_name" "GET" "http://127.0.0.1:$PORT$s_metric_path" || i_case_exit=1
+
+				i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT$s_metric_path")
+				s_body=$(proc_fetch_body)
+				proc_check "$s_exe_name head_$s_metric_name" "$i_status" "200" "$s_body" || i_case_exit=1
+				s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT$s_metric_path" "Content-Type")
+				proc_check "$s_exe_name head_$s_metric_name type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+				proc_check_security_headers "$s_exe_name head_$s_metric_name" "HEAD" "http://127.0.0.1:$PORT$s_metric_path" || i_case_exit=1
+			done <<EOF
+$arr_metrics_json
+EOF
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_clear")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name reload_clear" "$i_status" "200" "$s_body" 'reload_total_count=' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_clear" "Content-Type")
+			proc_check "$s_exe_name reload_clear type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name reload_clear" "GET" "http://127.0.0.1:$PORT/__xs/reload_clear" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_reset")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name reload_reset" "$i_status" "200" "$s_body" 'reload_total_count=' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_reset" "Content-Type")
+			proc_check "$s_exe_name reload_reset type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name reload_reset" "GET" "http://127.0.0.1:$PORT/__xs/reload_reset" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/check_config_clear")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name check_config_clear" "$i_status" "200" "$s_body" 'check_total_count=' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/check_config_clear" "Content-Type")
+			proc_check "$s_exe_name check_config_clear type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name check_config_clear" "GET" "http://127.0.0.1:$PORT/__xs/check_config_clear" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_clear")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name head_reload_clear" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_clear")
+			proc_check "$s_exe_name head_reload_clear allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_clear" "Content-Type")
+			proc_check "$s_exe_name head_reload_clear type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name head_reload_clear" "HEAD" "http://127.0.0.1:$PORT/__xs/reload_clear" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_reset")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name head_reload_reset" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_reset")
+			proc_check "$s_exe_name head_reload_reset allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_reset" "Content-Type")
+			proc_check "$s_exe_name head_reload_reset type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name head_reload_reset" "HEAD" "http://127.0.0.1:$PORT/__xs/reload_reset" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/check_config_clear")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name head_check_config_clear" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT/__xs/check_config_clear")
+			proc_check "$s_exe_name head_check_config_clear allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/check_config_clear" "Content-Type")
+			proc_check "$s_exe_name head_check_config_clear type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name head_check_config_clear" "HEAD" "http://127.0.0.1:$PORT/__xs/check_config_clear" || i_case_exit=1
+
+			while IFS='|' read -r s_metric_name s_metric_path s_metric_allow s_metric_type; do
+				proc_check_method_reject "$s_exe_name" "post_${s_metric_name}" "POST" "$s_metric_path" "405" "$s_metric_allow" "$s_metric_type" || i_case_exit=1
+			done <<EOF
+$arr_debug_readonly_text
+EOF
+
+			while IFS='|' read -r s_metric_name s_metric_path s_metric_allow s_metric_type; do
+				proc_check_method_reject "$s_exe_name" "post_${s_metric_name}" "POST" "$s_metric_path" "405" "$s_metric_allow" "$s_metric_type" || i_case_exit=1
+			done <<EOF
+$arr_debug_readonly_json
+EOF
+
+			while IFS='|' read -r s_metric_name s_metric_path s_metric_allow s_metric_type; do
+				proc_check_method_reject "$s_exe_name" "post_${s_metric_name}" "POST" "$s_metric_path" "405" "$s_metric_allow" "$s_metric_type" || i_case_exit=1
+			done <<EOF
+$arr_debug_get_only
+EOF
+		else
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/dashboard")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name dashboard" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "GET" "http://127.0.0.1:$PORT/__xs/dashboard")
+			proc_check "$s_exe_name dashboard body" "403" "403" "$s_body" 'dashboard api only available in xsdbg' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/dashboard" "Content-Type")
+			proc_check "$s_exe_name dashboard type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/dashboard" "Cache-Control")
+			proc_check "$s_exe_name dashboard cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/dashboard" "X-Frame-Options")
+			proc_check "$s_exe_name dashboard frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/dashboard" "Referrer-Policy")
+			proc_check "$s_exe_name dashboard referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/dashboard" "X-Content-Type-Options")
+			proc_check "$s_exe_name dashboard nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/dashboard_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name dashboard_json" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "GET" "http://127.0.0.1:$PORT/__xs/dashboard_json")
+			proc_check "$s_exe_name dashboard_json body" "403" "403" "$s_body" 'dashboard json api only available in xsdbg' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/dashboard_json" "Content-Type")
+			proc_check "$s_exe_name dashboard_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/dashboard_json" "Cache-Control")
+			proc_check "$s_exe_name dashboard_json cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/dashboard_json" "X-Frame-Options")
+			proc_check "$s_exe_name dashboard_json frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/dashboard_json" "Referrer-Policy")
+			proc_check "$s_exe_name dashboard_json referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/dashboard_json" "X-Content-Type-Options")
+			proc_check "$s_exe_name dashboard_json nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "bus_root" "GET" "/__xs/bus" "403" "application/json" 'bus api not included in production xs' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "head_bus_root_disabled" "HEAD" "/__xs/bus" "403" "application/json" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "post_bus_root_disabled" "POST" "/__xs/bus" "403" "application/json" 'bus api not included in production xs' || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/bus/status")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name bus_status" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "GET" "http://127.0.0.1:$PORT/__xs/bus/status")
+			proc_check "$s_exe_name bus_status body" "403" "403" "$s_body" 'bus api not included in production xs' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/bus/status" "Content-Type")
+			proc_check "$s_exe_name bus_status type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/bus/status" "Cache-Control")
+			proc_check "$s_exe_name bus_status cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/bus/status" "X-Frame-Options")
+			proc_check "$s_exe_name bus_status frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/bus/status" "Referrer-Policy")
+			proc_check "$s_exe_name bus_status referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/bus/status" "X-Content-Type-Options")
+			proc_check "$s_exe_name bus_status nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/status")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name head_bus_status_disabled" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/status" "Content-Type")
+			proc_check "$s_exe_name head_bus_status_disabled type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name head_bus_status_disabled" "HEAD" "http://127.0.0.1:$PORT/__xs/bus/status" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/bus/status")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name post_bus_status_disabled" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "POST" "http://127.0.0.1:$PORT/__xs/bus/status")
+			proc_check "$s_exe_name post_bus_status_disabled body" "403" "403" "$s_body" 'bus api not included in production xs' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/bus/status" "Content-Type")
+			proc_check "$s_exe_name post_bus_status_disabled type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name post_bus_status_disabled" "POST" "http://127.0.0.1:$PORT/__xs/bus/status" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/bus/namespaces")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name bus_namespaces" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "GET" "http://127.0.0.1:$PORT/__xs/bus/namespaces")
+			proc_check "$s_exe_name bus_namespaces body" "403" "403" "$s_body" 'bus api not included in production xs' || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/namespaces")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name head_bus_namespaces_disabled" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/namespaces" "Content-Type")
+			proc_check "$s_exe_name head_bus_namespaces_disabled type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name head_bus_namespaces_disabled" "HEAD" "http://127.0.0.1:$PORT/__xs/bus/namespaces" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/bus/namespaces")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name post_bus_namespaces_disabled" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "POST" "http://127.0.0.1:$PORT/__xs/bus/namespaces")
+			proc_check "$s_exe_name post_bus_namespaces_disabled body" "403" "403" "$s_body" 'bus api not included in production xs' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/bus/namespaces" "Content-Type")
+			proc_check "$s_exe_name post_bus_namespaces_disabled type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name post_bus_namespaces_disabled" "POST" "http://127.0.0.1:$PORT/__xs/bus/namespaces" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/bus/registry")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name bus_registry" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "GET" "http://127.0.0.1:$PORT/__xs/bus/registry")
+			proc_check "$s_exe_name bus_registry body" "403" "403" "$s_body" 'bus api not included in production xs' || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/registry")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name head_bus_registry_disabled" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/registry" "Content-Type")
+			proc_check "$s_exe_name head_bus_registry_disabled type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name head_bus_registry_disabled" "HEAD" "http://127.0.0.1:$PORT/__xs/bus/registry" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/bus/registry")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name post_bus_registry_disabled" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "POST" "http://127.0.0.1:$PORT/__xs/bus/registry")
+			proc_check "$s_exe_name post_bus_registry_disabled body" "403" "403" "$s_body" 'bus api not included in production xs' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/bus/registry" "Content-Type")
+			proc_check "$s_exe_name post_bus_registry_disabled type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name post_bus_registry_disabled" "POST" "http://127.0.0.1:$PORT/__xs/bus/registry" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/bus/limits")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name bus_limits" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "GET" "http://127.0.0.1:$PORT/__xs/bus/limits")
+			proc_check "$s_exe_name bus_limits body" "403" "403" "$s_body" 'bus api not included in production xs' || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/limits")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name head_bus_limits_disabled" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/limits" "Content-Type")
+			proc_check "$s_exe_name head_bus_limits_disabled type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name head_bus_limits_disabled" "HEAD" "http://127.0.0.1:$PORT/__xs/bus/limits" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/bus/limits")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name post_bus_limits_disabled" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "POST" "http://127.0.0.1:$PORT/__xs/bus/limits")
+			proc_check "$s_exe_name post_bus_limits_disabled body" "403" "403" "$s_body" 'bus api not included in production xs' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/bus/limits" "Content-Type")
+			proc_check "$s_exe_name post_bus_limits_disabled type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name post_bus_limits_disabled" "POST" "http://127.0.0.1:$PORT/__xs/bus/limits" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name bus_send" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "GET" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello")
+			proc_check "$s_exe_name bus_send body" "403" "403" "$s_body" 'bus api not included in production xs' || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name head_bus_send_disabled" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello" "Content-Type")
+			proc_check "$s_exe_name head_bus_send_disabled type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name head_bus_send_disabled" "HEAD" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name post_bus_send_disabled" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "POST" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello")
+			proc_check "$s_exe_name post_bus_send_disabled body" "403" "403" "$s_body" 'bus api not included in production xs' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello" "Content-Type")
+			proc_check "$s_exe_name post_bus_send_disabled type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name post_bus_send_disabled" "POST" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/bus/reset")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name bus_reset" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "GET" "http://127.0.0.1:$PORT/__xs/bus/reset")
+			proc_check "$s_exe_name bus_reset body" "403" "403" "$s_body" 'bus api not included in production xs' || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/reset")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name head_bus_reset_disabled" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/reset" "Content-Type")
+			proc_check "$s_exe_name head_bus_reset_disabled type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name head_bus_reset_disabled" "HEAD" "http://127.0.0.1:$PORT/__xs/bus/reset" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/bus/reset")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name post_bus_reset_disabled" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "POST" "http://127.0.0.1:$PORT/__xs/bus/reset")
+			proc_check "$s_exe_name post_bus_reset_disabled body" "403" "403" "$s_body" 'bus api not included in production xs' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/bus/reset" "Content-Type")
+			proc_check "$s_exe_name post_bus_reset_disabled type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name post_bus_reset_disabled" "POST" "http://127.0.0.1:$PORT/__xs/bus/reset" || i_case_exit=1
+
+			while IFS='|' read -r s_metric_name s_metric_path s_metric_prod; do
+				i_status=$(proc_fetch_status "http://127.0.0.1:$PORT$s_metric_path")
+				s_body=$(proc_fetch_body)
+				proc_check "$s_exe_name $s_metric_name" "$i_status" "403" "$s_body" || i_case_exit=1
+				s_body=$(proc_fetch_body_method "GET" "http://127.0.0.1:$PORT$s_metric_path")
+				proc_check "$s_exe_name $s_metric_name body" "403" "403" "$s_body" "$s_metric_prod" || i_case_exit=1
+				s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT$s_metric_path" "Content-Type")
+				proc_check "$s_exe_name $s_metric_name type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			done <<EOF
+$arr_metrics_clear
+EOF
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/http_metrics")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name http_metrics" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "GET" "http://127.0.0.1:$PORT/__xs/http_metrics")
+			proc_check "$s_exe_name http_metrics body" "403" "403" "$s_body" 'http metrics api only available in xsdbg' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/http_metrics" "Content-Type")
+			proc_check "$s_exe_name http_metrics type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/http_metrics" "Cache-Control")
+			proc_check "$s_exe_name http_metrics cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/http_metrics" "X-Frame-Options")
+			proc_check "$s_exe_name http_metrics frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/http_metrics" "Referrer-Policy")
+			proc_check "$s_exe_name http_metrics referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/http_metrics" "X-Content-Type-Options")
+			proc_check "$s_exe_name http_metrics nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/http_metrics_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name http_metrics_json" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "GET" "http://127.0.0.1:$PORT/__xs/http_metrics_json")
+			proc_check "$s_exe_name http_metrics_json body" "403" "403" "$s_body" 'http metrics json api only available in xsdbg' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/http_metrics_json" "Content-Type")
+			proc_check "$s_exe_name http_metrics_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/http_metrics_json" "Cache-Control")
+			proc_check "$s_exe_name http_metrics_json cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/http_metrics_json" "X-Frame-Options")
+			proc_check "$s_exe_name http_metrics_json frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/http_metrics_json" "Referrer-Policy")
+			proc_check "$s_exe_name http_metrics_json referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/http_metrics_json" "X-Content-Type-Options")
+			proc_check "$s_exe_name http_metrics_json nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/ws_metrics")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name ws_metrics" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "GET" "http://127.0.0.1:$PORT/__xs/ws_metrics")
+			proc_check "$s_exe_name ws_metrics body" "403" "403" "$s_body" 'ws metrics api only available in xsdbg' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/ws_metrics" "Content-Type")
+			proc_check "$s_exe_name ws_metrics type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/ws_metrics" "Cache-Control")
+			proc_check "$s_exe_name ws_metrics cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/ws_metrics" "X-Frame-Options")
+			proc_check "$s_exe_name ws_metrics frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/ws_metrics" "Referrer-Policy")
+			proc_check "$s_exe_name ws_metrics referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/ws_metrics" "X-Content-Type-Options")
+			proc_check "$s_exe_name ws_metrics nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/ws_metrics_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name ws_metrics_json" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "GET" "http://127.0.0.1:$PORT/__xs/ws_metrics_json")
+			proc_check "$s_exe_name ws_metrics_json body" "403" "403" "$s_body" 'ws metrics json api only available in xsdbg' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/ws_metrics_json" "Content-Type")
+			proc_check "$s_exe_name ws_metrics_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/ws_metrics_json" "Cache-Control")
+			proc_check "$s_exe_name ws_metrics_json cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/ws_metrics_json" "X-Frame-Options")
+			proc_check "$s_exe_name ws_metrics_json frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/ws_metrics_json" "Referrer-Policy")
+			proc_check "$s_exe_name ws_metrics_json referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/ws_metrics_json" "X-Content-Type-Options")
+			proc_check "$s_exe_name ws_metrics_json nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/xtp_metrics")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name xtp_metrics" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "GET" "http://127.0.0.1:$PORT/__xs/xtp_metrics")
+			proc_check "$s_exe_name xtp_metrics body" "403" "403" "$s_body" 'xtp metrics api only available in xsdbg' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/xtp_metrics" "Content-Type")
+			proc_check "$s_exe_name xtp_metrics type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/xtp_metrics" "Cache-Control")
+			proc_check "$s_exe_name xtp_metrics cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/xtp_metrics" "X-Frame-Options")
+			proc_check "$s_exe_name xtp_metrics frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/xtp_metrics" "Referrer-Policy")
+			proc_check "$s_exe_name xtp_metrics referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/xtp_metrics" "X-Content-Type-Options")
+			proc_check "$s_exe_name xtp_metrics nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/xtp_metrics_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name xtp_metrics_json" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "GET" "http://127.0.0.1:$PORT/__xs/xtp_metrics_json")
+			proc_check "$s_exe_name xtp_metrics_json body" "403" "403" "$s_body" 'xtp metrics json api only available in xsdbg' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/xtp_metrics_json" "Content-Type")
+			proc_check "$s_exe_name xtp_metrics_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/xtp_metrics_json" "Cache-Control")
+			proc_check "$s_exe_name xtp_metrics_json cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/xtp_metrics_json" "X-Frame-Options")
+			proc_check "$s_exe_name xtp_metrics_json frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/xtp_metrics_json" "Referrer-Policy")
+			proc_check "$s_exe_name xtp_metrics_json referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/xtp_metrics_json" "X-Content-Type-Options")
+			proc_check "$s_exe_name xtp_metrics_json nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/udp_metrics")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name udp_metrics" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "GET" "http://127.0.0.1:$PORT/__xs/udp_metrics")
+			proc_check "$s_exe_name udp_metrics body" "403" "403" "$s_body" 'udp metrics api only available in xsdbg' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/udp_metrics" "Content-Type")
+			proc_check "$s_exe_name udp_metrics type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/udp_metrics" "Cache-Control")
+			proc_check "$s_exe_name udp_metrics cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/udp_metrics" "X-Frame-Options")
+			proc_check "$s_exe_name udp_metrics frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/udp_metrics" "Referrer-Policy")
+			proc_check "$s_exe_name udp_metrics referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/udp_metrics" "X-Content-Type-Options")
+			proc_check "$s_exe_name udp_metrics nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/udp_metrics_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name udp_metrics_json" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "GET" "http://127.0.0.1:$PORT/__xs/udp_metrics_json")
+			proc_check "$s_exe_name udp_metrics_json body" "403" "403" "$s_body" 'udp metrics json api only available in xsdbg' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/udp_metrics_json" "Content-Type")
+			proc_check "$s_exe_name udp_metrics_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/udp_metrics_json" "Cache-Control")
+			proc_check "$s_exe_name udp_metrics_json cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/udp_metrics_json" "X-Frame-Options")
+			proc_check "$s_exe_name udp_metrics_json frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/udp_metrics_json" "Referrer-Policy")
+			proc_check "$s_exe_name udp_metrics_json referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/udp_metrics_json" "X-Content-Type-Options")
+			proc_check "$s_exe_name udp_metrics_json nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/custom_metrics")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name custom_metrics" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "GET" "http://127.0.0.1:$PORT/__xs/custom_metrics")
+			proc_check "$s_exe_name custom_metrics body" "403" "403" "$s_body" 'custom metrics api only available in xsdbg' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/custom_metrics" "Content-Type")
+			proc_check "$s_exe_name custom_metrics type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/custom_metrics" "Cache-Control")
+			proc_check "$s_exe_name custom_metrics cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/custom_metrics" "X-Frame-Options")
+			proc_check "$s_exe_name custom_metrics frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/custom_metrics" "Referrer-Policy")
+			proc_check "$s_exe_name custom_metrics referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/custom_metrics" "X-Content-Type-Options")
+			proc_check "$s_exe_name custom_metrics nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/custom_metrics_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name custom_metrics_json" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "GET" "http://127.0.0.1:$PORT/__xs/custom_metrics_json")
+			proc_check "$s_exe_name custom_metrics_json body" "403" "403" "$s_body" 'custom metrics json api only available in xsdbg' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/custom_metrics_json" "Content-Type")
+			proc_check "$s_exe_name custom_metrics_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/custom_metrics_json" "Cache-Control")
+			proc_check "$s_exe_name custom_metrics_json cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/custom_metrics_json" "X-Frame-Options")
+			proc_check "$s_exe_name custom_metrics_json frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/custom_metrics_json" "Referrer-Policy")
+			proc_check "$s_exe_name custom_metrics_json referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/custom_metrics_json" "X-Content-Type-Options")
+			proc_check "$s_exe_name custom_metrics_json nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_clear")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name reload_clear" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "GET" "http://127.0.0.1:$PORT/__xs/reload_clear")
+			proc_check "$s_exe_name reload_clear body" "403" "403" "$s_body" 'config reload clear api only available in xsdbg' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_clear" "Content-Type")
+			proc_check "$s_exe_name reload_clear type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_clear" "Cache-Control")
+			proc_check "$s_exe_name reload_clear cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_clear" "X-Frame-Options")
+			proc_check "$s_exe_name reload_clear frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_clear" "Referrer-Policy")
+			proc_check "$s_exe_name reload_clear referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_clear" "X-Content-Type-Options")
+			proc_check "$s_exe_name reload_clear nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_reset")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name reload_reset" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "GET" "http://127.0.0.1:$PORT/__xs/reload_reset")
+			proc_check "$s_exe_name reload_reset body" "403" "403" "$s_body" 'config reload reset api only available in xsdbg' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_reset" "Content-Type")
+			proc_check "$s_exe_name reload_reset type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_reset" "Cache-Control")
+			proc_check "$s_exe_name reload_reset cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_reset" "X-Frame-Options")
+			proc_check "$s_exe_name reload_reset frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_reset" "Referrer-Policy")
+			proc_check "$s_exe_name reload_reset referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_reset" "X-Content-Type-Options")
+			proc_check "$s_exe_name reload_reset nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/check_config_clear")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name check_config_clear" "$i_status" "403" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_body_method "GET" "http://127.0.0.1:$PORT/__xs/check_config_clear")
+			proc_check "$s_exe_name check_config_clear body" "403" "403" "$s_body" 'check config clear api only available in xsdbg' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/check_config_clear" "Content-Type")
+			proc_check "$s_exe_name check_config_clear type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/check_config_clear" "Cache-Control")
+			proc_check "$s_exe_name check_config_clear cache" "200" "200" "$s_body" 'no-store' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/check_config_clear" "X-Frame-Options")
+			proc_check "$s_exe_name check_config_clear frame" "200" "200" "$s_body" 'DENY' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/check_config_clear" "Referrer-Policy")
+			proc_check "$s_exe_name check_config_clear referrer" "200" "200" "$s_body" 'no-referrer' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/check_config_clear" "X-Content-Type-Options")
+			proc_check "$s_exe_name check_config_clear nosniff" "200" "200" "$s_body" 'nosniff' || i_case_exit=1
+
+			while IFS='|' read -r s_metric_name s_metric_path s_metric_prod; do
+				proc_check_disabled_endpoint "$s_exe_name" "head_${s_metric_name}_disabled" "HEAD" "$s_metric_path" "403" "text/plain" || i_case_exit=1
+				proc_check_disabled_endpoint "$s_exe_name" "post_${s_metric_name}_disabled" "POST" "$s_metric_path" "403" "text/plain" "$s_metric_prod" || i_case_exit=1
+			done <<EOF
+$arr_debug_disabled_text
+EOF
+
+			while IFS='|' read -r s_metric_name s_metric_path s_metric_prod; do
+				proc_check_disabled_endpoint "$s_exe_name" "head_${s_metric_name}_disabled" "HEAD" "$s_metric_path" "403" "application/json" || i_case_exit=1
+				proc_check_disabled_endpoint "$s_exe_name" "post_${s_metric_name}_disabled" "POST" "$s_metric_path" "403" "application/json" "$s_metric_prod" || i_case_exit=1
+			done <<EOF
+$arr_debug_disabled_json
+EOF
+		fi
+
+		return "$i_case_exit"
+	)
+}
+
+proc_run_repo_root_case() {
+	s_exe_name="$1"
+	b_debug="$2"
+	s_exe_path="$RELEASE_DIR/$s_exe_name"
+	i_case_exit=0
+
+	if [ ! -f "$s_exe_path" ]; then
+		echo "FAIL $s_exe_name repo_root : executable not found"
+		return 1
+	fi
+
+	(
+		cd "$REPO_ROOT"
+		proc_cleanup_servers
+		"$s_exe_path" "$CONFIG" >/dev/null 2>&1 &
+		i_pid=$!
+		trap 'proc_stop_server "$i_pid"' EXIT INT TERM
+
+		if ! proc_wait_ready; then
+			echo "FAIL $s_exe_name repo_root_ready : server not ready within ${WAIT_SECS}s"
+			return 1
+		fi
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/status_json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name repo_root status_json" "$i_status" "200" "$s_body" '"manage_api":true' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/status_json" "Content-Type")
+		proc_check "$s_exe_name repo_root status_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name repo_root status_json" "GET" "http://127.0.0.1:$PORT/__xs/status_json" || i_case_exit=1
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/status")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name repo_root status" "$i_status" "200" "$s_body" 'manage_api=true' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/status" "Content-Type")
+		proc_check "$s_exe_name repo_root status type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name repo_root status" "GET" "http://127.0.0.1:$PORT/__xs/status" || i_case_exit=1
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/health_json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name repo_root health_json" "$i_status" "200" "$s_body" '"ok":true' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/health_json" "Content-Type")
+		proc_check "$s_exe_name repo_root health_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name repo_root health_json" "GET" "http://127.0.0.1:$PORT/__xs/health_json" || i_case_exit=1
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/health")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name repo_root health" "$i_status" "200" "$s_body" 'ok=true' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/health" "Content-Type")
+		proc_check "$s_exe_name repo_root health type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name repo_root health" "GET" "http://127.0.0.1:$PORT/__xs/health" || i_case_exit=1
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_status_json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name repo_root reload_status_json" "$i_status" "200" "$s_body" '"busy":false' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_status_json" "Content-Type")
+		proc_check "$s_exe_name repo_root reload_status_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name repo_root reload_status_json" "GET" "http://127.0.0.1:$PORT/__xs/reload_status_json" || i_case_exit=1
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_status")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name repo_root reload_status" "$i_status" "200" "$s_body" 'busy=false' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_status" "Content-Type")
+		proc_check "$s_exe_name repo_root reload_status type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name repo_root reload_status" "GET" "http://127.0.0.1:$PORT/__xs/reload_status" || i_case_exit=1
+
+		if ! proc_wait_reload_idle; then
+			echo "FAIL $s_exe_name repo_root reload_idle_wait : timeout"
+			i_case_exit=1
+		else
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root reload" "$i_status" "200" "$s_body" 'result=true' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload" "Content-Type")
+			proc_check "$s_exe_name repo_root reload type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root reload" "GET" "http://127.0.0.1:$PORT/__xs/reload" || i_case_exit=1
+		fi
+
+		if ! proc_wait_reload_idle; then
+			echo "FAIL $s_exe_name repo_root reload_idle_after : timeout"
+			i_case_exit=1
+		else
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/reload")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root post_reload" "$i_status" "200" "$s_body" 'result=true' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/reload" "Content-Type")
+			proc_check "$s_exe_name repo_root post_reload type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root post_reload" "POST" "http://127.0.0.1:$PORT/__xs/reload" || i_case_exit=1
+		fi
+
+		if ! proc_wait_reload_idle; then
+			echo "FAIL $s_exe_name repo_root reload_post_idle_wait : timeout"
+			i_case_exit=1
+		fi
+
+		if ! proc_wait_reload_idle; then
+			echo "FAIL $s_exe_name repo_root reload_json_idle_wait : timeout"
+			i_case_exit=1
+		else
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root reload_json" "$i_status" "200" "$s_body" '"result":true' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_json" "Content-Type")
+			proc_check "$s_exe_name repo_root reload_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root reload_json" "GET" "http://127.0.0.1:$PORT/__xs/reload_json" || i_case_exit=1
+		fi
+
+		if ! proc_wait_reload_idle; then
+			echo "FAIL $s_exe_name repo_root reload_json_idle_after : timeout"
+			i_case_exit=1
+		else
+			i_try=0
+			b_reload_ok=false
+			while [ "$i_try" -lt 10 ]; do
+				i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/reload_json")
+				s_body=$(proc_fetch_body)
+				if [ "$i_status" = "200" ]; then
+					proc_check "$s_exe_name repo_root post_reload_json" "$i_status" "200" "$s_body" '"result":true' || i_case_exit=1
+					s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/reload_json" "Content-Type")
+					proc_check "$s_exe_name repo_root post_reload_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+					proc_check_security_headers "$s_exe_name repo_root post_reload_json" "POST" "http://127.0.0.1:$PORT/__xs/reload_json" || i_case_exit=1
+					b_reload_ok=true
+					break
+				fi
+				if [ "$i_status" != "409" ]; then
+					proc_check "$s_exe_name repo_root post_reload_json" "$i_status" "200" "$s_body" || i_case_exit=1
+					break
+				fi
+				i_try=$((i_try + 1))
+				sleep 0.2
+			done
+
+			if [ "$b_reload_ok" != "true" ] && [ "$i_try" -ge 10 ]; then
+				echo "FAIL $s_exe_name repo_root post_reload_json : remained busy after retries"
+				i_case_exit=1
+			fi
+		fi
+
+		if ! proc_wait_reload_idle; then
+			echo "FAIL $s_exe_name repo_root reload_json_post_idle_wait : timeout"
+			i_case_exit=1
+		fi
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/check_config_json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name repo_root check_config_json" "$i_status" "200" "$s_body" '"check_total_count":' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/check_config_json" "Content-Type")
+		proc_check "$s_exe_name repo_root check_config_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name repo_root check_config_json" "GET" "http://127.0.0.1:$PORT/__xs/check_config_json" || i_case_exit=1
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/check_config")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name repo_root check_config" "$i_status" "200" "$s_body" 'check_total_count=' || i_case_exit=1
+		s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/check_config" "Content-Type")
+		proc_check "$s_exe_name repo_root check_config type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+		proc_check_security_headers "$s_exe_name repo_root check_config" "GET" "http://127.0.0.1:$PORT/__xs/check_config" || i_case_exit=1
+
+		arr_repo_root_head_ok='head_status_json|/__xs/status_json|application/json
+head_status|/__xs/status|text/plain
+head_health_json|/__xs/health_json|application/json
+head_health|/__xs/health|text/plain
+head_reload_status_json|/__xs/reload_status_json|application/json
+head_reload_status|/__xs/reload_status|text/plain'
+
+		arr_repo_root_method_reject='post_status_json|POST|/__xs/status_json|405|GET, HEAD|application/json
+post_status|POST|/__xs/status|405|GET, HEAD|text/plain
+post_health_json|POST|/__xs/health_json|405|GET, HEAD|application/json
+post_health|POST|/__xs/health|405|GET, HEAD|text/plain
+post_reload_status_json|POST|/__xs/reload_status_json|405|GET, HEAD|application/json
+post_reload_status|POST|/__xs/reload_status|405|GET, HEAD|text/plain
+post_check_config_json|POST|/__xs/check_config_json|405|GET|application/json
+post_check_config|POST|/__xs/check_config|405|GET|text/plain
+head_check_config_json|HEAD|/__xs/check_config_json|405|GET|application/json
+head_check_config|HEAD|/__xs/check_config|405|GET|text/plain
+head_reload_json|HEAD|/__xs/reload_json|405|GET, POST|application/json
+head_reload|HEAD|/__xs/reload|405|GET, POST|text/plain
+head_reload_config_json|HEAD|/__xs/reload_config_json|405|GET, POST|application/json
+head_reload_config|HEAD|/__xs/reload_config|405|GET, POST|text/plain'
+
+		while IFS='|' read -r s_metric_name s_metric_path s_metric_type; do
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT$s_metric_path")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root $s_metric_name" "$i_status" "200" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT$s_metric_path" "Content-Type")
+			proc_check "$s_exe_name repo_root $s_metric_name type" "200" "200" "$s_body" "$s_metric_type" || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root $s_metric_name" "HEAD" "http://127.0.0.1:$PORT$s_metric_path" || i_case_exit=1
+		done <<EOF
+$arr_repo_root_head_ok
+EOF
+
+		while IFS='|' read -r s_metric_name s_method s_metric_path i_expect_status s_allow s_metric_type; do
+			proc_check_method_reject "$s_exe_name" "repo_root $s_metric_name" "$s_method" "$s_metric_path" "$i_expect_status" "$s_allow" "$s_metric_type" || i_case_exit=1
+		done <<EOF
+$arr_repo_root_method_reject
+EOF
+
+		proc_check_disabled_endpoint "$s_exe_name" "repo_root manage_root" "GET" "/__xs" "404" "text/plain" 'manage api not found' || i_case_exit=1
+		proc_check_disabled_endpoint "$s_exe_name" "repo_root head_manage_root" "HEAD" "/__xs" "404" "text/plain" || i_case_exit=1
+		proc_check_disabled_endpoint "$s_exe_name" "repo_root post_manage_root" "POST" "/__xs" "404" "text/plain" 'manage api not found' || i_case_exit=1
+
+		proc_check_disabled_endpoint "$s_exe_name" "repo_root unknown_manage" "GET" "/__xs/unknown" "404" "text/plain" || i_case_exit=1
+		proc_check_disabled_endpoint "$s_exe_name" "repo_root head_unknown_manage" "HEAD" "/__xs/unknown" "404" "text/plain" || i_case_exit=1
+		proc_check_disabled_endpoint "$s_exe_name" "repo_root post_unknown_manage" "POST" "/__xs/unknown" "404" "text/plain" 'manage api not found' || i_case_exit=1
+
+		proc_check_disabled_endpoint "$s_exe_name" "repo_root unknown_manage_json" "GET" "/__xs/unknown_json" "404" "application/json" || i_case_exit=1
+		proc_check_disabled_endpoint "$s_exe_name" "repo_root head_unknown_manage_json" "HEAD" "/__xs/unknown_json" "404" "application/json" || i_case_exit=1
+		proc_check_disabled_endpoint "$s_exe_name" "repo_root post_unknown_manage_json" "POST" "/__xs/unknown_json" "404" "application/json" 'manage api not found' || i_case_exit=1
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name repo_root json_route" "$i_status" "200" "$s_body" '"path":"/json"' || i_case_exit=1
+
+		if ! proc_wait_reload_idle; then
+			echo "FAIL $s_exe_name repo_root reload_config_idle_wait : timeout"
+			i_case_exit=1
+		else
+			i_try=0
+			b_reload_config_text_ok=false
+			while [ "$i_try" -lt 10 ]; do
+				i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_config")
+				s_body=$(proc_fetch_body)
+				if [ "$i_status" = "200" ]; then
+					proc_check "$s_exe_name repo_root reload_config" "$i_status" "200" "$s_body" 'result=true' || i_case_exit=1
+					proc_check "$s_exe_name repo_root reload_config body" "200" "200" "$s_body" 'config reload queued' || i_case_exit=1
+					s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_config" "Content-Type")
+					proc_check "$s_exe_name repo_root reload_config type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+					proc_check_security_headers "$s_exe_name repo_root reload_config" "GET" "http://127.0.0.1:$PORT/__xs/reload_config" || i_case_exit=1
+					b_reload_config_text_ok=true
+					break
+				fi
+				if [ "$i_status" != "409" ]; then
+					proc_check "$s_exe_name repo_root reload_config" "$i_status" "200" "$s_body" || i_case_exit=1
+					break
+				fi
+				i_try=$((i_try + 1))
+				sleep 0.2
+			done
+
+			if [ "$b_reload_config_text_ok" != "true" ] && [ "$i_try" -ge 10 ]; then
+				echo "FAIL $s_exe_name repo_root reload_config : remained busy after retries"
+				i_case_exit=1
+			fi
+		fi
+
+		if ! proc_wait_reload_idle; then
+			echo "FAIL $s_exe_name repo_root reload_config_text_idle_after : timeout"
+			i_case_exit=1
+		else
+			i_try=0
+			b_reload_config_ok=false
+			while [ "$i_try" -lt 10 ]; do
+				i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_config_json")
+				s_body=$(proc_fetch_body)
+				if [ "$i_status" = "200" ]; then
+					proc_check "$s_exe_name repo_root reload_config_json" "$i_status" "200" "$s_body" '"result":true' || i_case_exit=1
+					proc_check "$s_exe_name repo_root reload_config_json body" "$i_status" "200" "$s_body" 'config reload queued' || i_case_exit=1
+					s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_config_json" "Content-Type")
+					proc_check "$s_exe_name repo_root reload_config_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+					proc_check_security_headers "$s_exe_name repo_root reload_config_json" "GET" "http://127.0.0.1:$PORT/__xs/reload_config_json" || i_case_exit=1
+					b_reload_config_ok=true
+					break
+				fi
+				if [ "$i_status" != "409" ]; then
+					proc_check "$s_exe_name repo_root reload_config_json" "$i_status" "200" "$s_body" || i_case_exit=1
+					break
+				fi
+				i_try=$((i_try + 1))
+				sleep 0.2
+			done
+
+			if [ "$b_reload_config_ok" != "true" ] && [ "$i_try" -ge 10 ]; then
+				echo "FAIL $s_exe_name repo_root reload_config_json : remained busy after retries"
+				i_case_exit=1
+			fi
+		fi
+
+		if ! proc_wait_reload_idle; then
+			echo "FAIL $s_exe_name repo_root reload_config_idle_after : timeout"
+			i_case_exit=1
+		else
+			i_try=0
+			b_reload_config_text_ok=false
+			while [ "$i_try" -lt 10 ]; do
+				i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/reload_config")
+				s_body=$(proc_fetch_body)
+				if [ "$i_status" = "200" ]; then
+					proc_check "$s_exe_name repo_root post_reload_config" "$i_status" "200" "$s_body" 'result=true' || i_case_exit=1
+					proc_check "$s_exe_name repo_root post_reload_config body" "$i_status" "200" "$s_body" 'config reload queued' || i_case_exit=1
+					s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/reload_config" "Content-Type")
+					proc_check "$s_exe_name repo_root post_reload_config type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+					proc_check_security_headers "$s_exe_name repo_root post_reload_config" "POST" "http://127.0.0.1:$PORT/__xs/reload_config" || i_case_exit=1
+					b_reload_config_text_ok=true
+					break
+				fi
+				if [ "$i_status" != "409" ]; then
+					proc_check "$s_exe_name repo_root post_reload_config" "$i_status" "200" "$s_body" || i_case_exit=1
+					break
+				fi
+				i_try=$((i_try + 1))
+				sleep 0.2
+			done
+
+			if [ "$b_reload_config_text_ok" != "true" ] && [ "$i_try" -ge 10 ]; then
+				echo "FAIL $s_exe_name repo_root post_reload_config : remained busy after retries"
+				i_case_exit=1
+			fi
+		fi
+
+		if ! proc_wait_reload_idle; then
+			echo "FAIL $s_exe_name repo_root reload_config_text_post_idle_wait : timeout"
+			i_case_exit=1
+		else
+			i_try=0
+			b_reload_config_ok=false
+			while [ "$i_try" -lt 10 ]; do
+				i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/reload_config_json")
+				s_body=$(proc_fetch_body)
+				if [ "$i_status" = "200" ]; then
+					proc_check "$s_exe_name repo_root post_reload_config_json" "$i_status" "200" "$s_body" '"result":true' || i_case_exit=1
+					proc_check "$s_exe_name repo_root post_reload_config_json body" "$i_status" "200" "$s_body" 'config reload queued' || i_case_exit=1
+					s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/reload_config_json" "Content-Type")
+					proc_check "$s_exe_name repo_root post_reload_config_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+					proc_check_security_headers "$s_exe_name repo_root post_reload_config_json" "POST" "http://127.0.0.1:$PORT/__xs/reload_config_json" || i_case_exit=1
+					b_reload_config_ok=true
+					break
+				fi
+				if [ "$i_status" != "409" ]; then
+					proc_check "$s_exe_name repo_root post_reload_config_json" "$i_status" "200" "$s_body" || i_case_exit=1
+					break
+				fi
+				i_try=$((i_try + 1))
+				sleep 0.2
+			done
+
+			if [ "$b_reload_config_ok" != "true" ] && [ "$i_try" -ge 10 ]; then
+				echo "FAIL $s_exe_name repo_root post_reload_config_json : remained busy after retries"
+				i_case_exit=1
+			fi
+		fi
+
+		if ! proc_wait_reload_idle; then
+			echo "FAIL $s_exe_name repo_root reload_config_post_idle_wait : timeout"
+			i_case_exit=1
+		fi
+
+		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name repo_root json_after_config_reload" "$i_status" "200" "$s_body" '"path":"/json"' || i_case_exit=1
+
+		if [ "$b_debug" = "true" ]; then
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root bus_root" "GET" "/__xs/bus" "404" "application/json" 'manage api not found' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_bus_root" "HEAD" "/__xs/bus" "404" "application/json" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_bus_root" "POST" "/__xs/bus" "404" "application/json" 'manage api not found' || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/dashboard")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root dashboard" "$i_status" "200" "$s_body" 'http_req_count=' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/dashboard" "Content-Type")
+			proc_check "$s_exe_name repo_root dashboard type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root dashboard" "GET" "http://127.0.0.1:$PORT/__xs/dashboard" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/dashboard")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root head_dashboard" "$i_status" "200" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/dashboard" "Content-Type")
+			proc_check "$s_exe_name repo_root head_dashboard type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root head_dashboard" "HEAD" "http://127.0.0.1:$PORT/__xs/dashboard" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/dashboard")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root post_dashboard" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/dashboard")
+			proc_check "$s_exe_name repo_root post_dashboard allow" "200" "200" "$s_body" 'GET, HEAD' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/dashboard" "Content-Type")
+			proc_check "$s_exe_name repo_root post_dashboard type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root post_dashboard" "POST" "http://127.0.0.1:$PORT/__xs/dashboard" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/dashboard_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root dashboard_json" "$i_status" "200" "$s_body" || i_case_exit=1
+			proc_check "$s_exe_name repo_root dashboard_json body" "200" "200" "$s_body" '"status"' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/dashboard_json" "Content-Type")
+			proc_check "$s_exe_name repo_root dashboard_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root dashboard_json" "GET" "http://127.0.0.1:$PORT/__xs/dashboard_json" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/dashboard_json")
+			proc_check "$s_exe_name repo_root head_dashboard_json" "$i_status" "200" "" || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/dashboard_json" "Content-Type")
+			proc_check "$s_exe_name repo_root head_dashboard_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root head_dashboard_json" "HEAD" "http://127.0.0.1:$PORT/__xs/dashboard_json" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/dashboard_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root post_dashboard_json" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/dashboard_json")
+			proc_check "$s_exe_name repo_root post_dashboard_json allow" "200" "200" "$s_body" 'GET, HEAD' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/dashboard_json" "Content-Type")
+			proc_check "$s_exe_name repo_root post_dashboard_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root post_dashboard_json" "POST" "http://127.0.0.1:$PORT/__xs/dashboard_json" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/http_metrics")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root http_metrics" "$i_status" "200" "$s_body" 'http_req_count=' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/http_metrics" "Content-Type")
+			proc_check "$s_exe_name repo_root http_metrics type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root http_metrics" "GET" "http://127.0.0.1:$PORT/__xs/http_metrics" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/http_metrics")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root head_http_metrics" "$i_status" "200" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/http_metrics" "Content-Type")
+			proc_check "$s_exe_name repo_root head_http_metrics type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root head_http_metrics" "HEAD" "http://127.0.0.1:$PORT/__xs/http_metrics" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/http_metrics")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root post_http_metrics" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/http_metrics")
+			proc_check "$s_exe_name repo_root post_http_metrics allow" "200" "200" "$s_body" 'GET, HEAD' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/http_metrics" "Content-Type")
+			proc_check "$s_exe_name repo_root post_http_metrics type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root post_http_metrics" "POST" "http://127.0.0.1:$PORT/__xs/http_metrics" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/http_metrics_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root http_metrics_json" "$i_status" "200" "$s_body" || i_case_exit=1
+			proc_check "$s_exe_name repo_root http_metrics_json body" "200" "200" "$s_body" '"http_req_count"' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/http_metrics_json" "Content-Type")
+			proc_check "$s_exe_name repo_root http_metrics_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root http_metrics_json" "GET" "http://127.0.0.1:$PORT/__xs/http_metrics_json" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/http_metrics_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root head_http_metrics_json" "$i_status" "200" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/http_metrics_json" "Content-Type")
+			proc_check "$s_exe_name repo_root head_http_metrics_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root head_http_metrics_json" "HEAD" "http://127.0.0.1:$PORT/__xs/http_metrics_json" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/http_metrics_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root post_http_metrics_json" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/http_metrics_json")
+			proc_check "$s_exe_name repo_root post_http_metrics_json allow" "200" "200" "$s_body" 'GET, HEAD' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/http_metrics_json" "Content-Type")
+			proc_check "$s_exe_name repo_root post_http_metrics_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root post_http_metrics_json" "POST" "http://127.0.0.1:$PORT/__xs/http_metrics_json" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/ws_metrics")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root ws_metrics" "$i_status" "200" "$s_body" 'ws_open_count=' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/ws_metrics" "Content-Type")
+			proc_check "$s_exe_name repo_root ws_metrics type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root ws_metrics" "GET" "http://127.0.0.1:$PORT/__xs/ws_metrics" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/ws_metrics")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root head_ws_metrics" "$i_status" "200" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/ws_metrics" "Content-Type")
+			proc_check "$s_exe_name repo_root head_ws_metrics type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root head_ws_metrics" "HEAD" "http://127.0.0.1:$PORT/__xs/ws_metrics" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/ws_metrics")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root post_ws_metrics" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/ws_metrics")
+			proc_check "$s_exe_name repo_root post_ws_metrics allow" "200" "200" "$s_body" 'GET, HEAD' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/ws_metrics" "Content-Type")
+			proc_check "$s_exe_name repo_root post_ws_metrics type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root post_ws_metrics" "POST" "http://127.0.0.1:$PORT/__xs/ws_metrics" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/ws_metrics_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root ws_metrics_json" "$i_status" "200" "$s_body" || i_case_exit=1
+			proc_check "$s_exe_name repo_root ws_metrics_json body" "200" "200" "$s_body" '"ws_open_count"' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/ws_metrics_json" "Content-Type")
+			proc_check "$s_exe_name repo_root ws_metrics_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root ws_metrics_json" "GET" "http://127.0.0.1:$PORT/__xs/ws_metrics_json" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/ws_metrics_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root head_ws_metrics_json" "$i_status" "200" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/ws_metrics_json" "Content-Type")
+			proc_check "$s_exe_name repo_root head_ws_metrics_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root head_ws_metrics_json" "HEAD" "http://127.0.0.1:$PORT/__xs/ws_metrics_json" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/ws_metrics_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root post_ws_metrics_json" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/ws_metrics_json")
+			proc_check "$s_exe_name repo_root post_ws_metrics_json allow" "200" "200" "$s_body" 'GET, HEAD' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/ws_metrics_json" "Content-Type")
+			proc_check "$s_exe_name repo_root post_ws_metrics_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root post_ws_metrics_json" "POST" "http://127.0.0.1:$PORT/__xs/ws_metrics_json" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/xtp_metrics")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root xtp_metrics" "$i_status" "200" "$s_body" 'xtp_open_count=' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/xtp_metrics" "Content-Type")
+			proc_check "$s_exe_name repo_root xtp_metrics type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root xtp_metrics" "GET" "http://127.0.0.1:$PORT/__xs/xtp_metrics" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/xtp_metrics")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root head_xtp_metrics" "$i_status" "200" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/xtp_metrics" "Content-Type")
+			proc_check "$s_exe_name repo_root head_xtp_metrics type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root head_xtp_metrics" "HEAD" "http://127.0.0.1:$PORT/__xs/xtp_metrics" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/xtp_metrics")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root post_xtp_metrics" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/xtp_metrics")
+			proc_check "$s_exe_name repo_root post_xtp_metrics allow" "200" "200" "$s_body" 'GET, HEAD' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/xtp_metrics" "Content-Type")
+			proc_check "$s_exe_name repo_root post_xtp_metrics type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root post_xtp_metrics" "POST" "http://127.0.0.1:$PORT/__xs/xtp_metrics" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/xtp_metrics_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root xtp_metrics_json" "$i_status" "200" "$s_body" || i_case_exit=1
+			proc_check "$s_exe_name repo_root xtp_metrics_json body" "200" "200" "$s_body" '"xtp_open_count"' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/xtp_metrics_json" "Content-Type")
+			proc_check "$s_exe_name repo_root xtp_metrics_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root xtp_metrics_json" "GET" "http://127.0.0.1:$PORT/__xs/xtp_metrics_json" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/xtp_metrics_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root head_xtp_metrics_json" "$i_status" "200" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/xtp_metrics_json" "Content-Type")
+			proc_check "$s_exe_name repo_root head_xtp_metrics_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root head_xtp_metrics_json" "HEAD" "http://127.0.0.1:$PORT/__xs/xtp_metrics_json" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/xtp_metrics_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root post_xtp_metrics_json" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/xtp_metrics_json")
+			proc_check "$s_exe_name repo_root post_xtp_metrics_json allow" "200" "200" "$s_body" 'GET, HEAD' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/xtp_metrics_json" "Content-Type")
+			proc_check "$s_exe_name repo_root post_xtp_metrics_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root post_xtp_metrics_json" "POST" "http://127.0.0.1:$PORT/__xs/xtp_metrics_json" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/udp_metrics")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root udp_metrics" "$i_status" "200" "$s_body" 'udp_recv_count=' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/udp_metrics" "Content-Type")
+			proc_check "$s_exe_name repo_root udp_metrics type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root udp_metrics" "GET" "http://127.0.0.1:$PORT/__xs/udp_metrics" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/udp_metrics")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root head_udp_metrics" "$i_status" "200" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/udp_metrics" "Content-Type")
+			proc_check "$s_exe_name repo_root head_udp_metrics type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root head_udp_metrics" "HEAD" "http://127.0.0.1:$PORT/__xs/udp_metrics" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/udp_metrics")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root post_udp_metrics" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/udp_metrics")
+			proc_check "$s_exe_name repo_root post_udp_metrics allow" "200" "200" "$s_body" 'GET, HEAD' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/udp_metrics" "Content-Type")
+			proc_check "$s_exe_name repo_root post_udp_metrics type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root post_udp_metrics" "POST" "http://127.0.0.1:$PORT/__xs/udp_metrics" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/udp_metrics_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root udp_metrics_json" "$i_status" "200" "$s_body" || i_case_exit=1
+			proc_check "$s_exe_name repo_root udp_metrics_json body" "200" "200" "$s_body" '"udp_recv_count"' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/udp_metrics_json" "Content-Type")
+			proc_check "$s_exe_name repo_root udp_metrics_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root udp_metrics_json" "GET" "http://127.0.0.1:$PORT/__xs/udp_metrics_json" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/udp_metrics_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root head_udp_metrics_json" "$i_status" "200" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/udp_metrics_json" "Content-Type")
+			proc_check "$s_exe_name repo_root head_udp_metrics_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root head_udp_metrics_json" "HEAD" "http://127.0.0.1:$PORT/__xs/udp_metrics_json" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/udp_metrics_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root post_udp_metrics_json" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/udp_metrics_json")
+			proc_check "$s_exe_name repo_root post_udp_metrics_json allow" "200" "200" "$s_body" 'GET, HEAD' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/udp_metrics_json" "Content-Type")
+			proc_check "$s_exe_name repo_root post_udp_metrics_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root post_udp_metrics_json" "POST" "http://127.0.0.1:$PORT/__xs/udp_metrics_json" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/custom_metrics")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root custom_metrics" "$i_status" "200" "$s_body" 'custom_open_count=' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/custom_metrics" "Content-Type")
+			proc_check "$s_exe_name repo_root custom_metrics type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root custom_metrics" "GET" "http://127.0.0.1:$PORT/__xs/custom_metrics" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/custom_metrics")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root head_custom_metrics" "$i_status" "200" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/custom_metrics" "Content-Type")
+			proc_check "$s_exe_name repo_root head_custom_metrics type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root head_custom_metrics" "HEAD" "http://127.0.0.1:$PORT/__xs/custom_metrics" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/custom_metrics")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root post_custom_metrics" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/custom_metrics")
+			proc_check "$s_exe_name repo_root post_custom_metrics allow" "200" "200" "$s_body" 'GET, HEAD' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/custom_metrics" "Content-Type")
+			proc_check "$s_exe_name repo_root post_custom_metrics type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root post_custom_metrics" "POST" "http://127.0.0.1:$PORT/__xs/custom_metrics" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/custom_metrics_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root custom_metrics_json" "$i_status" "200" "$s_body" || i_case_exit=1
+			proc_check "$s_exe_name repo_root custom_metrics_json body" "200" "200" "$s_body" '"custom_open_count"' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/custom_metrics_json" "Content-Type")
+			proc_check "$s_exe_name repo_root custom_metrics_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root custom_metrics_json" "GET" "http://127.0.0.1:$PORT/__xs/custom_metrics_json" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/custom_metrics_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root head_custom_metrics_json" "$i_status" "200" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/custom_metrics_json" "Content-Type")
+			proc_check "$s_exe_name repo_root head_custom_metrics_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root head_custom_metrics_json" "HEAD" "http://127.0.0.1:$PORT/__xs/custom_metrics_json" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/custom_metrics_json")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root post_custom_metrics_json" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/custom_metrics_json")
+			proc_check "$s_exe_name repo_root post_custom_metrics_json allow" "200" "200" "$s_body" 'GET, HEAD' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/custom_metrics_json" "Content-Type")
+			proc_check "$s_exe_name repo_root post_custom_metrics_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root post_custom_metrics_json" "POST" "http://127.0.0.1:$PORT/__xs/custom_metrics_json" || i_case_exit=1
+
+			while IFS='|' read -r s_metric_name s_metric_path s_metric_token; do
+				i_status=$(proc_fetch_status "http://127.0.0.1:$PORT$s_metric_path")
+				s_body=$(proc_fetch_body)
+				proc_check "$s_exe_name repo_root $s_metric_name" "$i_status" "200" "$s_body" "$s_metric_token" || i_case_exit=1
+				s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT$s_metric_path" "Content-Type")
+				proc_check "$s_exe_name repo_root $s_metric_name type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+				proc_check_security_headers "$s_exe_name repo_root $s_metric_name" "GET" "http://127.0.0.1:$PORT$s_metric_path" || i_case_exit=1
+
+				i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT$s_metric_path")
+				s_body=$(proc_fetch_body)
+				proc_check "$s_exe_name repo_root head_$s_metric_name" "$i_status" "405" "$s_body" || i_case_exit=1
+				s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT$s_metric_path")
+				proc_check "$s_exe_name repo_root head_$s_metric_name allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+				s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT$s_metric_path" "Content-Type")
+				proc_check "$s_exe_name repo_root head_$s_metric_name type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+				proc_check_security_headers "$s_exe_name repo_root head_$s_metric_name" "HEAD" "http://127.0.0.1:$PORT$s_metric_path" || i_case_exit=1
+
+				i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT$s_metric_path")
+				s_body=$(proc_fetch_body)
+				proc_check "$s_exe_name repo_root post_$s_metric_name" "$i_status" "405" "$s_body" || i_case_exit=1
+				s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT$s_metric_path")
+				proc_check "$s_exe_name repo_root post_$s_metric_name allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+				s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT$s_metric_path" "Content-Type")
+				proc_check "$s_exe_name repo_root post_$s_metric_name type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+				proc_check_security_headers "$s_exe_name repo_root post_$s_metric_name" "POST" "http://127.0.0.1:$PORT$s_metric_path" || i_case_exit=1
+			done <<EOF
+$arr_metrics_clear_text
+EOF
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_clear")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root reload_clear" "$i_status" "200" "$s_body" 'reload_total_count=' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_clear" "Content-Type")
+			proc_check "$s_exe_name repo_root reload_clear type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root reload_clear" "GET" "http://127.0.0.1:$PORT/__xs/reload_clear" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_reset")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root reload_reset" "$i_status" "200" "$s_body" 'reload_total_count=' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_reset" "Content-Type")
+			proc_check "$s_exe_name repo_root reload_reset type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root reload_reset" "GET" "http://127.0.0.1:$PORT/__xs/reload_reset" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/check_config_clear")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root check_config_clear" "$i_status" "200" "$s_body" 'check_total_count=' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/check_config_clear" "Content-Type")
+			proc_check "$s_exe_name repo_root check_config_clear type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root check_config_clear" "GET" "http://127.0.0.1:$PORT/__xs/check_config_clear" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_clear")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root head_reload_clear" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_clear")
+			proc_check "$s_exe_name repo_root head_reload_clear allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_clear" "Content-Type")
+			proc_check "$s_exe_name repo_root head_reload_clear type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root head_reload_clear" "HEAD" "http://127.0.0.1:$PORT/__xs/reload_clear" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_reset")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root head_reload_reset" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_reset")
+			proc_check "$s_exe_name repo_root head_reload_reset allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/reload_reset" "Content-Type")
+			proc_check "$s_exe_name repo_root head_reload_reset type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root head_reload_reset" "HEAD" "http://127.0.0.1:$PORT/__xs/reload_reset" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/check_config_clear")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root head_check_config_clear" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT/__xs/check_config_clear")
+			proc_check "$s_exe_name repo_root head_check_config_clear allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/check_config_clear" "Content-Type")
+			proc_check "$s_exe_name repo_root head_check_config_clear type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root head_check_config_clear" "HEAD" "http://127.0.0.1:$PORT/__xs/check_config_clear" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/reload_clear")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root post_reload_clear" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/reload_clear")
+			proc_check "$s_exe_name repo_root post_reload_clear allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/reload_clear" "Content-Type")
+			proc_check "$s_exe_name repo_root post_reload_clear type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root post_reload_clear" "POST" "http://127.0.0.1:$PORT/__xs/reload_clear" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/reload_reset")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root post_reload_reset" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/reload_reset")
+			proc_check "$s_exe_name repo_root post_reload_reset allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/reload_reset" "Content-Type")
+			proc_check "$s_exe_name repo_root post_reload_reset type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root post_reload_reset" "POST" "http://127.0.0.1:$PORT/__xs/reload_reset" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/check_config_clear")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root post_check_config_clear" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/check_config_clear")
+			proc_check "$s_exe_name repo_root post_check_config_clear allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/check_config_clear" "Content-Type")
+			proc_check "$s_exe_name repo_root post_check_config_clear type" "200" "200" "$s_body" 'text/plain' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root post_check_config_clear" "POST" "http://127.0.0.1:$PORT/__xs/check_config_clear" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/bus/status")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root bus_status" "$i_status" "200" "$s_body" || i_case_exit=1
+			proc_check "$s_exe_name repo_root bus_status body" "200" "200" "$s_body" '"data_count"' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/bus/status" "Content-Type")
+			proc_check "$s_exe_name repo_root bus_status type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root bus_status" "GET" "http://127.0.0.1:$PORT/__xs/bus/status" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/status")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root head_bus_status" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/status")
+			proc_check "$s_exe_name repo_root head_bus_status allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/status" "Content-Type")
+			proc_check "$s_exe_name repo_root head_bus_status type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root head_bus_status" "HEAD" "http://127.0.0.1:$PORT/__xs/bus/status" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/bus/status")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root post_bus_status" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/bus/status")
+			proc_check "$s_exe_name repo_root post_bus_status allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/bus/status" "Content-Type")
+			proc_check "$s_exe_name repo_root post_bus_status type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root post_bus_status" "POST" "http://127.0.0.1:$PORT/__xs/bus/status" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/bus/namespaces")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root bus_namespaces" "$i_status" "200" "$s_body" '"namespace_count"' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/bus/namespaces" "Content-Type")
+			proc_check "$s_exe_name repo_root bus_namespaces type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root bus_namespaces" "GET" "http://127.0.0.1:$PORT/__xs/bus/namespaces" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/namespaces")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root head_bus_namespaces" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/namespaces")
+			proc_check "$s_exe_name repo_root head_bus_namespaces allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/namespaces" "Content-Type")
+			proc_check "$s_exe_name repo_root head_bus_namespaces type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root head_bus_namespaces" "HEAD" "http://127.0.0.1:$PORT/__xs/bus/namespaces" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/bus/namespaces")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root post_bus_namespaces" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/bus/namespaces")
+			proc_check "$s_exe_name repo_root post_bus_namespaces allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/bus/namespaces" "Content-Type")
+			proc_check "$s_exe_name repo_root post_bus_namespaces type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root post_bus_namespaces" "POST" "http://127.0.0.1:$PORT/__xs/bus/namespaces" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/bus/registry")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root bus_registry" "$i_status" "200" "$s_body" '"items"' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/bus/registry" "Content-Type")
+			proc_check "$s_exe_name repo_root bus_registry type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root bus_registry" "GET" "http://127.0.0.1:$PORT/__xs/bus/registry" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/registry")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root head_bus_registry" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/registry")
+			proc_check "$s_exe_name repo_root head_bus_registry allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/registry" "Content-Type")
+			proc_check "$s_exe_name repo_root head_bus_registry type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root head_bus_registry" "HEAD" "http://127.0.0.1:$PORT/__xs/bus/registry" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/bus/registry")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root post_bus_registry" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/bus/registry")
+			proc_check "$s_exe_name repo_root post_bus_registry allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/bus/registry" "Content-Type")
+			proc_check "$s_exe_name repo_root post_bus_registry type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root post_bus_registry" "POST" "http://127.0.0.1:$PORT/__xs/bus/registry" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/bus/limits")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root bus_limits" "$i_status" "200" "$s_body" '"data_limit"' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/bus/limits" "Content-Type")
+			proc_check "$s_exe_name repo_root bus_limits type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root bus_limits" "GET" "http://127.0.0.1:$PORT/__xs/bus/limits" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/limits")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root head_bus_limits" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/limits")
+			proc_check "$s_exe_name repo_root head_bus_limits allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/limits" "Content-Type")
+			proc_check "$s_exe_name repo_root head_bus_limits type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root head_bus_limits" "HEAD" "http://127.0.0.1:$PORT/__xs/bus/limits" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/bus/limits")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root post_bus_limits" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/bus/limits")
+			proc_check "$s_exe_name repo_root post_bus_limits allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/bus/limits" "Content-Type")
+			proc_check "$s_exe_name repo_root post_bus_limits type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root post_bus_limits" "POST" "http://127.0.0.1:$PORT/__xs/bus/limits" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root bus_send" "$i_status" "200" "$s_body" '"result":true' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello" "Content-Type")
+			proc_check "$s_exe_name repo_root bus_send type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root bus_send" "GET" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root head_bus_send" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello")
+			proc_check "$s_exe_name repo_root head_bus_send allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello" "Content-Type")
+			proc_check "$s_exe_name repo_root head_bus_send type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root head_bus_send" "HEAD" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root post_bus_send" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello")
+			proc_check "$s_exe_name repo_root post_bus_send allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello" "Content-Type")
+			proc_check "$s_exe_name repo_root post_bus_send type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root post_bus_send" "POST" "http://127.0.0.1:$PORT/__xs/bus/send?topic=stable.smoke&text=hello" || i_case_exit=1
+
+			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/bus/reset")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root bus_reset" "$i_status" "200" "$s_body" '"sweep_count"' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/bus/reset" "Content-Type")
+			proc_check "$s_exe_name repo_root bus_reset type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root bus_reset" "GET" "http://127.0.0.1:$PORT/__xs/bus/reset" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/reset")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root head_bus_reset" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/reset")
+			proc_check "$s_exe_name repo_root head_bus_reset allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/bus/reset" "Content-Type")
+			proc_check "$s_exe_name repo_root head_bus_reset type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root head_bus_reset" "HEAD" "http://127.0.0.1:$PORT/__xs/bus/reset" || i_case_exit=1
+
+			i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/bus/reset")
+			s_body=$(proc_fetch_body)
+			proc_check "$s_exe_name repo_root post_bus_reset" "$i_status" "405" "$s_body" || i_case_exit=1
+			s_body=$(proc_fetch_allow_method "POST" "http://127.0.0.1:$PORT/__xs/bus/reset")
+			proc_check "$s_exe_name repo_root post_bus_reset allow" "200" "200" "$s_body" 'GET' || i_case_exit=1
+			s_body=$(proc_fetch_header_method "POST" "http://127.0.0.1:$PORT/__xs/bus/reset" "Content-Type")
+			proc_check "$s_exe_name repo_root post_bus_reset type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+			proc_check_security_headers "$s_exe_name repo_root post_bus_reset" "POST" "http://127.0.0.1:$PORT/__xs/bus/reset" || i_case_exit=1
+		else
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root bus_root" "GET" "/__xs/bus" "403" "application/json" 'bus api not included in production xs' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_bus_root_disabled" "HEAD" "/__xs/bus" "403" "application/json" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_bus_root_disabled" "POST" "/__xs/bus" "403" "application/json" 'bus api not included in production xs' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root dashboard" "GET" "/__xs/dashboard" "403" "text/plain" 'dashboard api only available in xsdbg' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_dashboard_disabled" "HEAD" "/__xs/dashboard" "403" "text/plain" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_dashboard_disabled" "POST" "/__xs/dashboard" "403" "text/plain" 'dashboard api only available in xsdbg' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root dashboard_json" "GET" "/__xs/dashboard_json" "403" "application/json" 'dashboard json api only available in xsdbg' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_dashboard_json_disabled" "HEAD" "/__xs/dashboard_json" "403" "application/json" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_dashboard_json_disabled" "POST" "/__xs/dashboard_json" "403" "application/json" 'dashboard json api only available in xsdbg' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root http_metrics" "GET" "/__xs/http_metrics" "403" "text/plain" 'http metrics api only available in xsdbg' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_http_metrics_disabled" "HEAD" "/__xs/http_metrics" "403" "text/plain" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_http_metrics_disabled" "POST" "/__xs/http_metrics" "403" "text/plain" 'http metrics api only available in xsdbg' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root http_metrics_json" "GET" "/__xs/http_metrics_json" "403" "application/json" 'http metrics json api only available in xsdbg' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_http_metrics_json_disabled" "HEAD" "/__xs/http_metrics_json" "403" "application/json" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_http_metrics_json_disabled" "POST" "/__xs/http_metrics_json" "403" "application/json" 'http metrics json api only available in xsdbg' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root ws_metrics" "GET" "/__xs/ws_metrics" "403" "text/plain" 'ws metrics api only available in xsdbg' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_ws_metrics_disabled" "HEAD" "/__xs/ws_metrics" "403" "text/plain" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_ws_metrics_disabled" "POST" "/__xs/ws_metrics" "403" "text/plain" 'ws metrics api only available in xsdbg' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root ws_metrics_json" "GET" "/__xs/ws_metrics_json" "403" "application/json" 'ws metrics json api only available in xsdbg' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_ws_metrics_json_disabled" "HEAD" "/__xs/ws_metrics_json" "403" "application/json" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_ws_metrics_json_disabled" "POST" "/__xs/ws_metrics_json" "403" "application/json" 'ws metrics json api only available in xsdbg' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root xtp_metrics" "GET" "/__xs/xtp_metrics" "403" "text/plain" 'xtp metrics api only available in xsdbg' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_xtp_metrics_disabled" "HEAD" "/__xs/xtp_metrics" "403" "text/plain" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_xtp_metrics_disabled" "POST" "/__xs/xtp_metrics" "403" "text/plain" 'xtp metrics api only available in xsdbg' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root xtp_metrics_json" "GET" "/__xs/xtp_metrics_json" "403" "application/json" 'xtp metrics json api only available in xsdbg' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_xtp_metrics_json_disabled" "HEAD" "/__xs/xtp_metrics_json" "403" "application/json" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_xtp_metrics_json_disabled" "POST" "/__xs/xtp_metrics_json" "403" "application/json" 'xtp metrics json api only available in xsdbg' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root udp_metrics" "GET" "/__xs/udp_metrics" "403" "text/plain" 'udp metrics api only available in xsdbg' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_udp_metrics_disabled" "HEAD" "/__xs/udp_metrics" "403" "text/plain" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_udp_metrics_disabled" "POST" "/__xs/udp_metrics" "403" "text/plain" 'udp metrics api only available in xsdbg' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root udp_metrics_json" "GET" "/__xs/udp_metrics_json" "403" "application/json" 'udp metrics json api only available in xsdbg' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_udp_metrics_json_disabled" "HEAD" "/__xs/udp_metrics_json" "403" "application/json" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_udp_metrics_json_disabled" "POST" "/__xs/udp_metrics_json" "403" "application/json" 'udp metrics json api only available in xsdbg' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root custom_metrics" "GET" "/__xs/custom_metrics" "403" "text/plain" 'custom metrics api only available in xsdbg' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_custom_metrics_disabled" "HEAD" "/__xs/custom_metrics" "403" "text/plain" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_custom_metrics_disabled" "POST" "/__xs/custom_metrics" "403" "text/plain" 'custom metrics api only available in xsdbg' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root custom_metrics_json" "GET" "/__xs/custom_metrics_json" "403" "application/json" 'custom metrics json api only available in xsdbg' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_custom_metrics_json_disabled" "HEAD" "/__xs/custom_metrics_json" "403" "application/json" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_custom_metrics_json_disabled" "POST" "/__xs/custom_metrics_json" "403" "application/json" 'custom metrics json api only available in xsdbg' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root http_metrics_clear" "GET" "/__xs/http_metrics_clear" "403" "text/plain" 'http metrics clear api only available in xsdbg' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_http_metrics_clear_disabled" "HEAD" "/__xs/http_metrics_clear" "403" "text/plain" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_http_metrics_clear_disabled" "POST" "/__xs/http_metrics_clear" "403" "text/plain" 'http metrics clear api only available in xsdbg' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root ws_metrics_clear" "GET" "/__xs/ws_metrics_clear" "403" "text/plain" 'ws metrics clear api only available in xsdbg' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_ws_metrics_clear_disabled" "HEAD" "/__xs/ws_metrics_clear" "403" "text/plain" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_ws_metrics_clear_disabled" "POST" "/__xs/ws_metrics_clear" "403" "text/plain" 'ws metrics clear api only available in xsdbg' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root xtp_metrics_clear" "GET" "/__xs/xtp_metrics_clear" "403" "text/plain" 'xtp metrics clear api only available in xsdbg' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_xtp_metrics_clear_disabled" "HEAD" "/__xs/xtp_metrics_clear" "403" "text/plain" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_xtp_metrics_clear_disabled" "POST" "/__xs/xtp_metrics_clear" "403" "text/plain" 'xtp metrics clear api only available in xsdbg' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root udp_metrics_clear" "GET" "/__xs/udp_metrics_clear" "403" "text/plain" 'udp metrics clear api only available in xsdbg' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_udp_metrics_clear_disabled" "HEAD" "/__xs/udp_metrics_clear" "403" "text/plain" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_udp_metrics_clear_disabled" "POST" "/__xs/udp_metrics_clear" "403" "text/plain" 'udp metrics clear api only available in xsdbg' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root custom_metrics_clear" "GET" "/__xs/custom_metrics_clear" "403" "text/plain" 'custom metrics clear api only available in xsdbg' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_custom_metrics_clear_disabled" "HEAD" "/__xs/custom_metrics_clear" "403" "text/plain" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_custom_metrics_clear_disabled" "POST" "/__xs/custom_metrics_clear" "403" "text/plain" 'custom metrics clear api only available in xsdbg' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root reload_clear" "GET" "/__xs/reload_clear" "403" "text/plain" 'config reload clear api only available in xsdbg' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_reload_clear_disabled" "HEAD" "/__xs/reload_clear" "403" "text/plain" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_reload_clear_disabled" "POST" "/__xs/reload_clear" "403" "text/plain" 'config reload clear api only available in xsdbg' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root reload_reset" "GET" "/__xs/reload_reset" "403" "text/plain" 'config reload reset api only available in xsdbg' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_reload_reset_disabled" "HEAD" "/__xs/reload_reset" "403" "text/plain" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_reload_reset_disabled" "POST" "/__xs/reload_reset" "403" "text/plain" 'config reload reset api only available in xsdbg' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root check_config_clear" "GET" "/__xs/check_config_clear" "403" "text/plain" 'check config clear api only available in xsdbg' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_check_config_clear_disabled" "HEAD" "/__xs/check_config_clear" "403" "text/plain" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_check_config_clear_disabled" "POST" "/__xs/check_config_clear" "403" "text/plain" 'check config clear api only available in xsdbg' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root bus_status" "GET" "/__xs/bus/status" "403" "application/json" 'bus api not included in production xs' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_bus_status_disabled" "HEAD" "/__xs/bus/status" "403" "application/json" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_bus_status_disabled" "POST" "/__xs/bus/status" "403" "application/json" 'bus api not included in production xs' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root bus_namespaces" "GET" "/__xs/bus/namespaces" "403" "application/json" 'bus api not included in production xs' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_bus_namespaces_disabled" "HEAD" "/__xs/bus/namespaces" "403" "application/json" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_bus_namespaces_disabled" "POST" "/__xs/bus/namespaces" "403" "application/json" 'bus api not included in production xs' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root bus_registry" "GET" "/__xs/bus/registry" "403" "application/json" 'bus api not included in production xs' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_bus_registry_disabled" "HEAD" "/__xs/bus/registry" "403" "application/json" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_bus_registry_disabled" "POST" "/__xs/bus/registry" "403" "application/json" 'bus api not included in production xs' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root bus_limits" "GET" "/__xs/bus/limits" "403" "application/json" 'bus api not included in production xs' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_bus_limits_disabled" "HEAD" "/__xs/bus/limits" "403" "application/json" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_bus_limits_disabled" "POST" "/__xs/bus/limits" "403" "application/json" 'bus api not included in production xs' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root bus_send" "GET" "/__xs/bus/send?topic=stable.smoke&text=hello" "403" "application/json" 'bus api not included in production xs' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_bus_send_disabled" "HEAD" "/__xs/bus/send?topic=stable.smoke&text=hello" "403" "application/json" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_bus_send_disabled" "POST" "/__xs/bus/send?topic=stable.smoke&text=hello" "403" "application/json" 'bus api not included in production xs' || i_case_exit=1
+
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root bus_reset" "GET" "/__xs/bus/reset" "403" "application/json" 'bus api not included in production xs' || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root head_bus_reset_disabled" "HEAD" "/__xs/bus/reset" "403" "application/json" || i_case_exit=1
+			proc_check_disabled_endpoint "$s_exe_name" "repo_root post_bus_reset_disabled" "POST" "/__xs/bus/reset" "403" "application/json" 'bus api not included in production xs' || i_case_exit=1
+		fi
+
+		return "$i_case_exit"
+	)
+}
+
+proc_run_xtp_case() {
+	s_exe_name="$1"
+	s_exe_path="$RELEASE_DIR/$s_exe_name"
+	s_client_exe=""
+	i_case_exit=0
+
+	if [ ! -f "$s_exe_path" ]; then
+		echo "FAIL $s_exe_name xtp : executable not found"
+		return 1
+	fi
+
+	if ! s_client_exe=$(proc_build_xtp_smoke_client); then
+		echo "FAIL $s_exe_name xtp_build : compile failed"
+		return 1
+	fi
+
+	(
+		cd "$RELEASE_DIR"
+		proc_cleanup_servers
+		"$s_exe_path" xs_manage_xtp_test.json >/dev/null 2>&1 &
+		i_pid=$!
+		trap 'proc_stop_server "$i_pid"' EXIT INT TERM
+
+		if ! proc_wait_ready; then
+			echo "FAIL $s_exe_name xtp_ready : timeout"
+			return 1
+		fi
+
+		sleep 1
+
+		s_out=$(proc_run_client_retry "$s_client_exe" 10 127.0.0.1 "$XTP_PORT" demo.callself tag=smoke 2>&1) || {
+			echo "FAIL $s_exe_name xtp_callself : client exit"
+			return 1
+		}
+		if printf "%s" "$s_out" | grep -F "status=0" >/dev/null 2>&1 && \
+			printf "%s" "$s_out" | grep -F "cmd=xtp.reply" >/dev/null 2>&1 && \
+			printf "%s" "$s_out" | grep -F "self call ok" >/dev/null 2>&1; then
+			echo "OK   $s_exe_name xtp_callself : 0"
+		else
+			echo "FAIL $s_exe_name xtp_callself : unexpected body"
+			i_case_exit=1
+		fi
+
+		s_out=$(proc_run_client_retry "$s_client_exe" 10 127.0.0.1 "$XTP_PORT" demo.callrequeststatus port=9096 inner_cmd=demo.ping tag=smoke 2>&1) || {
+			echo "FAIL $s_exe_name xtp_callrequeststatus : client exit"
+			return 1
+		}
+		if printf "%s" "$s_out" | grep -F "status=0" >/dev/null 2>&1 && \
+			printf "%s" "$s_out" | grep -F "cmd=xtp.reply" >/dev/null 2>&1 && \
+			printf "%s" "$s_out" | grep -F "request status ok=true" >/dev/null 2>&1; then
+			echo "OK   $s_exe_name xtp_callrequeststatus : 0"
+		else
+			echo "FAIL $s_exe_name xtp_callrequeststatus : unexpected body"
+			i_case_exit=1
+		fi
+
+		return "$i_case_exit"
+	)
+}
+
+proc_run_ws_case() {
+	s_exe_name="$1"
+	s_client_exe=""
+	s_out=""
+
+	if ! s_client_exe=$(proc_build_ws_smoke_client); then
+		echo "FAIL $s_exe_name ws_build : compile failed"
+		return 1
+	fi
+
+	s_out=$(proc_run_helper_case "$s_exe_name" "xs_manage_ws_test.json" "$s_client_exe" "ws_ready" 127.0.0.1 8081 "smoke ws" 2>&1) || {
+		echo "$s_out"
+		echo "FAIL $s_exe_name ws_echo : client exit"
+		return 1
+	}
+
+	if printf "%s" "$s_out" | grep -F "ws demo" >/dev/null 2>&1 && \
+		printf "%s" "$s_out" | grep -F "text=smoke ws" >/dev/null 2>&1 && \
+		printf "%s" "$s_out" | grep -F "protocol=xs-demo" >/dev/null 2>&1; then
+		echo "OK   $s_exe_name ws_echo : 0"
+		return 0
+	fi
+
+	echo "FAIL $s_exe_name ws_echo : unexpected body"
+	return 1
+}
+
+proc_run_custom_case() {
+	s_exe_name="$1"
+	s_client_exe=""
+	s_out=""
+
+	if ! s_client_exe=$(proc_build_custom_smoke_client); then
+		echo "FAIL $s_exe_name custom_build : compile failed"
+		return 1
+	fi
+
+	s_out=$(proc_run_helper_case "$s_exe_name" "xs_manage_custom_test.json" "$s_client_exe" "custom_ready" 127.0.0.1 9098 "smoke custom" 2>&1) || {
+		echo "$s_out"
+		echo "FAIL $s_exe_name custom_echo : client exit"
+		return 1
+	}
+
+	if printf "%s" "$s_out" | grep -F "custom demo" >/dev/null 2>&1 && \
+		printf "%s" "$s_out" | grep -F "data=smoke custom" >/dev/null 2>&1; then
+		echo "OK   $s_exe_name custom_echo : 0"
+		return 0
+	fi
+
+	echo "FAIL $s_exe_name custom_echo : unexpected body"
+	return 1
+}
+
+proc_check_process_cleanup() {
+	echo "[cleanup]"
+
+	i_found=0
+	for s_name in xs xsdbg; do
+		s_pids=$(pgrep -x "$s_name" 2>/dev/null || true)
+		if [ -n "$s_pids" ]; then
+			i_found=1
+			for s_pid in $s_pids; do
+				s_desc=$(ps -p "$s_pid" -o pid= -o comm= 2>/dev/null | sed 's/^[[:space:]]*//')
+				if [ -n "$s_desc" ]; then
+					echo "FAIL cleanup_processes : $s_desc"
+				else
+					echo "FAIL cleanup_processes : $s_name pid=$s_pid"
+				fi
+			done
+		fi
+	done
+
+	if [ "$i_found" -eq 0 ]; then
+		echo "OK   cleanup_processes : none"
+		return 0
+	fi
+
+	return 1
+}
+
+proc_check_artifacts() {
+	echo "[artifacts]"
+
+	i_found=0
+
+	s_root_hash_after=$(proc_get_file_hash "$ROOT_MEM_REPORT")
+	if [ "$s_root_hash_after" = "$ROOT_MEM_HASH_BEFORE" ]; then
+		echo "OK   tracked_mem_report_root : unchanged"
+	else
+		echo "FAIL tracked_mem_report_root : changed"
+		i_found=1
+	fi
+
+	s_release_hash_after=$(proc_get_file_hash "$RELEASE_MEM_REPORT")
+	if [ "$s_release_hash_after" = "$RELEASE_MEM_HASH_BEFORE" ]; then
+		echo "OK   tracked_mem_report_release : unchanged"
+	else
+		echo "FAIL tracked_mem_report_release : changed"
+		i_found=1
+	fi
+
+	for s_path in \
+		"$TOOL_DIR/xtp_smoke_client" \
+		"$TOOL_DIR/ws_smoke_client" \
+		"$TOOL_DIR/custom_smoke_client" \
+		"$TOOL_DIR/xtp_smoke_client.exe" \
+		"$TOOL_DIR/ws_smoke_client.exe" \
+		"$TOOL_DIR/custom_smoke_client.exe" \
+		"$BODY_FILE"
+	do
+		if [ -e "$s_path" ]; then
+			echo "FAIL generated_helpers : $(basename "$s_path")"
+			i_found=1
+		fi
+	done
+
+	if [ "$i_found" -eq 0 ]; then
+		echo "OK   generated_helpers : none"
+		return 0
+	fi
+
+	return 1
+}
+
+i_exit=0
+ROOT_MEM_HASH_BEFORE=$(proc_get_file_hash "$ROOT_MEM_REPORT")
+RELEASE_MEM_HASH_BEFORE=$(proc_get_file_hash "$RELEASE_MEM_REPORT")
+
+proc_cleanup_generated_files
+
+echo "[static-homepage]"
+proc_run_static_homepage_audit || i_exit=1
+
+echo "[xs]"
+proc_run_case "$XS_BIN" "false" || i_exit=1
+
+echo "[xs-root]"
+proc_run_repo_root_case "$XS_BIN" "false" || i_exit=1
+
+echo "[xs-xtp]"
+proc_run_xtp_case "$XS_BIN" || i_exit=1
+
+echo "[xs-ws]"
+proc_run_ws_case "$XS_BIN" || i_exit=1
+
+echo "[xs-custom]"
+proc_run_custom_case "$XS_BIN" || i_exit=1
+
+echo "[xsdbg]"
+proc_run_case "$XSDBG_BIN" "true" || i_exit=1
+
+echo "[xsdbg-root]"
+proc_run_repo_root_case "$XSDBG_BIN" "true" || i_exit=1
+
+echo "[xsdbg-xtp]"
+proc_run_xtp_case "$XSDBG_BIN" || i_exit=1
+
+echo "[xsdbg-ws]"
+proc_run_ws_case "$XSDBG_BIN" || i_exit=1
+
+echo "[xsdbg-custom]"
+proc_run_custom_case "$XSDBG_BIN" || i_exit=1
+
+proc_cleanup_generated_files
+proc_check_artifacts || i_exit=1
+proc_check_process_cleanup || i_exit=1
+exit "$i_exit"

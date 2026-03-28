@@ -1,7 +1,7 @@
 /*
 
     XRT Single Header File
-    Generated: 2026-03-20 16:14:41
+    Generated: 2026-03-26 16:40:36
 
     MIT License
 
@@ -228,6 +228,7 @@
 	#define XRT_NO_TIME
 	#define XRT_NO_FILE
 	#define XRT_NO_THREAD
+	#define XRT_NO_QUEUE
 	#define XRT_NO_COROUTINE
 	#define XRT_NO_NETWORK
 	#define XRT_NO_CRYPTO
@@ -268,6 +269,11 @@
 	#endif
 	#ifndef XRT_NO_XWS
 		#define XRT_NO_XWS
+	#endif
+#endif
+#if defined(XRT_NO_QUEUE)
+	#ifndef XRT_NO_QUEUE_WAIT
+		#define XRT_NO_QUEUE_WAIT
 	#endif
 #endif
 // 裁剪依赖警告辅助
@@ -416,6 +422,14 @@
 		XRT_CUT_WARN("XRT_NO_THREAD ignored because current runtime core requires THREAD support.")
 	#endif
 	#undef XRT_NO_THREAD
+#endif
+#if defined(XRT_NO_QUEUE) && !defined(XRT_NO_NETWORK)
+	#if defined(__clang__) || defined(__GNUC__) || defined(__TINYC__)
+		#warning "XRT_NO_QUEUE ignored because current XNET runtime requires QUEUE support."
+	#else
+		XRT_CUT_WARN("XRT_NO_QUEUE ignored because current XNET runtime requires QUEUE support.")
+	#endif
+	#undef XRT_NO_QUEUE
 #endif
 #if defined(XRT_NO_TIME) && (!defined(XRT_NO_VALUE) || !defined(XRT_NO_TEMPLATE) || !defined(XRT_NO_XID))
 	#if defined(__clang__) || defined(__GNUC__) || defined(__TINYC__)
@@ -954,7 +968,7 @@
 	#endif
 	
 	// 设置错误
-	XXAPI void xrtSetError(str sError, bool bFree);
+	XXAPI void xrtSetError(const void* sError, bool bFree);
 	XXAPI void xrtSetErrorU16(u16str sError, size_t iSize, bool bFree);
 	XXAPI void xrtSetErrorU32(u32str sError, size_t iSize, bool bFree);
 	
@@ -1002,6 +1016,31 @@
 			return __sync_lock_test_and_set(pValue, iValue);
 		#endif
 	}
+	/* Keep dedicated 32-bit atomics for uint32 fields. LP64 builds make long-based helpers 64-bit wide. */
+	static inline uint32 __xrtAtomicCompareExchangeU32(volatile uint32* pValue, uint32 iExchange, uint32 iComparand)
+	{
+		#if defined(__TINYC__) && defined(_WIN32) && !defined(_WIN64)
+			return (uint32)__xrtAtomicCompareExchange32((volatile long*)pValue, (long)iExchange, (long)iComparand);
+		#elif defined(_WIN32) || defined(_WIN64)
+			return (uint32)InterlockedCompareExchange((volatile LONG*)pValue, (LONG)iExchange, (LONG)iComparand);
+		#else
+			return __sync_val_compare_and_swap(pValue, iComparand, iExchange);
+		#endif
+	}
+	static inline uint32 __xrtAtomicLoadU32(const volatile uint32* pValue)
+	{
+		return __xrtAtomicCompareExchangeU32((volatile uint32*)pValue, 0u, 0u);
+	}
+	static inline void __xrtAtomicStoreU32(volatile uint32* pValue, uint32 iValue)
+	{
+		#if defined(__TINYC__) && defined(_WIN32) && !defined(_WIN64)
+			(void)__xrtAtomicExchange32((volatile long*)pValue, (long)iValue);
+		#elif defined(_WIN32) || defined(_WIN64)
+			(void)InterlockedExchange((volatile LONG*)pValue, (LONG)iValue);
+		#else
+			(void)__sync_lock_test_and_set(pValue, iValue);
+		#endif
+	}
 	static inline long __xrtAtomicAddFetch32(volatile long* pValue, long iDelta)
 	{
 		#if defined(__TINYC__) && (defined(_WIN32) || defined(_WIN64))
@@ -1032,6 +1071,33 @@
 			return (int64)InterlockedExchangeAdd64((volatile LONG64*)pValue, (LONG64)iDelta) + iDelta;
 		#else
 			return __sync_add_and_fetch(pValue, iDelta);
+		#endif
+	}
+	static inline int64 __xrtAtomicCompareExchange64(volatile int64* pValue, int64 iExchange, int64 iComparand)
+	{
+		#if defined(__TINYC__) && defined(_WIN32)
+			return (int64)InterlockedCompareExchange64((volatile LONG64*)pValue, (LONG64)iExchange, (LONG64)iComparand);
+		#elif defined(_WIN32) || defined(_WIN64)
+			return (int64)InterlockedCompareExchange64((volatile LONG64*)pValue, (LONG64)iExchange, (LONG64)iComparand);
+		#else
+			return __sync_val_compare_and_swap(pValue, iComparand, iExchange);
+		#endif
+	}
+	static inline int64 __xrtAtomicLoad64(const volatile int64* pValue)
+	{
+		return __xrtAtomicCompareExchange64((volatile int64*)pValue, 0, 0);
+	}
+	static inline void __xrtAtomicStore64(volatile int64* pValue, int64 iValue)
+	{
+		#if defined(__TINYC__) && defined(_WIN32)
+			int64 iPrev;
+			do {
+				iPrev = __xrtAtomicLoad64(pValue);
+			} while ( __xrtAtomicCompareExchange64(pValue, iValue, iPrev) != iPrev );
+		#elif defined(_WIN32) || defined(_WIN64)
+			(void)InterlockedExchange64((volatile LONG64*)pValue, (LONG64)iValue);
+		#else
+			(void)__sync_lock_test_and_set(pValue, iValue);
 		#endif
 	}
 	static inline long __xrtOwnerAtomicCompareExchange(volatile long* pValue, long iExchange, long iComparand)
@@ -1121,7 +1187,7 @@
 	{
 		return (str)"shared object is not published yet; cross-thread access is not allowed before publish.";
 	}
-	static inline bool xrtOwnerLock(xrtOwnerInfo* pOwner, str sError)
+	static inline bool xrtOwnerLock(xrtOwnerInfo* pOwner, const void* sError)
 	{
 		uint64 iThreadId;
 		if ( pOwner == NULL ) {
@@ -1148,7 +1214,7 @@
 		if ( pOwner->iOwnerThreadId == 0 || pOwner->iOwnerThreadId == iThreadId ) {
 			return TRUE;
 		}
-		xrtSetError(sError ? sError : (str)"runtime object belongs to another thread.", FALSE);
+		xrtSetError(sError ? sError : "runtime object belongs to another thread.", FALSE);
 		return FALSE;
 	}
 	static inline void xrtOwnerUnlock(xrtOwnerInfo* pOwner)
@@ -1171,7 +1237,7 @@
 			__xrtOwnerSpinUnlock(&pOwner->iSharedLock);
 		}
 	}
-	static inline bool xrtOwnerBeginMutable(xrtOwnerInfo* pOwner, str sError)
+	static inline bool xrtOwnerBeginMutable(xrtOwnerInfo* pOwner, const void* sError)
 	{
 		return xrtOwnerLock(pOwner, sError);
 	}
@@ -1180,7 +1246,7 @@
 		xrtOwnerUnlock(pOwner);
 	}
 	// 检查当前线程是否允许修改对象
-	static inline bool xrtOwnerCheckMutable(xrtOwnerInfo* pOwner, str sError)
+	static inline bool xrtOwnerCheckMutable(xrtOwnerInfo* pOwner, const void* sError)
 	{
 		uint64 iThreadId;
 		xrtThreadData* pThreadData;
@@ -1202,7 +1268,7 @@
 		if ( pOwner->iOwnerThreadId == 0 || pOwner->iOwnerThreadId == iThreadId ) {
 			return TRUE;
 		}
-		xrtSetError(sError ? sError : (str)"runtime object belongs to another thread.", FALSE);
+		xrtSetError(sError ? sError : "runtime object belongs to another thread.", FALSE);
 		return FALSE;
 	}
 	
@@ -1347,7 +1413,7 @@
 	XXAPI str xrtFilterStr(str sText, size_t iSize, str sFilter, size_t iSubSize, bool bSrcRevise, size_t* iRetSize);
 	
 	// 字符串格式化（ 需使用 xrtFree 释放 ）
-	XXAPI str xrtFormat(str sFormat, ...);
+	XXAPI str xrtFormat(const void* sFormat, ...);
 	
 	// 字符串替换（ 需使用 xrtFree 释放 ）
 	XXAPI str xrtReplace(str sText, size_t iSize, str sSubText, size_t iSubSize, str sRepText, size_t iRepSize, size_t* iRetSize);
@@ -1612,7 +1678,7 @@
 	// 格式占位符: yyyy/yy(年), mm/m(月,h后=分钟), mmm/mmmm(英文月份),
 	//             dd/d(日), hh/h(24时), HH/H(12时), nn/n(分钟),
 	//             ss/s(秒), ap/AP(am/pm), w/ww/www(星期), q(季度)
-	XXAPI str xrtTimeFormat(xtime iTime, str sFormat);
+	XXAPI str xrtTimeFormat(xtime iTime, const void* sFormat);
 	
 	// 字符串解析为时间
 	// 格式占位符同 xrtTimeFormat，另支持: *(跳过任意非数字), .(至少1个非数字), ?(跳过1字符), 空格(跳过空白)
@@ -1672,6 +1738,9 @@
 	
 	// 向已打开的文件写入数据 ( iSize 为要写入的字节数 )
 	XXAPI size_t xrtWrite(xfile objFile, str sText, size_t iSize);
+	
+	// 从已打开的文件读取二进制数据到特定位置
+	XXAPI size_t xrtGetBuffer(xfile objFile, ptr sBuff, size_t iSize);
 	
 	// 从已打开的文件读取二进制数据 ( 需要使用 xrtFree 释放内存 )
 	XXAPI ptr xrtGet(xfile objFile, size_t iSize, size_t* iRetSize);
@@ -1969,6 +2038,128 @@
 	
 	// 读锁升级为写锁（可能失败，需要释放后重新获取）
 	XXAPI bool xrtRWLockUpgrade(xrwlock pRWLock);
+	/* ------------------------------------ Queue 队列库 ------------------------------------ */
+	#ifndef XRT_NO_QUEUE
+		typedef enum xqueue_result
+		{
+			XQUEUE_OK = 0,
+			XQUEUE_EMPTY = 1,
+			XQUEUE_FULL = 2,
+			XQUEUE_CLOSED = 3,
+			XQUEUE_TIMEOUT = 4,
+			XQUEUE_ERROR = -1
+		} xqueue_result;
+		typedef enum xqueue_kind
+		{
+			XQUEUE_KIND_SPSC = 1,
+			XQUEUE_KIND_MPSC = 2,
+			XQUEUE_KIND_MPMC = 3
+		} xqueue_kind;
+		typedef struct xqueuebase_struct
+		{
+			uint32 iKind;
+			volatile uint32 bClosed;
+		} xqueuebase;
+		typedef struct xqueue_config
+		{
+			uint32 iCapacity;
+			uint32 iFlags;
+		} xqueue_config;
+		typedef void (*xqueue_drain_fn)(ptr pItem, ptr pUserData);
+		typedef struct xspscq_struct
+		{
+			xqueuebase tBase;
+			uint32 iCapacity;
+			uint32 iMask;
+			volatile uint32 iHead;
+			uint8 _pad0[64];
+			volatile uint32 iTail;
+			ptr* arrItems;
+		} xspscq_struct, *xspscq;
+		typedef struct xmpscq_slot
+		{
+			volatile uint64 iSeq;
+			ptr pItem;
+		} xmpscq_slot;
+		typedef struct xmpscq_struct
+		{
+			xqueuebase tBase;
+			uint32 iCapacity;
+			uint32 iMask;
+			uint8 _pad0[64];
+			volatile uint64 iHead;
+			uint8 _pad1[64];
+			volatile uint64 iTail;
+			xmpscq_slot* arrSlots;
+		} xmpscq_struct, *xmpscq;
+		typedef xmpscq_slot xmpmcq_slot;
+		typedef struct xmpmcq_struct
+		{
+			xqueuebase tBase;
+			uint32 iCapacity;
+			uint32 iMask;
+			uint8 _pad0[64];
+			volatile uint64 iHead;
+			uint8 _pad1[64];
+			volatile uint64 iTail;
+			xmpmcq_slot* arrSlots;
+		} xmpmcq_struct, *xmpmcq;
+		XXAPI bool xrtSPSCQInit(xspscq pQueue, const xqueue_config* pCfg);
+		XXAPI void xrtSPSCQUnit(xspscq pQueue);
+		XXAPI xspscq xrtSPSCQCreate(const xqueue_config* pCfg);
+		XXAPI void xrtSPSCQDestroy(xspscq pQueue);
+		XXAPI xqueue_result xrtSPSCQTryPush(xspscq pQueue, ptr pItem);
+		XXAPI xqueue_result xrtSPSCQTryPop(xspscq pQueue, ptr* ppItem);
+		XXAPI uint32 xrtSPSCQApproxCount(xspscq pQueue);
+		XXAPI void xrtSPSCQClose(xspscq pQueue);
+		XXAPI uint32 xrtSPSCQDrain(xspscq pQueue, xqueue_drain_fn procDrain, ptr pUserData);
+		XXAPI bool xrtSPSCQReset(xspscq pQueue);
+		XXAPI bool xrtMPSCQInit(xmpscq pQueue, const xqueue_config* pCfg);
+		XXAPI void xrtMPSCQUnit(xmpscq pQueue);
+		XXAPI xmpscq xrtMPSCQCreate(const xqueue_config* pCfg);
+		XXAPI void xrtMPSCQDestroy(xmpscq pQueue);
+		XXAPI xqueue_result xrtMPSCQTryPush(xmpscq pQueue, ptr pItem);
+		XXAPI xqueue_result xrtMPSCQTryPop(xmpscq pQueue, ptr* ppItem);
+		XXAPI uint32 xrtMPSCQPushBatch(xmpscq pQueue, ptr* arrItems, uint32 iCount);
+		XXAPI uint32 xrtMPSCQPopBatch(xmpscq pQueue, ptr* arrItems, uint32 iCap);
+		XXAPI uint32 xrtMPSCQApproxCount(xmpscq pQueue);
+		XXAPI void xrtMPSCQClose(xmpscq pQueue);
+		XXAPI uint32 xrtMPSCQDrain(xmpscq pQueue, xqueue_drain_fn procDrain, ptr pUserData);
+		XXAPI bool xrtMPSCQReset(xmpscq pQueue);
+		XXAPI bool xrtMPMCQInit(xmpmcq pQueue, const xqueue_config* pCfg);
+		XXAPI void xrtMPMCQUnit(xmpmcq pQueue);
+		XXAPI xmpmcq xrtMPMCQCreate(const xqueue_config* pCfg);
+		XXAPI void xrtMPMCQDestroy(xmpmcq pQueue);
+		XXAPI xqueue_result xrtMPMCQTryPush(xmpmcq pQueue, ptr pItem);
+		XXAPI xqueue_result xrtMPMCQTryPop(xmpmcq pQueue, ptr* ppItem);
+		XXAPI uint32 xrtMPMCQPushBatch(xmpmcq pQueue, ptr* arrItems, uint32 iCount);
+		XXAPI uint32 xrtMPMCQPopBatch(xmpmcq pQueue, ptr* arrItems, uint32 iCap);
+		XXAPI uint32 xrtMPMCQApproxCount(xmpmcq pQueue);
+		XXAPI void xrtMPMCQClose(xmpmcq pQueue);
+		XXAPI uint32 xrtMPMCQDrain(xmpmcq pQueue, xqueue_drain_fn procDrain, ptr pUserData);
+		XXAPI bool xrtMPMCQReset(xmpmcq pQueue);
+		XXAPI bool xrtQueueIsClosed(const xqueuebase* pQueue);
+		XXAPI bool xrtQueueIsDrained(const xqueuebase* pQueue);
+		#ifndef XRT_NO_QUEUE_WAIT
+			typedef struct xmpscqwait_struct
+			{
+				xmpscq_struct tQueue;
+				xsem hItems;
+				xmutex hPopLock;
+				volatile long iWaiters;
+			} xmpscqwait_struct, *xmpscqwait;
+			XXAPI bool xrtMPSCQWaitInit(xmpscqwait pQueue, const xqueue_config* pCfg);
+			XXAPI void xrtMPSCQWaitUnit(xmpscqwait pQueue);
+			XXAPI xmpscqwait xrtMPSCQWaitCreate(const xqueue_config* pCfg);
+			XXAPI void xrtMPSCQWaitDestroy(xmpscqwait pQueue);
+			XXAPI xqueue_result xrtMPSCQWaitTryPush(xmpscqwait pQueue, ptr pItem);
+			XXAPI xqueue_result xrtMPSCQWaitTryPop(xmpscqwait pQueue, ptr* ppItem);
+			XXAPI xqueue_result xrtMPSCQWaitPop(xmpscqwait pQueue, ptr* ppItem);
+			XXAPI xqueue_result xrtMPSCQWaitPopTimeout(xmpscqwait pQueue, ptr* ppItem, uint32 iTimeoutMs);
+			XXAPI uint32 xrtMPSCQWaitApproxCount(xmpscqwait pQueue);
+			XXAPI void xrtMPSCQWaitClose(xmpscqwait pQueue);
+		#endif
+	#endif
 	
 	
 	
@@ -2405,84 +2596,78 @@
 	/* ------------------------------------ Regex 正则表达式模块 ------------------------------------ */
 	
 	#ifndef XRT_NO_REGEX
-	// bbre 错误码
-	#define BBRE_ERR_MEM   (-1)  // 内存不足
-	#define BBRE_ERR_PARSE (-2)  // 解析失败
-	#define BBRE_ERR_LIMIT (-3)  // 超出限制
+	// Regex 错误码
+	#define XRT_REGEX_ERR_MEM			(-1)	// 内存不足
+	#define XRT_REGEX_ERR_PARSE		(-2)	// 解析失败
+	#define XRT_REGEX_ERR_LIMIT		(-3)	// 超出限制
 	
-	// 正则表达式标志
-	typedef enum bbre_flags {
-	  BBRE_FLAG_INSENSITIVE = 1,  // (?i) 不区分大小写
-	  BBRE_FLAG_MULTILINE = 2,    // (?m) 多行模式（^$匹配行首尾）
-	  BBRE_FLAG_DOTNEWLINE = 4,   // (?s) . 匹配换行符
-	  BBRE_FLAG_UNGREEDY = 8      // (?U) 量词变为非贪婪
-	} bbre_flags;
+	// Regex 标志
+	typedef uint32 xregexflags;
+	#define XRT_REGEX_FLAG_INSENSITIVE	((xregexflags)1u)	// (?i) 不区分大小写
+	#define XRT_REGEX_FLAG_MULTILINE	((xregexflags)2u)	// (?m) 多行模式（^$匹配行首尾）
+	#define XRT_REGEX_FLAG_DOTNEWLINE	((xregexflags)4u)	// (?s) . 匹配换行符
+	#define XRT_REGEX_FLAG_UNGREEDY		((xregexflags)8u)	// (?U) 量词变为非贪婪
 	
-	// 内存分配器回调
-	typedef void *(*bbre_alloc_cb)(void *user, void *ptr, size_t prev, size_t next);
+	// Regex 分配器
+	typedef ptr (*xregexallocproc)(ptr pUserData, ptr pMem, size_t iPrevSize, size_t iNextSize);
 	
-	typedef struct bbre_alloc {
-	  void *user;       // 用户上下文
-	  bbre_alloc_cb cb; // 分配器回调
-	} bbre_alloc;
+	typedef struct {
+		ptr pUserData;				// 用户上下文
+		xregexallocproc procAlloc;	// 分配器回调
+	} xregexalloc;
 	
-	// 匹配跨度（用于捕获组）
-	typedef struct bbre_span {
-	  size_t begin;  // 起始位置
-	  size_t end;    // 结束位置
-	} bbre_span;
+	// 匹配范围
+	typedef struct {
+		size_t iBegin;				// 起始位置
+		size_t iEnd;				// 结束位置
+	} xregexspan;
 	
 	// 前向声明
-	typedef struct bbre bbre;
-	typedef struct bbre_builder bbre_builder;
-	typedef struct bbre_set bbre_set;
-	typedef struct bbre_set_builder bbre_set_builder;
+	typedef struct xrt_regex xregex;
+	typedef struct xrt_regex_builder xregexbuilder;
+	typedef struct xrt_regex_set xregexset;
+	typedef struct xrt_regex_set_builder xregexsetbuilder;
 	
-	// 快速创建 API（null-terminated 字符串）
-	XXAPI bbre *bbre_init_pattern(const char *pat_nt);
+	// 单模式
+	XXAPI xregex* xrtRegexCreate(const char* sPatternNt);
+	XXAPI int xrtRegexCreateFromBuilder(xregex** ppRegex, const xregexbuilder* pBuilder, const xregexalloc* pAlloc);
+	XXAPI void xrtRegexDestroy(xregex* pRegex);
+	XXAPI const char* xrtRegexGetErrorMsg(const xregex* pRegex);
+	XXAPI size_t xrtRegexGetErrorPos(const xregex* pRegex);
+	XXAPI int xrtRegexIsMatch(xregex* pRegex, const char* sText, size_t iTextSize);
+	XXAPI int xrtRegexFind(xregex* pRegex, const char* sText, size_t iTextSize, xregexspan* pOutSpan);
+	XXAPI int xrtRegexCaptures(xregex* pRegex, const char* sText, size_t iTextSize, xregexspan* pOutCaptures, uint32 iCaptureCount);
+	XXAPI int xrtRegexWhichCaptures(xregex* pRegex, const char* sText, size_t iTextSize, xregexspan* pOutCaptures, uint32* pOutCapturesDidMatch, uint32 iCaptureCount);
+	XXAPI int xrtRegexIsMatchAt(xregex* pRegex, const char* sText, size_t iTextSize, size_t iPos);
+	XXAPI int xrtRegexFindAt(xregex* pRegex, const char* sText, size_t iTextSize, size_t iPos, xregexspan* pOutSpan);
+	XXAPI int xrtRegexCapturesAt(xregex* pRegex, const char* sText, size_t iTextSize, size_t iPos, xregexspan* pOutCaptures, uint32 iCaptureCount);
+	XXAPI int xrtRegexWhichCapturesAt(xregex* pRegex, const char* sText, size_t iTextSize, size_t iPos, xregexspan* pOutCaptures, uint32* pOutCapturesDidMatch, uint32 iCaptureCount);
+	XXAPI uint32 xrtRegexCaptureCount(const xregex* pRegex);
+	XXAPI const char* xrtRegexCaptureName(const xregex* pRegex, uint32 iCaptureIndex, size_t* pOutNameSize);
 	
-	// 完整初始化 API（从 builder 创建）
-	XXAPI int bbre_init(
-	  bbre **preg, const bbre_builder *build, const bbre_alloc *alloc);
+	// Builder
+	XXAPI int xrtRegexBuilderCreate(xregexbuilder** ppBuilder, const char* sPattern, size_t iPatternSize, const xregexalloc* pAlloc);
+	XXAPI void xrtRegexBuilderDestroy(xregexbuilder* pBuilder);
+	XXAPI void xrtRegexBuilderSetFlags(xregexbuilder* pBuilder, xregexflags iFlags);
 	
-	// 销毁 regex 对象
-	XXAPI void bbre_destroy(bbre *reg);
+	// 克隆
+	XXAPI int xrtRegexClone(xregex** ppOut, const xregex* pRegex, const xregexalloc* pAlloc);
 	
-	// 匹配函数
-	XXAPI int bbre_is_match(bbre *reg, const char *text, size_t text_size);
-	XXAPI int bbre_find(
-	  bbre *reg, const char *text, size_t text_size, bbre_span *out_bounds);
-	XXAPI int bbre_captures(
-	  bbre *reg, const char *text, size_t text_size, bbre_span *out_captures,
-	  unsigned int out_captures_size);
+	// 多模式
+	XXAPI int xrtRegexSetBuilderCreate(xregexsetbuilder** ppBuilder, const xregexalloc* pAlloc);
+	XXAPI void xrtRegexSetBuilderDestroy(xregexsetbuilder* pBuilder);
+	XXAPI int xrtRegexSetBuilderAdd(xregexsetbuilder* pBuilder, const xregex* pRegex);
+	XXAPI xregexset* xrtRegexSetCreate(const char* const* arrPatternsNt, size_t iPatternCount);
+	XXAPI int xrtRegexSetCreateFromBuilder(xregexset** ppSet, const xregexsetbuilder* pBuilder, const xregexalloc* pAlloc);
+	XXAPI void xrtRegexSetDestroy(xregexset* pSet);
+	XXAPI const char* xrtRegexSetGetErrorMsg(const xregexset* pSet);
+	XXAPI size_t xrtRegexSetGetErrorPos(const xregexset* pSet);
+	XXAPI int xrtRegexSetIsMatch(xregexset* pSet, const char* sText, size_t iTextSize);
+	XXAPI int xrtRegexSetMatches(xregexset* pSet, const char* sText, size_t iTextSize, uint32* pOutIndexes, uint32 iMaxIndexes, uint32* pOutIndexCount);
+	XXAPI int xrtRegexSetIsMatchAt(xregexset* pSet, const char* sText, size_t iTextSize, size_t iPos);
+	XXAPI int xrtRegexSetMatchesAt(xregexset* pSet, const char* sText, size_t iTextSize, size_t iPos, uint32* pOutIndexes, uint32 iMaxIndexes, uint32* pOutIndexCount);
+	XXAPI int xrtRegexSetClone(xregexset** ppOut, const xregexset* pSet, const xregexalloc* pAlloc);
 	
-	// Builder API（高级用法）
-	XXAPI int bbre_builder_init(
-	  bbre_builder **pbuild, const char *pat, size_t pat_size,
-	  const bbre_alloc *alloc);
-	XXAPI void bbre_builder_destroy(bbre_builder *build);
-	XXAPI void bbre_builder_flags(bbre_builder *build, bbre_flags flags);
-	
-	// 克隆 API（多线程安全）
-	XXAPI int bbre_clone(bbre **pout, const bbre *reg, const bbre_alloc *alloc);
-	
-	// bbre_set API（多模式匹配）
-	XXAPI int bbre_set_builder_init(bbre_set_builder **pbuild, const bbre_alloc *alloc);
-	XXAPI void bbre_set_builder_destroy(bbre_set_builder *build);
-	XXAPI int bbre_set_builder_add(bbre_set_builder *build, const bbre *reg);
-	XXAPI bbre_set *bbre_set_init_patterns(const char *const *ppats_nt, size_t num_pats);
-	XXAPI int bbre_set_init(
-	  bbre_set **pset, const bbre_set_builder *build, const bbre_alloc *alloc);
-	XXAPI void bbre_set_destroy(bbre_set *set);
-	XXAPI int bbre_set_is_match(bbre_set *set, const char *text, size_t text_size);
-	XXAPI int bbre_set_matches(
-	  bbre_set *set, const char *text, size_t text_size, unsigned int *out_idxs,
-	  unsigned int out_idxs_size, unsigned int *out_num_idxs);
-	XXAPI int bbre_set_clone(
-	  bbre_set **pout, const bbre_set *set, const bbre_alloc *alloc);
-	
-	// 版本号
-	XXAPI const char *bbre_version(void);
 	#endif // XRT_NO_REGEX
 	/* ------------------------------------ XNet V2 ------------------------------------ */
 	/*
@@ -3140,6 +3325,7 @@
 	char* pBody;
 	size_t iBodyLen;
 	uint32 iTimeoutMs;
+	uint32 iIdleTimeoutMs;
 	bool bVerifyPeer;
 	xnetproxy* pProxy;
 	} xhttprequest;
@@ -3237,7 +3423,6 @@
 	char sProtocol[XWS_PROTOCOL_CAP];
 	uint32 iConnectTimeoutMs;
 	uint32 iRecvLimit;
-	uint32 iMessageLimit;
 	bool bVerifyPeer;
 	xnetproxy* pProxy;
 	} xwsclientconfig;
@@ -3246,7 +3431,6 @@
 	uint32 iFlags;
 	uint32 iBacklog;
 	uint32 iRecvLimit;
-	uint32 iMessageLimit;
 	const xtlsconfig* pTlsConfig;
 	char sProtocol[XWS_PROTOCOL_CAP];
 	} xwsserverconfig;
@@ -3775,6 +3959,7 @@
 	XXAPI bool xrtHttpRequestSetHeader(xhttprequest* pReq, const char* sName, const char* sValue);
 	XXAPI bool xrtHttpRequestSetBodyCopy(xhttprequest* pReq, const void* pData, size_t iLen, const char* sContentType);
 	XXAPI void xrtHttpRequestSetTimeout(xhttprequest* pReq, uint32 iTimeoutMs);
+	XXAPI void xrtHttpRequestSetIdleTimeout(xhttprequest* pReq, uint32 iTimeoutMs);
 	XXAPI void xrtHttpRequestSetVerifyPeer(xhttprequest* pReq, bool bVerifyPeer);
 	XXAPI void xrtHttpResponseDestroy(xhttpresponse* pResp);
 	XXAPI const char* xrtHttpResponseHeader(const xhttpresponse* pResp, const char* sName);
@@ -4893,9 +5078,10 @@
 	XXAPI int xrtParseNum(const char *str, jnum_type_t *type, jnum_value_t *value);
 	
 	// 解析字符串（自动跳过前导空白字符）
-	static inline int xrtParseNumSkipSpace(const char *str, jnum_type_t *type, jnum_value_t *value)
+	static inline int xrtParseNumSkipSpace(const void *str, jnum_type_t *type, jnum_value_t *value)
 	{
-		const char *s = str;
+		const char *pBase = (const char*)str;
+		const char *s = pBase;
 		while (1) {
 			switch (*s) {
 			case '\b': case '\f': case '\n': case '\r': case '\t': case '\v': case ' ': ++s; break;
@@ -4903,15 +5089,15 @@
 			}
 		}
 	next:
-		return (int)(xrtParseNum(s, type, value) + (s - str));
+		return (int)(xrtParseNum(s, type, value) + (s - pBase));
 	}
 	
 	// 字符串转数字
-	XXAPI int32_t xrtStrToI32(const char* pStr);
-	XXAPI int64_t xrtStrToI64(const char* pStr);
-	XXAPI uint32_t xrtStrToU32(const char* pStr);
-	XXAPI uint64_t xrtStrToU64(const char* pStr);
-	XXAPI double xrtStrToNum(const char* pStr);
+	XXAPI int32_t xrtStrToI32(const void* pStr);
+	XXAPI int64_t xrtStrToI64(const void* pStr);
+	XXAPI uint32_t xrtStrToU32(const void* pStr);
+	XXAPI uint64_t xrtStrToU64(const void* pStr);
+	XXAPI double xrtStrToNum(const void* pStr);
 	
 	
 	
@@ -4994,7 +5180,7 @@
 	// Value 头部与共享状态的内联辅助函数
 	static inline uint32 __xvoAtomicCompareExchange32(volatile uint32* pValue, uint32 iExchange, uint32 iComparand)
 	{
-		return (uint32)__xrtAtomicCompareExchange32((volatile long*)pValue, (long)iExchange, (long)iComparand);
+		return __xrtAtomicCompareExchangeU32(pValue, iExchange, iComparand);
 	}
 	static inline void xvoInitHeader(xvalue pVal, uint32 iType, bool bStatic, bool bShared, uint32 iRefCount)
 	{
@@ -5355,7 +5541,7 @@
 	XXAPI bool xvoCollSetParent(xvalue pColl, xvalue pParentColl);
 	
 	// Table 读数据
-	XXAPI xvalue xvoTableGetValue(xvalue pTbl, str key, uint32 kl);
+	XXAPI xvalue xvoTableGetValue(xvalue pTbl, const void* key, uint32 kl);
 	#define xvoTableGetBool(pTbl, key, kl)														xvoGetBool(xvoTableGetValue(pTbl, key, kl))
 	#define xvoTableGetInt(pTbl, key, kl)														xvoGetInt(xvoTableGetValue(pTbl, key, kl))
 	#define xvoTableGetFloat(pTbl, key, kl)														xvoGetFloat(xvoTableGetValue(pTbl, key, kl))
@@ -5371,7 +5557,7 @@
 	#define xvoTableGetCustom(pTbl, key, kl)													xvoGetCustom(xvoTableGetValue(pTbl, key, kl))
 	
 	// Table 写数据
-	XXAPI bool xvoTableSetValue(xvalue pTbl, str key, uint32 kl, xvalue pVal, bool bColloc);
+	XXAPI bool xvoTableSetValue(xvalue pTbl, const void* key, uint32 kl, xvalue pVal, bool bColloc);
 	#define xvoTableSetNull(pTbl, key, kl)														xvoTableSetValue(pTbl, key, kl, xvoCreateNull(), TRUE)
 	#define xvoTableSetBool(pTbl, key, kl, bVal)												xvoTableSetValue(pTbl, key, kl, xvoCreateBool(bVal), TRUE)
 	#define xvoTableSetInt(pTbl, key, kl, iVal)													xvoTableSetValue(pTbl, key, kl, xvoCreateInt(iVal), TRUE)
@@ -5430,11 +5616,6 @@
 			JNUM 函数库
 	*/
 	
-	// 链表节点
-	struct json_list {
-		struct json_list *next;
-	};
-	
 	// json对象的类型
 	typedef enum {
 		JSON_NULL = 0,              /* It doesn't has value variable: null */
@@ -5445,8 +5626,8 @@
 		JSON_LHEX,                  /* Its value variable is vlhex */
 		JSON_DOUBLE,                /* Its value variable is vdbl */
 		JSON_STRING,                /* Its value variable is vstr */
-		JSON_ARRAY,                 /* Its value variable is head */
-		JSON_OBJECT                 /* Its value variable is head */
+		JSON_ARRAY,                 /* Collection type: array */
+		JSON_OBJECT                 /* Collection type: object */
 	} json_type_t;
 	
 	// json对象的键或字符串类型的值的信息（LJSON使用此结构就知道了字符串长度，可以加快数据处理）
@@ -5473,22 +5654,6 @@
 		uint64_t vlhex;
 		double vdbl;
 	} json_number_t;
-	
-	// json对象的值（LJSON使用union管理对象的值从而节省内存空间）
-	typedef union {
-		json_number_t vnum;			// 数字类型的值
-		char *vstr;					// 字符串类型的值
-		struct json_list head;		// 集合对象的子节点挂载的链表头，指向最后一个元素(非空时)或自己(空时)
-	} json_value_t;
-	
-	// json对象（LJSON使用更紧凑的内存结构以节省内存）
-	typedef struct {
-		struct json_list list;		// 链表节点，指向下一个对象或父对象的链表头
-		char *key;					// json对象的键值，只有JSON_OBJECT的子对象才有键值
-		json_strinfo_t ikey;		// key字符串信息(含json类型)
-		json_strinfo_t istr;		// value.str字符串信息
-		json_value_t value;			// json对象的值
-	} json_object;
 	
 	// SAX APIs中指示JSON_ARRAY或JSON_OBJECT的开始和结束（集合类型是括号包起来的，JSON_SAX_START表示左边括号, JSON_SAX_FINISH指示右边括号）
 	typedef enum {
@@ -5541,7 +5706,6 @@
 	
 	// 打印参数设置
 	typedef struct {
-		size_t str_len;
 		size_t plus_size;
 		size_t item_size;
 		int item_total;
@@ -5613,6 +5777,31 @@
 	
 	
 	
+	/* ------------------------------------ XSON 函数库 ------------------------------------ */
+	/*
+		依赖项：
+			File 函数库
+			Value 函数库
+			Time 函数库
+			JNUM 函数库
+			JSON 函数库
+	*/
+	
+	#define XSON_F_IGNORE_UNSUPPORTED_ENCODE	0x0001u
+	#define XSON_F_IGNORE_UNSUPPORTED_DECODE	0x0002u
+	
+	// 解析 XSON（保持对 JSON 的兼容）
+	XXAPI xvalue xrtParseXSON(str sText, size_t iSize);
+	XXAPI xvalue xrtParseXSONEx(str sText, size_t iSize, uint32 iFlags);
+	XXAPI xvalue xrtParseXSON_File(str sFile);
+	XXAPI xvalue xrtParseXSON_FileEx(str sFile, uint32 iFlags);
+	
+	// 将 xvalue 转换为 XSON
+	XXAPI str xrtStringifyXSON(xvalue varVal, int bFormat, uint32 iFlags, size_t* pRetSize);
+	XXAPI int xrtStringifyXSON_File(str sFile, xvalue varVal, int bFormat, uint32 iFlags);
+	
+	
+	
 	/* ------------------------------------ Template 函数库 ------------------------------------ */
 	/*
 		依赖项：
@@ -5625,243 +5814,245 @@
 			JNUM 函数库
 	*/
 	
-	// 最大支持参数数量
-	#define XTE_PARAM_MAXCOUNT		6
-	
-	// Token 定义编号
-	#define XTE_TK_TEXT				0				// 文本内容
-	#define XTE_TK_COMMEN			1				// 注释				{! * }
-	#define XTE_TK_VAR				0x100			// 代入变量			{$ * : *}			参数：为 NULL 默认值
-	#define XTE_TK_NUM				0x101			// 代入数字变量		{% * : *}			参数：格式
-	#define XTE_TK_TIME				0x102			// 代入时间变量		{& * : *}			参数：格式
-	#define XTE_TK_BOOL				0x103			// 根据逻辑代入值		{? * : * : * }		参数：为真时的值和为假时的值
-	#define XTE_TK_ARR				0x104			// 代入数组			{* * : *}			参数：套用子模板
-	#define XTE_TK_PROC				0x105			// 代入函数或流程		{@ * : * ...}		参数：函数参数列表
-	#define XTE_TK_SUBTEMPLATE		0x106			// 代入子模板			{= * : * }			参数：子模板环境变量名
-	#define XTE_TK_SYMBOL			0xFFFF			// 预定义符号			{# * : * ...}		参数：语句参数列表
-	#define XTE_MODE_BLOCK			0xFFFE			// 特殊符号，表示进入数据块采集模式，以 {#end} 结尾
-	
-	// Token 扩展编号
-	#define XTE_TK_INCLUDE			0x10000			// 引用外部文件
-	#define XTE_TK_DEFINE			0x10001			// 定义子模板
-	#define XTE_TK_SCRIPT			0x10002			// 脚本块
-	#define XTE_TK_IF				0x20000			// 判断语句
-	#define XTE_TK_ELSEIF			0x20001			// 判断语句
-	#define XTE_TK_ELSE				0x20002			// 判断语句
-	#define XTE_TK_FOR				0x30000			// 循环语句
-	#define XTE_TK_FOREACH			0x30001			// 迭代循环语句
-	#define XTE_TK_BREAK			0x30002			// 跳出循环
-	#define XTE_TK_CONTINUE			0x30003			// 继续下一轮循环
-	#define XTE_TK_END				0xFFFFFF		// 语句结束
-	#define XTE_TK_USER				0x1000000		// 大于这个编号的，XTE模板后续更新不会使用，可以安全的用于扩展
-	
-	// 标识符分类
-	#define XTE_IDTPE_DEFAULT		0				// 单语句标识符
-	#define XTE_IDTPE_BLOCK			1
-	
-	// Ident Info 数据结构（用于定义标识符）
+	typedef struct XTE_Engine_Struct* xteengine;
+	typedef struct XTE_Template_Struct* xtetemplate;
+	typedef struct XTE_RenderCtx_Struct XTE_RenderCtx;
+	typedef struct XTE_StmtParseCtx_Struct XTE_StmtParseCtx;
+	typedef struct XTE_StmtRenderCtx_Struct XTE_StmtRenderCtx;
+	typedef struct XTE_FuncCtx_Struct XTE_FuncCtx;
+	#define XTE_NODE_TEXT					1
+	#define XTE_NODE_OUTPUT					2
+	#define XTE_NODE_INLINE_BOOL			3
+	#define XTE_NODE_STATEMENT				4
+	#define XTE_EXPR_PATH					1
+	#define XTE_EXPR_TEXT					2
+	#define XTE_EXPR_INT					3
+	#define XTE_EXPR_BOOL					4
+	#define XTE_EXPR_BOOL_EXPR				5
+	#define XTE_OUTPUT_TEXT					1
+	#define XTE_OUTPUT_NUM					2
+	#define XTE_OUTPUT_TIME					3
+	#define XTE_OUTPUT_FUNC					4
+	#define XTE_STMT_INLINE					0x0001
+	#define XTE_STMT_BLOCK					0x0002
+	#define XTE_STMT_HYBRID					(XTE_STMT_INLINE | XTE_STMT_BLOCK)
+	#define XTE_STMT_RAW_BODY				0x0004
+	#define XTE_STMT_ALLOW_NAMED_ARGS		0x0008
 	typedef struct {
-		char* Ident;								// 标识符
-		uint32 TokenIndex;					// 对应的 Token 编号
-		unsigned short Type;						// 0 = 单语句、1 = 独立语句块(以 {#end} 结尾)
-		unsigned short Size;						// 标识符长度
-		unsigned short MinParamCount;				// 最小参数数量
-		unsigned short MaxParamCount;				// 最大参数数量
-		uint32 Hash;							// 标识符哈希值
-	} XTE_IdentInfo_Struct, *XTE_IdentInfo;
-	
-	// Token Item 数据结构
+		int iCode;
+		const char* sDesc;
+		uint32 iLine;
+		uint32 iColumn;
+		uint32 iPos;
+		uint32 iRefLine;
+		uint32 iRefColumn;
+		uint32 iRefPos;
+	} XTE_Error;
 	typedef struct {
-		uint32 Type;							// Token 定义编号
-		char* Text;									// 关联文本
-		size_t Size;								// 关联文本长度
-		uint32 ParamCount;					// 参数数量
-		char* ParamText[XTE_PARAM_MAXCOUNT];		// 参数文本
-		uint32 ParamSize[XTE_PARAM_MAXCOUNT];	// 参数长度
-		XTE_IdentInfo IdentInfo;					// 标识符语句对应的标识符信息结构体指针
-		uint32 RefLine;						// 语句在源文件中所在行
-		uint32 RefLinePos;					// 语句在源文件中所在行的位置
-		uint32 RefPos;						// 语句在源文件中所在的位置
-		uint32 RefSize;						// 语句在源文件中的长度
-	} XTE_TokenItem_Struct, *XTE_TokenItem;
-	
-	// Token List 数据结构
+		int (*procWrite)(void* pUserData, const char* sText, size_t iSize);
+		void* pUserData;
+		size_t iWritten;
+	} XTE_Writer;
 	typedef struct {
-		int Success;								// 解析是否成功
-		int ErrorCode;								// 错误代码（0=成功）
-		const char* ErrorDesc;						// 错误描述
-		uint32 ErrorLine;						// 错误行号
-		uint32 ErrorLinePos;					// 错误行位置
-		uint32 ErrorPos;						// 错误位置
-		uint32 ErrorRefLine;					// 出错参考行
-		uint32 ErrorRefLinePos;				// 出错参考行位置
-		uint32 ErrorRefPos;					// 错误参考位置
-		xarray_struct Tokens;						// Token 列表
-	} XTE_TokenList_Struct, *XTE_TokenList;
-	
-	// xTemplate Engine Lite 数据结构
+		const char* sBracket;
+		uint32 iFlags;
+	} XTE_ParseOptions;
 	typedef struct {
-		int Success;								// 解析是否成功
-		int ErrorCode;								// 错误代码（0=成功）
-		const char* ErrorDesc;						// 错误描述
-		uint32 ErrorLine;						// 错误行号
-		uint32 ErrorLinePos;					// 错误行位置
-		uint32 ErrorPos;						// 错误位置
-		uint32 ErrorRefLine;					// 出错参考行
-		uint32 ErrorRefLinePos;				// 出错参考行位置
-		uint32 ErrorRefPos;					// 错误参考位置
-		xarray_struct Tokens;								// Token 列表
-		xparray_struct Actions;						// 编译后的动作列表
-		xdict_struct SubTemplates;					// 子模板列表（哈希表）
-	} XTE_LiteStruct, *XTE_LiteObject;
-	
-	// 创建关键字列表（失败返回 NULL）
-	XXAPI xarray xteCreateIdentList();
-	
-	// 销毁关键字列表
-	XXAPI void xteDestroyIdentList(xarray objList);
-	
-	// 添加一个关键字到列表
-	XXAPI int xteAddIdentToList(xarray objList, char* sID, uint32 iSize, uint32 iIndex, uint32 iType, uint32 iMinParamCount, uint32 iMaxParamCount);
-	
-	// 释放 XTE_TokenList
-	XXAPI void xteLexerFree(XTE_TokenList arrToken);
-	
-	// 解析模板文件为 Token 列表
-	XXAPI XTE_TokenList xteLexer(char* sText, size_t iSize, xarray objIdentList, char* sBracket);
-	
-	// 将 XTE_TokenList 转换为 XTE_LiteObject（XTE_TokenList将被释放）
-	XXAPI XTE_LiteObject xteParseFromTokenList(XTE_TokenList objToks);
-	
-	// 解析返回语法列表
-	XXAPI XTE_LiteObject xteParse(char* sText, size_t iSize, char* sBracket);
-	
-	// 释放 XTE_LiteObject 对象
-	XXAPI void xteParseFree(XTE_LiteObject objLite);
-	
-	// 根据 XTE_LiteObject 模板对象生成文档
-	XXAPI char* xteMakeActions(xparray arrAction, XTE_LiteObject objTemplate, xvalue tblVal, xvalue tblRoot, xvalue tblENV, xdict tblInclude, size_t* pRetSize);
-	XXAPI char* xteMake(XTE_LiteObject objTemplate, xvalue tblVal, xvalue tblENV, xdict tblInclude, size_t* pRetSize);
-	
-	// 路径解析器：支持 a.b.c 和 arr[0] 语法
-	// path: 路径字符串（如 "user.profile.name" 或 "items[0].title"）
-	// pathLen: 路径长度（传0则自动计算）
-	// tblVal: 当前作用域
-	// tblRoot: 根作用域
-	// tblENV: 环境变量
-	// 返回: 解析到的 xvalue，失败返回 &XVO_VALUE_NULL
-	XXAPI xvalue xteResolvePath(const char* path, size_t pathLen, xvalue tblVal, xvalue tblRoot, xvalue tblENV);
-	
-	
-	
-	/* -------------------- 表达式解析器 (Expression Parser) -------------------- */
-	
-	// 表达式 Token 类型
-	#define XTE_ETK_EOF			0			// 结束
-	#define XTE_ETK_NUM			1			// 数字（整数或浮点数）
-	#define XTE_ETK_STR			2			// 字符串字面量
-	#define XTE_ETK_BOOL		3			// 布尔值 (true/false)
-	#define XTE_ETK_IDENT		4			// 标识符/变量名（支持路径）
-	#define XTE_ETK_LPAREN		10			// (
-	#define XTE_ETK_RPAREN		11			// )
-	// 运算符
-	#define XTE_ETK_OP_EQ		20			// =
-	#define XTE_ETK_OP_NE		21			// !=
-	#define XTE_ETK_OP_AE		22			// ~= (约等于)
-	#define XTE_ETK_OP_GT		23			// >
-	#define XTE_ETK_OP_LT		24			// <
-	#define XTE_ETK_OP_GE		25			// >=
-	#define XTE_ETK_OP_LE		26			// <=
-	#define XTE_ETK_OP_AND		30			// and
-	#define XTE_ETK_OP_OR		31			// or
-	#define XTE_ETK_OP_NOT		32			// not
-	
-	// 表达式 Token 结构体
+		xvalue pRoot;
+		xvalue pCurrent;
+		xvalue pGlobal;
+		xdict pIncludeMap;
+		XTE_Writer* pWriter;
+		uint32 iFlags;
+	} XTE_RenderOptions;
 	typedef struct {
-		uint32 Type;						// Token 类型
+		uint32 iStart;
+		uint32 iCount;
+	} XTE_NodeSpan;
+	typedef struct {
+		uint32 iType;
+		uint32 iFlags;
+		uint32 iTextOff;
+		uint32 iTextSize;
+		int64 iIntValue;
+		int iBoolValue;
+	} XTE_ExprNode;
+	typedef struct {
+		uint32 iNameOff;
+		uint32 iNameSize;
+		uint32 iRawOff;
+		uint32 iRawSize;
+		uint32 iFlags;
+		uint32 iExprIndex;
+	} XTE_ArgItem;
+	typedef struct {
+		xtetemplate hTemplate;
+		const XTE_ArgItem* pItems;
+		uint32 iCount;
+	} XTE_ArgList;
+	typedef struct {
+		uint32 iType;
+		uint32 iFlags;
+		uint32 iPos;
+		uint32 iSize;
 		union {
-			int64 IntVal;					// 整数值
-			double NumVal;					// 浮点数值
-			int BoolVal;						// 布尔值
 			struct {
-				const char* Ptr;			// 字符串/标识符指针
-				size_t Len;					// 长度
-			} Str;
-		} Value;
-		int IsFloat;							// 数字是否为浮点数
-		size_t Pos;							// 在表达式中的位置
-	} XTE_ExprToken_Struct, *XTE_ExprToken;
-	
-	// AST 节点类型
-	#define XTE_AST_LITERAL		1			// 字面量（数字、字符串、布尔）
-	#define XTE_AST_VARIABLE	2			// 变量引用
-	#define XTE_AST_UNARY		3			// 一元运算 (not)
-	#define XTE_AST_BINARY		4			// 二元运算
-	
-	// 字面量类型
-	#define XTE_LIT_INT			1			// 整数
-	#define XTE_LIT_FLOAT		2			// 浮点数
-	#define XTE_LIT_STRING		3			// 字符串
-	#define XTE_LIT_BOOL		4			// 布尔
-	
-	// AST 节点结构体（前向声明）
-	typedef struct XTE_ASTNode_Struct XTE_ASTNode_Struct;
-	typedef XTE_ASTNode_Struct* XTE_ASTNode;
-	
-	struct XTE_ASTNode_Struct {
-		uint32 Type;						// 节点类型
-		union {
-			// 字面量节点
+				uint32 iTextOff;
+				uint32 iTextSize;
+			} Text;
 			struct {
-				uint32 LitType;			// 字面量类型
-				union {
-					int64 IntVal;
-					double NumVal;
-					int BoolVal;
-					struct {
-						char* Ptr;			// 已复制的字符串
-						size_t Len;
-					} Str;
-				} Val;
-			} Literal;
-			// 变量节点
+				uint32 iOutputType;
+				uint32 iExprIndex;
+				uint32 iFormatOff;
+				uint32 iFormatSize;
+				uint32 iNameOff;
+				uint32 iNameSize;
+				uint32 iArgStart;
+				uint32 iArgCount;
+			} Output;
 			struct {
-				char* Path;					// 路径字符串（已复制）
-				size_t PathLen;
-			} Variable;
-			// 一元运算节点
+				uint32 iExprIndex;
+				uint32 iTrueOff;
+				uint32 iTrueSize;
+				uint32 iFalseOff;
+				uint32 iFalseSize;
+			} InlineBool;
 			struct {
-				uint32 Op;				// 运算符
-				XTE_ASTNode Operand;		// 操作数
-			} Unary;
-			// 二元运算节点
-			struct {
-				uint32 Op;				// 运算符
-				XTE_ASTNode Left;			// 左操作数
-				XTE_ASTNode Right;			// 右操作数
-			} Binary;
+				uint32 iStmtNameOff;
+				uint32 iStmtNameSize;
+				uint32 iArgStart;
+				uint32 iArgCount;
+				XTE_NodeSpan tBody;
+				uint32 iRawBodyOff;
+				uint32 iRawBodySize;
+				ptr pData;
+			} Statement;
 		} Data;
+	} XTE_Node;
+	typedef enum {
+		XTE_FLOW_OK = 0,
+		XTE_FLOW_BREAK = 1,
+		XTE_FLOW_CONTINUE = 2,
+		XTE_FLOW_ERROR = -1
+	} XTE_Flow;
+	typedef struct XTE_StatementDef_Struct {
+		const char* sName;
+		uint32 iFlags;
+		uint16 iMinArgs;
+		uint16 iMaxArgs;
+		void* pUserData;
+		int (*procParse)(XTE_StmtParseCtx* pCtx, void** ppData);
+		XTE_Flow (*procRender)(XTE_StmtRenderCtx* pCtx);
+		void (*procFreeData)(void* pData);
+	} XTE_StatementDef;
+	typedef struct XTE_FunctionDef_Struct {
+		const char* sName;
+		uint16 iMinArgs;
+		uint16 iMaxArgs;
+		void* pUserData;
+		int (*procCall)(XTE_FuncCtx* pCtx, xvalue* ppRet);
+	} XTE_FunctionDef;
+	struct XTE_StmtParseCtx_Struct {
+		xteengine hEngine;
+		xtetemplate hTemplate;
+		const XTE_StatementDef* pDef;
+		const XTE_ArgList* pArgs;
+		const XTE_NodeSpan* pBody;
+		const char* sRawBody;
+		size_t iRawBodySize;
+		XTE_Error* pError;
+		void* pUserData;
 	};
-	
-	// 表达式解析结果
-	typedef struct {
-		int Success;							// 解析是否成功
-		const char* ErrorDesc;					// 错误描述
-		size_t ErrorPos;						// 错误位置
-		XTE_ASTNode Root;						// AST 根节点
-	} XTE_ExprResult_Struct, *XTE_ExprResult;
-	
-	// 解析表达式字符串，返回 AST
-	XXAPI XTE_ExprResult xteExprParse(const char* expr, size_t len);
-	
-	// 释放表达式解析结果
-	XXAPI void xteExprFree(XTE_ExprResult result);
-	
-	// 求值表达式，返回 xvalue 结果（调用者负责 unref）
-	XXAPI xvalue xteExprEval(XTE_ASTNode ast, xvalue tblVal, xvalue tblRoot, xvalue tblENV);
-	
-	// 便捷函数：解析并求值表达式，返回布尔结果
-	XXAPI int xteExprEvalBool(const char* expr, size_t len, xvalue tblVal, xvalue tblRoot, xvalue tblENV);
+	struct XTE_StmtRenderCtx_Struct {
+		XTE_RenderCtx* pRender;
+		const XTE_StatementDef* pDef;
+		const XTE_ArgList* pArgs;
+		const XTE_NodeSpan* pBody;
+		const char* sRawBody;
+		size_t iRawBodySize;
+		void* pData;
+		void* pUserData;
+	};
+	struct XTE_FuncCtx_Struct {
+		XTE_RenderCtx* pRender;
+		const XTE_FunctionDef* pDef;
+		const XTE_ArgList* pArgs;
+		void* pUserData;
+	};
+	XXAPI xteengine xteCreateEngine(void);
+	XXAPI void xteDestroyEngine(xteengine hEngine);
+	XXAPI int xteRegisterBuiltinStatements(xteengine hEngine);
+	XXAPI int xteRegisterStatement(xteengine hEngine, const XTE_StatementDef* pDef);
+	XXAPI int xteRegisterFunction(xteengine hEngine, const XTE_FunctionDef* pDef);
+	XXAPI xtetemplate xteParseEx(xteengine hEngine, const char* sText, size_t iSize, const XTE_ParseOptions* pOptions, XTE_Error* pError);
+	XXAPI xtetemplate xteParse(const char* sText, size_t iSize, const char* sBracket);
+	XXAPI void xteDestroyTemplate(xtetemplate hTemplate);
+	XXAPI void xteParseFree(xtetemplate hTemplate);
+	XXAPI int xteRenderEx(xtetemplate hTemplate, const XTE_RenderOptions* pOptions, XTE_Error* pError);
+	XXAPI char* xteMake(xtetemplate hTemplate, xvalue pCurrent, xvalue pGlobal, xdict pIncludeMap, size_t* pRetSize);
+	XXAPI xvalue xteResolvePath(const char* sPath, size_t iPathSize, xvalue pCurrent, xvalue pRoot, xvalue pLocal, xvalue pGlobal);
+	XXAPI uint32 xteTemplateGetNodeCount(xtetemplate hTemplate);
+	XXAPI uint32 xteTemplateGetExprCount(xtetemplate hTemplate);
+	XXAPI uint32 xteTemplateGetArgCount(xtetemplate hTemplate);
+	XXAPI uint32 xteTemplateGetStringPoolSize(xtetemplate hTemplate);
+	XXAPI XTE_NodeSpan xteTemplateGetRootSpan(xtetemplate hTemplate);
+	XXAPI const XTE_Node* xteTemplateGetNode(xtetemplate hTemplate, uint32 iIndex);
+	XXAPI const XTE_ExprNode* xteTemplateGetExpr(xtetemplate hTemplate, uint32 iIndex);
+	XXAPI const XTE_ArgItem* xteTemplateGetArg(xtetemplate hTemplate, uint32 iIndex);
+	XXAPI const char* xteTemplateGetString(xtetemplate hTemplate, uint32 iOff);
+	XXAPI uint32 xteArgCount(const XTE_ArgList* pArgs);
+	XXAPI const XTE_ArgItem* xteArgAt(const XTE_ArgList* pArgs, uint32 iIndex);
+	XXAPI const XTE_ArgItem* xteFindNamedArg(const XTE_ArgList* pArgs, const char* sName, size_t iNameSize);
+	XXAPI const char* xteArgNameText(const XTE_ArgList* pArgs, const XTE_ArgItem* pArg);
+	XXAPI const char* xteArgRawText(const XTE_ArgList* pArgs, const XTE_ArgItem* pArg);
+	XXAPI uint32 xteArgExprType(const XTE_ArgList* pArgs, const XTE_ArgItem* pArg);
+	XXAPI xvalue xteEvalArgValue(XTE_RenderCtx* pCtx, const XTE_ArgItem* pArg);
+	XXAPI int xteEvalArgBool(XTE_RenderCtx* pCtx, const XTE_ArgItem* pArg, int* pOut);
+	XXAPI int xteEvalArgInt(XTE_RenderCtx* pCtx, const XTE_ArgItem* pArg, int64* pOut);
+	XXAPI int xteEvalArgFloat(XTE_RenderCtx* pCtx, const XTE_ArgItem* pArg, double* pOut);
+	XXAPI char* xteEvalArgText(XTE_RenderCtx* pCtx, const XTE_ArgItem* pArg);
+	XXAPI int xteEvalArgBoolStrict(XTE_RenderCtx* pCtx, const XTE_ArgItem* pArg, int* pOut);
+	XXAPI int xteEvalArgIntStrict(XTE_RenderCtx* pCtx, const XTE_ArgItem* pArg, int64* pOut);
+	XXAPI int xteEvalArgFloatStrict(XTE_RenderCtx* pCtx, const XTE_ArgItem* pArg, double* pOut);
+	XXAPI char* xteEvalArgTextStrict(XTE_RenderCtx* pCtx, const XTE_ArgItem* pArg);
+	XXAPI const XTE_ArgItem* xteStmtParseRequireArg(XTE_StmtParseCtx* pCtx, uint32 iIndex, const char* sDesc);
+	XXAPI const XTE_ArgItem* xteStmtParseRequireNamedArg(XTE_StmtParseCtx* pCtx, const char* sName, size_t iNameSize, const char* sDesc);
+	XXAPI const XTE_ArgItem* xteStmtParseRequireExprType(XTE_StmtParseCtx* pCtx, uint32 iIndex, uint32 iExprType, const char* sDesc);
+	XXAPI const XTE_ArgItem* xteStmtParseRequireNamedExprType(XTE_StmtParseCtx* pCtx, const char* sName, size_t iNameSize, uint32 iExprType, const char* sDesc);
+	XXAPI const XTE_ArgItem* xteStmtRequireArg(XTE_StmtRenderCtx* pCtx, uint32 iIndex, const char* sDesc);
+	XXAPI const XTE_ArgItem* xteStmtRequireNamedArg(XTE_StmtRenderCtx* pCtx, const char* sName, size_t iNameSize, const char* sDesc);
+	XXAPI int xteStmtRequireBoolStrict(XTE_StmtRenderCtx* pCtx, uint32 iIndex, int* pOut, const char* sDesc);
+	XXAPI int xteStmtRequireNamedBoolStrict(XTE_StmtRenderCtx* pCtx, const char* sName, size_t iNameSize, int* pOut, const char* sDesc);
+	XXAPI int xteStmtRequireIntStrict(XTE_StmtRenderCtx* pCtx, uint32 iIndex, int64* pOut, const char* sDesc);
+	XXAPI int xteStmtRequireNamedIntStrict(XTE_StmtRenderCtx* pCtx, const char* sName, size_t iNameSize, int64* pOut, const char* sDesc);
+	XXAPI int xteStmtRequireFloatStrict(XTE_StmtRenderCtx* pCtx, uint32 iIndex, double* pOut, const char* sDesc);
+	XXAPI int xteStmtRequireNamedFloatStrict(XTE_StmtRenderCtx* pCtx, const char* sName, size_t iNameSize, double* pOut, const char* sDesc);
+	XXAPI char* xteStmtRequireTextStrict(XTE_StmtRenderCtx* pCtx, uint32 iIndex, const char* sDesc);
+	XXAPI char* xteStmtRequireNamedTextStrict(XTE_StmtRenderCtx* pCtx, const char* sName, size_t iNameSize, const char* sDesc);
+	XXAPI const XTE_ArgItem* xteFuncRequireArg(XTE_FuncCtx* pCtx, uint32 iIndex, const char* sDesc);
+	XXAPI const XTE_ArgItem* xteFuncRequireNamedArg(XTE_FuncCtx* pCtx, const char* sName, size_t iNameSize, const char* sDesc);
+	XXAPI int xteFuncRequireBoolStrict(XTE_FuncCtx* pCtx, uint32 iIndex, int* pOut, const char* sDesc);
+	XXAPI int xteFuncRequireNamedBoolStrict(XTE_FuncCtx* pCtx, const char* sName, size_t iNameSize, int* pOut, const char* sDesc);
+	XXAPI int xteFuncRequireIntStrict(XTE_FuncCtx* pCtx, uint32 iIndex, int64* pOut, const char* sDesc);
+	XXAPI int xteFuncRequireNamedIntStrict(XTE_FuncCtx* pCtx, const char* sName, size_t iNameSize, int64* pOut, const char* sDesc);
+	XXAPI int xteFuncRequireFloatStrict(XTE_FuncCtx* pCtx, uint32 iIndex, double* pOut, const char* sDesc);
+	XXAPI int xteFuncRequireNamedFloatStrict(XTE_FuncCtx* pCtx, const char* sName, size_t iNameSize, double* pOut, const char* sDesc);
+	XXAPI char* xteFuncRequireTextStrict(XTE_FuncCtx* pCtx, uint32 iIndex, const char* sDesc);
+	XXAPI char* xteFuncRequireNamedTextStrict(XTE_FuncCtx* pCtx, const char* sName, size_t iNameSize, const char* sDesc);
+	XXAPI int xteStmtParseSetError(XTE_StmtParseCtx* pCtx, int iCode, const char* sDesc);
+	XXAPI XTE_Flow xteStmtSetError(XTE_StmtRenderCtx* pCtx, int iCode, const char* sDesc);
+	XXAPI int xteFuncSetError(XTE_FuncCtx* pCtx, int iCode, const char* sDesc);
+	XXAPI int xteStmtWrite(XTE_StmtRenderCtx* pCtx, const char* sText, size_t iSize);
+	XXAPI int xteStmtRenderBody(XTE_StmtRenderCtx* pCtx);
+	XXAPI int xteStmtRenderBodyWithScope(XTE_StmtRenderCtx* pCtx, xvalue pLocal, xvalue pCurrent);
+	#ifdef XTE_ENABLE_FILE
+	XXAPI int xteTemplateSaveFile(xtetemplate hTemplate, const char* sFilePath, uint32 iFlags, XTE_Error* pError);
+	XXAPI xtetemplate xteTemplateLoadFile(xteengine hEngine, const char* sFilePath, uint32 iFlags, XTE_Error* pError);
+	#endif
+	#ifdef XTE_DEBUGMODE
+	XXAPI int xteTemplateDump(xtetemplate hTemplate, XTE_Writer* pWriter, uint32 iFlags);
+	XXAPI int xteTemplateDumpConsole(xtetemplate hTemplate, uint32 iFlags);
+	#endif
 	
 	
 	
@@ -6070,7 +6261,9 @@
 // ========================================
 
 
-#define XRT_BUILD_CORE
+#ifndef XRT_BUILD_CORE
+	#define XRT_BUILD_CORE
+#endif
 // (skipped include: #include "xrt.h")
 #if defined(_WIN32) || defined(_WIN64)
 	#ifdef __TINYC__
@@ -6086,9 +6279,11 @@
 	#include <sys/types.h>
 	#include <sys/stat.h>
 	#include <wchar.h>
-	#pragma comment (lib, "shell32")
-	#pragma comment (lib, "Ws2_32")
-	#pragma comment (lib, "IPHLPAPI")
+	#if defined(_MSC_VER)
+		#pragma comment (lib, "shell32")
+		#pragma comment (lib, "Ws2_32")
+		#pragma comment (lib, "IPHLPAPI")
+	#endif
 #else
 	#include <fcntl.h>
 	#include <sys/stat.h>
@@ -6119,9 +6314,7 @@ xrtGlobalData xCore = { FALSE };
 	static SRWLOCK __xrtRuntimeLockObj = SRWLOCK_INIT;
 	#define __xrtRuntimeLock()		AcquireSRWLockExclusive(&__xrtRuntimeLockObj)
 	#define __xrtRuntimeUnlock()	ReleaseSRWLockExclusive(&__xrtRuntimeLockObj)
-	#if defined(__TINYC__)
-		#define XRT_TLS_STORAGE		__declspec(thread)
-	#elif defined(__GNUC__)
+	#if defined(__GNUC__)
 		#define XRT_TLS_STORAGE		__thread
 	#else
 		#define XRT_TLS_STORAGE		__declspec(thread)
@@ -6132,7 +6325,73 @@ xrtGlobalData xCore = { FALSE };
 	#define __xrtRuntimeUnlock()	pthread_mutex_unlock(&__xrtRuntimeLockObj)
 	#define XRT_TLS_STORAGE			__thread
 #endif
-static XRT_TLS_STORAGE xrtThreadData* __xrtThreadState = NULL;
+#if defined(_WIN32) || defined(_WIN64)
+	#if defined(__TINYC__)
+		static DWORD __xrtThreadTlsSlot = TLS_OUT_OF_INDEXES;
+		static bool __xrtThreadStateInitStorage()
+		{
+			if ( __xrtThreadTlsSlot != TLS_OUT_OF_INDEXES ) {
+				return TRUE;
+			}
+			__xrtThreadTlsSlot = TlsAlloc();
+			return __xrtThreadTlsSlot != TLS_OUT_OF_INDEXES;
+		}
+		static void __xrtThreadStateUnitStorage()
+		{
+			if ( __xrtThreadTlsSlot != TLS_OUT_OF_INDEXES ) {
+				TlsFree(__xrtThreadTlsSlot);
+				__xrtThreadTlsSlot = TLS_OUT_OF_INDEXES;
+			}
+		}
+		static xrtThreadData* __xrtThreadStateGet()
+		{
+			if ( __xrtThreadTlsSlot == TLS_OUT_OF_INDEXES ) {
+				return NULL;
+			}
+			return (xrtThreadData*)TlsGetValue(__xrtThreadTlsSlot);
+		}
+		static void __xrtThreadStateSet(xrtThreadData* pThreadData)
+		{
+			if ( __xrtThreadTlsSlot != TLS_OUT_OF_INDEXES ) {
+				(void)TlsSetValue(__xrtThreadTlsSlot, pThreadData);
+			}
+		}
+	#else
+		static XRT_TLS_STORAGE xrtThreadData* __xrtThreadState = NULL;
+		static bool __xrtThreadStateInitStorage()
+		{
+			return TRUE;
+		}
+		static void __xrtThreadStateUnitStorage()
+		{
+		}
+		static xrtThreadData* __xrtThreadStateGet()
+		{
+			return __xrtThreadState;
+		}
+		static void __xrtThreadStateSet(xrtThreadData* pThreadData)
+		{
+			__xrtThreadState = pThreadData;
+		}
+	#endif
+#else
+	static XRT_TLS_STORAGE xrtThreadData* __xrtThreadState = NULL;
+	static bool __xrtThreadStateInitStorage()
+	{
+		return TRUE;
+	}
+	static void __xrtThreadStateUnitStorage()
+	{
+	}
+	static xrtThreadData* __xrtThreadStateGet()
+	{
+		return __xrtThreadState;
+	}
+	static void __xrtThreadStateSet(xrtThreadData* pThreadData)
+	{
+		__xrtThreadState = pThreadData;
+	}
+#endif
 #ifndef XRT_MEM_DEBUG
 static volatile long __xrtMemForeignAllocLock = 0;
 static xrtMemDebugForeignAlloc* __xrtMemForeignAllocList = NULL;
@@ -6169,10 +6428,10 @@ static void __xrtRuntimeFinalizeLocked();
 		char* pMemC = pMem;
 		char* pSubC = pSub;
 		size_t iRange = iMemSize - iSubSize;
-		for ( int i = 0; i <= iRange; i++ ) {
+		for ( size_t i = 0; i <= iRange; i++ ) {
 			char* pPos = &pMemC[i];
 			int bOK = TRUE;
-			for ( int j = 0; j < iSubSize; j++ ) {
+			for ( size_t j = 0; j < iSubSize; j++ ) {
 				if ( pPos[j] != pSubC[j] ) {
 					bOK = FALSE;
 					break;
@@ -7959,12 +8218,13 @@ XXAPI void xrtFreeTempMemory()
 	__xrtTempArenaResetThread(pThreadData);
 }
 // 设置错误（线程级）
-XXAPI void xrtSetError(str sError, bool bFree)
+XXAPI void xrtSetError(const void* sError, bool bFree)
 {
+	str sErrorText = (str)sError;
 	xrtThreadData* pThreadData = xrtThreadGetCurrent();
 	// 回调通知
 	if ( xCore.OnError ) {
-		xCore.OnError(sError);
+		xCore.OnError(sErrorText);
 	}
 	if ( pThreadData == NULL ) {
 		return;
@@ -7973,7 +8233,7 @@ XXAPI void xrtSetError(str sError, bool bFree)
 	if ( pThreadData->bFreeLastError && pThreadData->LastError && pThreadData->LastError != xCore.sNull ) {
 		xrtFree(pThreadData->LastError);
 	}
-	pThreadData->LastError = sError;
+	pThreadData->LastError = sErrorText;
 	pThreadData->bFreeLastError = bFree;
 }
 XXAPI void xrtSetErrorU16(u16str sError, size_t iSize, bool bFree)
@@ -8097,11 +8357,13 @@ static inline void __xrtMemTelemetryRecordTemp(size_t iSize);
 // ========================================
 
 
+#define __xrt_cstr(sText) ((const char*)(sText))
+#define __xrt_str(sText) ((char*)(sText))
 // 创建字符串副本（ 需使用 xrtFree 释放 ）(线程安全)
 XXAPI str xrtCopyStr(str sText, size_t iSize)
 {
 	if ( sText == NULL ) { return xCore.sNull; }
-	if ( iSize == 0 ) { iSize = strlen(sText); }
+	if ( iSize == 0 ) { iSize = strlen(__xrt_cstr(sText)); }
 	if ( iSize == 0 ) { return xCore.sNull; }
 	str sRet = xrtMalloc(iSize + 1);
 	if ( sRet == NULL ) { return xCore.sNull; }
@@ -8147,25 +8409,25 @@ XXAPI int xrtStrComp(str s1, str s2, size_t iSize, bool bCase)
 		if ( bCase ) {
 			#if defined(_WIN32) || defined(_WIN64)
 				// windows 方案
-				return strnicmp(s1, s2, iSize);
+				return strnicmp(__xrt_cstr(s1), __xrt_cstr(s2), iSize);
 			#else
 				// 其他平台方案
-				return strncasecmp(s1, s2, iSize);
+				return strncasecmp(__xrt_cstr(s1), __xrt_cstr(s2), iSize);
 			#endif
 		} else {
-			return strncmp(s1, s2, iSize);
+			return strncmp(__xrt_cstr(s1), __xrt_cstr(s2), iSize);
 		}
 	} else {
 		if ( bCase ) {
 			#if defined(_WIN32) || defined(_WIN64)
 				// windows 方案
-				return stricmp(s1, s2);
+				return stricmp(__xrt_cstr(s1), __xrt_cstr(s2));
 			#else
 				// 其他平台方案
-				return strcasecmp(s1, s2);
+				return strcasecmp(__xrt_cstr(s1), __xrt_cstr(s2));
 			#endif
 		} else {
-			return strcmp(s1, s2);
+			return strcmp(__xrt_cstr(s1), __xrt_cstr(s2));
 		}
 	}
 }
@@ -8173,11 +8435,11 @@ XXAPI int xrtStrComp(str s1, str s2, size_t iSize, bool bCase)
 XXAPI str xrtLCase(str sText, size_t iSize, bool bSrcRevise)
 {
 	if ( sText == NULL ) { return xCore.sNull; }
-	if ( iSize == 0 ) { iSize = strlen(sText); }
+	if ( iSize == 0 ) { iSize = strlen(__xrt_cstr(sText)); }
 	if ( iSize == 0 ) { return xCore.sNull; }
 	str sRet;
 	if ( bSrcRevise ) { sRet = sText; } else { sRet = xrtCopyStr(sText, iSize); }
-	for ( int i = 0; i < iSize; i++ ) {
+	for ( size_t i = 0; i < iSize; i++ ) {
 		unsigned char c = (unsigned char)sRet[i];
 		if ( (c & 0x80) == 0 ) {
 			// ASCII 字符
@@ -8206,11 +8468,11 @@ XXAPI str xrtLCase(str sText, size_t iSize, bool bSrcRevise)
 XXAPI str xrtUCase(str sText, size_t iSize, bool bSrcRevise)
 {
 	if ( sText == NULL ) { return xCore.sNull; }
-	if ( iSize == 0 ) { iSize = strlen(sText); }
+	if ( iSize == 0 ) { iSize = strlen(__xrt_cstr(sText)); }
 	if ( iSize == 0 ) { return xCore.sNull; }
 	str sRet;
 	if ( bSrcRevise != FALSE ) { sRet = sText; } else { sRet = xrtCopyStr(sText, iSize); }
-	for ( int i = 0; i < iSize; i++ ) {
+	for ( size_t i = 0; i < iSize; i++ ) {
 		unsigned char c = (unsigned char)sRet[i];
 		if ( (c & 0x80) == 0 ) {
 			// ASCII 字符
@@ -8240,9 +8502,9 @@ XXAPI str xrtFindStr(str sText, size_t iSize, str sSubText, size_t iSubSize, boo
 {
 	if ( sText == NULL ) { return NULL; }
 	if ( sSubText == NULL ) { return NULL; }
-	if ( iSize == 0 ) { iSize = strlen(sText); }
+	if ( iSize == 0 ) { iSize = strlen(__xrt_cstr(sText)); }
 	if ( iSize == 0 ) { return NULL; }
-	if ( iSubSize == 0 ) { iSubSize = strlen(sSubText); }
+	if ( iSubSize == 0 ) { iSubSize = strlen(__xrt_cstr(sSubText)); }
 	if ( iSubSize == 0 ) { return NULL; }
 	str sSub;
 	if ( bCase ) {
@@ -8263,9 +8525,9 @@ XXAPI uint xrtInStr(str sText, size_t iSize, str sSubText, size_t iSubSize, bool
 {
 	if ( sText == NULL ) { return 0; }
 	if ( sSubText == NULL ) { return 0; }
-	if ( iSize == 0 ) { iSize = strlen(sText); }
+	if ( iSize == 0 ) { iSize = strlen(__xrt_cstr(sText)); }
 	if ( iSize == 0 ) { return 0; }
-	if ( iSubSize == 0 ) { iSubSize = strlen(sSubText); }
+	if ( iSubSize == 0 ) { iSubSize = strlen(__xrt_cstr(sSubText)); }
 	if ( iSubSize == 0 ) { return 0; }
 	str sSub;
 	if ( bCase ) {
@@ -8289,14 +8551,14 @@ XXAPI uint xrtInStr(str sText, size_t iSize, str sSubText, size_t iSubSize, bool
 // 字符串检查（ sText 中是否包含 sSubText 列出的字符，支持 utf-8 mb6 编码 ）
 XXAPI str xrtCheckStr(str sText, size_t iSize, str sSubText, size_t iSubSize)
 {
-	if ( iSize == 0 ) { iSize = strlen(sText); }
+	if ( iSize == 0 ) { iSize = strlen(__xrt_cstr(sText)); }
 	if ( iSize == 0 ) { return NULL; }
-	if ( iSubSize == 0 ) { iSubSize = strlen(sSubText); }
+	if ( iSubSize == 0 ) { iSubSize = strlen(__xrt_cstr(sSubText)); }
 	if ( iSubSize == 0 ) { return NULL; }
-	for ( int i = 0; i < iSize; i++ ) {
+	for ( size_t i = 0; i < iSize; i++ ) {
 		if ( (sText[i] & 0b10000000) == 0 ) {
 			// ASCII 兼容字符
-			for ( int j = 0; j < iSubSize; j++ ) {
+			for ( size_t j = 0; j < iSubSize; j++ ) {
 				if ( sSubText[j] == sText[i] ) {
 					return &sText[i];
 				}
@@ -8304,7 +8566,7 @@ XXAPI str xrtCheckStr(str sText, size_t iSize, str sSubText, size_t iSubSize)
 		} else if ( (sText[i] & 0b11000000) == 0b11000000 ) {
 			// 双字节字符
 			size_t iLen = iSubSize - 1;
-			for ( int j = 0; j < iLen; j++ ) {
+			for ( size_t j = 0; j < iLen; j++ ) {
 				if ( (sSubText[j] == sText[i]) && (sSubText[j+1] == sText[i+1]) ) {
 					return &sText[i];
 				}
@@ -8313,7 +8575,7 @@ XXAPI str xrtCheckStr(str sText, size_t iSize, str sSubText, size_t iSubSize)
 		} else if ( (sText[i] & 0b11100000) == 0b11100000 ) {
 			// 三字节字符
 			size_t iLen = iSubSize - 2;
-			for ( int j = 0; j < iLen; j++ ) {
+			for ( size_t j = 0; j < iLen; j++ ) {
 				if ( (sSubText[j] == sText[i]) && (sSubText[j+1] == sText[i+1]) && (sSubText[j+2] == sText[i+2]) ) {
 					return &sText[i];
 				}
@@ -8322,7 +8584,7 @@ XXAPI str xrtCheckStr(str sText, size_t iSize, str sSubText, size_t iSubSize)
 		} else if ( (sText[i] & 0b11110000) == 0b11110000 ) {
 			// 四字节字符
 			size_t iLen = iSubSize - 3;
-			for ( int j = 0; j < iLen; j++ ) {
+			for ( size_t j = 0; j < iLen; j++ ) {
 				if ( (sSubText[j] == sText[i]) && (sSubText[j+1] == sText[i+1]) && (sSubText[j+2] == sText[i+2]) && (sSubText[j+3] == sText[i+3]) ) {
 					return &sText[i];
 				}
@@ -8331,7 +8593,7 @@ XXAPI str xrtCheckStr(str sText, size_t iSize, str sSubText, size_t iSubSize)
 		} else if ( (sText[i] & 0b11111000) == 0b11111000 ) {
 			// 五字节字符
 			size_t iLen = iSubSize - 4;
-			for ( int j = 0; j < iLen; j++ ) {
+			for ( size_t j = 0; j < iLen; j++ ) {
 				if ( (sSubText[j] == sText[i]) && (sSubText[j+1] == sText[i+1]) && (sSubText[j+2] == sText[i+2]) && (sSubText[j+3] == sText[i+3]) && (sSubText[j+4] == sText[i+4]) ) {
 					return &sText[i];
 				}
@@ -8340,7 +8602,7 @@ XXAPI str xrtCheckStr(str sText, size_t iSize, str sSubText, size_t iSubSize)
 		} else if ( (sText[i] & 0b11111100) == 0b11111100 ) {
 			// 六字节字符
 			size_t iLen = iSubSize - 5;
-			for ( int j = 0; j < iLen; j++ ) {
+			for ( size_t j = 0; j < iLen; j++ ) {
 				if ( (sSubText[j] == sText[i]) && (sSubText[j+1] == sText[i+1]) && (sSubText[j+2] == sText[i+2]) && (sSubText[j+3] == sText[i+3]) && (sSubText[j+4] == sText[i+4]) && (sSubText[j+5] == sText[i+5]) ) {
 					return &sText[i];
 				}
@@ -8356,17 +8618,17 @@ XXAPI str xrtCheckStr(str sText, size_t iSize, str sSubText, size_t iSubSize)
 XXAPI str xrtLTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool bSrcRevise, size_t* iRetSize)
 {
 	if ( sText == NULL ) { if ( iRetSize ) { *iRetSize = 0; } return xCore.sNull; }
-	if ( iSize == 0 ) { iSize = strlen(sText); }
+	if ( iSize == 0 ) { iSize = strlen(__xrt_cstr(sText)); }
 	if ( iSize == 0 ) { if ( iRetSize ) { *iRetSize = 0; } return xCore.sNull; }
-	if ( sSubText == NULL ) { sSubText = " \t\r\n"; iSubSize = 4; }
-	if ( iSubSize == 0 ) { iSubSize = strlen(sSubText); }
-	if ( iSubSize == 0 ) { sSubText = " \t\r\n"; iSubSize = 4; }
+	if ( sSubText == NULL ) { sSubText = (str)" \t\r\n"; iSubSize = 4; }
+	if ( iSubSize == 0 ) { iSubSize = strlen(__xrt_cstr(sSubText)); }
+	if ( iSubSize == 0 ) { sSubText = (str)" \t\r\n"; iSubSize = 4; }
 	int iCount = 0;
-	for ( int i = 0; i < iSize; i++ ) {
+	for ( size_t i = 0; i < iSize; i++ ) {
 		int bBreak = TRUE;
 		if ( (sText[i] & 0b10000000) == 0 ) {
 			// ASCII 兼容字符
-			for ( int j = 0; j < iSubSize; j++ ) {
+			for ( size_t j = 0; j < iSubSize; j++ ) {
 				if ( sSubText[j] == sText[i] ) {
 					iCount++;
 					bBreak = FALSE;
@@ -8376,7 +8638,7 @@ XXAPI str xrtLTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool 
 		} else if ( (sText[i] & 0b11000000) == 0b11000000 ) {
 			// 双字节字符
 			size_t iLen = iSubSize - 1;
-			for ( int j = 0; j < iLen; j++ ) {
+			for ( size_t j = 0; j < iLen; j++ ) {
 				if ( (sSubText[j] == sText[i]) && (sSubText[j+1] == sText[i+1]) ) {
 					iCount += 2;
 					bBreak = FALSE;
@@ -8387,7 +8649,7 @@ XXAPI str xrtLTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool 
 		} else if ( (sText[i] & 0b11100000) == 0b11100000 ) {
 			// 三字节字符
 			size_t iLen = iSubSize - 2;
-			for ( int j = 0; j < iLen; j++ ) {
+			for ( size_t j = 0; j < iLen; j++ ) {
 				if ( (sSubText[j] == sText[i]) && (sSubText[j+1] == sText[i+1]) && (sSubText[j+2] == sText[i+2]) ) {
 					iCount += 3;
 					bBreak = FALSE;
@@ -8398,7 +8660,7 @@ XXAPI str xrtLTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool 
 		} else if ( (sText[i] & 0b11110000) == 0b11110000 ) {
 			// 四字节字符
 			size_t iLen = iSubSize - 3;
-			for ( int j = 0; j < iLen; j++ ) {
+			for ( size_t j = 0; j < iLen; j++ ) {
 				if ( (sSubText[j] == sText[i]) && (sSubText[j+1] == sText[i+1]) && (sSubText[j+2] == sText[i+2]) && (sSubText[j+3] == sText[i+3]) ) {
 					iCount += 4;
 					bBreak = FALSE;
@@ -8409,7 +8671,7 @@ XXAPI str xrtLTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool 
 		} else if ( (sText[i] & 0b11111000) == 0b11111000 ) {
 			// 五字节字符
 			size_t iLen = iSubSize - 4;
-			for ( int j = 0; j < iLen; j++ ) {
+			for ( size_t j = 0; j < iLen; j++ ) {
 				if ( (sSubText[j] == sText[i]) && (sSubText[j+1] == sText[i+1]) && (sSubText[j+2] == sText[i+2]) && (sSubText[j+3] == sText[i+3]) && (sSubText[j+4] == sText[i+4]) ) {
 					iCount += 5;
 					bBreak = FALSE;
@@ -8420,7 +8682,7 @@ XXAPI str xrtLTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool 
 		} else if ( (sText[i] & 0b11111100) == 0b11111100 ) {
 			// 六字节字符
 			size_t iLen = iSubSize - 5;
-			for ( int j = 0; j < iLen; j++ ) {
+			for ( size_t j = 0; j < iLen; j++ ) {
 				if ( (sSubText[j] == sText[i]) && (sSubText[j+1] == sText[i+1]) && (sSubText[j+2] == sText[i+2]) && (sSubText[j+3] == sText[i+3]) && (sSubText[j+4] == sText[i+4]) && (sSubText[j+5] == sText[i+5]) ) {
 					iCount += 6;
 					bBreak = FALSE;
@@ -8449,17 +8711,17 @@ XXAPI str xrtLTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool 
 XXAPI str xrtRTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool bSrcRevise, size_t* iRetSize)
 {
 	if ( sText == NULL ) { if ( iRetSize ) { *iRetSize = 0; } return xCore.sNull; }
-	if ( iSize == 0 ) { iSize = strlen(sText); }
+	if ( iSize == 0 ) { iSize = strlen(__xrt_cstr(sText)); }
 	if ( iSize == 0 ) { if ( iRetSize ) { *iRetSize = 0; } return xCore.sNull; }
-	if ( sSubText == NULL ) { sSubText = " \t\r\n"; iSubSize = 4; }
-	if ( iSubSize == 0 ) { iSubSize = strlen(sSubText); }
-	if ( iSubSize == 0 ) { sSubText = " \t\r\n"; iSubSize = 4; }
+	if ( sSubText == NULL ) { sSubText = (str)" \t\r\n"; iSubSize = 4; }
+	if ( iSubSize == 0 ) { iSubSize = strlen(__xrt_cstr(sSubText)); }
+	if ( iSubSize == 0 ) { sSubText = (str)" \t\r\n"; iSubSize = 4; }
 	int iCount = 0;
 	for ( int i = iSize - 1; i >= 0; i-- ) {
 		int bBreak = TRUE;
 		if ( (sText[i] & 0b10000000) == 0 ) {
 			// ASCII 兼容字符
-			for ( int j = 0; j < iSubSize; j++ ) {
+			for ( size_t j = 0; j < iSubSize; j++ ) {
 				if ( sSubText[j] == sText[i] ) {
 					iCount++;
 					bBreak = FALSE;
@@ -8474,9 +8736,9 @@ XXAPI str xrtRTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool 
 			}
 			// 现在 i 指向首字节
 			int iCharLen = iEnd - i + 1;
-			if ( iCharLen <= iSubSize ) {
+			if ( (size_t)iCharLen <= iSubSize ) {
 				size_t iLen = iSubSize - iCharLen + 1;
-				for ( int j = 0; j < iLen; j++ ) {
+				for ( size_t j = 0; j < iLen; j++ ) {
 					bool bMatch = TRUE;
 					for ( int k = 0; k < iCharLen; k++ ) {
 						if ( sSubText[j + k] != sText[i + k] ) {
@@ -8512,19 +8774,19 @@ XXAPI str xrtRTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool 
 XXAPI str xrtTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool bSrcRevise, size_t* iRetSize)
 {
 	if ( sText == NULL ) { if ( iRetSize ) { *iRetSize = 0; } return xCore.sNull; }
-	if ( iSize == 0 ) { iSize = strlen(sText); }
+	if ( iSize == 0 ) { iSize = strlen(__xrt_cstr(sText)); }
 	if ( iSize == 0 ) { if ( iRetSize ) { *iRetSize = 0; } return xCore.sNull; }
-	if ( sSubText == NULL ) { sSubText = " \t\r\n"; iSubSize = 4; }
-	if ( iSubSize == 0 ) { iSubSize = strlen(sSubText); }
-	if ( iSubSize == 0 ) { sSubText = " \t\r\n"; iSubSize = 4; }
+	if ( sSubText == NULL ) { sSubText = (str)" \t\r\n"; iSubSize = 4; }
+	if ( iSubSize == 0 ) { iSubSize = strlen(__xrt_cstr(sSubText)); }
+	if ( iSubSize == 0 ) { sSubText = (str)" \t\r\n"; iSubSize = 4; }
 	int iCountL = 0;
 	int iCountR = 0;
 	// 裁剪左侧
-	for ( int i = 0; i < iSize; i++ ) {
+	for ( size_t i = 0; i < iSize; i++ ) {
 		int bBreak = TRUE;
 		if ( (sText[i] & 0b10000000) == 0 ) {
 			// ASCII 兼容字符
-			for ( int j = 0; j < iSubSize; j++ ) {
+			for ( size_t j = 0; j < iSubSize; j++ ) {
 				if ( sSubText[j] == sText[i] ) {
 					iCountL++;
 					bBreak = FALSE;
@@ -8534,7 +8796,7 @@ XXAPI str xrtTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool b
 		} else if ( (sText[i] & 0b11000000) == 0b11000000 ) {
 			// 双字节字符
 			size_t iLen = iSubSize - 1;
-			for ( int j = 0; j < iLen; j++ ) {
+			for ( size_t j = 0; j < iLen; j++ ) {
 				if ( (sSubText[j] == sText[i]) && (sSubText[j+1] == sText[i+1]) ) {
 					iCountL += 2;
 					bBreak = FALSE;
@@ -8545,7 +8807,7 @@ XXAPI str xrtTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool b
 		} else if ( (sText[i] & 0b11100000) == 0b11100000 ) {
 			// 三字节字符
 			size_t iLen = iSubSize - 2;
-			for ( int j = 0; j < iLen; j++ ) {
+			for ( size_t j = 0; j < iLen; j++ ) {
 				if ( (sSubText[j] == sText[i]) && (sSubText[j+1] == sText[i+1]) && (sSubText[j+2] == sText[i+2]) ) {
 					iCountL += 3;
 					bBreak = FALSE;
@@ -8556,7 +8818,7 @@ XXAPI str xrtTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool b
 		} else if ( (sText[i] & 0b11110000) == 0b11110000 ) {
 			// 四字节字符
 			size_t iLen = iSubSize - 3;
-			for ( int j = 0; j < iLen; j++ ) {
+			for ( size_t j = 0; j < iLen; j++ ) {
 				if ( (sSubText[j] == sText[i]) && (sSubText[j+1] == sText[i+1]) && (sSubText[j+2] == sText[i+2]) && (sSubText[j+3] == sText[i+3]) ) {
 					iCountL += 4;
 					bBreak = FALSE;
@@ -8567,7 +8829,7 @@ XXAPI str xrtTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool b
 		} else if ( (sText[i] & 0b11111000) == 0b11111000 ) {
 			// 五字节字符
 			size_t iLen = iSubSize - 4;
-			for ( int j = 0; j < iLen; j++ ) {
+			for ( size_t j = 0; j < iLen; j++ ) {
 				if ( (sSubText[j] == sText[i]) && (sSubText[j+1] == sText[i+1]) && (sSubText[j+2] == sText[i+2]) && (sSubText[j+3] == sText[i+3]) && (sSubText[j+4] == sText[i+4]) ) {
 					iCountL += 5;
 					bBreak = FALSE;
@@ -8578,7 +8840,7 @@ XXAPI str xrtTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool b
 		} else if ( (sText[i] & 0b11111100) == 0b11111100 ) {
 			// 六字节字符
 			size_t iLen = iSubSize - 5;
-			for ( int j = 0; j < iLen; j++ ) {
+			for ( size_t j = 0; j < iLen; j++ ) {
 				if ( (sSubText[j] == sText[i]) && (sSubText[j+1] == sText[i+1]) && (sSubText[j+2] == sText[i+2]) && (sSubText[j+3] == sText[i+3]) && (sSubText[j+4] == sText[i+4]) && (sSubText[j+5] == sText[i+5]) ) {
 					iCountL += 6;
 					bBreak = FALSE;
@@ -8594,13 +8856,13 @@ XXAPI str xrtTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool b
 		}
 	}
 	// 全部裁剪需要特殊处理
-	if ( iCountL >= iSize ) { if ( iRetSize ) { *iRetSize = 0; } return xCore.sNull; }
+	if ( (size_t)iCountL >= iSize ) { if ( iRetSize ) { *iRetSize = 0; } return xCore.sNull; }
 	// 裁剪右侧
 	for ( int i = iSize - 1; i >= 0; i-- ) {
 		int bBreak = TRUE;
 		if ( (sText[i] & 0b10000000) == 0 ) {
 			// ASCII 兼容字符
-			for ( int j = 0; j < iSubSize; j++ ) {
+			for ( size_t j = 0; j < iSubSize; j++ ) {
 				if ( sSubText[j] == sText[i] ) {
 					iCountR++;
 					bBreak = FALSE;
@@ -8615,9 +8877,9 @@ XXAPI str xrtTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool b
 			}
 			// 现在 i 指向首字节
 			int iCharLen = iEnd - i + 1;
-			if ( iCharLen <= iSubSize ) {
+			if ( (size_t)iCharLen <= iSubSize ) {
 				size_t iLen = iSubSize - iCharLen + 1;
-				for ( int j = 0; j < iLen; j++ ) {
+				for ( size_t j = 0; j < iLen; j++ ) {
 					bool bMatch = TRUE;
 					for ( int k = 0; k < iCharLen; k++ ) {
 						if ( sSubText[j + k] != sText[i + k] ) {
@@ -8656,21 +8918,21 @@ XXAPI str xrtTrim(str sText, size_t iSize, str sSubText, size_t iSubSize, bool b
 XXAPI str xrtFilterStr(str sText, size_t iSize, str sSubText, size_t iSubSize, bool bSrcRevise, size_t* iRetSize)
 {
 	if ( sText == NULL ) { if ( iRetSize ) { *iRetSize = 0; } return xCore.sNull; }
-	if ( iSize == 0 ) { iSize = strlen(sText); }
+	if ( iSize == 0 ) { iSize = strlen(__xrt_cstr(sText)); }
 	if ( iSize == 0 ) { if ( iRetSize ) { *iRetSize = 0; } return xCore.sNull; }
 	if ( sSubText == NULL ) { if ( bSrcRevise ) { if ( iRetSize ) { *iRetSize = iSize; } return sText; } else { if ( iRetSize ) { *iRetSize = iSize; } return xrtCopyStr(sText, iSize); } }
-	if ( iSubSize == 0 ) { iSubSize = strlen(sSubText); }
+	if ( iSubSize == 0 ) { iSubSize = strlen(__xrt_cstr(sSubText)); }
 	if ( iSubSize == 0 ) { if ( bSrcRevise ) { if ( iRetSize ) { *iRetSize = iSize; } return sText; } else { if ( iRetSize ) { *iRetSize = iSize; } return xrtCopyStr(sText, iSize); } }
 	// 不改动源数据时，直接创建副本
 	if ( bSrcRevise == FALSE ) {
 		sText = xrtCopyStr(sText, iSize);
 	}
 	int iCount = 0;
-	for ( int i = 0; i < iSize; i++ ) {
+	for ( size_t i = 0; i < iSize; i++ ) {
 		if ( (sText[i] & 0b10000000) == 0 ) {
 			// ASCII 兼容字符
 			int bCopy = TRUE;
-			for ( int j = 0; j < iSubSize; j++ ) {
+			for ( size_t j = 0; j < iSubSize; j++ ) {
 				if ( sSubText[j] == sText[i] ) {
 					iCount++;
 					bCopy = FALSE;
@@ -8684,7 +8946,7 @@ XXAPI str xrtFilterStr(str sText, size_t iSize, str sSubText, size_t iSubSize, b
 			// 双字节字符
 			int bCopy = TRUE;
 			size_t iLen = iSubSize - 1;
-			for ( int j = 0; j < iLen; j++ ) {
+			for ( size_t j = 0; j < iLen; j++ ) {
 				if ( (sSubText[j] == sText[i]) && (sSubText[j+1] == sText[i+1]) ) {
 					iCount += 2;
 					bCopy = FALSE;
@@ -8700,7 +8962,7 @@ XXAPI str xrtFilterStr(str sText, size_t iSize, str sSubText, size_t iSubSize, b
 			// 三字节字符
 			int bCopy = TRUE;
 			size_t iLen = iSubSize - 2;
-			for ( int j = 0; j < iLen; j++ ) {
+			for ( size_t j = 0; j < iLen; j++ ) {
 				if ( (sSubText[j] == sText[i]) && (sSubText[j+1] == sText[i+1]) && (sSubText[j+2] == sText[i+2]) ) {
 					iCount += 3;
 					bCopy = FALSE;
@@ -8717,7 +8979,7 @@ XXAPI str xrtFilterStr(str sText, size_t iSize, str sSubText, size_t iSubSize, b
 			// 四字节字符
 			int bCopy = TRUE;
 			size_t iLen = iSubSize - 3;
-			for ( int j = 0; j < iLen; j++ ) {
+			for ( size_t j = 0; j < iLen; j++ ) {
 				if ( (sSubText[j] == sText[i]) && (sSubText[j+1] == sText[i+1]) && (sSubText[j+2] == sText[i+2]) && (sSubText[j+3] == sText[i+3]) ) {
 					iCount += 4;
 					bCopy = FALSE;
@@ -8735,7 +8997,7 @@ XXAPI str xrtFilterStr(str sText, size_t iSize, str sSubText, size_t iSubSize, b
 			// 五字节字符
 			int bCopy = TRUE;
 			size_t iLen = iSubSize - 4;
-			for ( int j = 0; j < iLen; j++ ) {
+			for ( size_t j = 0; j < iLen; j++ ) {
 				if ( (sSubText[j] == sText[i]) && (sSubText[j+1] == sText[i+1]) && (sSubText[j+2] == sText[i+2]) && (sSubText[j+3] == sText[i+3]) && (sSubText[j+4] == sText[i+4]) ) {
 					iCount += 5;
 					bCopy = FALSE;
@@ -8754,7 +9016,7 @@ XXAPI str xrtFilterStr(str sText, size_t iSize, str sSubText, size_t iSubSize, b
 			// 六字节字符
 			int bCopy = TRUE;
 			size_t iLen = iSubSize - 5;
-			for ( int j = 0; j < iLen; j++ ) {
+			for ( size_t j = 0; j < iLen; j++ ) {
 				if ( (sSubText[j] == sText[i]) && (sSubText[j+1] == sText[i+1]) && (sSubText[j+2] == sText[i+2]) && (sSubText[j+3] == sText[i+3]) && (sSubText[j+4] == sText[i+4]) && (sSubText[j+5] == sText[i+5]) ) {
 					iCount += 6;
 					bCopy = FALSE;
@@ -8779,18 +9041,19 @@ XXAPI str xrtFilterStr(str sText, size_t iSize, str sSubText, size_t iSubSize, b
 	return sText;
 }
 // 字符串格式化（ 需使用 xrtFree 释放 ）
-XXAPI str xrtFormat(str sFormat, ...)
+XXAPI str xrtFormat(const void* sFormat, ...)
 {
-	if ( sFormat == NULL ) { return xCore.sNull; }
+	const char* sFormatText = __xrt_cstr(sFormat);
+	if ( sFormatText == NULL ) { return xCore.sNull; }
 	va_list ip;
 	va_start(ip, sFormat);
-	int iSize = vsnprintf(NULL, 0, sFormat, ip);
+	int iSize = vsnprintf(NULL, 0, sFormatText, ip);
 	va_end(ip);
 	if ( iSize > 0 ) {
 		str sRet = xrtMalloc(iSize + 1);
 		if ( sRet == NULL ) { return xCore.sNull; }
 		va_start(ip, sFormat);
-		iSize = vsnprintf(sRet, iSize + 1, sFormat, ip);
+		iSize = vsnprintf(__xrt_str(sRet), iSize + 1, sFormatText, ip);
 		va_end(ip);
 		sRet[iSize] = 0;
 		return sRet;
@@ -8802,12 +9065,12 @@ XXAPI str xrtFormat(str sFormat, ...)
 XXAPI str xrtReplace(str sText, size_t iSize, str sSubText, size_t iSubSize, str sRepText, size_t iRepSize, size_t* iRetSize)
 {
 	if ( sText == NULL ) { if ( iRetSize ) { *iRetSize = 0; } return xCore.sNull; }
-	if ( iSize == 0 ) { iSize = strlen(sText); }
+	if ( iSize == 0 ) { iSize = strlen(__xrt_cstr(sText)); }
 	if ( iSize == 0 ) { if ( iRetSize ) { *iRetSize = 0; } return xCore.sNull; }
 	if ( sSubText == NULL ) { if ( iRetSize ) { *iRetSize = iSize; } return xrtCopyStr(sText, iSize); }
-	if ( iSubSize == 0 ) { iSubSize = strlen(sSubText); }
+	if ( iSubSize == 0 ) { iSubSize = strlen(__xrt_cstr(sSubText)); }
 	if ( iSubSize == 0 ) { if ( iRetSize ) { *iRetSize = iSize; } return xrtCopyStr(sText, iSize); }
-	if ( sRepText == NULL ) { iRepSize = 0; } else { if ( iRepSize == 0 ) { iRepSize = strlen(sRepText); } }
+	if ( sRepText == NULL ) { iRepSize = 0; } else { if ( iRepSize == 0 ) { iRepSize = strlen(__xrt_cstr(sRepText)); } }
 	// 计算 sSubText 在 sText 中出现的次数
 	size_t iFindCount = 0;
 	str sTextPtr;
@@ -8824,10 +9087,10 @@ XXAPI str xrtReplace(str sText, size_t iSize, str sSubText, size_t iSubSize, str
 	for ( sTextPtr = sText; (sSubPos = memmem(sTextPtr, iSize - (sTextPtr - sText) + 1, sSubText, iSubSize)); sTextPtr = sSubPos + iSubSize ) {
 		size_t iSkipSize = sSubPos - sTextPtr;
 		// 复制前面的部分，直到出现要查找的字符串
-		strncpy(sRetPtr, sTextPtr, iSkipSize);
+		strncpy(__xrt_str(sRetPtr), __xrt_cstr(sTextPtr), iSkipSize);
 		sRetPtr += iSkipSize;
 		// 复制要替换的字符串
-		strncpy(sRetPtr, sRepText, iRepSize);
+		strncpy(__xrt_str(sRetPtr), __xrt_cstr(sRepText), iRepSize);
 		sRetPtr += iRepSize;
 	}
 	// 复制最后一段剩下的字符串
@@ -8842,17 +9105,17 @@ XXAPI str xrtReplace(str sText, size_t iSize, str sSubText, size_t iSubSize, str
 XXAPI str* xrtSplit(str sText, size_t iSize, str sSepText, size_t iSepSize, bool bSrcRevise, size_t* iRetSize)
 {
 	if ( sText == NULL ) { goto return_nullstr; }
-	if ( iSize == 0 ) { iSize = strlen(sText); }
+	if ( iSize == 0 ) { iSize = strlen(__xrt_cstr(sText)); }
 	if ( iSize == 0 ) { goto return_nullstr; }
 	if ( sSepText == NULL ) { goto return_nullsep; }
-	if ( iSepSize == 0 ) { iSize = strlen(sSepText); }
+	if ( iSepSize == 0 ) { iSepSize = strlen(__xrt_cstr(sSepText)); }
 	if ( iSepSize == 0 ) { goto return_nullsep; }
 	// 统计分隔符出现的次数
 	int iCount = 0;
-	for ( int i = 0; i < iSize; i++ ) {
+	for ( size_t i = 0; i < iSize; i++ ) {
 		str pPos = &sText[i];
 		int bOK = TRUE;
-		for ( int j = 0; j < iSepSize; j++ ) {
+		for ( size_t j = 0; j < iSepSize; j++ ) {
 			if ( pPos[j] != sSepText[j] ) {
 				bOK = FALSE;
 				break;
@@ -8887,10 +9150,10 @@ XXAPI str* xrtSplit(str sText, size_t iSize, str sSepText, size_t iSepSize, bool
 	iCount = 0;
 	int iPos = 0;
 	str pAddr = pData;
-	for ( int i = 0; i < iSize; i++ ) {
+	for ( size_t i = 0; i < iSize; i++ ) {
 		str pPos = &sText[i];
 		int bOK = TRUE;
-		for ( int j = 0; j < iSepSize; j++ ) {
+		for ( size_t j = 0; j < iSepSize; j++ ) {
 			if ( pPos[j] != sSepText[j] ) {
 				bOK = FALSE;
 				break;
@@ -8965,11 +9228,11 @@ return_error:
 	return (str*)xCore.sNull;
 }
 // 生成随机字符串（ 需使用 xrtFree 释放 ）
-static const str RandStringDefaultTemplate = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_";
+static const str RandStringDefaultTemplate = (str)"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_";
 XXAPI str xrtRandStr(str sTemplate, size_t iSize, size_t iLen)
 {
 	if ( sTemplate == NULL ) { sTemplate = RandStringDefaultTemplate; iSize = 64; }
-	if ( iSize == 0 ) { iSize = strlen(sTemplate); }
+	if ( iSize == 0 ) { iSize = strlen(__xrt_cstr(sTemplate)); }
 	if ( iSize == 0 ) { sTemplate = RandStringDefaultTemplate; iSize = 64; }
 	if ( iLen == 0 ) { return xCore.sNull; }
 	iSize--;
@@ -8977,7 +9240,7 @@ XXAPI str xrtRandStr(str sTemplate, size_t iSize, size_t iLen)
 	if ( sRet == NULL ) {
 		return xCore.sNull;
 	}
-	for ( int i = 0; i < iLen; i++ ) {
+	for ( size_t i = 0; i < iLen; i++ ) {
 		int idx = xrtRandRange(0, iSize);
 		sRet[i] = sTemplate[idx];
 	}
@@ -8989,13 +9252,13 @@ XXAPI str xrtRandStr(str sTemplate, size_t iSize, size_t iLen)
 XXAPI str xrtHexEncode(ptr pMem, size_t iSize)
 {
 	if ( pMem == NULL ) { return xCore.sNull; }
-	if ( iSize == 0 ) { iSize = strlen(pMem); }
+	if ( iSize == 0 ) { iSize = strlen((const char*)pMem); }
 	if ( iSize == 0 ) { return xCore.sNull; }
 	str sRet = xrtMalloc((iSize * 2) + 1);
 	if ( sRet == NULL ) { return xCore.sNull; }
 	uint8* pStr = pMem;
 	int iPos = 0;
-	for ( int i = 0; i < iSize; i++ ) {
+	for ( size_t i = 0; i < iSize; i++ ) {
 		int i1 = (pStr[i] & 0xF0) >> 4;
 		int i2 = pStr[i] & 0x0F;
 		sRet[iPos++] = dec2hex(i1);
@@ -9009,12 +9272,12 @@ XXAPI str xrtHexEncode(ptr pMem, size_t iSize)
 XXAPI ptr xrtHexDecode(str sText, size_t iSize)
 {
 	if ( sText == NULL ) { return xCore.sNull; }
-	if ( iSize == 0 ) { iSize = strlen(sText); }
+	if ( iSize == 0 ) { iSize = strlen(__xrt_cstr(sText)); }
 	if ( iSize == 0 ) { return xCore.sNull; }
 	str sRet = xrtMalloc((iSize / 2) + 1);
 	if ( sRet == NULL ) { return xCore.sNull; }
 	int iPos = 0;
-	for ( int i = 0; i < iSize; i++ ) {
+	for ( size_t i = 0; i < iSize; i++ ) {
 		uint8 c0 = sText[i++];
 		uint8 c1 = sText[i];
 		sRet[iPos++] = (hex2dec(c0) << 4) + hex2dec(c1);
@@ -9023,11 +9286,11 @@ XXAPI ptr xrtHexDecode(str sText, size_t iSize)
 	return sRet;
 }
 // Base64 编码（ 需使用 xrtFree 释放 ）
-static const str Base64EncodeTable = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static const str Base64EncodeTable = (str)"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 XXAPI str xrtBase64Encode(ptr pMem, size_t iSize, str sTable)
 {
 	if ( pMem == NULL ) { return xCore.sNull; }
-	if ( iSize == 0 ) { iSize = strlen(pMem); }
+	if ( iSize == 0 ) { iSize = strlen((const char*)pMem); }
 	if ( iSize == 0 ) { return xCore.sNull; }
 	if ( sTable == NULL ) { sTable = Base64EncodeTable; }
 	// 申请返回值内存
@@ -9055,12 +9318,12 @@ XXAPI str xrtBase64Encode(ptr pMem, size_t iSize, str sTable)
 	return sRet;
 }
 // Base64 解码（ 需使用 xrtFree 释放 ）
-static const str sErrorBase64_mul4 = "Base64 input length must be multiple of 4 !";
-static const str sErrorBase64_char = "Base64 input contains invalid characters !";
+static const str sErrorBase64_mul4 = (str)"Base64 input length must be multiple of 4 !";
+static const str sErrorBase64_char = (str)"Base64 input contains invalid characters !";
 XXAPI ptr xrtBase64Decode(str sText, size_t iSize, str sTable)
 {
 	if ( sText == NULL ) { return xCore.sNull; }
-	if ( iSize == 0 ) { iSize = strlen(sText); }
+	if ( iSize == 0 ) { iSize = strlen(__xrt_cstr(sText)); }
 	if ( iSize == 0 ) { return xCore.sNull; }
 	int8_t Base64DecodeTable[128] = {
 		-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,		// 0-15
@@ -9092,11 +9355,15 @@ XXAPI ptr xrtBase64Decode(str sText, size_t iSize, str sTable)
 		return xCore.sNull;
 	}
 	// 开始解码
-	for (size_t i = 0, j = 0; i < iSize;) {
-		int8_t sextet_a = sText[i] == '=' ? 0 & i++ : Base64DecodeTable[(int)sText[i++]];
-		int8_t sextet_b = sText[i] == '=' ? 0 & i++ : Base64DecodeTable[(int)sText[i++]];
-		int8_t sextet_c = sText[i] == '=' ? 0 & i++ : Base64DecodeTable[(int)sText[i++]];
-		int8_t sextet_d = sText[i] == '=' ? 0 & i++ : Base64DecodeTable[(int)sText[i++]];
+	for ( size_t i = 0, j = 0; i < iSize; ) {
+		int8_t sextet_a = sText[i] == '=' ? 0 : Base64DecodeTable[(int)sText[i]];
+		i++;
+		int8_t sextet_b = sText[i] == '=' ? 0 : Base64DecodeTable[(int)sText[i]];
+		i++;
+		int8_t sextet_c = sText[i] == '=' ? 0 : Base64DecodeTable[(int)sText[i]];
+		i++;
+		int8_t sextet_d = sText[i] == '=' ? 0 : Base64DecodeTable[(int)sText[i]];
+		i++;
 		// 发现非法字符
 		if (sextet_a == -1 || sextet_b == -1 || sextet_c == -1 || sextet_d == -1) {
 			xrtSetError(sErrorBase64_char, FALSE);
@@ -9105,9 +9372,9 @@ XXAPI ptr xrtBase64Decode(str sText, size_t iSize, str sTable)
 		}
 		// 组合 4 个 6 位值为 3 个 8 位字节
 		uint32_t triple = (sextet_a << 3 * 6) + (sextet_b << 2 * 6) + (sextet_c << 1 * 6) + (sextet_d << 0 * 6);
-		if ( j < iRet ) { sRet[j++] = (triple >> 2 * 8) & 0xFF; }
-		if ( j < iRet ) { sRet[j++] = (triple >> 1 * 8) & 0xFF; }
-		if ( j < iRet ) { sRet[j++] = (triple >> 0 * 8) & 0xFF; }
+		if ( j < (size_t)iRet ) { sRet[j++] = (triple >> 2 * 8) & 0xFF; }
+		if ( j < (size_t)iRet ) { sRet[j++] = (triple >> 1 * 8) & 0xFF; }
+		if ( j < (size_t)iRet ) { sRet[j++] = (triple >> 0 * 8) & 0xFF; }
 	}
 	sRet[iRet] = '\0';
 	return sRet;
@@ -9118,12 +9385,12 @@ XXAPI bool xrtStrLike(str sText, size_t iTextSize, str sPattern, size_t iPatSize
 {
 	// 参数检查
 	if ( sPattern == NULL ) { return FALSE; }
-	if ( iPatSize == 0 ) { iPatSize = strlen(sPattern); }
+	if ( iPatSize == 0 ) { iPatSize = strlen(__xrt_cstr(sPattern)); }
 	
 	// 空模式只匹配空字符串
 	if ( iPatSize == 0 ) {
 		if ( sText == NULL ) { return TRUE; }
-		if ( iTextSize == 0 ) { iTextSize = strlen(sText); }
+		if ( iTextSize == 0 ) { iTextSize = strlen(__xrt_cstr(sText)); }
 		return iTextSize == 0;
 	}
 	
@@ -9135,7 +9402,7 @@ XXAPI bool xrtStrLike(str sText, size_t iTextSize, str sPattern, size_t iPatSize
 		}
 		return TRUE;
 	}
-	if ( iTextSize == 0 ) { iTextSize = strlen(sText); }
+	if ( iTextSize == 0 ) { iTextSize = strlen(__xrt_cstr(sText)); }
 	if ( iTextSize == 0 ) {
 		for ( size_t i = 0; i < iPatSize; i++ ) {
 			if ( sPattern[i] != '*' ) { return FALSE; }
@@ -9230,7 +9497,7 @@ static inline void xrt_parse_format(str format, XrtNumFmtOpts* opts)
 	
 	if ( format == NULL || *format == '\0' ) { return; }
 	
-	const char* p = format;
+	const char* p = __xrt_cstr(format);
 	while ( *p ) {
 		char c = *p++;
 		switch ( c ) {
@@ -9357,7 +9624,7 @@ XXAPI str xrtIntFormat(int64 value, str format)
 	str buffer = xrtMalloc(totalLen + 1);
 	if ( buffer == NULL ) { return xCore.sNull; }
 	
-	char* out = buffer;
+	char* out = __xrt_str(buffer);
 	
 	// 写入符号
 	if ( signLen ) {
@@ -9450,7 +9717,7 @@ XXAPI str xrtNumFormat(double value, str format)
 	str buffer = xrtMalloc(totalLen + 1);
 	if ( buffer == NULL ) { return xCore.sNull; }
 	
-	char* out = buffer;
+	char* out = __xrt_str(buffer);
 	
 	// 写入符号
 	if ( negative ) {
@@ -9492,12 +9759,12 @@ XXAPI str xrtNumFormat(double value, str format)
 XXAPI double xrtStrSim(str s1, size_t len1, str s2, size_t len2)
 {
 	// 空指针检查
-	if ( s1 == NULL ) { s1 = ""; len1 = 0; }
-	if ( s2 == NULL ) { s2 = ""; len2 = 0; }
+	if ( s1 == NULL ) { s1 = (str)""; len1 = 0; }
+	if ( s2 == NULL ) { s2 = (str)""; len2 = 0; }
 	
 	// 自动计算长度
-	if ( len1 == 0 ) { len1 = strlen(s1); }
-	if ( len2 == 0 ) { len2 = strlen(s2); }
+	if ( len1 == 0 ) { len1 = strlen(__xrt_cstr(s1)); }
+	if ( len2 == 0 ) { len2 = strlen(__xrt_cstr(s2)); }
 	
 	// 快速路径：空字符串
 	if ( len1 == 0 && len2 == 0 ) { return 1.0; }
@@ -11905,7 +12172,7 @@ XXAPI bool xrtNumApprox(double a, double b)
 XXAPI str xrtPathGetNameExt(str sPath, size_t iSize)
 {
 	if ( sPath == NULL ) { return xCore.sNull; }
-	if ( iSize == 0 ) { iSize = strlen(sPath); }
+	if ( iSize == 0 ) { iSize = strlen((const char*)sPath); }
 	if ( iSize == 0 ) { return xCore.sNull; }
 	for ( int i = iSize - 1; i >= 0; i-- ) {
 		if ( (sPath[i] == L'/') || (sPath[i] == L'\\') ) {
@@ -11922,7 +12189,7 @@ XXAPI str xrtPathGetNameExt(str sPath, size_t iSize)
 XXAPI str xrtPathGetName(str sPath, size_t iSize)
 {
 	if ( sPath == NULL ) { return xCore.sNull; }
-	if ( iSize == 0 ) { iSize = strlen(sPath); }
+	if ( iSize == 0 ) { iSize = strlen((const char*)sPath); }
 	if ( iSize == 0 ) { return xCore.sNull; }
 	uint iPointPos = 0;
 	for ( int i = iSize - 1; i >= 0; i-- ) {
@@ -11942,7 +12209,7 @@ XXAPI str xrtPathGetName(str sPath, size_t iSize)
 XXAPI str xrtPathGetExt(str sPath, size_t iSize)
 {
 	if ( sPath == NULL ) { return xCore.sNull; }
-	if ( iSize == 0 ) { iSize = strlen(sPath); }
+	if ( iSize == 0 ) { iSize = strlen((const char*)sPath); }
 	if ( iSize == 0 ) { return xCore.sNull; }
 	for ( int i = iSize - 1; i >= 0; i-- ) {
 		if ( sPath[i] == L'.' ) {
@@ -11957,7 +12224,7 @@ XXAPI str xrtPathGetExt(str sPath, size_t iSize)
 XXAPI str xrtPathGetDir(str sPath, size_t iSize)
 {
 	if ( sPath == NULL ) { return xCore.sNull; }
-	if ( iSize == 0 ) { iSize = strlen(sPath); }
+	if ( iSize == 0 ) { iSize = strlen((const char*)sPath); }
 	if ( iSize == 0 ) { return xCore.sNull; }
 	for ( int i = iSize - 1; i >= 0; i-- ) {
 		if ( (sPath[i] == L'/') || (sPath[i] == L'\\') ) {
@@ -11974,12 +12241,12 @@ XXAPI str xrtPathGetDir(str sPath, size_t iSize)
 XXAPI bool xrtPathIsAbs(str sPath, size_t iSize)
 {
 	if ( sPath == NULL ) { return FALSE; }
-	if ( iSize == 0 ) { iSize = strlen(sPath); }
+	if ( iSize == 0 ) { iSize = strlen((const char*)sPath); }
 	if ( iSize == 0 ) { return FALSE; }
 	if ( sPath[0] == '/' ) {
 		return TRUE;
 	}
-	for ( int i = 0; i < iSize; i++ ) {
+	for ( size_t i = 0; i < iSize; i++ ) {
 		if ( sPath[i] == ':' ) {
 			return TRUE;
 		}
@@ -11990,13 +12257,13 @@ XXAPI bool xrtPathIsAbs(str sPath, size_t iSize)
 XXAPI str xrtPathRandom(str sHead, size_t iHeadSize, str sFoot, size_t iFootSize, size_t iLen)
 {
 	if ( sHead ) {
-		if ( iHeadSize == 0 ) { iHeadSize = strlen(sHead); }
+		if ( iHeadSize == 0 ) { iHeadSize = strlen((const char*)sHead); }
 		if ( iHeadSize == 0 ) { sHead = NULL; }
 	} else {
 		iHeadSize = 0;
 	}
 	if ( sFoot ) {
-		if ( iFootSize == 0 ) { iFootSize = strlen(sFoot); }
+		if ( iFootSize == 0 ) { iFootSize = strlen((const char*)sFoot); }
 		if ( iFootSize == 0 ) { sFoot = NULL; }
 	} else {
 		iFootSize = 0;
@@ -12010,7 +12277,7 @@ XXAPI str xrtPathRandom(str sHead, size_t iHeadSize, str sFoot, size_t iFootSize
 	if ( sHead ) {
 		memcpy(sRet, sHead, iHeadSize);
 	}
-	for ( int i = 0; i < iLen; i++ ) {
+	for ( size_t i = 0; i < iLen; i++ ) {
 		int idx = xrtRandRange(0, 61);		// 这里写 61，可以忽略 - 和 _ 字符
 		sRet[iHeadSize + i] = RandStringDefaultTemplate[idx];
 	}
@@ -12031,10 +12298,10 @@ XXAPI str xrtPathJoin(uint iCount, ...)
 	va_list args;
 	va_start(args, iCount);
 	size_t iPos = 0;
-	for ( int i = 0; i < iCount; i++ ) {
+	for ( uint i = 0; i < iCount; i++ ) {
 		str sPath = va_arg(args, str);
 		if ( sPath == NULL ) { continue; }
-		size_t iSize = strlen(sPath);
+		size_t iSize = strlen((const char*)sPath);
 		if ( iSize == 0 ) { continue; }
 		if ( (iPos + iSize) > 4094 ) { xrtFree(sRet); return xCore.sNull; }
 		memcpy(&sRet[iPos], sPath, iSize);
@@ -12177,8 +12444,8 @@ XXAPI xtime xrtDateSerial(int64 iYear, int iMonth, int iDay)
 		iYear = llabs(iYear);
 		uint64 iYear400 = iYear / 400;
 		uint64 iYearMod = iYear % 400;
-		for ( int i = 0; i < iYearMod; i++ ) {
-			iDate += xrtDaysInYear(i) * XRT_TIME_DAY;
+		for ( uint64 i = 0; i < iYearMod; i++ ) {
+			iDate += xrtDaysInYear((int)i) * XRT_TIME_DAY;
 		}
 		iDate += iYear400 * XRT_TIME_400YEAR;
 		iDate = iDate * -1;
@@ -12186,8 +12453,8 @@ XXAPI xtime xrtDateSerial(int64 iYear, int iMonth, int iDay)
 		// 公元后
 		uint64 iYear400 = iYear / 400;
 		uint64 iYearMod = iYear % 400;
-		for ( int i = 0; i < iYearMod; i++ ) {
-			iDate += xrtDaysInYear(i) * XRT_TIME_DAY;
+		for ( uint64 i = 0; i < iYearMod; i++ ) {
+			iDate += xrtDaysInYear((int)i) * XRT_TIME_DAY;
 		}
 		iDate += iYear400 * XRT_TIME_400YEAR;
 	}
@@ -12219,7 +12486,6 @@ XXAPI int xrtHour(xtime iTime)
 XXAPI int xrtDay(xtime iTime)
 {
 	xtime iTimeAbs = llabs(iTime);
-	uint64 iYear400 = iTimeAbs / XRT_TIME_400YEAR;
 	uint64 iYearMod = iTimeAbs % XRT_TIME_400YEAR;
 	uint64 iYear = 0;
 	for ( int i = 0; i < 400; i++ ) {
@@ -12256,7 +12522,6 @@ XXAPI int xrtDay(xtime iTime)
 XXAPI int xrtMonth(xtime iTime)
 {
 	xtime iTimeAbs = llabs(iTime);
-	uint64 iYear400 = iTimeAbs / XRT_TIME_400YEAR;
 	uint64 iYearMod = iTimeAbs % XRT_TIME_400YEAR;
 	uint64 iYear = 0;
 	for ( int i = 0; i < 400; i++ ) {
@@ -12779,12 +13044,12 @@ XXAPI str xrtRelativeTime(xtime iTime, xtime iBaseTime)
 XXAPI xtime xrtStrToTime(str sTime, size_t iSize)
 {
 	if ( !sTime ) return 0;
-	if ( iSize == 0 ) iSize = strlen(sTime);
+	if ( iSize == 0 ) iSize = strlen((const char*)sTime);
 	if ( iSize == 0 ) return 0;
 	
 	int year = 0, month = 1, day = 1, hour = 0, minute = 0, second = 0;
-	const char* p = sTime;
-	const char* end = sTime + iSize;
+	const char* p = (const char*)sTime;
+	const char* end = (const char*)sTime + iSize;
 	
 	// 跳过前导非数字
 	while ( p < end && (*p < '0' || *p > '9') ) p++;
@@ -13114,7 +13379,7 @@ static void _xrtParseFormat(const char* fmt, _XrtFmtResult* result, int forParse
 	}
 }
 // 时间格式化为字符串
-XXAPI str xrtTimeFormat(xtime iTime, str sFormat)
+XXAPI str xrtTimeFormat(xtime iTime, const void* sFormat)
 {
 	if (!sFormat) return NULL;
 	_XrtFmtResult fmt;
@@ -13140,10 +13405,10 @@ XXAPI str xrtTimeFormat(xtime iTime, str sFormat)
 			case _XRT_FMT_MONTH2: _xrtWrite2Digit(buf + pos, iMonth); pos += 2; break;
 			case _XRT_FMT_MONTH1: pos += snprintf(buf + pos, bufSize - pos, "%d", iMonth); break;
 			case _XRT_FMT_MONTH_SHORT:
-				if (iMonth >= 1 && iMonth <= 12) { size_t len = strlen(_xrtMonthShort[iMonth - 1]); memcpy(buf + pos, _xrtMonthShort[iMonth - 1], len); pos += len; }
+				if (iMonth >= 1 && iMonth <= 12) { size_t len = strlen((const char*)_xrtMonthShort[iMonth - 1]); memcpy(buf + pos, _xrtMonthShort[iMonth - 1], len); pos += len; }
 				break;
 			case _XRT_FMT_MONTH_FULL:
-				if (iMonth >= 1 && iMonth <= 12) { size_t len = strlen(_xrtMonthFull[iMonth - 1]); memcpy(buf + pos, _xrtMonthFull[iMonth - 1], len); pos += len; }
+				if (iMonth >= 1 && iMonth <= 12) { size_t len = strlen((const char*)_xrtMonthFull[iMonth - 1]); memcpy(buf + pos, _xrtMonthFull[iMonth - 1], len); pos += len; }
 				break;
 			case _XRT_FMT_DAY2: _xrtWrite2Digit(buf + pos, iDay); pos += 2; break;
 			case _XRT_FMT_DAY1: pos += snprintf(buf + pos, bufSize - pos, "%d", iDay); break;
@@ -13159,27 +13424,27 @@ XXAPI str xrtTimeFormat(xtime iTime, str sFormat)
 			case _XRT_FMT_AMPM_UPPER: buf[pos++] = isPM ? 'P' : 'A'; buf[pos++] = 'M'; break;
 			case _XRT_FMT_WEEKDAY_NUM: buf[pos++] = '0' + iWeekday; break;
 			case _XRT_FMT_WEEKDAY_SHORT:
-				if (iWeekday >= 0 && iWeekday <= 6) { size_t len = strlen(_xrtWeekShort[iWeekday]); memcpy(buf + pos, _xrtWeekShort[iWeekday], len); pos += len; }
+				if (iWeekday >= 0 && iWeekday <= 6) { size_t len = strlen((const char*)_xrtWeekShort[iWeekday]); memcpy(buf + pos, _xrtWeekShort[iWeekday], len); pos += len; }
 				break;
 			case _XRT_FMT_WEEKDAY_FULL:
-				if (iWeekday >= 0 && iWeekday <= 6) { size_t len = strlen(_xrtWeekFull[iWeekday]); memcpy(buf + pos, _xrtWeekFull[iWeekday], len); pos += len; }
+				if (iWeekday >= 0 && iWeekday <= 6) { size_t len = strlen((const char*)_xrtWeekFull[iWeekday]); memcpy(buf + pos, _xrtWeekFull[iWeekday], len); pos += len; }
 				break;
 			case _XRT_FMT_QUARTER: buf[pos++] = '0' + iQuarter; break;
 			default: break;
 		}
 	}
 	buf[pos] = '\0';
-	return buf;
+	return (str)buf;
 }
 // 字符串解析为时间
 XXAPI xtime xrtTimeParse(str sTime, str sFormat)
 {
 	if (!sTime || !sFormat) return 0;
 	_XrtFmtResult fmt;
-	_xrtParseFormat(sFormat, &fmt, 1);
+	_xrtParseFormat((const char*)sFormat, &fmt, 1);
 	if (fmt.count == 0) return 0;
-	const char* s = sTime;
-	const char* end = sTime + strlen(sTime);
+	const char* s = (const char*)sTime;
+	const char* end = (const char*)sTime + strlen((const char*)sTime);
 	int year = 0, month = 1, day = 1, hour = 0, minute = 0, second = 0;
 	int isPM = -1, is12Hour = 0;
 	for (int i = 0; i < fmt.count && s < end; i++) {
@@ -13324,13 +13589,13 @@ XXAPI bool xrtTimeApprox(xtime a, xtime b)
 
 
 // 错误描述定义
-static const str sErrorFile_Open = "Failed to open file !";
-static const str sErrorFile_OpenDir = "Failed to open dir !";
-static const str sErrorFile_Handle = "Incorrect file handle !";
-static const str sErrorFile_BOM = "Incorrect BOM data !";
-static const str sErrorFile_Seek = "Incorrect seek method !";
-static const str sErrorFile_Read = "File read failure !";
-static const str sErrorFile_Write = "File write failure !";
+static const str sErrorFile_Open = (str)"Failed to open file !";
+static const str sErrorFile_OpenDir = (str)"Failed to open dir !";
+static const str sErrorFile_Handle = (str)"Incorrect file handle !";
+static const str sErrorFile_BOM = (str)"Incorrect BOM data !";
+static const str sErrorFile_Seek = (str)"Incorrect seek method !";
+static const str sErrorFile_Read = (str)"File read failure !";
+static const str sErrorFile_Write = (str)"File write failure !";
 // 打开文件
 XXAPI xfile xrtOpen(str sPath, int bReadOnly, int iCharset)
 {
@@ -13871,7 +14136,7 @@ XXAPI size_t xrtWrite(xfile objFile, str sText, size_t iSize)
 		// windows 方案
 		if ( objFile && (objFile->obj != INVALID_HANDLE_VALUE) ) {
 			if ( sText == NULL ) { return 0; }
-			if ( iSize == 0 ) { iSize = strlen(sText); }
+			if ( iSize == 0 ) { iSize = strlen((const char*)sText); }
 			if ( iSize == 0 ) { return 0; }
 			DWORD iRetSize;
 			if ( (objFile->Charset >= 0) && (objFile->Charset != XRT_CP_UTF8) ) {
@@ -13928,6 +14193,43 @@ XXAPI size_t xrtWrite(xfile objFile, str sText, size_t iSize)
 					xrtSetError(sErrorFile_Write, FALSE);
 					return 0;
 				}
+			}
+		} else {
+			xrtSetError(sErrorFile_Handle, FALSE);
+			return 0;
+		}
+	#endif
+}
+// 从已打开的文件读取二进制数据到特定位置
+XXAPI size_t xrtGetBuffer(xfile objFile, ptr sBuff, size_t iSize)
+{
+	#if defined(_WIN32) || defined(_WIN64)
+		// windows 方案
+		if ( objFile && (objFile->obj != INVALID_HANDLE_VALUE) ) {
+			if ( iSize == 0 ) { return 0; }
+			// 读取数据
+			DWORD iRet;
+			if ( ReadFile(objFile->obj, sBuff, iSize, &iRet, NULL) ) {
+				return iRet;
+			} else {
+				xrtSetError(sErrorFile_Read, FALSE);
+				return 0;
+			}
+		} else {
+			xrtSetError(sErrorFile_Handle, FALSE);
+			return 0;
+		}
+	#else
+		// 其他平台方案
+		if ( objFile && (objFile->idx != -1) ) {
+			if ( iSize == 0 ) { return 0; }
+			// 读取数据
+			ssize_t iRet = read(objFile->idx, sBuff, iSize);
+			if ( iRet >= 0 ) {
+				return (size_t)iRet;
+			} else {
+				xrtSetError(sErrorFile_Read, FALSE);
+				return 0;
 			}
 		} else {
 			xrtSetError(sErrorFile_Handle, FALSE);
@@ -14031,7 +14333,7 @@ XXAPI int xrtPut(xfile objFile, ptr pBuff, size_t iSize)
 XXAPI int xrtFileAppend(str sPath, str sText, size_t iSize, int iCharset)
 {
 	if ( sText == NULL ) { return 0; }
-	if ( iSize == 0 ) { iSize = strlen(sText); }
+	if ( iSize == 0 ) { iSize = strlen((const char*)sText); }
 	if ( iSize == 0 ) { return 0; }
 	xfile objFile = xrtOpen(sPath, FALSE, iCharset);
 	if ( objFile ) {
@@ -14046,7 +14348,7 @@ XXAPI int xrtFileAppend(str sPath, str sText, size_t iSize, int iCharset)
 XXAPI int xrtFileWriteAll(str sPath, str sText, size_t iSize, int iCharset)
 {
 	if ( sText == NULL ) { return 0; }
-	if ( iSize == 0 ) { iSize = strlen(sText); }
+	if ( iSize == 0 ) { iSize = strlen((const char*)sText); }
 	if ( iSize == 0 ) { return 0; }
 	xfile objFile = xrtOpen(sPath, FALSE, iCharset);
 	if ( objFile ) {
@@ -14388,7 +14690,7 @@ XXAPI int64 xrtFileGetAccessTime(str sPath)
 	#if defined(_WIN32) || defined(_WIN64)
 		// windows 方案
 		struct _stat fileStat;
-		int iRet = _stat(sPath, &fileStat);
+		int iRet = _stat((const char*)sPath, &fileStat);
 		if ( iRet == 0 ) {
 			return fileStat.st_atime + XRT_TIME_19700101;
 		} else {
@@ -14411,7 +14713,7 @@ XXAPI int64 xrtFileGetChangeTime(str sPath)
 	#if defined(_WIN32) || defined(_WIN64)
 		// windows 方案
 		struct _stat fileStat;
-		int iRet = _stat(sPath, &fileStat);
+		int iRet = _stat((const char*)sPath, &fileStat);
 		if ( iRet == 0 ) {
 			return fileStat.st_mtime + XRT_TIME_19700101;
 		} else {
@@ -14490,6 +14792,9 @@ XXAPI bool xrtFileCopy(str sSrc, str sDst, bool bReWrite)
 			xrtFree(sText);
 			return FALSE;
 		}
+		close(fsrc);
+		close(fdst);
+		xrtFree(sText);
 		return TRUE;
 	#endif
 }
@@ -14565,6 +14870,7 @@ XXAPI bool xrtFileDelete(str sPath)
 	// windows 方案
 	int __pri__DirScan_Proc(str sPath, size_t iSize, int bRecu, ptr pProc, ptr Param)
 	{
+		(void)iSize;
 		int (*pCallBack)(ptr sPath, size_t iSize, int bDir, ptr pData, ptr Param) = pProc;
 		int iFileCount = 0;
 		WIN32_FIND_DATAW objFindData;
@@ -14586,7 +14892,7 @@ XXAPI bool xrtFileDelete(str sPath)
 				} else {
 					str sFileName = xrtUTF16to8(objFindData.cFileName, 0, NULL);
 					str sDir = xrtPathJoin(2, sPath, sFileName);
-					size_t iDirSize = strlen(sDir);
+					size_t iDirSize = strlen((const char*)sDir);
 					xrtFree(sFileName);
 					// 处理文件夹 - 进入
 					if ( pProc ) {
@@ -14606,7 +14912,7 @@ XXAPI bool xrtFileDelete(str sPath)
 				// 处理文件
 				str sFileName = xrtUTF16to8(objFindData.cFileName, 0, NULL);
 				str sFile = xrtPathJoin(2, sPath, sFileName);
-				size_t iFileSize = strlen(sFile);
+				size_t iFileSize = strlen((const char*)sFile);
 				xrtFree(sFileName);
 				if ( pProc ) {
 					bExit = pCallBack(sFile, iFileSize, 0, &objFindData, Param);
@@ -14681,14 +14987,14 @@ XXAPI int xrtDirScan(str sPath, int bRecu, ptr pProc, ptr Param)
 	#if defined(_WIN32) || defined(_WIN64)
 		// windows 方案
 		if ( sPath == NULL ) { return 0; }
-		size_t iSize = strlen(sPath);
+		size_t iSize = strlen((const char*)sPath);
 		if ( iSize == 0 ) { return 0; }
 		int iFileCount = __pri__DirScan_Proc(sPath, iSize, bRecu, pProc, Param);
 		return iFileCount;
 	#else
 		// 其他平台方案
 		if ( sPath == NULL ) { return 0; }
-		size_t iSize = strlen(sPath);
+		size_t iSize = strlen((const char*)sPath);
 		if ( iSize == 0 ) { return 0; }
 		int iFileCount = __pri__DirScan_Proc(sPath, iSize, bRecu, pProc, Param);
 		return iFileCount;
@@ -14728,7 +15034,7 @@ XXAPI bool xrtDirCreateAll(str sPath)
 			return FALSE;
 		}
 		size_t iCurPos = 0;
-		for ( int i = 0; i < iSize; i++ ) {
+		for ( size_t i = 0; i < iSize; i++ ) {
 			if ( (sPathW[i] == L'/') || (sPathW[i] == L'\\') ) {
 				sCurPath[iCurPos] = 0;
 				CreateDirectoryW(sCurPath, NULL);
@@ -14778,6 +15084,8 @@ XXAPI bool xrtDirCreateAll(str sPath)
 	} xrtCopyFolder_Info;
 	int __pri__DirCopyProc(str sPath, size_t iSize, int bDir, ptr pData, xrtCopyFolder_Info* pInfo)
 	{
+		(void)iSize;
+		(void)pData;
 		if ( bDir == 0 ) {
 			str sDstPath = xrtPathJoin(2, pInfo->DstPath, &sPath[pInfo->SrcSize]);
 			//printf("\tcopy file   : %S -> %S\n", sPath, sDstPath);
@@ -14842,10 +15150,10 @@ XXAPI int xrtDirCopy(str sSrc, str sDst, bool bReWrite)
 	#if defined(_WIN32) || defined(_WIN64)
 		// windows 方案
 		if ( sSrc == NULL ) { return 0; }
-		size_t iSrcSize = strlen(sSrc);
+		size_t iSrcSize = strlen((const char*)sSrc);
 		if ( iSrcSize == 0 ) { return 0; }
 		if ( sDst == NULL ) { return 0; }
-		size_t iDstSize = strlen(sDst);
+		size_t iDstSize = strlen((const char*)sDst);
 		if ( iDstSize == 0 ) { return 0; }
 		xrtCopyFolder_Info stuInfo;
 		stuInfo.DstPath = sDst;
@@ -14858,10 +15166,10 @@ XXAPI int xrtDirCopy(str sSrc, str sDst, bool bReWrite)
 	#else
 		// 其他平台方案
 		if ( sSrc == NULL ) { return 0; }
-		size_t iSrcSize = strlen(sSrc);
+		size_t iSrcSize = strlen((const char*)sSrc);
 		if ( iSrcSize == 0 ) { return 0; }
 		if ( sDst == NULL ) { return 0; }
-		size_t iDstSize = strlen(sDst);
+		size_t iDstSize = strlen((const char*)sDst);
 		if ( iDstSize == 0 ) { return 0; }
 		xrtCopyFolder_Info stuInfo;
 		stuInfo.DstPath = sDst;
@@ -14920,6 +15228,8 @@ XXAPI int xrtDirMove(str sSrc, str sDst, bool bReWrite)
 #if defined(_WIN32) || defined(_WIN64)
 	int __pri__DirDeleteProc(str sPath, size_t iSize, int bDir, ptr pData, xrtCopyFolder_Info* pInfo)
 	{
+		(void)pData;
+		(void)pInfo;
 		if ( bDir == 0 ) {
 			//printf("\tremove file : %S\n", sPath);
 			xrtFileDelete(sPath);
@@ -14949,7 +15259,7 @@ XXAPI int xrtDirDelete(str sPath)
 	#if defined(_WIN32) || defined(_WIN64)
 		// windows 方案
 		if ( sPath == NULL ) { return 0; }
-		size_t iSize = strlen(sPath);
+		size_t iSize = strlen((const char*)sPath);
 		if ( iSize == 0 ) { return 0; }
 		int iRet = xrtDirScan(sPath, TRUE, __pri__DirDeleteProc, NULL);
 		u16str sPathW = xrtUTF8to16(sPath, iSize, NULL);
@@ -15801,6 +16111,1057 @@ XXAPI bool xrtRWLockUpgrade(xrwlock pRWLock)
 	#endif
 }
 #endif
+#ifndef XRT_NO_QUEUE
+
+// ========================================
+// File: D:/git/xrt/lib/queue.h
+// ========================================
+
+#ifndef __XRT_QUEUE_MAX_CAPACITY
+	#define __XRT_QUEUE_MAX_CAPACITY (1u << 30)
+#endif
+static inline uint32 __xrtQueueAtomicLoad32(const volatile uint32* pValue)
+{
+	return __xrtAtomicLoadU32(pValue);
+}
+static inline void __xrtQueueAtomicStore32(volatile uint32* pValue, uint32 iValue)
+{
+	__xrtAtomicStoreU32(pValue, iValue);
+}
+static inline uint64 __xrtQueueAtomicLoad64(const volatile uint64* pValue)
+{
+	return (uint64)__xrtAtomicLoad64((const volatile int64*)pValue);
+}
+static inline void __xrtQueueAtomicStore64(volatile uint64* pValue, uint64 iValue)
+{
+	__xrtAtomicStore64((volatile int64*)pValue, (int64)iValue);
+}
+static inline bool __xrtQueueAtomicCAS64(volatile uint64* pValue, uint64 iExpected, uint64 iDesired)
+{
+	return (uint64)__xrtAtomicCompareExchange64((volatile int64*)pValue, (int64)iDesired, (int64)iExpected) == iExpected;
+}
+static inline uint32 __xrtQueueRoundUpPow2(uint32 iCapacity)
+{
+	if ( iCapacity == 0 || iCapacity > __XRT_QUEUE_MAX_CAPACITY ) {
+		return 0;
+	}
+	iCapacity--;
+	iCapacity |= (iCapacity >> 1);
+	iCapacity |= (iCapacity >> 2);
+	iCapacity |= (iCapacity >> 4);
+	iCapacity |= (iCapacity >> 8);
+	iCapacity |= (iCapacity >> 16);
+	iCapacity++;
+	if ( iCapacity == 0 || iCapacity > __XRT_QUEUE_MAX_CAPACITY ) {
+		return 0;
+	}
+	return iCapacity;
+}
+static inline bool __xrtQueueResolveCapacity(const xqueue_config* pCfg, uint32* pCapacity)
+{
+	uint32 iCapacity;
+	if ( pCapacity == NULL || pCfg == NULL ) {
+		return FALSE;
+	}
+	iCapacity = __xrtQueueRoundUpPow2(pCfg->iCapacity);
+	if ( iCapacity == 0 ) {
+		xrtSetError("invalid queue capacity.", FALSE);
+		return FALSE;
+	}
+	*pCapacity = iCapacity;
+	return TRUE;
+}
+static inline uint32 __xrtQueueSPSCCount(const xspscq pQueue)
+{
+	uint32 iHead;
+	uint32 iTail;
+	if ( pQueue == NULL || pQueue->arrItems == NULL ) {
+		return 0;
+	}
+	iHead = __xrtQueueAtomicLoad32(&pQueue->iHead);
+	iTail = __xrtQueueAtomicLoad32(&pQueue->iTail);
+	return (uint32)(iTail - iHead);
+}
+static inline uint32 __xrtQueueMPSCCount(const xmpscq pQueue)
+{
+	uint64 iHead;
+	uint64 iTail;
+	if ( pQueue == NULL || pQueue->arrSlots == NULL ) {
+		return 0;
+	}
+	iHead = __xrtQueueAtomicLoad64(&pQueue->iHead);
+	iTail = __xrtQueueAtomicLoad64(&pQueue->iTail);
+	if ( iTail <= iHead ) {
+		return 0;
+	}
+	if ( (iTail - iHead) > 0xffffffffULL ) {
+		return 0xffffffffu;
+	}
+	return (uint32)(iTail - iHead);
+}
+static inline uint32 __xrtQueueMPMCCount(const xmpmcq pQueue)
+{
+	uint64 iHead;
+	uint64 iTail;
+	if ( pQueue == NULL || pQueue->arrSlots == NULL ) {
+		return 0;
+	}
+	iHead = __xrtQueueAtomicLoad64(&pQueue->iHead);
+	iTail = __xrtQueueAtomicLoad64(&pQueue->iTail);
+	if ( iTail <= iHead ) {
+		return 0;
+	}
+	if ( (iTail - iHead) > 0xffffffffULL ) {
+		return 0xffffffffu;
+	}
+	return (uint32)(iTail - iHead);
+}
+#ifndef XRT_NO_QUEUE_WAIT
+static inline uint64 __xrtQueueWaitNowMs(void)
+{
+	#if defined(_WIN32) || defined(_WIN64)
+		return (uint64)GetTickCount64();
+	#else
+		struct timespec tNow;
+		if ( clock_gettime(CLOCK_MONOTONIC, &tNow) != 0 ) {
+			return 0;
+		}
+		return ((uint64)tNow.tv_sec * 1000u) + ((uint64)tNow.tv_nsec / 1000000u);
+	#endif
+}
+static inline long __xrtQueueWaitLoadLong(const volatile long* pValue)
+{
+	return __xrtAtomicCompareExchange32((volatile long*)pValue, 0, 0);
+}
+static inline void __xrtQueueWaitAddLong(volatile long* pValue, long iDelta)
+{
+	(void)__xrtAtomicAddFetch32(pValue, iDelta);
+}
+static inline bool __xrtMPSCQWaitIsClosedAndDrained(const xmpscqwait pQueue)
+{
+	return pQueue != NULL && xrtQueueIsClosed(&pQueue->tQueue.tBase) && xrtQueueIsDrained(&pQueue->tQueue.tBase);
+}
+static inline void __xrtMPSCQWaitWakeAll(xmpscqwait pQueue)
+{
+	long iWaiters;
+	uint32 iWakeCount;
+	if ( pQueue == NULL || pQueue->hItems == NULL ) {
+		return;
+	}
+	iWaiters = __xrtQueueWaitLoadLong(&pQueue->iWaiters);
+	if ( iWaiters <= 0 ) {
+		return;
+	}
+	iWakeCount = (iWaiters > (long)0xffffffffu) ? 0xffffffffu : (uint32)iWaiters;
+	(void)xrtSemPostMultiple(pQueue->hItems, iWakeCount);
+}
+static xqueue_result __xrtMPSCQWaitPopWithToken(xmpscqwait pQueue, ptr* ppItem)
+{
+	xqueue_result iRet;
+	bool bWake = FALSE;
+	if ( pQueue == NULL || pQueue->hPopLock == NULL || ppItem == NULL ) {
+		return XQUEUE_ERROR;
+	}
+	xrtMutexLock(pQueue->hPopLock);
+	iRet = xrtMPSCQTryPop(&pQueue->tQueue, ppItem);
+	bWake = __xrtMPSCQWaitIsClosedAndDrained(pQueue);
+	xrtMutexUnlock(pQueue->hPopLock);
+	if ( bWake ) {
+		__xrtMPSCQWaitWakeAll(pQueue);
+	}
+	if ( iRet == XQUEUE_OK || iRet == XQUEUE_CLOSED || iRet == XQUEUE_ERROR ) {
+		return iRet;
+	}
+	return __xrtMPSCQWaitIsClosedAndDrained(pQueue) ? XQUEUE_CLOSED : XQUEUE_EMPTY;
+}
+static xqueue_result __xrtMPSCQWaitPopCore(xmpscqwait pQueue, ptr* ppItem, bool bInfinite, uint32 iTimeoutMs)
+{
+	uint64 iDeadlineMs = 0;
+	if ( pQueue == NULL || pQueue->hItems == NULL || pQueue->hPopLock == NULL || ppItem == NULL ) {
+		return XQUEUE_ERROR;
+	}
+	*ppItem = NULL;
+	if ( !bInfinite ) {
+		iDeadlineMs = __xrtQueueWaitNowMs() + (uint64)iTimeoutMs;
+	}
+	for ( ;; ) {
+		if ( xrtSemTryWait(pQueue->hItems) ) {
+			return __xrtMPSCQWaitPopWithToken(pQueue, ppItem);
+		}
+		else {
+			if ( __xrtMPSCQWaitIsClosedAndDrained(pQueue) ) {
+				return XQUEUE_CLOSED;
+			}
+			__xrtQueueWaitAddLong(&pQueue->iWaiters, 1);
+			if ( xrtSemTryWait(pQueue->hItems) ) {
+				__xrtQueueWaitAddLong(&pQueue->iWaiters, -1);
+				return __xrtMPSCQWaitPopWithToken(pQueue, ppItem);
+			}
+			else if ( __xrtMPSCQWaitIsClosedAndDrained(pQueue) ) {
+				__xrtQueueWaitAddLong(&pQueue->iWaiters, -1);
+				return XQUEUE_CLOSED;
+			}
+			else if ( bInfinite ) {
+				xrtSemWait(pQueue->hItems);
+				__xrtQueueWaitAddLong(&pQueue->iWaiters, -1);
+				return __xrtMPSCQWaitPopWithToken(pQueue, ppItem);
+			}
+			else {
+				uint64 iNowMs = __xrtQueueWaitNowMs();
+				uint64 iRemainMs;
+				int iWaitRet;
+				if ( iNowMs >= iDeadlineMs ) {
+					__xrtQueueWaitAddLong(&pQueue->iWaiters, -1);
+					return XQUEUE_TIMEOUT;
+				}
+				iRemainMs = iDeadlineMs - iNowMs;
+				if ( iRemainMs > 0xffffffffu ) {
+					iRemainMs = 0xffffffffu;
+				}
+				iWaitRet = xrtSemWaitTimeout(pQueue->hItems, (uint32)iRemainMs);
+				__xrtQueueWaitAddLong(&pQueue->iWaiters, -1);
+				if ( iWaitRet == XRT_WAIT_OK ) {
+					return __xrtMPSCQWaitPopWithToken(pQueue, ppItem);
+				}
+				else if ( iWaitRet == XRT_WAIT_TIMEOUT ) {
+					if ( __xrtMPSCQWaitIsClosedAndDrained(pQueue) ) {
+						return XQUEUE_CLOSED;
+					}
+					return XQUEUE_TIMEOUT;
+				}
+				else {
+					return XQUEUE_ERROR;
+				}
+			}
+		}
+	}
+}
+#endif
+XXAPI bool xrtSPSCQInit(xspscq pQueue, const xqueue_config* pCfg)
+{
+	uint32 iCapacity;
+	ptr* arrItems;
+	if ( pQueue == NULL ) {
+		return FALSE;
+	}
+	if ( !__xrtQueueResolveCapacity(pCfg, &iCapacity) ) {
+		memset(pQueue, 0, sizeof(xspscq_struct));
+		return FALSE;
+	}
+	arrItems = (ptr*)xrtCalloc(iCapacity, sizeof(ptr));
+	if ( arrItems == NULL ) {
+		memset(pQueue, 0, sizeof(xspscq_struct));
+		return FALSE;
+	}
+	memset(pQueue, 0, sizeof(xspscq_struct));
+	pQueue->tBase.iKind = XQUEUE_KIND_SPSC;
+	pQueue->tBase.bClosed = 0;
+	pQueue->iCapacity = iCapacity;
+	pQueue->iMask = iCapacity - 1u;
+	pQueue->arrItems = arrItems;
+	return TRUE;
+}
+XXAPI void xrtSPSCQUnit(xspscq pQueue)
+{
+	if ( pQueue == NULL ) {
+		return;
+	}
+	if ( pQueue->arrItems != NULL ) {
+		xrtFree(pQueue->arrItems);
+	}
+	memset(pQueue, 0, sizeof(xspscq_struct));
+}
+XXAPI xspscq xrtSPSCQCreate(const xqueue_config* pCfg)
+{
+	xspscq pQueue = (xspscq)xrtCalloc(1, sizeof(xspscq_struct));
+	if ( pQueue == NULL ) {
+		return NULL;
+	}
+	if ( !xrtSPSCQInit(pQueue, pCfg) ) {
+		xrtFree(pQueue);
+		return NULL;
+	}
+	return pQueue;
+}
+XXAPI void xrtSPSCQDestroy(xspscq pQueue)
+{
+	if ( pQueue == NULL ) {
+		return;
+	}
+	xrtSPSCQUnit(pQueue);
+	xrtFree(pQueue);
+}
+XXAPI xqueue_result xrtSPSCQTryPush(xspscq pQueue, ptr pItem)
+{
+	uint32 iHead;
+	uint32 iTail;
+	if ( pQueue == NULL || pQueue->arrItems == NULL ) {
+		return XQUEUE_ERROR;
+	}
+	if ( __xrtQueueAtomicLoad32(&pQueue->tBase.bClosed) != 0 ) {
+		return XQUEUE_CLOSED;
+	}
+	iTail = __xrtQueueAtomicLoad32(&pQueue->iTail);
+	iHead = __xrtQueueAtomicLoad32(&pQueue->iHead);
+	if ( (uint32)(iTail - iHead) >= pQueue->iCapacity ) {
+		return XQUEUE_FULL;
+	}
+	pQueue->arrItems[iTail & pQueue->iMask] = pItem;
+	__xrtQueueAtomicStore32(&pQueue->iTail, iTail + 1u);
+	return XQUEUE_OK;
+}
+XXAPI xqueue_result xrtSPSCQTryPop(xspscq pQueue, ptr* ppItem)
+{
+	uint32 iHead;
+	uint32 iTail;
+	ptr pItem;
+	if ( pQueue == NULL || pQueue->arrItems == NULL || ppItem == NULL ) {
+		return XQUEUE_ERROR;
+	}
+	iHead = __xrtQueueAtomicLoad32(&pQueue->iHead);
+	iTail = __xrtQueueAtomicLoad32(&pQueue->iTail);
+	if ( iHead == iTail ) {
+		*ppItem = NULL;
+		if ( __xrtQueueAtomicLoad32(&pQueue->tBase.bClosed) != 0 ) {
+			return XQUEUE_CLOSED;
+		}
+		return XQUEUE_EMPTY;
+	}
+	pItem = pQueue->arrItems[iHead & pQueue->iMask];
+	pQueue->arrItems[iHead & pQueue->iMask] = NULL;
+	__xrtQueueAtomicStore32(&pQueue->iHead, iHead + 1u);
+	*ppItem = pItem;
+	return XQUEUE_OK;
+}
+XXAPI uint32 xrtSPSCQApproxCount(xspscq pQueue)
+{
+	return __xrtQueueSPSCCount(pQueue);
+}
+XXAPI void xrtSPSCQClose(xspscq pQueue)
+{
+	if ( pQueue == NULL ) {
+		return;
+	}
+	__xrtQueueAtomicStore32(&pQueue->tBase.bClosed, 1u);
+}
+XXAPI uint32 xrtSPSCQDrain(xspscq pQueue, xqueue_drain_fn procDrain, ptr pUserData)
+{
+	uint32 iCount = 0;
+	ptr pItem = NULL;
+	xqueue_result iRet;
+	if ( pQueue == NULL || procDrain == NULL ) {
+		return 0;
+	}
+	for ( ;; ) {
+		iRet = xrtSPSCQTryPop(pQueue, &pItem);
+		if ( iRet != XQUEUE_OK ) {
+			break;
+		}
+		procDrain(pItem, pUserData);
+		iCount++;
+	}
+	return iCount;
+}
+XXAPI bool xrtSPSCQReset(xspscq pQueue)
+{
+	if ( pQueue == NULL || pQueue->arrItems == NULL ) {
+		return FALSE;
+	}
+	if ( xrtSPSCQApproxCount(pQueue) != 0 ) {
+		return FALSE;
+	}
+	memset(pQueue->arrItems, 0, sizeof(ptr) * pQueue->iCapacity);
+	__xrtQueueAtomicStore32(&pQueue->iHead, 0u);
+	__xrtQueueAtomicStore32(&pQueue->iTail, 0u);
+	__xrtQueueAtomicStore32(&pQueue->tBase.bClosed, 0u);
+	return TRUE;
+}
+XXAPI bool xrtMPSCQInit(xmpscq pQueue, const xqueue_config* pCfg)
+{
+	uint32 iCapacity;
+	xmpscq_slot* arrSlots;
+	uint32 i;
+	if ( pQueue == NULL ) {
+		return FALSE;
+	}
+	if ( !__xrtQueueResolveCapacity(pCfg, &iCapacity) ) {
+		memset(pQueue, 0, sizeof(xmpscq_struct));
+		return FALSE;
+	}
+	arrSlots = (xmpscq_slot*)xrtCalloc(iCapacity, sizeof(xmpscq_slot));
+	if ( arrSlots == NULL ) {
+		memset(pQueue, 0, sizeof(xmpscq_struct));
+		return FALSE;
+	}
+	memset(pQueue, 0, sizeof(xmpscq_struct));
+	pQueue->tBase.iKind = XQUEUE_KIND_MPSC;
+	pQueue->tBase.bClosed = 0;
+	pQueue->iCapacity = iCapacity;
+	pQueue->iMask = iCapacity - 1u;
+	pQueue->arrSlots = arrSlots;
+	for ( i = 0; i < iCapacity; ++i ) {
+		pQueue->arrSlots[i].iSeq = (uint64)i;
+		pQueue->arrSlots[i].pItem = NULL;
+	}
+	return TRUE;
+}
+XXAPI void xrtMPSCQUnit(xmpscq pQueue)
+{
+	if ( pQueue == NULL ) {
+		return;
+	}
+	if ( pQueue->arrSlots != NULL ) {
+		xrtFree(pQueue->arrSlots);
+	}
+	memset(pQueue, 0, sizeof(xmpscq_struct));
+}
+XXAPI xmpscq xrtMPSCQCreate(const xqueue_config* pCfg)
+{
+	xmpscq pQueue = (xmpscq)xrtCalloc(1, sizeof(xmpscq_struct));
+	if ( pQueue == NULL ) {
+		return NULL;
+	}
+	if ( !xrtMPSCQInit(pQueue, pCfg) ) {
+		xrtFree(pQueue);
+		return NULL;
+	}
+	return pQueue;
+}
+XXAPI void xrtMPSCQDestroy(xmpscq pQueue)
+{
+	if ( pQueue == NULL ) {
+		return;
+	}
+	xrtMPSCQUnit(pQueue);
+	xrtFree(pQueue);
+}
+XXAPI xqueue_result xrtMPSCQTryPush(xmpscq pQueue, ptr pItem)
+{
+	uint64 iTail;
+	xmpscq_slot* pSlot;
+	uint64 iSeq;
+	int64 iDiff;
+	if ( pQueue == NULL || pQueue->arrSlots == NULL ) {
+		return XQUEUE_ERROR;
+	}
+	for ( ;; ) {
+		if ( __xrtQueueAtomicLoad32(&pQueue->tBase.bClosed) != 0 ) {
+			return XQUEUE_CLOSED;
+		}
+		iTail = __xrtQueueAtomicLoad64(&pQueue->iTail);
+		pSlot = &pQueue->arrSlots[(uint32)(iTail & pQueue->iMask)];
+		iSeq = __xrtQueueAtomicLoad64(&pSlot->iSeq);
+		iDiff = (int64)iSeq - (int64)iTail;
+		if ( iDiff == 0 ) {
+			if ( __xrtQueueAtomicCAS64(&pQueue->iTail, iTail, iTail + 1u) ) {
+				pSlot->pItem = pItem;
+				__xrtQueueAtomicStore64(&pSlot->iSeq, iTail + 1u);
+				return XQUEUE_OK;
+			}
+			xrtThreadYield();
+			continue;
+		}
+		if ( iDiff < 0 ) {
+			return XQUEUE_FULL;
+		}
+		xrtThreadYield();
+	}
+}
+XXAPI xqueue_result xrtMPSCQTryPop(xmpscq pQueue, ptr* ppItem)
+{
+	uint64 iHead;
+	xmpscq_slot* pSlot;
+	uint64 iSeq;
+	int64 iDiff;
+	uint64 iTail;
+	if ( pQueue == NULL || pQueue->arrSlots == NULL || ppItem == NULL ) {
+		return XQUEUE_ERROR;
+	}
+	iHead = __xrtQueueAtomicLoad64(&pQueue->iHead);
+	pSlot = &pQueue->arrSlots[(uint32)(iHead & pQueue->iMask)];
+	iSeq = __xrtQueueAtomicLoad64(&pSlot->iSeq);
+	iDiff = (int64)iSeq - (int64)(iHead + 1u);
+	if ( iDiff == 0 ) {
+		*ppItem = pSlot->pItem;
+		pSlot->pItem = NULL;
+		__xrtQueueAtomicStore64(&pQueue->iHead, iHead + 1u);
+		__xrtQueueAtomicStore64(&pSlot->iSeq, iHead + pQueue->iCapacity);
+		return XQUEUE_OK;
+	}
+	*ppItem = NULL;
+	if ( iDiff < 0 ) {
+		if ( __xrtQueueAtomicLoad32(&pQueue->tBase.bClosed) != 0 ) {
+			iTail = __xrtQueueAtomicLoad64(&pQueue->iTail);
+			if ( iTail == iHead ) {
+				return XQUEUE_CLOSED;
+			}
+		}
+		return XQUEUE_EMPTY;
+	}
+	return XQUEUE_EMPTY;
+}
+XXAPI uint32 xrtMPSCQPushBatch(xmpscq pQueue, ptr* arrItems, uint32 iCount)
+{
+	uint64 iTail;
+	uint32 iReady;
+	uint32 i;
+	uint64 iPos;
+	xmpscq_slot* pSlot;
+	uint64 iSeq;
+	int64 iDiff;
+	if ( pQueue == NULL || arrItems == NULL || iCount == 0u ) {
+		return 0u;
+	}
+	if ( pQueue->arrSlots == NULL ) {
+		return 0u;
+	}
+	for ( ;; ) {
+		if ( __xrtQueueAtomicLoad32(&pQueue->tBase.bClosed) != 0 ) {
+			return 0u;
+		}
+		iTail = __xrtQueueAtomicLoad64(&pQueue->iTail);
+		iReady = 0u;
+		iDiff = 0;
+		while ( iReady < iCount ) {
+			iPos = iTail + iReady;
+			pSlot = &pQueue->arrSlots[(uint32)(iPos & pQueue->iMask)];
+			iSeq = __xrtQueueAtomicLoad64(&pSlot->iSeq);
+			iDiff = (int64)iSeq - (int64)iPos;
+			if ( iDiff == 0 ) {
+				iReady++;
+				continue;
+			}
+			break;
+		}
+		if ( iReady == 0u ) {
+			if ( iDiff < 0 ) {
+				return 0u;
+			}
+			xrtThreadYield();
+			continue;
+		}
+		if ( __xrtQueueAtomicCAS64(&pQueue->iTail, iTail, iTail + iReady) ) {
+			for ( i = 0; i < iReady; ++i ) {
+				iPos = iTail + i;
+				pSlot = &pQueue->arrSlots[(uint32)(iPos & pQueue->iMask)];
+				pSlot->pItem = arrItems[i];
+				__xrtQueueAtomicStore64(&pSlot->iSeq, iPos + 1u);
+			}
+			return iReady;
+		}
+		xrtThreadYield();
+	}
+}
+XXAPI uint32 xrtMPSCQPopBatch(xmpscq pQueue, ptr* arrItems, uint32 iCap)
+{
+	uint64 iHead;
+	uint32 iPopped;
+	uint32 i;
+	uint64 iPos;
+	xmpscq_slot* pSlot;
+	uint64 iSeq;
+	int64 iDiff;
+	if ( pQueue == NULL || arrItems == NULL || iCap == 0u ) {
+		return 0u;
+	}
+	if ( pQueue->arrSlots == NULL ) {
+		return 0u;
+	}
+	iHead = __xrtQueueAtomicLoad64(&pQueue->iHead);
+	iPopped = 0u;
+	while ( iPopped < iCap ) {
+		iPos = iHead + iPopped;
+		pSlot = &pQueue->arrSlots[(uint32)(iPos & pQueue->iMask)];
+		iSeq = __xrtQueueAtomicLoad64(&pSlot->iSeq);
+		iDiff = (int64)iSeq - (int64)(iPos + 1u);
+		if ( iDiff != 0 ) {
+			break;
+		}
+		iPopped++;
+	}
+	for ( i = 0; i < iPopped; ++i ) {
+		iPos = iHead + i;
+		pSlot = &pQueue->arrSlots[(uint32)(iPos & pQueue->iMask)];
+		arrItems[i] = pSlot->pItem;
+		pSlot->pItem = NULL;
+		__xrtQueueAtomicStore64(&pSlot->iSeq, iPos + pQueue->iCapacity);
+	}
+	if ( iPopped != 0u ) {
+		__xrtQueueAtomicStore64(&pQueue->iHead, iHead + iPopped);
+	}
+	return iPopped;
+}
+XXAPI uint32 xrtMPSCQApproxCount(xmpscq pQueue)
+{
+	return __xrtQueueMPSCCount(pQueue);
+}
+XXAPI void xrtMPSCQClose(xmpscq pQueue)
+{
+	if ( pQueue == NULL ) {
+		return;
+	}
+	__xrtQueueAtomicStore32(&pQueue->tBase.bClosed, 1u);
+}
+XXAPI uint32 xrtMPSCQDrain(xmpscq pQueue, xqueue_drain_fn procDrain, ptr pUserData)
+{
+	uint32 iCount = 0;
+	ptr pItem = NULL;
+	xqueue_result iRet;
+	if ( pQueue == NULL || procDrain == NULL ) {
+		return 0;
+	}
+	for ( ;; ) {
+		iRet = xrtMPSCQTryPop(pQueue, &pItem);
+		if ( iRet != XQUEUE_OK ) {
+			break;
+		}
+		procDrain(pItem, pUserData);
+		iCount++;
+	}
+	return iCount;
+}
+XXAPI bool xrtMPSCQReset(xmpscq pQueue)
+{
+	uint32 i;
+	if ( pQueue == NULL || pQueue->arrSlots == NULL ) {
+		return FALSE;
+	}
+	if ( xrtMPSCQApproxCount(pQueue) != 0 ) {
+		return FALSE;
+	}
+	for ( i = 0; i < pQueue->iCapacity; ++i ) {
+		pQueue->arrSlots[i].pItem = NULL;
+		__xrtQueueAtomicStore64(&pQueue->arrSlots[i].iSeq, (uint64)i);
+	}
+	__xrtQueueAtomicStore64(&pQueue->iHead, 0u);
+	__xrtQueueAtomicStore64(&pQueue->iTail, 0u);
+	__xrtQueueAtomicStore32(&pQueue->tBase.bClosed, 0u);
+	return TRUE;
+}
+XXAPI bool xrtMPMCQInit(xmpmcq pQueue, const xqueue_config* pCfg)
+{
+	uint32 iCapacity;
+	xmpmcq_slot* arrSlots;
+	uint32 i;
+	if ( pQueue == NULL ) {
+		return FALSE;
+	}
+	if ( !__xrtQueueResolveCapacity(pCfg, &iCapacity) ) {
+		memset(pQueue, 0, sizeof(xmpmcq_struct));
+		return FALSE;
+	}
+	arrSlots = (xmpmcq_slot*)xrtCalloc(iCapacity, sizeof(xmpmcq_slot));
+	if ( arrSlots == NULL ) {
+		memset(pQueue, 0, sizeof(xmpmcq_struct));
+		return FALSE;
+	}
+	memset(pQueue, 0, sizeof(xmpmcq_struct));
+	pQueue->tBase.iKind = XQUEUE_KIND_MPMC;
+	pQueue->tBase.bClosed = 0;
+	pQueue->iCapacity = iCapacity;
+	pQueue->iMask = iCapacity - 1u;
+	pQueue->arrSlots = arrSlots;
+	for ( i = 0; i < iCapacity; ++i ) {
+		pQueue->arrSlots[i].iSeq = (uint64)i;
+		pQueue->arrSlots[i].pItem = NULL;
+	}
+	return TRUE;
+}
+XXAPI void xrtMPMCQUnit(xmpmcq pQueue)
+{
+	if ( pQueue == NULL ) {
+		return;
+	}
+	if ( pQueue->arrSlots != NULL ) {
+		xrtFree(pQueue->arrSlots);
+	}
+	memset(pQueue, 0, sizeof(xmpmcq_struct));
+}
+XXAPI xmpmcq xrtMPMCQCreate(const xqueue_config* pCfg)
+{
+	xmpmcq pQueue = (xmpmcq)xrtCalloc(1, sizeof(xmpmcq_struct));
+	if ( pQueue == NULL ) {
+		return NULL;
+	}
+	if ( !xrtMPMCQInit(pQueue, pCfg) ) {
+		xrtFree(pQueue);
+		return NULL;
+	}
+	return pQueue;
+}
+XXAPI void xrtMPMCQDestroy(xmpmcq pQueue)
+{
+	if ( pQueue == NULL ) {
+		return;
+	}
+	xrtMPMCQUnit(pQueue);
+	xrtFree(pQueue);
+}
+XXAPI xqueue_result xrtMPMCQTryPush(xmpmcq pQueue, ptr pItem)
+{
+	uint64 iTail;
+	xmpmcq_slot* pSlot;
+	uint64 iSeq;
+	int64 iDiff;
+	if ( pQueue == NULL || pQueue->arrSlots == NULL ) {
+		return XQUEUE_ERROR;
+	}
+	for ( ;; ) {
+		if ( __xrtQueueAtomicLoad32(&pQueue->tBase.bClosed) != 0 ) {
+			return XQUEUE_CLOSED;
+		}
+		iTail = __xrtQueueAtomicLoad64(&pQueue->iTail);
+		pSlot = &pQueue->arrSlots[(uint32)(iTail & pQueue->iMask)];
+		iSeq = __xrtQueueAtomicLoad64(&pSlot->iSeq);
+		iDiff = (int64)iSeq - (int64)iTail;
+		if ( iDiff == 0 ) {
+			if ( __xrtQueueAtomicCAS64(&pQueue->iTail, iTail, iTail + 1u) ) {
+				pSlot->pItem = pItem;
+				__xrtQueueAtomicStore64(&pSlot->iSeq, iTail + 1u);
+				return XQUEUE_OK;
+			}
+			xrtThreadYield();
+			continue;
+		}
+		if ( iDiff < 0 ) {
+			return XQUEUE_FULL;
+		}
+		xrtThreadYield();
+	}
+}
+XXAPI xqueue_result xrtMPMCQTryPop(xmpmcq pQueue, ptr* ppItem)
+{
+	uint64 iHead;
+	xmpmcq_slot* pSlot;
+	uint64 iSeq;
+	int64 iDiff;
+	uint64 iTail;
+	ptr pItem;
+	if ( pQueue == NULL || pQueue->arrSlots == NULL || ppItem == NULL ) {
+		return XQUEUE_ERROR;
+	}
+	for ( ;; ) {
+		iHead = __xrtQueueAtomicLoad64(&pQueue->iHead);
+		pSlot = &pQueue->arrSlots[(uint32)(iHead & pQueue->iMask)];
+		iSeq = __xrtQueueAtomicLoad64(&pSlot->iSeq);
+		iDiff = (int64)iSeq - (int64)(iHead + 1u);
+		if ( iDiff == 0 ) {
+			if ( __xrtQueueAtomicCAS64(&pQueue->iHead, iHead, iHead + 1u) ) {
+				pItem = pSlot->pItem;
+				pSlot->pItem = NULL;
+				__xrtQueueAtomicStore64(&pSlot->iSeq, iHead + pQueue->iCapacity);
+				*ppItem = pItem;
+				return XQUEUE_OK;
+			}
+			xrtThreadYield();
+			continue;
+		}
+		*ppItem = NULL;
+		if ( iDiff < 0 ) {
+			if ( __xrtQueueAtomicLoad32(&pQueue->tBase.bClosed) != 0 ) {
+				iTail = __xrtQueueAtomicLoad64(&pQueue->iTail);
+				if ( iTail == iHead ) {
+					return XQUEUE_CLOSED;
+				}
+			}
+			return XQUEUE_EMPTY;
+		}
+		xrtThreadYield();
+	}
+}
+XXAPI uint32 xrtMPMCQPushBatch(xmpmcq pQueue, ptr* arrItems, uint32 iCount)
+{
+	uint64 iTail;
+	uint32 iReady;
+	uint32 i;
+	uint64 iPos;
+	xmpmcq_slot* pSlot;
+	uint64 iSeq;
+	int64 iDiff;
+	if ( pQueue == NULL || arrItems == NULL || iCount == 0u ) {
+		return 0u;
+	}
+	if ( pQueue->arrSlots == NULL ) {
+		return 0u;
+	}
+	for ( ;; ) {
+		if ( __xrtQueueAtomicLoad32(&pQueue->tBase.bClosed) != 0 ) {
+			return 0u;
+		}
+		iTail = __xrtQueueAtomicLoad64(&pQueue->iTail);
+		iReady = 0u;
+		iDiff = 0;
+		while ( iReady < iCount ) {
+			iPos = iTail + iReady;
+			pSlot = &pQueue->arrSlots[(uint32)(iPos & pQueue->iMask)];
+			iSeq = __xrtQueueAtomicLoad64(&pSlot->iSeq);
+			iDiff = (int64)iSeq - (int64)iPos;
+			if ( iDiff == 0 ) {
+				iReady++;
+				continue;
+			}
+			break;
+		}
+		if ( iReady == 0u ) {
+			if ( iDiff < 0 ) {
+				return 0u;
+			}
+			xrtThreadYield();
+			continue;
+		}
+		if ( __xrtQueueAtomicCAS64(&pQueue->iTail, iTail, iTail + iReady) ) {
+			for ( i = 0; i < iReady; ++i ) {
+				iPos = iTail + i;
+				pSlot = &pQueue->arrSlots[(uint32)(iPos & pQueue->iMask)];
+				pSlot->pItem = arrItems[i];
+				__xrtQueueAtomicStore64(&pSlot->iSeq, iPos + 1u);
+			}
+			return iReady;
+		}
+		xrtThreadYield();
+	}
+}
+XXAPI uint32 xrtMPMCQPopBatch(xmpmcq pQueue, ptr* arrItems, uint32 iCap)
+{
+	uint64 iHead;
+	uint32 iPopped;
+	uint32 i;
+	uint64 iPos;
+	xmpmcq_slot* pSlot;
+	uint64 iSeq;
+	int64 iDiff;
+	if ( pQueue == NULL || arrItems == NULL || iCap == 0u ) {
+		return 0u;
+	}
+	if ( pQueue->arrSlots == NULL ) {
+		return 0u;
+	}
+	for ( ;; ) {
+		iHead = __xrtQueueAtomicLoad64(&pQueue->iHead);
+		iPopped = 0u;
+		iDiff = 0;
+		while ( iPopped < iCap ) {
+			iPos = iHead + iPopped;
+			pSlot = &pQueue->arrSlots[(uint32)(iPos & pQueue->iMask)];
+			iSeq = __xrtQueueAtomicLoad64(&pSlot->iSeq);
+			iDiff = (int64)iSeq - (int64)(iPos + 1u);
+			if ( iDiff == 0 ) {
+				iPopped++;
+				continue;
+			}
+			break;
+		}
+		if ( iPopped == 0u ) {
+			if ( iDiff < 0 ) {
+				return 0u;
+			}
+			xrtThreadYield();
+			continue;
+		}
+		if ( __xrtQueueAtomicCAS64(&pQueue->iHead, iHead, iHead + iPopped) ) {
+			for ( i = 0; i < iPopped; ++i ) {
+				iPos = iHead + i;
+				pSlot = &pQueue->arrSlots[(uint32)(iPos & pQueue->iMask)];
+				arrItems[i] = pSlot->pItem;
+				pSlot->pItem = NULL;
+				__xrtQueueAtomicStore64(&pSlot->iSeq, iPos + pQueue->iCapacity);
+			}
+			return iPopped;
+		}
+		xrtThreadYield();
+	}
+}
+XXAPI uint32 xrtMPMCQApproxCount(xmpmcq pQueue)
+{
+	return __xrtQueueMPMCCount(pQueue);
+}
+XXAPI void xrtMPMCQClose(xmpmcq pQueue)
+{
+	if ( pQueue == NULL ) {
+		return;
+	}
+	__xrtQueueAtomicStore32(&pQueue->tBase.bClosed, 1u);
+}
+XXAPI uint32 xrtMPMCQDrain(xmpmcq pQueue, xqueue_drain_fn procDrain, ptr pUserData)
+{
+	uint32 iCount = 0;
+	ptr pItem = NULL;
+	xqueue_result iRet;
+	if ( pQueue == NULL || procDrain == NULL ) {
+		return 0;
+	}
+	for ( ;; ) {
+		iRet = xrtMPMCQTryPop(pQueue, &pItem);
+		if ( iRet != XQUEUE_OK ) {
+			break;
+		}
+		procDrain(pItem, pUserData);
+		iCount++;
+	}
+	return iCount;
+}
+XXAPI bool xrtMPMCQReset(xmpmcq pQueue)
+{
+	uint32 i;
+	if ( pQueue == NULL || pQueue->arrSlots == NULL ) {
+		return FALSE;
+	}
+	if ( xrtMPMCQApproxCount(pQueue) != 0 ) {
+		return FALSE;
+	}
+	for ( i = 0; i < pQueue->iCapacity; ++i ) {
+		pQueue->arrSlots[i].pItem = NULL;
+		__xrtQueueAtomicStore64(&pQueue->arrSlots[i].iSeq, (uint64)i);
+	}
+	__xrtQueueAtomicStore64(&pQueue->iHead, 0u);
+	__xrtQueueAtomicStore64(&pQueue->iTail, 0u);
+	__xrtQueueAtomicStore32(&pQueue->tBase.bClosed, 0u);
+	return TRUE;
+}
+XXAPI bool xrtQueueIsClosed(const xqueuebase* pQueue)
+{
+	if ( pQueue == NULL ) {
+		return FALSE;
+	}
+	return __xrtQueueAtomicLoad32(&pQueue->bClosed) != 0;
+}
+XXAPI bool xrtQueueIsDrained(const xqueuebase* pQueue)
+{
+	if ( pQueue == NULL || !xrtQueueIsClosed(pQueue) ) {
+		return FALSE;
+	}
+	switch ( pQueue->iKind ) {
+		case XQUEUE_KIND_SPSC:
+			return __xrtQueueSPSCCount((xspscq)pQueue) == 0;
+		case XQUEUE_KIND_MPSC:
+			return __xrtQueueMPSCCount((xmpscq)pQueue) == 0;
+		case XQUEUE_KIND_MPMC:
+			return __xrtQueueMPMCCount((xmpmcq)pQueue) == 0;
+		default:
+			break;
+	}
+	return FALSE;
+}
+#ifndef XRT_NO_QUEUE_WAIT
+XXAPI bool xrtMPSCQWaitInit(xmpscqwait pQueue, const xqueue_config* pCfg)
+{
+	if ( pQueue == NULL ) {
+		return FALSE;
+	}
+	memset(pQueue, 0, sizeof(xmpscqwait_struct));
+	if ( !xrtMPSCQInit(&pQueue->tQueue, pCfg) ) {
+		memset(pQueue, 0, sizeof(xmpscqwait_struct));
+		return FALSE;
+	}
+	pQueue->hItems = xrtSemCreate(0u, 0x7fffffffu);
+	if ( pQueue->hItems == NULL ) {
+		xrtMPSCQUnit(&pQueue->tQueue);
+		memset(pQueue, 0, sizeof(xmpscqwait_struct));
+		xrtSetError("mpsc wait queue semaphore init failed.", FALSE);
+		return FALSE;
+	}
+	pQueue->hPopLock = xrtMutexCreate();
+	if ( pQueue->hPopLock == NULL ) {
+		xrtSemDestroy(pQueue->hItems);
+		pQueue->hItems = NULL;
+		xrtMPSCQUnit(&pQueue->tQueue);
+		memset(pQueue, 0, sizeof(xmpscqwait_struct));
+		xrtSetError("mpsc wait queue mutex init failed.", FALSE);
+		return FALSE;
+	}
+	pQueue->iWaiters = 0;
+	return TRUE;
+}
+XXAPI void xrtMPSCQWaitUnit(xmpscqwait pQueue)
+{
+	if ( pQueue == NULL ) {
+		return;
+	}
+	if ( pQueue->hPopLock != NULL ) {
+		xrtMutexDestroy(pQueue->hPopLock);
+		pQueue->hPopLock = NULL;
+	}
+	if ( pQueue->hItems != NULL ) {
+		xrtSemDestroy(pQueue->hItems);
+		pQueue->hItems = NULL;
+	}
+	xrtMPSCQUnit(&pQueue->tQueue);
+	memset(pQueue, 0, sizeof(xmpscqwait_struct));
+}
+XXAPI xmpscqwait xrtMPSCQWaitCreate(const xqueue_config* pCfg)
+{
+	xmpscqwait pQueue = (xmpscqwait)xrtCalloc(1, sizeof(xmpscqwait_struct));
+	if ( pQueue == NULL ) {
+		return NULL;
+	}
+	if ( !xrtMPSCQWaitInit(pQueue, pCfg) ) {
+		xrtFree(pQueue);
+		return NULL;
+	}
+	return pQueue;
+}
+XXAPI void xrtMPSCQWaitDestroy(xmpscqwait pQueue)
+{
+	if ( pQueue == NULL ) {
+		return;
+	}
+	xrtMPSCQWaitUnit(pQueue);
+	xrtFree(pQueue);
+}
+XXAPI xqueue_result xrtMPSCQWaitTryPush(xmpscqwait pQueue, ptr pItem)
+{
+	xqueue_result iRet;
+	if ( pQueue == NULL || pQueue->hItems == NULL ) {
+		return XQUEUE_ERROR;
+	}
+	iRet = xrtMPSCQTryPush(&pQueue->tQueue, pItem);
+	if ( iRet != XQUEUE_OK ) {
+		return iRet;
+	}
+	if ( !xrtSemPost(pQueue->hItems) ) {
+		xrtSetError("mpsc wait queue semaphore post failed.", FALSE);
+		return XQUEUE_ERROR;
+	}
+	return XQUEUE_OK;
+}
+XXAPI xqueue_result xrtMPSCQWaitTryPop(xmpscqwait pQueue, ptr* ppItem)
+{
+	if ( pQueue == NULL || pQueue->hItems == NULL || ppItem == NULL ) {
+		return XQUEUE_ERROR;
+	}
+	*ppItem = NULL;
+	if ( !xrtSemTryWait(pQueue->hItems) ) {
+		return __xrtMPSCQWaitIsClosedAndDrained(pQueue) ? XQUEUE_CLOSED : XQUEUE_EMPTY;
+	}
+	return __xrtMPSCQWaitPopWithToken(pQueue, ppItem);
+}
+XXAPI xqueue_result xrtMPSCQWaitPop(xmpscqwait pQueue, ptr* ppItem)
+{
+	return __xrtMPSCQWaitPopCore(pQueue, ppItem, TRUE, 0u);
+}
+XXAPI xqueue_result xrtMPSCQWaitPopTimeout(xmpscqwait pQueue, ptr* ppItem, uint32 iTimeoutMs)
+{
+	return __xrtMPSCQWaitPopCore(pQueue, ppItem, FALSE, iTimeoutMs);
+}
+XXAPI uint32 xrtMPSCQWaitApproxCount(xmpscqwait pQueue)
+{
+	if ( pQueue == NULL ) {
+		return 0u;
+	}
+	return xrtMPSCQApproxCount(&pQueue->tQueue);
+}
+XXAPI void xrtMPSCQWaitClose(xmpscqwait pQueue)
+{
+	if ( pQueue == NULL || pQueue->hItems == NULL ) {
+		return;
+	}
+	if ( __xrtAtomicCompareExchangeU32(&pQueue->tQueue.tBase.bClosed, 1u, 0u) != 0u ) {
+		return;
+	}
+	__xrtMPSCQWaitWakeAll(pQueue);
+}
+#endif
+#endif
 #ifndef XRT_NO_COROUTINE
 
 // ========================================
@@ -15821,7 +17182,19 @@ XXAPI bool xrtRWLockUpgrade(xrwlock pRWLock)
 #endif
 #define __XRT_CO_BACKEND_TIER_PRODUCTION	2
 #define __XRT_CO_BACKEND_STYLE_INLINE_ASM	2
-#if (defined(__GNUC__) || defined(__clang__)) && !defined(__TINYC__)
+#if defined(__TINYC__)
+	#if (defined(_WIN64)) && (defined(__x86_64__) || defined(_M_X64))
+		#define __XRT_CO_ASM_X64_WIN
+		#define __XRT_CO_BACKEND_NAME	"asm-x64-win64-tcc"
+		#define __XRT_CO_BACKEND_TIER	__XRT_CO_BACKEND_TIER_PRODUCTION
+		#define __XRT_CO_BACKEND_STYLE	__XRT_CO_BACKEND_STYLE_INLINE_ASM
+	#elif !defined(_WIN32) && !defined(_WIN64) && (defined(__x86_64__) || defined(_M_X64))
+		#define __XRT_CO_ASM_X64
+		#define __XRT_CO_BACKEND_NAME	"asm-x64-sysv-tcc"
+		#define __XRT_CO_BACKEND_TIER	__XRT_CO_BACKEND_TIER_PRODUCTION
+		#define __XRT_CO_BACKEND_STYLE	__XRT_CO_BACKEND_STYLE_INLINE_ASM
+	#endif
+#elif defined(__GNUC__) || defined(__clang__)
 	#if (defined(_WIN64)) && (defined(__x86_64__) || defined(_M_X64))
 		#define __XRT_CO_ASM_X64_WIN
 		#define __XRT_CO_BACKEND_NAME	"asm-x64-win64"
@@ -16287,6 +17660,55 @@ static void __xrt_co_sleep_ms(int iMs)
 	#endif
 }
 /* ================================ 后端实现: x86_64 内联汇编 ================================ */
+#define __XRT_CO_JMP_RDX	"jmp *0x00(%%rdx)\n\t"
+#define __XRT_CO_JMP_RSI	"jmp *0x00(%%rsi)\n\t"
+#if defined(__TINYC__) && defined(__XRT_CO_ASM_X64_WIN)
+	/*
+		TCC x64 Windows inline asm 只能解析部分 XMM 指令/寄存器名。
+		这里让 xmm6/xmm7 继续走可读语法，其余高位寄存器使用 .byte 编码。
+	*/
+	#define __XRT_CO_WIN64_SAVE_XMM6	"movups %%xmm6,  0x50(%%rcx)\n\t"
+	#define __XRT_CO_WIN64_SAVE_XMM7	"movups %%xmm7,  0x60(%%rcx)\n\t"
+	#define __XRT_CO_WIN64_SAVE_XMM8	".byte 0x44,0x0f,0x11,0x41,0x70\n\t"
+	#define __XRT_CO_WIN64_SAVE_XMM9	".byte 0x44,0x0f,0x11,0x89,0x80,0x00,0x00,0x00\n\t"
+	#define __XRT_CO_WIN64_SAVE_XMM10	".byte 0x44,0x0f,0x11,0x91,0x90,0x00,0x00,0x00\n\t"
+	#define __XRT_CO_WIN64_SAVE_XMM11	".byte 0x44,0x0f,0x11,0x99,0xA0,0x00,0x00,0x00\n\t"
+	#define __XRT_CO_WIN64_SAVE_XMM12	".byte 0x44,0x0f,0x11,0xA1,0xB0,0x00,0x00,0x00\n\t"
+	#define __XRT_CO_WIN64_SAVE_XMM13	".byte 0x44,0x0f,0x11,0xA9,0xC0,0x00,0x00,0x00\n\t"
+	#define __XRT_CO_WIN64_SAVE_XMM14	".byte 0x44,0x0f,0x11,0xB1,0xD0,0x00,0x00,0x00\n\t"
+	#define __XRT_CO_WIN64_SAVE_XMM15	".byte 0x44,0x0f,0x11,0xB9,0xE0,0x00,0x00,0x00\n\t"
+	#define __XRT_CO_WIN64_LOAD_XMM15	".byte 0x44,0x0f,0x10,0xBA,0xE0,0x00,0x00,0x00\n\t"
+	#define __XRT_CO_WIN64_LOAD_XMM14	".byte 0x44,0x0f,0x10,0xB2,0xD0,0x00,0x00,0x00\n\t"
+	#define __XRT_CO_WIN64_LOAD_XMM13	".byte 0x44,0x0f,0x10,0xAA,0xC0,0x00,0x00,0x00\n\t"
+	#define __XRT_CO_WIN64_LOAD_XMM12	".byte 0x44,0x0f,0x10,0xA2,0xB0,0x00,0x00,0x00\n\t"
+	#define __XRT_CO_WIN64_LOAD_XMM11	".byte 0x44,0x0f,0x10,0x9A,0xA0,0x00,0x00,0x00\n\t"
+	#define __XRT_CO_WIN64_LOAD_XMM10	".byte 0x44,0x0f,0x10,0x92,0x90,0x00,0x00,0x00\n\t"
+	#define __XRT_CO_WIN64_LOAD_XMM9	".byte 0x44,0x0f,0x10,0x8A,0x80,0x00,0x00,0x00\n\t"
+	#define __XRT_CO_WIN64_LOAD_XMM8	".byte 0x44,0x0f,0x10,0x42,0x70\n\t"
+	#define __XRT_CO_WIN64_LOAD_XMM7	"movups 0x60(%%rdx), %%xmm7\n\t"
+	#define __XRT_CO_WIN64_LOAD_XMM6	"movups 0x50(%%rdx), %%xmm6\n\t"
+#else
+	#define __XRT_CO_WIN64_SAVE_XMM6	"movdqu %%xmm6,  0x50(%%rcx)\n\t"
+	#define __XRT_CO_WIN64_SAVE_XMM7	"movdqu %%xmm7,  0x60(%%rcx)\n\t"
+	#define __XRT_CO_WIN64_SAVE_XMM8	"movdqu %%xmm8,  0x70(%%rcx)\n\t"
+	#define __XRT_CO_WIN64_SAVE_XMM9	"movdqu %%xmm9,  0x80(%%rcx)\n\t"
+	#define __XRT_CO_WIN64_SAVE_XMM10	"movdqu %%xmm10, 0x90(%%rcx)\n\t"
+	#define __XRT_CO_WIN64_SAVE_XMM11	"movdqu %%xmm11, 0xA0(%%rcx)\n\t"
+	#define __XRT_CO_WIN64_SAVE_XMM12	"movdqu %%xmm12, 0xB0(%%rcx)\n\t"
+	#define __XRT_CO_WIN64_SAVE_XMM13	"movdqu %%xmm13, 0xC0(%%rcx)\n\t"
+	#define __XRT_CO_WIN64_SAVE_XMM14	"movdqu %%xmm14, 0xD0(%%rcx)\n\t"
+	#define __XRT_CO_WIN64_SAVE_XMM15	"movdqu %%xmm15, 0xE0(%%rcx)\n\t"
+	#define __XRT_CO_WIN64_LOAD_XMM15	"movdqu 0xE0(%%rdx), %%xmm15\n\t"
+	#define __XRT_CO_WIN64_LOAD_XMM14	"movdqu 0xD0(%%rdx), %%xmm14\n\t"
+	#define __XRT_CO_WIN64_LOAD_XMM13	"movdqu 0xC0(%%rdx), %%xmm13\n\t"
+	#define __XRT_CO_WIN64_LOAD_XMM12	"movdqu 0xB0(%%rdx), %%xmm12\n\t"
+	#define __XRT_CO_WIN64_LOAD_XMM11	"movdqu 0xA0(%%rdx), %%xmm11\n\t"
+	#define __XRT_CO_WIN64_LOAD_XMM10	"movdqu 0x90(%%rdx), %%xmm10\n\t"
+	#define __XRT_CO_WIN64_LOAD_XMM9	"movdqu 0x80(%%rdx), %%xmm9\n\t"
+	#define __XRT_CO_WIN64_LOAD_XMM8	"movdqu 0x70(%%rdx), %%xmm8\n\t"
+	#define __XRT_CO_WIN64_LOAD_XMM7	"movdqu 0x60(%%rdx), %%xmm7\n\t"
+	#define __XRT_CO_WIN64_LOAD_XMM6	"movdqu 0x50(%%rdx), %%xmm6\n\t"
+#endif
 #ifdef __XRT_CO_ASM_X64_WIN
 /*
 	Windows x64 ABI callee-saved 寄存器:
@@ -16325,26 +17747,26 @@ static void __xrt_co_swap(__xrt_co_ctx* pFrom, __xrt_co_ctx* pTo)
 		"movq %%r13, 0x38(%%rcx)\n\t"
 		"movq %%r14, 0x40(%%rcx)\n\t"
 		"movq %%r15, 0x48(%%rcx)\n\t"
-		"movdqu %%xmm6,  0x50(%%rcx)\n\t"
-		"movdqu %%xmm7,  0x60(%%rcx)\n\t"
-		"movdqu %%xmm8,  0x70(%%rcx)\n\t"
-		"movdqu %%xmm9,  0x80(%%rcx)\n\t"
-		"movdqu %%xmm10, 0x90(%%rcx)\n\t"
-		"movdqu %%xmm11, 0xA0(%%rcx)\n\t"
-		"movdqu %%xmm12, 0xB0(%%rcx)\n\t"
-		"movdqu %%xmm13, 0xC0(%%rcx)\n\t"
-		"movdqu %%xmm14, 0xD0(%%rcx)\n\t"
-		"movdqu %%xmm15, 0xE0(%%rcx)\n\t"
-		"movdqu 0xE0(%%rdx), %%xmm15\n\t"
-		"movdqu 0xD0(%%rdx), %%xmm14\n\t"
-		"movdqu 0xC0(%%rdx), %%xmm13\n\t"
-		"movdqu 0xB0(%%rdx), %%xmm12\n\t"
-		"movdqu 0xA0(%%rdx), %%xmm11\n\t"
-		"movdqu 0x90(%%rdx), %%xmm10\n\t"
-		"movdqu 0x80(%%rdx), %%xmm9\n\t"
-		"movdqu 0x70(%%rdx), %%xmm8\n\t"
-		"movdqu 0x60(%%rdx), %%xmm7\n\t"
-		"movdqu 0x50(%%rdx), %%xmm6\n\t"
+		__XRT_CO_WIN64_SAVE_XMM6
+		__XRT_CO_WIN64_SAVE_XMM7
+		__XRT_CO_WIN64_SAVE_XMM8
+		__XRT_CO_WIN64_SAVE_XMM9
+		__XRT_CO_WIN64_SAVE_XMM10
+		__XRT_CO_WIN64_SAVE_XMM11
+		__XRT_CO_WIN64_SAVE_XMM12
+		__XRT_CO_WIN64_SAVE_XMM13
+		__XRT_CO_WIN64_SAVE_XMM14
+		__XRT_CO_WIN64_SAVE_XMM15
+		__XRT_CO_WIN64_LOAD_XMM15
+		__XRT_CO_WIN64_LOAD_XMM14
+		__XRT_CO_WIN64_LOAD_XMM13
+		__XRT_CO_WIN64_LOAD_XMM12
+		__XRT_CO_WIN64_LOAD_XMM11
+		__XRT_CO_WIN64_LOAD_XMM10
+		__XRT_CO_WIN64_LOAD_XMM9
+		__XRT_CO_WIN64_LOAD_XMM8
+		__XRT_CO_WIN64_LOAD_XMM7
+		__XRT_CO_WIN64_LOAD_XMM6
 		"movq 0x48(%%rdx), %%r15\n\t"
 		"movq 0x40(%%rdx), %%r14\n\t"
 		"movq 0x38(%%rdx), %%r13\n\t"
@@ -16354,7 +17776,7 @@ static void __xrt_co_swap(__xrt_co_ctx* pFrom, __xrt_co_ctx* pTo)
 		"movq 0x18(%%rdx), %%rbx\n\t"
 		"movq 0x10(%%rdx), %%rbp\n\t"
 		"movq 0x08(%%rdx), %%rsp\n\t"
-		"jmpq *0x00(%%rdx)\n\t"
+		__XRT_CO_JMP_RDX
 		"1:\n\t"
 		:
 		: "c"(pFrom), "d"(pTo)
@@ -16393,7 +17815,7 @@ static void __xrt_co_swap(__xrt_co_ctx* pFrom, __xrt_co_ctx* pTo)
 		"movq 0x18(%%rsi), %%rbx\n\t"
 		"movq 0x10(%%rsi), %%rbp\n\t"
 		"movq 0x08(%%rsi), %%rsp\n\t"
-		"jmpq *0x00(%%rsi)\n\t"
+		__XRT_CO_JMP_RSI
 		"1:\n\t"
 		: : "D"(pFrom), "S"(pTo)
 		: "memory", "rax", "rcx", "rdx",
@@ -24937,23 +26359,6 @@ static bool __xcodecHttpParseInt64(const char* sText, int64_t* pValue)
 	*pValue = iValue;
 	return true;
 }
-static bool __xcodecHttpParseStatusCode(const char* sText, uint32* pValue)
-{
-	uint32 iValue = 0;
-	size_t i = 0;
-
-	if ( !sText || !sText[0] ) return false;
-	for ( i = 0; i < 3u; ++i ) {
-		char ch = sText[i];
-
-		if ( ch < '0' || ch > '9' ) return false;
-		iValue = (iValue * 10u) + (uint32)(ch - '0');
-	}
-	if ( sText[3] != '\0' ) return false;
-	if ( iValue < 100u ) return false;
-	if ( pValue ) *pValue = iValue;
-	return true;
-}
 static bool __xcodecHttpParseHexU64(const char* sText, size_t iLen, uint64* pValue)
 {
 	uint64 iValue = 0;
@@ -25145,10 +26550,7 @@ XXAPI xcodecstatus xrtCodecHttp1Parse(const xnetchain* pInput, xcodecframe* pFra
 		pMsg->iFlags |= XCODEC_HTTP1_F_RESPONSE;
 		pFrame->iFlags |= XCODEC_FRAME_F_RESPONSE;
 		__xcodecHttpCopyToken(pMsg->sVersion, sizeof(pMsg->sVersion), sVersion, strlen(sVersion));
-		if ( !__xcodecHttpParseStatusCode(sStatus, &pMsg->iStatusCode) ) {
-			XNET_FREE(sHeadBuf);
-			return XCODEC_STATUS_ERROR;
-		}
+		pMsg->iStatusCode = (uint32)atoi(sStatus);
 		if ( sReason ) __xcodecHttpCopyToken(pMsg->sReason, sizeof(pMsg->sReason), sReason, strlen(sReason));
 	} else {
 		char* sMethod = sHeadBuf;
@@ -25410,20 +26812,17 @@ typedef struct __xnet_engine_timer {
 	ptr pArg;
 } __xnet_engine_timer;
 typedef void (*xnet_port_event_fn)(xnetworker* pWorker, const xnetportevent* pEvents, uint32 iCount);
-#if defined(_WIN32) || defined(_WIN64)
-	typedef CRITICAL_SECTION __xnet_mutex;
-#else
-	typedef pthread_mutex_t __xnet_mutex;
-#endif
 #if defined(XXRTL_CORE) && !defined(XRT_NO_THREAD)
 	#define __XNET_ENGINE_USE_XRT_THREAD	1
 #else
 	#define __XNET_ENGINE_USE_XRT_THREAD	0
 #endif
 typedef struct {
-	__xnet_engine_cmd* pHead;
-	__xnet_engine_cmd* pTail;
-	__xnet_mutex tLock;
+	xmpscq_struct tQueue;
+	volatile long iFreeLock;
+	__xnet_engine_cmd* pFreeList;
+	uint32 iFreeCount;
+	uint32 iFreeLimit;
 } __xnet_engine_cmdq;
 typedef struct {
 	uint32 iTickMs;
@@ -25435,6 +26834,8 @@ typedef struct {
 #define __XNET_ENGINE_CMD_TIMER_ADD  2u
 #define __XNET_ENGINE_TIMER_PULSE_ID UINT64_C(0xffffffffffffffff)
 #define __XNET_ENGINE_HARVEST_BATCH  128u
+#define __XNET_ENGINE_CMDQ_DEFAULT_CAPACITY 65536u
+#define __XNET_ENGINE_CMDQ_DEFAULT_CACHE_LIMIT 256u
 /* ============================== Public object layout ============================== */
 struct xrt_net_worker {
 	xnetengine* pEngine;
@@ -25522,86 +26923,125 @@ static void __xnetEngineInitPortConfig(xnetportconfig* pPortCfg, const xnetengin
 	pPortCfg->iAcceptBatch = pCfg->iAcceptBatch;
 }
 /* ============================== Internal queue helpers ============================== */
-static bool __xnetCmdQInit(__xnet_engine_cmdq* pQ)
+static void __xnetCmdQFreeNode(ptr pItem, ptr pUserData)
 {
+	(void)pUserData;
+	if ( pItem ) {
+		XNET_FREE(pItem);
+	}
+}
+static uint32 __xnetCmdQResolveFreeLimit(uint32 iCapacity)
+{
+	uint32 iLimit = (iCapacity != 0) ? iCapacity : __XNET_ENGINE_CMDQ_DEFAULT_CAPACITY;
+	if ( iLimit > __XNET_ENGINE_CMDQ_DEFAULT_CACHE_LIMIT ) {
+		iLimit = __XNET_ENGINE_CMDQ_DEFAULT_CACHE_LIMIT;
+	}
+	return (iLimit == 0) ? 1u : iLimit;
+}
+static __xnet_engine_cmd* __xnetCmdQAllocNode(__xnet_engine_cmdq* pQ)
+{
+	__xnet_engine_cmd* pCmd = NULL;
+	if ( pQ == NULL ) {
+		return NULL;
+	}
+	__xrtOwnerSpinLock(&pQ->iFreeLock);
+	pCmd = pQ->pFreeList;
+	if ( pCmd != NULL ) {
+		pQ->pFreeList = pCmd->pNext;
+		pQ->iFreeCount--;
+	}
+	__xrtOwnerSpinUnlock(&pQ->iFreeLock);
+	if ( pCmd == NULL ) {
+		pCmd = (__xnet_engine_cmd*)XNET_ALLOC(sizeof(__xnet_engine_cmd));
+		if ( pCmd == NULL ) {
+			return NULL;
+		}
+	}
+	memset(pCmd, 0, sizeof(__xnet_engine_cmd));
+	return pCmd;
+}
+static void __xnetCmdQRecycleNode(__xnet_engine_cmdq* pQ, __xnet_engine_cmd* pCmd)
+{
+	int bCached = FALSE;
+	if ( pCmd == NULL ) {
+		return;
+	}
+	pCmd->pNext = NULL;
+	if ( pQ != NULL && pQ->iFreeLimit != 0 ) {
+		__xrtOwnerSpinLock(&pQ->iFreeLock);
+		if ( pQ->iFreeCount < pQ->iFreeLimit ) {
+			pCmd->pNext = pQ->pFreeList;
+			pQ->pFreeList = pCmd;
+			pQ->iFreeCount++;
+			bCached = TRUE;
+		}
+		__xrtOwnerSpinUnlock(&pQ->iFreeLock);
+	}
+	if ( !bCached ) {
+		XNET_FREE(pCmd);
+	}
+}
+static void __xnetCmdQFreeCached(__xnet_engine_cmdq* pQ)
+{
+	__xnet_engine_cmd* pList;
+	if ( pQ == NULL ) {
+		return;
+	}
+	__xrtOwnerSpinLock(&pQ->iFreeLock);
+	pList = pQ->pFreeList;
+	pQ->pFreeList = NULL;
+	pQ->iFreeCount = 0;
+	__xrtOwnerSpinUnlock(&pQ->iFreeLock);
+	while ( pList != NULL ) {
+		__xnet_engine_cmd* pNext = pList->pNext;
+		XNET_FREE(pList);
+		pList = pNext;
+	}
+}
+static bool __xnetCmdQInit(__xnet_engine_cmdq* pQ, uint32 iCapacity)
+{
+	xqueue_config tCfg;
 	if ( !pQ ) return false;
 	memset(pQ, 0, sizeof(__xnet_engine_cmdq));
-	#if defined(_WIN32) || defined(_WIN64)
-		InitializeCriticalSection(&pQ->tLock);
-		return true;
-	#else
-		return pthread_mutex_init(&pQ->tLock, NULL) == 0;
-	#endif
+	memset(&tCfg, 0, sizeof(tCfg));
+	tCfg.iCapacity = (iCapacity != 0) ? iCapacity : __XNET_ENGINE_CMDQ_DEFAULT_CAPACITY;
+	if ( !xrtMPSCQInit(&pQ->tQueue, &tCfg) ) {
+		return false;
+	}
+	pQ->iFreeLimit = __xnetCmdQResolveFreeLimit(tCfg.iCapacity);
+	return true;
 }
 static void __xnetCmdQUnit(__xnet_engine_cmdq* pQ)
 {
-	__xnet_engine_cmd* pNode;
 	if ( !pQ ) return;
-	for ( ;; ) {
-		pNode = pQ->pHead;
-		if ( !pNode ) break;
-		pQ->pHead = pNode->pNext;
-		XNET_FREE(pNode);
+	if ( pQ->tQueue.arrSlots ) {
+		xrtMPSCQClose(&pQ->tQueue);
+		(void)xrtMPSCQDrain(&pQ->tQueue, __xnetCmdQFreeNode, NULL);
+		xrtMPSCQUnit(&pQ->tQueue);
 	}
-	pQ->pTail = NULL;
-	#if defined(_WIN32) || defined(_WIN64)
-		DeleteCriticalSection(&pQ->tLock);
-	#else
-		pthread_mutex_destroy(&pQ->tLock);
-	#endif
+	__xnetCmdQFreeCached(pQ);
 }
-static void __xnetCmdQLock(__xnet_engine_cmdq* pQ)
-{
-	#if defined(_WIN32) || defined(_WIN64)
-		EnterCriticalSection(&pQ->tLock);
-	#else
-		pthread_mutex_lock(&pQ->tLock);
-	#endif
-}
-static void __xnetCmdQUnlock(__xnet_engine_cmdq* pQ)
-{
-	#if defined(_WIN32) || defined(_WIN64)
-		LeaveCriticalSection(&pQ->tLock);
-	#else
-		pthread_mutex_unlock(&pQ->tLock);
-	#endif
-}
-static bool __xnetCmdQPushEx(__xnet_engine_cmdq* pQ, uint32 iType, uint32 iDelayMs, xnet_task_fn pfnTask, ptr pArg);
-static bool __xnetCmdQPush(__xnet_engine_cmdq* pQ, xnet_task_fn pfnTask, ptr pArg)
+static xqueue_result __xnetCmdQPushEx(__xnet_engine_cmdq* pQ, uint32 iType, uint32 iDelayMs, xnet_task_fn pfnTask, ptr pArg);
+static xqueue_result __xnetCmdQPush(__xnet_engine_cmdq* pQ, xnet_task_fn pfnTask, ptr pArg)
 {
 	return __xnetCmdQPushEx(pQ, __XNET_ENGINE_CMD_TASK, 0, pfnTask, pArg);
 }
-static bool __xnetCmdQPushEx(__xnet_engine_cmdq* pQ, uint32 iType, uint32 iDelayMs, xnet_task_fn pfnTask, ptr pArg)
+static xqueue_result __xnetCmdQPushEx(__xnet_engine_cmdq* pQ, uint32 iType, uint32 iDelayMs, xnet_task_fn pfnTask, ptr pArg)
 {
 	__xnet_engine_cmd* pCmd;
-	if ( !pQ || !pfnTask ) return false;
-	pCmd = (__xnet_engine_cmd*)XNET_ALLOC(sizeof(__xnet_engine_cmd));
-	if ( !pCmd ) return false;
-	memset(pCmd, 0, sizeof(__xnet_engine_cmd));
+	xqueue_result iRet;
+	if ( !pQ || !pfnTask ) return XQUEUE_ERROR;
+	pCmd = __xnetCmdQAllocNode(pQ);
+	if ( !pCmd ) return XQUEUE_ERROR;
 	pCmd->iType = iType;
 	pCmd->iDelayMs = iDelayMs;
 	pCmd->pfnTask = pfnTask;
 	pCmd->pArg = pArg;
-	__xnetCmdQLock(pQ);
-	if ( pQ->pTail ) {
-		pQ->pTail->pNext = pCmd;
-	} else {
-		pQ->pHead = pCmd;
+	iRet = xrtMPSCQTryPush(&pQ->tQueue, pCmd);
+	if ( iRet != XQUEUE_OK ) {
+		__xnetCmdQRecycleNode(pQ, pCmd);
 	}
-	pQ->pTail = pCmd;
-	__xnetCmdQUnlock(pQ);
-	return true;
-}
-static __xnet_engine_cmd* __xnetCmdQPopAll(__xnet_engine_cmdq* pQ)
-{
-	__xnet_engine_cmd* pHead;
-	if ( !pQ ) return NULL;
-	__xnetCmdQLock(pQ);
-	pHead = pQ->pHead;
-	pQ->pHead = NULL;
-	pQ->pTail = NULL;
-	__xnetCmdQUnlock(pQ);
-	return pHead;
+	return iRet;
 }
 /* ============================== Internal timer wheel helpers ============================== */
 static bool __xnetTimerWheelInit(__xnet_engine_timerwheel* pWheel, uint32 iTickMs, uint32 iSlotCount)
@@ -25708,17 +27148,24 @@ static void __xnetEngineDrainCommands(xnetworker* pWorker)
 	__xnet_engine_cmdq* pQ = pWorker ? (__xnet_engine_cmdq*)pWorker->pCmdQ : NULL;
 	__xnet_engine_timerwheel* pWheel = pWorker ? (__xnet_engine_timerwheel*)pWorker->pTimerWheel : NULL;
 	__xnet_engine_cmd* pNode;
+	ptr pItem = NULL;
+	xqueue_result iRet;
 	if ( !pQ ) return;
-	pNode = __xnetCmdQPopAll(pQ);
-	while ( pNode ) {
-		__xnet_engine_cmd* pNext = pNode->pNext;
+	for ( ;; ) {
+		iRet = xrtMPSCQTryPop(&pQ->tQueue, &pItem);
+		if ( iRet != XQUEUE_OK ) {
+			break;
+		}
+		pNode = (__xnet_engine_cmd*)pItem;
+		if ( !pNode ) {
+			continue;
+		}
 		if ( pNode->iType == __XNET_ENGINE_CMD_TIMER_ADD ) {
 			(void)__xnetTimerWheelSchedule(pWheel, pNode->iDelayMs, pNode->pfnTask, pNode->pArg);
 		} else if ( pNode->pfnTask ) {
 			pNode->pfnTask(pWorker, pNode->pArg);
 		}
-		XNET_FREE(pNode);
-		pNode = pNext;
+		__xnetCmdQRecycleNode(pQ, pNode);
 	}
 }
 static void __xnetEngineStopWorkerResources(xnetworker* pWorker)
@@ -25826,7 +27273,7 @@ static xnet_result __xnetEngineStartWorker(xnetworker* pWorker, const xnetengine
 	if ( !pWorker || !pEngineCfg || !pOps || !pPortCfg || !pMemCfg ) return XRT_NET_ERROR;
 	pWorker->pCmdQ = XNET_ALLOC(sizeof(__xnet_engine_cmdq));
 	if ( !pWorker->pCmdQ ) return XRT_NET_ERROR;
-	if ( !__xnetCmdQInit((__xnet_engine_cmdq*)pWorker->pCmdQ) ) {
+	if ( !__xnetCmdQInit((__xnet_engine_cmdq*)pWorker->pCmdQ, pEngineCfg->iCmdQueueSize) ) {
 		XNET_FREE(pWorker->pCmdQ);
 		pWorker->pCmdQ = NULL;
 		return XRT_NET_ERROR;
@@ -25955,6 +27402,7 @@ XXAPI xnet_result xrtNetEnginePost(xnetengine* pEngine, uint32 iAffinityKey, xne
 {
 	xnetworker* pWorker;
 	__xnet_engine_cmdq* pQ;
+	xqueue_result iPushRet;
 	if ( !pEngine || !pEngine->bRunning || !pfnTask || pEngine->iWorkerCount == 0 ) {
 		return XRT_NET_ERROR;
 	}
@@ -25963,7 +27411,11 @@ XXAPI xnet_result xrtNetEnginePost(xnetengine* pEngine, uint32 iAffinityKey, xne
 		return XRT_NET_ERROR;
 	}
 	pQ = (__xnet_engine_cmdq*)pWorker->pCmdQ;
-	if ( !__xnetCmdQPush(pQ, pfnTask, pArg) ) {
+	iPushRet = __xnetCmdQPush(pQ, pfnTask, pArg);
+	if ( iPushRet == XQUEUE_FULL ) {
+		return XRT_NET_AGAIN;
+	}
+	if ( iPushRet != XQUEUE_OK ) {
 		return XRT_NET_ERROR;
 	}
 	if ( xrtNetPortWake(&pWorker->tPort) != XRT_NET_OK ) {
@@ -25978,6 +27430,7 @@ XXAPI xnet_result xrtNetEnginePostDelayed(xnetengine* pEngine, uint32 iAffinityK
 {
 	xnetworker* pWorker;
 	__xnet_engine_cmdq* pQ;
+	xqueue_result iPushRet;
 	if ( !pEngine || !pEngine->bRunning || !pfnTask || pEngine->iWorkerCount == 0 ) {
 		return XRT_NET_ERROR;
 	}
@@ -25986,7 +27439,11 @@ XXAPI xnet_result xrtNetEnginePostDelayed(xnetengine* pEngine, uint32 iAffinityK
 		return XRT_NET_ERROR;
 	}
 	pQ = (__xnet_engine_cmdq*)pWorker->pCmdQ;
-	if ( !__xnetCmdQPushEx(pQ, __XNET_ENGINE_CMD_TIMER_ADD, iDelayMs, pfnTask, pArg) ) {
+	iPushRet = __xnetCmdQPushEx(pQ, __XNET_ENGINE_CMD_TIMER_ADD, iDelayMs, pfnTask, pArg);
+	if ( iPushRet == XQUEUE_FULL ) {
+		return XRT_NET_AGAIN;
+	}
+	if ( iPushRet != XQUEUE_OK ) {
 		return XRT_NET_ERROR;
 	}
 	(void)xrtNetPortWake(&pWorker->tPort);
@@ -30583,6 +32040,13 @@ XXAPI bool xrtEd25519Verify(const uint8 *pMsg, size_t iMsgLen, const uint8 *pSig
         xrtTlsFeed
       - builtin client/server operation with no external TLS dependency
 */
+#if defined(_WIN32) || defined(_WIN64)
+	#ifdef __TINYC__
+		#include <winapi/wincrypt.h>
+	#else
+		#include <wincrypt.h>
+	#endif
+#endif
 typedef struct xrt_tls_context xtlsctx;
 XXAPI void xrtTlsDestroy(xtlsctx *pCtx);
 XXAPI xnet_result xrtTlsSetCert(xtlsctx *pCtx, const char *sCertFile, const char *sKeyFile);
@@ -31113,6 +32577,10 @@ struct __xrt_x509_cert {
 	uint8 *pEdPub;
 	size_t iEdPubSz;
 };
+enum __xrt_x509_parse_mode {
+	__XRT_X509_PARSE_STRICT = 0,
+	__XRT_X509_PARSE_ALLOW_UNKNOWN_SIGALG
+};
 static int __xrt_tls_ascii_tolower(int c)
 {
 	if ( c >= 'A' && c <= 'Z' ) return c + ('a' - 'A');
@@ -31362,6 +32830,18 @@ static bool __xrt_x509_parse_signature_algorithm(const struct __xrt_der_tlv *pAl
 	}
 	return false;
 }
+static bool __xrt_x509_parse_signature_algorithm_ex(const struct __xrt_der_tlv *pAlgSeq,
+	enum __xrt_x509_sig_alg *pSigAlg, size_t *pHashLen, enum __xrt_x509_parse_mode iMode)
+{
+	struct __xrt_der_tlv tSeq, tOID;
+	if ( __xrt_x509_parse_signature_algorithm(pAlgSeq, pSigAlg, pHashLen) ) return true;
+	if ( iMode != __XRT_X509_PARSE_ALLOW_UNKNOWN_SIGALG ) return false;
+	if ( !pAlgSeq || pAlgSeq->iType != 0x30 || !pSigAlg || !pHashLen ) return false;
+	*pSigAlg = __XRT_X509_SIGALG_UNKNOWN;
+	*pHashLen = 0;
+	tSeq = *pAlgSeq;
+	return __xrt_der_next(&tSeq, &tOID) > 0 && tOID.iType == 0x06;
+}
 static void __xrt_x509_add_dns_name(struct __xrt_x509_cert *pCert, const uint8 *pName, size_t iNameLen)
 {
 	size_t iCopy;
@@ -31540,7 +33020,8 @@ static bool __xrt_x509_parse_extensions(struct __xrt_x509_cert *pCert, const str
 	}
 	return true;
 }
-static bool __xrt_x509_parse(uint8 *pCertDer, size_t iCertLen, struct __xrt_x509_cert *pCert)
+static bool __xrt_x509_parse_ex(uint8 *pCertDer, size_t iCertLen, struct __xrt_x509_cert *pCert,
+	enum __xrt_x509_parse_mode iMode)
 {
 	struct __xrt_der_tlv tRoot, tTbs, tSigAlg, tSigValue;
 	struct __xrt_der_tlv tFields, tField, tValidity, tTime;
@@ -31552,7 +33033,9 @@ static bool __xrt_x509_parse(uint8 *pCertDer, size_t iCertLen, struct __xrt_x509
 	if ( __xrt_der_next(&tRoot, &tTbs) <= 0 || tTbs.iType != 0x30 ) return false;
 	if ( __xrt_der_next(&tRoot, &tSigAlg) <= 0 || tSigAlg.iType != 0x30 ) return false;
 	if ( __xrt_der_next(&tRoot, &tSigValue) <= 0 || tSigValue.iType != 0x03 || tSigValue.iLen < 2 ) return false;
-	if ( !__xrt_x509_parse_signature_algorithm(&tSigAlg, &pCert->iSigAlg, &pCert->iSigHashLen) ) return false;
+	if ( !__xrt_x509_parse_signature_algorithm_ex(&tSigAlg, &pCert->iSigAlg, &pCert->iSigHashLen, iMode) ) {
+		return false;
+	}
 	pCert->pTbs = tTbs.pRaw;
 	pCert->iTbsLen = tTbs.iTotalLen;
 	pCert->pSig = tSigValue.pValue + 1;
@@ -31592,6 +33075,14 @@ static bool __xrt_x509_parse(uint8 *pCertDer, size_t iCertLen, struct __xrt_x509
 	}
 	return true;
 }
+static bool __xrt_x509_parse(uint8 *pCertDer, size_t iCertLen, struct __xrt_x509_cert *pCert)
+{
+	return __xrt_x509_parse_ex(pCertDer, iCertLen, pCert, __XRT_X509_PARSE_STRICT);
+}
+static bool __xrt_x509_parse_for_chain(uint8 *pCertDer, size_t iCertLen, struct __xrt_x509_cert *pCert)
+{
+	return __xrt_x509_parse_ex(pCertDer, iCertLen, pCert, __XRT_X509_PARSE_ALLOW_UNKNOWN_SIGALG);
+}
 static bool __xrt_x509_is_time_valid(const struct __xrt_x509_cert *pCert, time_t iNow)
 {
 	if ( !pCert || !pCert->bHasValidity ) return false;
@@ -31600,6 +33091,34 @@ static bool __xrt_x509_is_time_valid(const struct __xrt_x509_cert *pCert, time_t
 static bool __xrt_x509_name_eq(const uint8 *pA, size_t iALen, const uint8 *pB, size_t iBLen)
 {
 	return pA && pB && iALen == iBLen && memcmp(pA, pB, iALen) == 0;
+}
+static bool __xrt_x509_public_key_eq(const struct __xrt_x509_cert *pA, const struct __xrt_x509_cert *pB)
+{
+	if ( !pA || !pB ) return false;
+	if ( pA->bIsECPubKey != pB->bIsECPubKey ) return false;
+	if ( pA->bIsEd25519Key != pB->bIsEd25519Key ) return false;
+	if ( pA->bIsRSAPSSKey != pB->bIsRSAPSSKey ) return false;
+	if ( pA->bIsEd25519Key ) {
+		return pA->pEdPub && pB->pEdPub && pA->iEdPubSz == pB->iEdPubSz &&
+			memcmp(pA->pEdPub, pB->pEdPub, pA->iEdPubSz) == 0;
+	}
+	if ( pA->bIsECPubKey ) {
+		return pA->pECPub && pB->pECPub && pA->iECPubSz == pB->iECPubSz &&
+			memcmp(pA->pECPub, pB->pECPub, pA->iECPubSz) == 0;
+	}
+	return pA->pMod && pB->pMod && pA->pExp && pB->pExp &&
+		pA->iModSz == pB->iModSz && pA->iExpSz == pB->iExpSz &&
+		memcmp(pA->pMod, pB->pMod, pA->iModSz) == 0 &&
+		memcmp(pA->pExp, pB->pExp, pA->iExpSz) == 0;
+}
+static bool __xrt_x509_anchor_matches(const struct __xrt_x509_cert *pCert, const struct __xrt_x509_cert *pAnchor)
+{
+	if ( !pCert || !pAnchor ) return false;
+	if ( !__xrt_x509_name_eq(pCert->pSubjectRaw, pCert->iSubjectRawLen,
+		pAnchor->pSubjectRaw, pAnchor->iSubjectRawLen) ) {
+		return false;
+	}
+	return __xrt_x509_public_key_eq(pCert, pAnchor);
 }
 static bool __xrt_x509_verify_signature(const struct __xrt_x509_cert *pChild, const struct __xrt_x509_cert *pIssuer)
 {
@@ -31640,6 +33159,19 @@ static bool __xrt_x509_is_ca_usable(const struct __xrt_x509_cert *pCert)
 	if ( pCert->bHasBasicConstraints && !pCert->bIsCA ) return false;
 	if ( pCert->bHasKeyUsage && (pCert->iKeyUsage & (1u << 5)) == 0 ) return false;
 	return true;
+}
+static bool __xrt_tls_current_cert_trusted_by_anchor(const struct __xrt_x509_cert *pCurrent,
+	const struct __xrt_x509_cert *pAnchor, time_t iNow)
+{
+	if ( !pCurrent || !pAnchor ) return false;
+	if ( !__xrt_x509_is_ca_usable(pAnchor) ) return false;
+	if ( !__xrt_x509_is_time_valid(pAnchor, iNow) ) return false;
+	if ( __xrt_x509_anchor_matches(pCurrent, pAnchor) ) return true;
+	if ( !__xrt_x509_name_eq(pCurrent->pIssuerRaw, pCurrent->iIssuerRawLen,
+		pAnchor->pSubjectRaw, pAnchor->iSubjectRawLen) ) {
+		return false;
+	}
+	return __xrt_x509_verify_signature(pCurrent, pAnchor);
 }
 /* ============================== TLS 上下文结构 ============================== */
 // 握手状态机
@@ -32053,7 +33585,7 @@ static bool __xrt_tls_verify_presented_chain(xtlsctx *pCtx, uint8 **apCertData, 
 		return false;
 	}
 	for ( i = 0; i < iCertCount; i++ ) {
-		if ( !__xrt_x509_parse(apCertData[i], apCertLen[i], &aCerts[i]) ) return false;
+		if ( !__xrt_x509_parse_for_chain(apCertData[i], apCertLen[i], &aCerts[i]) ) return false;
 	}
 	if ( !__xrt_tls_validate_leaf_server_cert(pCtx, &aCerts[0]) ) return false;
 	if ( !__xrt_tls_copy_pubkey_from_cert(pCtx, &aCerts[0]) ) return false;
@@ -32086,12 +33618,8 @@ static bool __xrt_tls_verify_presented_chain(xtlsctx *pCtx, uint8 **apCertData, 
 				struct __xrt_x509_cert tAnchor;
 				bool bOK = false;
 				if ( !__xrt_tls_ca_bundle_next(pCtx, &iOffset, &pAnchorDer, &iAnchorLen, &bOwned) ) break;
-				if ( __xrt_x509_parse(pAnchorDer, iAnchorLen, &tAnchor) &&
-					__xrt_x509_name_eq(aCerts[iCurrent].pIssuerRaw, aCerts[iCurrent].iIssuerRawLen,
-						tAnchor.pSubjectRaw, tAnchor.iSubjectRawLen) &&
-					__xrt_x509_is_ca_usable(&tAnchor) &&
-					__xrt_x509_is_time_valid(&tAnchor, iNow) &&
-					__xrt_x509_verify_signature(&aCerts[iCurrent], &tAnchor) ) {
+				if ( __xrt_x509_parse_for_chain(pAnchorDer, iAnchorLen, &tAnchor) &&
+					__xrt_tls_current_cert_trusted_by_anchor(&aCerts[iCurrent], &tAnchor, iNow) ) {
 					bOK = true;
 				}
 				if ( bOwned ) xrtFree(pAnchorDer);
@@ -32110,14 +33638,8 @@ static bool __xrt_tls_verify_presented_chain(xtlsctx *pCtx, uint8 **apCertData, 
 			struct __xrt_x509_cert tAnchor;
 			bool bTrusted = false;
 			if ( !__xrt_tls_ca_bundle_next(pCtx, &iOffset, &pAnchorDer, &iAnchorLen, &bOwned) ) break;
-			if ( __xrt_x509_parse(pAnchorDer, iAnchorLen, &tAnchor) &&
-				__xrt_x509_is_ca_usable(&tAnchor) &&
-				__xrt_x509_is_time_valid(&tAnchor, iNow) &&
-				__xrt_x509_name_eq(aCerts[iCurrent].pSubjectRaw, aCerts[iCurrent].iSubjectRawLen,
-					tAnchor.pSubjectRaw, tAnchor.iSubjectRawLen) &&
-				__xrt_x509_name_eq(aCerts[iCurrent].pIssuerRaw, aCerts[iCurrent].iIssuerRawLen,
-					tAnchor.pIssuerRaw, tAnchor.iIssuerRawLen) &&
-				__xrt_x509_verify_signature(&aCerts[iCurrent], &tAnchor) ) {
+			if ( __xrt_x509_parse_for_chain(pAnchorDer, iAnchorLen, &tAnchor) &&
+				__xrt_tls_current_cert_trusted_by_anchor(&aCerts[iCurrent], &tAnchor, iNow) ) {
 				bTrusted = true;
 			}
 			if ( bOwned ) xrtFree(pAnchorDer);
@@ -32196,6 +33718,103 @@ static bool __xrt_tls_load_der_file(const char *sFile, uint8 **ppDer, size_t *pD
 		return true;
 	}
 }
+static bool __xrt_tls_append_pem_cert(__xrt_tls_buf* pBuf, const uint8* pDer, size_t iDerLen)
+{
+	static const char sBegin[] = "-----BEGIN CERTIFICATE-----\n";
+	static const char sEnd[] = "-----END CERTIFICATE-----\n";
+	str sBase64;
+	size_t iBase64Len;
+	size_t iOffset;
+	if ( !pBuf || !pDer || iDerLen == 0 ) return false;
+	sBase64 = xrtBase64Encode((ptr)pDer, iDerLen, NULL);
+	if ( !sBase64 || sBase64 == xCore.sNull ) return false;
+	iBase64Len = strlen(sBase64);
+	if ( !__xrt_tls_buf_append(pBuf, sBegin, sizeof(sBegin) - 1) ) {
+		xrtFree(sBase64);
+		return false;
+	}
+	for ( iOffset = 0; iOffset < iBase64Len; iOffset += 64 ) {
+		size_t iChunk = iBase64Len - iOffset;
+		if ( iChunk > 64 ) iChunk = 64;
+		if ( !__xrt_tls_buf_append(pBuf, sBase64 + iOffset, iChunk)
+			|| !__xrt_tls_buf_append(pBuf, "\n", 1) ) {
+			xrtFree(sBase64);
+			return false;
+		}
+	}
+	xrtFree(sBase64);
+	return __xrt_tls_buf_append(pBuf, sEnd, sizeof(sEnd) - 1);
+}
+#if defined(_WIN32) || defined(_WIN64)
+static bool __xrt_tls_load_windows_root_store(xtlsctx *pCtx)
+{
+	typedef HCERTSTORE (WINAPI *procCertOpenStore_t)(LPCSTR, DWORD, ULONG_PTR, DWORD, const void*);
+	typedef PCCERT_CONTEXT (WINAPI *procCertEnumCertificatesInStore_t)(HCERTSTORE, PCCERT_CONTEXT);
+	typedef BOOL (WINAPI *procCertCloseStore_t)(HCERTSTORE, DWORD);
+	static procCertOpenStore_t procCertOpenStore = NULL;
+	static procCertEnumCertificatesInStore_t procCertEnumCertificatesInStore = NULL;
+	static procCertCloseStore_t procCertCloseStore = NULL;
+	static bool bCrypt32Loaded = false;
+	static const DWORD arrStoreFlags[] = {
+		CERT_SYSTEM_STORE_CURRENT_USER,
+		CERT_SYSTEM_STORE_LOCAL_MACHINE
+	};
+	__xrt_tls_buf tPemBuf;
+	HCERTSTORE hStore = NULL;
+	PCCERT_CONTEXT pCert = NULL;
+	size_t i;
+	bool bAnyLoaded = false;
+	if ( !pCtx ) return false;
+	if ( !bCrypt32Loaded ) {
+		HMODULE hLib = LoadLibraryA("crypt32.dll");
+		if ( hLib ) {
+			procCertOpenStore = (procCertOpenStore_t)GetProcAddress(hLib, "CertOpenStore");
+			procCertEnumCertificatesInStore =
+				(procCertEnumCertificatesInStore_t)GetProcAddress(hLib, "CertEnumCertificatesInStore");
+			procCertCloseStore = (procCertCloseStore_t)GetProcAddress(hLib, "CertCloseStore");
+		}
+		bCrypt32Loaded = true;
+	}
+	if ( !procCertOpenStore || !procCertEnumCertificatesInStore || !procCertCloseStore ) {
+		return false;
+	}
+	if ( !__xrt_tls_buf_init(&tPemBuf, 4096) ) {
+		return false;
+	}
+	for ( i = 0; i < sizeof(arrStoreFlags) / sizeof(arrStoreFlags[0]); i++ ) {
+		hStore = procCertOpenStore(
+			CERT_STORE_PROV_SYSTEM_A,
+			0,
+			0,
+			CERT_STORE_OPEN_EXISTING_FLAG | CERT_STORE_READONLY_FLAG | arrStoreFlags[i],
+			"ROOT");
+		if ( !hStore ) continue;
+		pCert = NULL;
+		while ( (pCert = procCertEnumCertificatesInStore(hStore, pCert)) != NULL ) {
+			if ( !pCert->pbCertEncoded || pCert->cbCertEncoded == 0 ) continue;
+			if ( !__xrt_tls_append_pem_cert(&tPemBuf, pCert->pbCertEncoded, pCert->cbCertEncoded) ) {
+				procCertCloseStore(hStore, 0);
+				__xrt_tls_buf_free(&tPemBuf);
+				return false;
+			}
+			bAnyLoaded = true;
+		}
+		procCertCloseStore(hStore, 0);
+		hStore = NULL;
+	}
+	if ( !bAnyLoaded || !__xrt_tls_buf_append(&tPemBuf, "\0", 1) ) {
+		__xrt_tls_buf_free(&tPemBuf);
+		return false;
+	}
+	pCtx->pCaData = (uint8*)tPemBuf.pBase;
+	pCtx->iCaDataLen = tPemBuf.iSize - 1;
+	tPemBuf.pBase = NULL;
+	tPemBuf.pData = NULL;
+	tPemBuf.iSize = 0;
+	tPemBuf.iCapacity = 0;
+	return true;
+}
+#endif
 static bool __xrt_tls_load_ca_bundle(xtlsctx *pCtx, const char *sCaFile)
 {
 	static const char *aDefaultPaths[] = {
@@ -32221,12 +33840,18 @@ static bool __xrt_tls_load_ca_bundle(xtlsctx *pCtx, const char *sCaFile)
 	if ( sEnvPath && sEnvPath[0] && __xrt_tls_load_file_copy(sEnvPath, &pCtx->pCaData, &pCtx->iCaDataLen) ) {
 		return true;
 	}
-	for ( i = 0; i < sizeof(aDefaultPaths) / sizeof(aDefaultPaths[0]); i++ ) {
-		if ( xrtFileExists((str)aDefaultPaths[i]) &&
-			__xrt_tls_load_file_copy(aDefaultPaths[i], &pCtx->pCaData, &pCtx->iCaDataLen) ) {
+	#if defined(_WIN32) || defined(_WIN64)
+		if ( __xrt_tls_load_windows_root_store(pCtx) ) {
 			return true;
 		}
-	}
+	#else
+		for ( i = 0; i < sizeof(aDefaultPaths) / sizeof(aDefaultPaths[0]); i++ ) {
+			if ( xrtFileExists((str)aDefaultPaths[i]) &&
+				__xrt_tls_load_file_copy(aDefaultPaths[i], &pCtx->pCaData, &pCtx->iCaDataLen) ) {
+				return true;
+			}
+		}
+	#endif
 	return false;
 }
 static void __xrt_tls13_hash_update(xtlsctx *pCtx, const uint8 *pData, size_t iLen)
@@ -36574,9 +38199,7 @@ static uint32 __xnetProxyStateFeed(__xnet_proxy_state* pState, const xnetproxy* 
 					uint32 iHeaderEnd = __xnetProxyFindHttpHeaderEnd(pState->aRecv, pState->iRecvLen);
 					char chSaved;
 					char* pStatus;
-					char* pStatusEnd;
-					char chStatusSaved;
-					uint32 iStatusCode;
+					int iStatusCode;
 					if ( iHeaderEnd == 0u ) return __XNET_PROXY_ACTION_WAIT;
 					chSaved = pState->aRecv[iHeaderEnd - 1u];
 					pState->aRecv[iHeaderEnd - 1u] = '\0';
@@ -36589,19 +38212,9 @@ static uint32 __xnetProxyStateFeed(__xnet_proxy_state* pState, const xnetproxy* 
 						pState->aRecv[iHeaderEnd - 1u] = chSaved;
 						return __XNET_PROXY_ACTION_ERROR;
 					}
-					while ( *pStatus == ' ' ) pStatus++;
-					pStatusEnd = pStatus;
-					while ( *pStatusEnd && *pStatusEnd != ' ' && *pStatusEnd != '\r' ) pStatusEnd++;
-					chStatusSaved = *pStatusEnd;
-					*pStatusEnd = '\0';
-					if ( !__xcodecHttpParseStatusCode(pStatus, &iStatusCode) ) {
-						*pStatusEnd = chStatusSaved;
-						pState->aRecv[iHeaderEnd - 1u] = chSaved;
-						return __XNET_PROXY_ACTION_ERROR;
-					}
-					*pStatusEnd = chStatusSaved;
+					iStatusCode = atoi(pStatus + 1);
 					pState->aRecv[iHeaderEnd - 1u] = chSaved;
-					if ( iStatusCode != 200u ) return __XNET_PROXY_ACTION_ERROR;
+					if ( iStatusCode != 200 ) return __XNET_PROXY_ACTION_ERROR;
 					__xnetProxyConsumeRecv(pState, iHeaderEnd);
 					pState->iStage = __XNET_PROXY_STAGE_READY;
 					return __XNET_PROXY_ACTION_READY;
@@ -36740,7 +38353,6 @@ struct xrt_net_stream {
 	uint32 iFlags;
 	uint32 iRecvLimit;
 	uint32 iConnectTimeoutMs;
-	uint32 iInternalError;
 	xnet_result iCloseReason;
 	volatile long iAsyncHoldCount;
 	volatile long iOpenTimerState;
@@ -36752,8 +38364,6 @@ struct xrt_net_stream {
 	bool bTlsCloseQueued;
 	bool bDestroyPending;
 };
-#define XNET_STREAM_INTERNAL_ERROR_NONE 0u
-#define XNET_STREAM_INTERNAL_ERROR_RECV_LIMIT 1u
 XXAPI void xrtNetStreamDestroy(xnetstream* pStream);
 XXAPI void xrtNetStreamClose(xnetstream* pStream, uint32 iFlags);
 static void __xnetStreamOnPortEvents(xnetworker* pWorker, const xnetportevent* pEvents, uint32 iCount);
@@ -37414,32 +39024,6 @@ static ptr __xnetStreamOwner(xnetstream* pStream)
 {
 	return pStream ? pStream->pUserData : NULL;
 }
-
-static inline void __xnetStreamEmitInternalError(xnetstream* pStream, uint32 iInternalError)
-{
-	if ( pStream == NULL ) {
-		return;
-	}
-
-	pStream->iInternalError = iInternalError;
-	if ( pStream->pEvents && pStream->pEvents->OnError ) {
-		pStream->pEvents->OnError(__xnetStreamOwner(pStream), pStream, -1);
-	}
-}
-
-static inline uint32 xrtNetStreamTakeInternalError(xnetstream* pStream)
-{
-	uint32 iInternalError;
-
-	if ( pStream == NULL ) {
-		return XNET_STREAM_INTERNAL_ERROR_NONE;
-	}
-
-	iInternalError = pStream->iInternalError;
-	pStream->iInternalError = XNET_STREAM_INTERNAL_ERROR_NONE;
-	return iInternalError;
-}
-
 static bool __xnetStreamAttachTls(xnetstream* pStream, const xtlsconfig* pCfg, bool bIsServer)
 {
 	if ( !pStream ) return false;
@@ -37609,7 +39193,9 @@ static bool __xnetStreamAppendRecvCopy(xnetstream* pStream, const void* pData, s
 	bool bOk;
 	if ( !pStream || !pData || iLen == 0 ) return false;
 	if ( pStream->iRecvLimit > 0 && xrtNetChainBytes(&pStream->tRxChain) + iLen > pStream->iRecvLimit ) {
-		__xnetStreamEmitInternalError(pStream, XNET_STREAM_INTERNAL_ERROR_RECV_LIMIT);
+		if ( pStream->pEvents && pStream->pEvents->OnError ) {
+			pStream->pEvents->OnError(__xnetStreamOwner(pStream), pStream, -1);
+		}
 		xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 		return false;
 	}
@@ -37624,7 +39210,9 @@ static bool __xnetStreamAppendRecvRef(xnetstream* pStream, const xnetbufref* pRe
 	bool bOk;
 	if ( !pStream || !pRef ) return false;
 	if ( pStream->iRecvLimit > 0 && xrtNetChainBytes(&pStream->tRxChain) + pRef->iLen > pStream->iRecvLimit ) {
-		__xnetStreamEmitInternalError(pStream, XNET_STREAM_INTERNAL_ERROR_RECV_LIMIT);
+		if ( pStream->pEvents && pStream->pEvents->OnError ) {
+			pStream->pEvents->OnError(__xnetStreamOwner(pStream), pStream, -1);
+		}
 		xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 		return false;
 	}
@@ -37696,7 +39284,9 @@ static bool __xnetStreamDriveProxyState(xnetstream* pStream, const void* pData, 
 	}
 	if ( iAction == __XNET_PROXY_ACTION_ERROR ) {
 		__xnetStreamFreeTempChain(pCarry);
-		__xnetStreamEmitInternalError(pStream, XNET_STREAM_INTERNAL_ERROR_NONE);
+		if ( pStream->pEvents && pStream->pEvents->OnError ) {
+			pStream->pEvents->OnError(__xnetStreamOwner(pStream), pStream, -1);
+		}
 		xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 		return false;
 	}
@@ -37796,7 +39386,9 @@ static bool __xnetStreamDrainTlsPlain(xnetstream* pStream)
 			return false;
 		}
 		if ( iRes != XRT_NET_OK ) {
-			__xnetStreamEmitInternalError(pStream, XNET_STREAM_INTERNAL_ERROR_NONE);
+			if ( pStream->pEvents && pStream->pEvents->OnError ) {
+				pStream->pEvents->OnError(__xnetStreamOwner(pStream), pStream, -1);
+			}
 			xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 			return false;
 		}
@@ -37837,7 +39429,9 @@ static bool __xnetStreamDriveTlsHandshake(xnetstream* pStream)
 				__xnetSocketBytesAvailable(pStream->hSocket));
 		#endif
 		if ( !__xnetStreamQueueTlsCipher(pStream) ) {
-			__xnetStreamEmitInternalError(pStream, XNET_STREAM_INTERNAL_ERROR_NONE);
+			if ( pStream->pEvents && pStream->pEvents->OnError ) {
+				pStream->pEvents->OnError(__xnetStreamOwner(pStream), pStream, -1);
+			}
 			xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 			return false;
 		}
@@ -37857,7 +39451,9 @@ static bool __xnetStreamDriveTlsHandshake(xnetstream* pStream)
 		(void)__xnetStreamArmRecvWatch(pStream);
 	}
 	if ( iRes == XRT_NET_OK || iRes == XRT_NET_AGAIN ) return true;
-	__xnetStreamEmitInternalError(pStream, XNET_STREAM_INTERNAL_ERROR_NONE);
+	if ( pStream->pEvents && pStream->pEvents->OnError ) {
+		pStream->pEvents->OnError(__xnetStreamOwner(pStream), pStream, -1);
+	}
 	xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 	return false;
 }
@@ -38114,7 +39710,9 @@ static void __xnetStreamHandleRecvEvent(xnetstream* pStream, xnetchain* pChain)
 		return;
 	}
 	if ( pStream->iRecvLimit > 0 && xrtNetChainBytes(&pStream->tRxChain) + xrtNetChainBytes(pChain) > pStream->iRecvLimit ) {
-		__xnetStreamEmitInternalError(pStream, XNET_STREAM_INTERNAL_ERROR_RECV_LIMIT);
+		if ( pStream->pEvents && pStream->pEvents->OnError ) {
+			pStream->pEvents->OnError(__xnetStreamOwner(pStream), pStream, -1);
+		}
 		__xnetStreamFreeTempChain(pChain);
 		xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 		return;
@@ -38123,7 +39721,9 @@ static void __xnetStreamHandleRecvEvent(xnetstream* pStream, xnetchain* pChain)
 		bool bHandshakeReady = __xnetStreamTlsReady(pStream);
 		if ( !__xnetStreamFeedTlsChain(pStream, pChain) ) {
 			__xnetStreamFreeTempChain(pChain);
-			__xnetStreamEmitInternalError(pStream, XNET_STREAM_INTERNAL_ERROR_NONE);
+			if ( pStream->pEvents && pStream->pEvents->OnError ) {
+				pStream->pEvents->OnError(__xnetStreamOwner(pStream), pStream, -1);
+			}
 			xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 			return;
 		}
@@ -38457,7 +40057,6 @@ static xnetstream* __xnetListenerCreateAcceptedStream(xnetlistener* pListener, p
 {
 	xnetstream* pStream;
 	xnetworker* pWorker;
-	bool bAccepted = true;
 	if ( !pListener || !pListener->pEngine ) return NULL;
 	pStream = (xnetstream*)XNET_ALLOC(sizeof(xnetstream));
 	if ( !pStream ) return NULL;
@@ -38476,13 +40075,6 @@ static xnetstream* __xnetListenerCreateAcceptedStream(xnetlistener* pListener, p
 	__xnetStreamInitQueues(pStream, pWorker);
 	__xnetStreamApplyDefaults(pStream, NULL, &pListener->tConfig);
 	if ( !__xnetStreamAttachTls(pStream, pListener->tConfig.pTlsConfig, true) ) {
-		xrtNetStreamDestroy(pStream);
-		return NULL;
-	}
-	if ( pListener->pEvents && pListener->pEvents->OnAccept ) {
-		bAccepted = pListener->pEvents->OnAccept(pListener->pUserData, pListener, pStream);
-	}
-	if ( !bAccepted ) {
 		xrtNetStreamDestroy(pStream);
 		return NULL;
 	}
@@ -38516,6 +40108,7 @@ static bool __xnetListenerAcceptSocket(xnetlistener* pListener, __xnet_listener_
 static xnetstream* __xnetListenerWrapAcceptedSocket(xnetlistener* pListener, const __xnet_listener_accept_raw* pRaw, ptr pUserData)
 {
 	xnetstream* pStream;
+	bool bAccepted = true;
 	if ( !pListener || !pRaw || !__xnetSocketIsValid(pRaw->hSocket) ) return NULL;
 	pStream = __xnetListenerCreateAcceptedStream(pListener, pUserData);
 	if ( !pStream ) {
@@ -38540,6 +40133,13 @@ static xnetstream* __xnetListenerWrapAcceptedSocket(xnetlistener* pListener, con
 		}
 	}
 	(void)__xnetSocketUpdateLocalAddr(pStream->hSocket, &pStream->tLocalAddr);
+	if ( pListener->pEvents && pListener->pEvents->OnAccept ) {
+		bAccepted = pListener->pEvents->OnAccept(pListener->pUserData, pListener, pStream);
+	}
+	if ( !bAccepted ) {
+		xrtNetStreamDestroy(pStream);
+		return NULL;
+	}
 	if ( pStream->pTls ) {
 		if ( __xnetStreamPostTlsHandshake(pStream) != XRT_NET_OK ) {
 			(void)__xnetStreamDriveTlsHandshake(pStream);
@@ -38983,7 +40583,9 @@ static void __xnetStreamOnPortEvents(xnetworker* pWorker, const xnetportevent* p
 			xnetstream* pStream = (xnetstream*)pEvent->pUserData;
 			if ( pStream ) {
 				if ( pEvent->iStatus != XRT_NET_OK ) {
-					__xnetStreamEmitInternalError(pStream, XNET_STREAM_INTERNAL_ERROR_NONE);
+					if ( pStream->pEvents && pStream->pEvents->OnError ) {
+						pStream->pEvents->OnError(__xnetStreamOwner(pStream), pStream, -1);
+					}
 					xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 				} else {
 					if ( __xnetSocketIsValid(pStream->hSocket) ) {
@@ -39032,7 +40634,9 @@ static void __xnetStreamOnPortEvents(xnetworker* pWorker, const xnetportevent* p
 				if ( pEvent->iStatus == XRT_NET_CLOSED || (pEvent->iFlags & XNET_PORT_EVENT_F_EOF) != 0 ) {
 					xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 				} else if ( pEvent->iStatus != XRT_NET_OK ) {
-					__xnetStreamEmitInternalError(pStream, XNET_STREAM_INTERNAL_ERROR_NONE);
+					if ( pStream->pEvents && pStream->pEvents->OnError ) {
+						pStream->pEvents->OnError(__xnetStreamOwner(pStream), pStream, -1);
+					}
 					xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 				} else if ( pStream->pProxyState ) {
 					(void)__xnetStreamArmRecvWatch(pStream);
@@ -39051,7 +40655,9 @@ static void __xnetStreamOnPortEvents(xnetworker* pWorker, const xnetportevent* p
 			}
 		} else if ( pEvent->iType == XNET_PORT_EVENT_ERROR ) {
 			xnetstream* pStream = (xnetstream*)pEvent->pUserData;
-			__xnetStreamEmitInternalError(pStream, XNET_STREAM_INTERNAL_ERROR_NONE);
+			if ( pStream && pStream->pEvents && pStream->pEvents->OnError ) {
+				pStream->pEvents->OnError(__xnetStreamOwner(pStream), pStream, -1);
+			}
 		}
 	}
 }
@@ -44159,6 +45765,7 @@ typedef struct {
 	char* pBody;
 	size_t iBodyLen;
 	uint32 iTimeoutMs;
+	uint32 iIdleTimeoutMs;
 	bool bVerifyPeer;
 	xnetproxy* pProxy;
 } xhttprequest;
@@ -44178,6 +45785,7 @@ typedef struct {
 	volatile long iRefCount;
 	volatile long iCleanupPosted;
 	volatile long iComplete;
+	volatile long iIdleTimerGen;
 	xnetengine* pEngine;
 	struct __xhttp_conn* pConn;
 	xnetstream* pStream;
@@ -44188,6 +45796,10 @@ typedef struct {
 	int iLastSysErr;
 	xtlsconfig tTlsCfg;
 } __xhttp_tx;
+typedef struct {
+	__xhttp_tx* pTx;
+	long iGeneration;
+} __xhttp_idle_timer_ctx;
 typedef struct __xhttp_conn {
 	struct __xhttp_conn* pNext;
 	volatile long iCleanupPosted;
@@ -44300,6 +45912,8 @@ static void __xhttpRequestUnitInternal(xhttprequest* pReq);
 static bool __xhttpBuildRequestBytes(const xhttprequest* pReq, char** ppOut, size_t* pOutLen);
 static xhttpresponse* __xhttpBuildResponse(const xcodecframe* pFrame, const xcodechttp1msg* pMsg, const xnetchain* pChain);
 static void __xhttpConnPostCleanup(__xhttp_conn* pConn);
+static void __xhttpTxRefreshIdleTimeout(__xhttp_tx* pTx);
+static uint32 __xhttpResolveConnectTimeoutMs(const xhttprequest* pReq);
 static void __xhttpPoolLockAcquire(void)
 {
 	while ( __xnetAtomicCompareExchange32(&__g_xhttpPoolLock, 1, 0) != 0 ) {
@@ -44436,6 +46050,7 @@ XXAPI void xrtHttpRequestInit(xhttprequest* pReq)
 	memset(pReq, 0, sizeof(xhttprequest));
 	strcpy(pReq->sMethod, "GET");
 	pReq->iTimeoutMs = 30000u;
+	pReq->iIdleTimeoutMs = 0u;
 	pReq->bVerifyPeer = true;
 }
 static void __xhttpRequestUnitInternal(xhttprequest* pReq)
@@ -44520,6 +46135,11 @@ XXAPI void xrtHttpRequestSetTimeout(xhttprequest* pReq, uint32 iTimeoutMs)
 	if ( !pReq ) return;
 	pReq->iTimeoutMs = iTimeoutMs;
 }
+XXAPI void xrtHttpRequestSetIdleTimeout(xhttprequest* pReq, uint32 iTimeoutMs)
+{
+	if ( !pReq ) return;
+	pReq->iIdleTimeoutMs = iTimeoutMs;
+}
 XXAPI void xrtHttpRequestSetVerifyPeer(xhttprequest* pReq, bool bVerifyPeer)
 {
 	if ( !pReq ) return;
@@ -44554,6 +46174,7 @@ static bool __xhttpRequestClone(xhttprequest* pDst, const xhttprequest* pSrc)
 	memcpy(pDst->arrHeaders, pSrc->arrHeaders, sizeof(pDst->arrHeaders));
 	pDst->iHeaderCount = pSrc->iHeaderCount;
 	pDst->iTimeoutMs = pSrc->iTimeoutMs;
+	pDst->iIdleTimeoutMs = pSrc->iIdleTimeoutMs;
 	pDst->bVerifyPeer = pSrc->bVerifyPeer;
 	pDst->pProxy = pSrc->pProxy ? xrtNetProxyAddRef(pSrc->pProxy) : NULL;
 	if ( pSrc->pBody && pSrc->iBodyLen > 0 ) {
@@ -44751,6 +46372,57 @@ static bool __xhttpResponseReusable(const __xhttp_tx* pTx, const xcodechttp1msg*
 	if ( __xhttpResponseWantsClose(pMsg) ) return false;
 	return pTx->pConn->pStream != NULL && pTx->pConn->bOpen;
 }
+static void __xhttpTxAbortStream(__xhttp_tx* pTx)
+{
+	if ( !pTx ) return;
+	if ( pTx->pConn && pTx->pConn->pStream ) xrtNetStreamClose(pTx->pConn->pStream, XNET_CLOSE_F_ABORT);
+	else if ( pTx->pStream ) xrtNetStreamClose(pTx->pStream, XNET_CLOSE_F_ABORT);
+}
+static void __xhttpIdleTimeoutTask(xnetworker* pWorker, ptr pArg)
+{
+	__xhttp_idle_timer_ctx* pCtx = (__xhttp_idle_timer_ctx*)pArg;
+	__xhttp_tx* pTx;
+	(void)pWorker;
+	if ( !pCtx ) return;
+	pTx = pCtx->pTx;
+	if ( pTx &&
+		__xhttpAtomicLoad(&pTx->iComplete) == 0 &&
+		__xhttpAtomicLoad(&pTx->iIdleTimerGen) == pCtx->iGeneration ) {
+		(void)__xhttpTxComplete(pTx, XRT_NET_TIMEOUT, NULL);
+		__xhttpTxAbortStream(pTx);
+	}
+	if ( pTx ) __xhttpTxRelease(pTx);
+	XNET_FREE(pCtx);
+}
+static void __xhttpTxRefreshIdleTimeout(__xhttp_tx* pTx)
+{
+	__xhttp_idle_timer_ctx* pCtx;
+	uint32 iTimeoutMs;
+	long iGeneration;
+	uint32 iAffinity = 0u;
+	if ( !pTx || !pTx->pEngine ) return;
+	iTimeoutMs = pTx->tReq.iIdleTimeoutMs;
+	if ( iTimeoutMs == 0u ) return;
+	iGeneration = __xhttpAtomicAdd(&pTx->iIdleTimerGen, 1);
+	pCtx = (__xhttp_idle_timer_ctx*)XNET_ALLOC(sizeof(__xhttp_idle_timer_ctx));
+	if ( !pCtx ) return;
+	memset(pCtx, 0, sizeof(__xhttp_idle_timer_ctx));
+	pCtx->pTx = pTx;
+	pCtx->iGeneration = iGeneration;
+	__xhttpTxAddRef(pTx);
+	if ( pTx->pStream && pTx->pStream->pWorker ) iAffinity = pTx->pStream->pWorker->iId;
+	else if ( pTx->pConn && pTx->pConn->pStream && pTx->pConn->pStream->pWorker ) iAffinity = pTx->pConn->pStream->pWorker->iId;
+	if ( xrtNetEnginePostDelayed(pTx->pEngine, iAffinity, iTimeoutMs, __xhttpIdleTimeoutTask, pCtx) != XRT_NET_OK ) {
+		__xhttpTxRelease(pTx);
+		XNET_FREE(pCtx);
+	}
+}
+static uint32 __xhttpResolveConnectTimeoutMs(const xhttprequest* pReq)
+{
+	if ( !pReq ) return 0u;
+	if ( pReq->iTimeoutMs > 0u ) return pReq->iTimeoutMs;
+	return pReq->iIdleTimeoutMs;
+}
 static bool __xhttpConnSendActiveTx(__xhttp_conn* pConn)
 {
 	__xhttp_tx* pTx;
@@ -44762,6 +46434,7 @@ static bool __xhttpConnSendActiveTx(__xhttp_conn* pConn)
 		xrtNetStreamClose(pConn->pStream, XNET_CLOSE_F_ABORT);
 		return false;
 	}
+	__xhttpTxRefreshIdleTimeout(pTx);
 	return true;
 }
 static void __xhttpTxTimeoutTask(xnetworker* pWorker, ptr pArg)
@@ -44771,8 +46444,7 @@ static void __xhttpTxTimeoutTask(xnetworker* pWorker, ptr pArg)
 	if ( !pTx ) return;
 	if ( __xhttpAtomicLoad(&pTx->iComplete) == 0 ) {
 		(void)__xhttpTxComplete(pTx, XRT_NET_TIMEOUT, NULL);
-		if ( pTx->pConn && pTx->pConn->pStream ) xrtNetStreamClose(pTx->pConn->pStream, XNET_CLOSE_F_ABORT);
-		else if ( pTx->pStream ) xrtNetStreamClose(pTx->pStream, XNET_CLOSE_F_ABORT);
+		__xhttpTxAbortStream(pTx);
 	}
 	__xhttpTxRelease(pTx);
 }
@@ -44794,6 +46466,7 @@ static void __xhttpClientOnRecv(ptr pOwner, xnetstream* pStream, xnetchain* pCha
 	bool bReusable;
 	xhttpresponse* pResp;
 	if ( !pTx || !pStream || !pChain ) return;
+	__xhttpTxRefreshIdleTimeout(pTx);
 	iParse = xrtCodecHttp1Parse(pChain, &tFrame, &tMsg);
 	if ( iParse == XCODEC_STATUS_NEED_MORE ) return;
 	if ( iParse == XCODEC_STATUS_ERROR ) {
@@ -44941,7 +46614,7 @@ XXAPI xnetfuture* xrtHttpExecuteAsync(xnetengine* pEngine, const xhttprequest* p
 		xrtNetConnectConfigInit(&tConnCfg);
 		tConnCfg.sHost = pTx->tReq.tURL.sHost;
 		tConnCfg.iPort = pTx->tReq.tURL.iPort;
-		tConnCfg.iConnectTimeoutMs = pTx->tReq.iTimeoutMs;
+		tConnCfg.iConnectTimeoutMs = __xhttpResolveConnectTimeoutMs(&pTx->tReq);
 		tConnCfg.iRecvLimit = 1024u * 1024u;
 		tConnCfg.pProxy = pConn->pProxy;
 		if ( pTx->tReq.tURL.bHttps ) {
@@ -45788,7 +47461,6 @@ typedef struct {
 	char sProtocol[XWS_PROTOCOL_CAP];
 	uint32 iConnectTimeoutMs;
 	uint32 iRecvLimit;
-	uint32 iMessageLimit;
 	bool bVerifyPeer;
 	xnetproxy* pProxy;
 } xwsclientconfig;
@@ -45797,7 +47469,6 @@ typedef struct {
 	uint32 iFlags;
 	uint32 iBacklog;
 	uint32 iRecvLimit;
-	uint32 iMessageLimit;
 	const xtlsconfig* pTlsConfig;
 	char sProtocol[XWS_PROTOCOL_CAP];
 } xwsserverconfig;
@@ -45843,7 +47514,6 @@ struct xrt_ws_client {
 	volatile long iOpen;
 	volatile long iClosePosted;
 	volatile long iCloseNotified;
-	uint16 iLastCloseCode;
 	int iLastSysErr;
 };
 struct xrt_ws_conn {
@@ -45852,7 +47522,6 @@ struct xrt_ws_conn {
 	volatile long iOpen;
 	volatile long iClosePosted;
 	volatile long iCloseNotified;
-	uint16 iLastCloseCode;
 	xwsserver* pServer;
 	xnetstream* pStream;
 	char sProtocol[XWS_PROTOCOL_CAP];
@@ -46371,7 +48040,7 @@ static void __xwsServerEmitBinary(xwsconn* pConn, const void* pData, size_t iLen
 }
 static int __xwsClientConsumeDataFrame(xwsclient* pClient, uint8 iOpcode, bool bFin, const char* pPayload, size_t iPayloadLen)
 {
-	size_t iLimit = pClient && pClient->tConfig.iMessageLimit > 0u ? (size_t)pClient->tConfig.iMessageLimit : (pClient && pClient->tConfig.iRecvLimit > 0u ? (size_t)pClient->tConfig.iRecvLimit : 0u);
+	size_t iLimit = pClient && pClient->tConfig.iRecvLimit > 0u ? (size_t)pClient->tConfig.iRecvLimit : 0u;
 	int iAppend;
 	if ( !pClient ) return __XWS_APPEND_INTERNAL;
 	if ( iOpcode == XCODEC_WS_OPCODE_CONT ) {
@@ -46388,7 +48057,6 @@ static int __xwsClientConsumeDataFrame(xwsclient* pClient, uint8 iOpcode, bool b
 	}
 	if ( iOpcode != XCODEC_WS_OPCODE_TEXT && iOpcode != XCODEC_WS_OPCODE_BINARY ) return __XWS_APPEND_PROTOCOL;
 	if ( pClient->iMsgOpcode != 0u ) return __XWS_APPEND_PROTOCOL;
-	if ( iLimit > 0u && iPayloadLen > iLimit ) return __XWS_APPEND_TOO_BIG;
 	if ( bFin ) {
 		if ( iOpcode == XCODEC_WS_OPCODE_TEXT ) __xwsClientEmitText(pClient, pPayload, iPayloadLen);
 		else __xwsClientEmitBinary(pClient, pPayload, iPayloadLen);
@@ -46398,7 +48066,7 @@ static int __xwsClientConsumeDataFrame(xwsclient* pClient, uint8 iOpcode, bool b
 }
 static int __xwsServerConsumeDataFrame(xwsconn* pConn, uint8 iOpcode, bool bFin, const char* pPayload, size_t iPayloadLen)
 {
-	size_t iLimit = (pConn && pConn->pServer && pConn->pServer->tConfig.iMessageLimit > 0u) ? (size_t)pConn->pServer->tConfig.iMessageLimit : ((pConn && pConn->pServer && pConn->pServer->tConfig.iRecvLimit > 0u) ? (size_t)pConn->pServer->tConfig.iRecvLimit : 0u);
+	size_t iLimit = (pConn && pConn->pServer && pConn->pServer->tConfig.iRecvLimit > 0u) ? (size_t)pConn->pServer->tConfig.iRecvLimit : 0u;
 	int iAppend;
 	if ( !pConn ) return __XWS_APPEND_INTERNAL;
 	if ( iOpcode == XCODEC_WS_OPCODE_CONT ) {
@@ -46415,7 +48083,6 @@ static int __xwsServerConsumeDataFrame(xwsconn* pConn, uint8 iOpcode, bool bFin,
 	}
 	if ( iOpcode != XCODEC_WS_OPCODE_TEXT && iOpcode != XCODEC_WS_OPCODE_BINARY ) return __XWS_APPEND_PROTOCOL;
 	if ( pConn->iMsgOpcode != 0u ) return __XWS_APPEND_PROTOCOL;
-	if ( iLimit > 0u && iPayloadLen > iLimit ) return __XWS_APPEND_TOO_BIG;
 	if ( bFin ) {
 		if ( iOpcode == XCODEC_WS_OPCODE_TEXT ) __xwsServerEmitText(pConn, pPayload, iPayloadLen);
 		else __xwsServerEmitBinary(pConn, pPayload, iPayloadLen);
@@ -46439,13 +48106,6 @@ static void __xwsClientEmitCloseOnce(xwsclient* pClient, xnet_result iReason)
 	if ( pClient->tEvents.OnClose ) {
 		pClient->tEvents.OnClose(pClient->pUserData, pClient, iReason);
 	}
-}
-static xnet_result __xwsClientResolveCloseReason(const xwsclient* pClient, xnet_result iReason)
-{
-	if ( iReason == XRT_NET_CLOSED && pClient && pClient->iLastCloseCode > 0u ) {
-		return (xnet_result)pClient->iLastCloseCode;
-	}
-	return iReason;
 }
 static bool __xwsIsBenignStreamError(int iSysErr, xnetstream* pStream, volatile long* pClosePosted, volatile long* pCloseNotified)
 {
@@ -46499,7 +48159,6 @@ static void __xwsClientConsumeFrames(xwsclient* pClient, xnetchain* pChain)
 			return;
 		}
 		if ( (tInfo.iFlags & XCODEC_WS_F_CONTROL) != 0u && tInfo.iPayloadLen > 125u ) {
-			pClient->iLastCloseCode = XWS_CLOSE_PROTOCOL;
 			(void)__xwsPostClose(pClient->pStream, true, XWS_CLOSE_PROTOCOL, "control too large", true);
 			return;
 		}
@@ -46517,10 +48176,8 @@ static void __xwsClientConsumeFrames(xwsclient* pClient, xnetchain* pChain)
 				iDataRet = __xwsClientConsumeDataFrame(pClient, tInfo.iOpcode, bFin, pPayload, iPayloadLen);
 				if ( iDataRet == __XWS_APPEND_OK ) break;
 				if ( iDataRet == __XWS_APPEND_TOO_BIG ) {
-					pClient->iLastCloseCode = XWS_CLOSE_TOO_BIG;
 					(void)__xwsPostClose(pClient->pStream, true, XWS_CLOSE_TOO_BIG, "message too large", true);
 				} else if ( iDataRet == __XWS_APPEND_PROTOCOL ) {
-					pClient->iLastCloseCode = XWS_CLOSE_PROTOCOL;
 					(void)__xwsPostClose(pClient->pStream, true, XWS_CLOSE_PROTOCOL, "bad fragment sequence", true);
 				} else {
 					__xwsClientEmitError(pClient, -7);
@@ -46539,7 +48196,6 @@ static void __xwsClientConsumeFrames(xwsclient* pClient, xnetchain* pChain)
 			case XCODEC_WS_OPCODE_CLOSE:
 				if ( iPayloadLen >= 2u ) {
 					iCloseCode = (uint16)(((uint8)pPayload[0] << 8u) | (uint8)pPayload[1]);
-					pClient->iLastCloseCode = iCloseCode;
 				}
 				#if defined(XNET_DEBUG_CLOSE_DIAG)
 					fprintf(stderr, "[CLOSE_DIAG][WS-CLIENT] recv close stream=%p code=%u posted=%ld open=%ld len=%zu\n",
@@ -46549,7 +48205,7 @@ static void __xwsClientConsumeFrames(xwsclient* pClient, xnetchain* pChain)
 						(long)__xwsAtomicLoad(&pClient->iOpen),
 						iPayloadLen);
 				#endif
-				__xwsClientEmitCloseOnce(pClient, __xwsClientResolveCloseReason(pClient, XRT_NET_CLOSED));
+				__xwsClientEmitCloseOnce(pClient, XRT_NET_CLOSED);
 				if ( __xwsAtomicCompareExchange(&pClient->iClosePosted, 1, 0) == 0 ) {
 					if ( pClient->pStream ) (void)__xwsPostClose(pClient->pStream, true, iCloseCode, NULL, true);
 				} else if ( pClient->pStream ) {
@@ -46558,7 +48214,6 @@ static void __xwsClientConsumeFrames(xwsclient* pClient, xnetchain* pChain)
 				XNET_FREE(pPayload);
 				return;
 			default:
-				pClient->iLastCloseCode = XWS_CLOSE_PROTOCOL;
 				(void)__xwsPostClose(pClient->pStream, true, XWS_CLOSE_PROTOCOL, "bad opcode", true);
 				XNET_FREE(pPayload);
 				return;
@@ -46618,7 +48273,7 @@ static void __xwsClientStreamOnClose(ptr pOwner, xnetstream* pStream, xnet_resul
 			pClient ? (long)__xwsAtomicLoad(&pClient->iCloseNotified) : -1L);
 	#endif
 	(void)pStream;
-	__xwsClientEmitCloseOnce(pClient, __xwsClientResolveCloseReason(pClient, iReason));
+	__xwsClientEmitCloseOnce(pClient, iReason);
 }
 static void __xwsClientStreamOnError(ptr pOwner, xnetstream* pStream, int iSysErr)
 {
@@ -46716,13 +48371,6 @@ static void __xwsServerEmitCloseOnce(xwsserver* pServer, xwsconn* pConn, xnet_re
 		pServer->tEvents.OnClose(pServer->pUserData, pServer, pConn, iReason);
 	}
 }
-static xnet_result __xwsServerResolveCloseReason(const xwsconn* pConn, xnet_result iReason)
-{
-	if ( iReason == XRT_NET_CLOSED && pConn && pConn->iLastCloseCode > 0u ) {
-		return (xnet_result)pConn->iLastCloseCode;
-	}
-	return iReason;
-}
 static bool __xwsSendHttpReply(xnetstream* pStream, uint32 iStatusCode, const char* sBody, const char* sAccept, const char* sProtocol, bool bClose)
 {
 	char* pBytes = NULL;
@@ -46777,12 +48425,10 @@ static void __xwsServerConsumeFrames(xwsconn* pConn, xnetchain* pChain)
 			return;
 		}
 		if ( (tInfo.iFlags & XCODEC_WS_F_MASKED) == 0u ) {
-			pConn->iLastCloseCode = XWS_CLOSE_PROTOCOL;
 			(void)__xwsPostClose(pConn->pStream, false, XWS_CLOSE_PROTOCOL, "mask required", true);
 			return;
 		}
 		if ( (tInfo.iFlags & XCODEC_WS_F_CONTROL) != 0u && tInfo.iPayloadLen > 125u ) {
-			pConn->iLastCloseCode = XWS_CLOSE_PROTOCOL;
 			(void)__xwsPostClose(pConn->pStream, false, XWS_CLOSE_PROTOCOL, "control too large", true);
 			return;
 		}
@@ -46800,10 +48446,8 @@ static void __xwsServerConsumeFrames(xwsconn* pConn, xnetchain* pChain)
 				iDataRet = __xwsServerConsumeDataFrame(pConn, tInfo.iOpcode, bFin, pPayload, iPayloadLen);
 				if ( iDataRet == __XWS_APPEND_OK ) break;
 				if ( iDataRet == __XWS_APPEND_TOO_BIG ) {
-					pConn->iLastCloseCode = XWS_CLOSE_TOO_BIG;
 					(void)__xwsPostClose(pConn->pStream, false, XWS_CLOSE_TOO_BIG, "message too large", true);
 				} else if ( iDataRet == __XWS_APPEND_PROTOCOL ) {
-					pConn->iLastCloseCode = XWS_CLOSE_PROTOCOL;
 					(void)__xwsPostClose(pConn->pStream, false, XWS_CLOSE_PROTOCOL, "bad fragment sequence", true);
 				} else {
 					__xwsServerEmitError(pServer, pConn, -23);
@@ -46822,7 +48466,6 @@ static void __xwsServerConsumeFrames(xwsconn* pConn, xnetchain* pChain)
 			case XCODEC_WS_OPCODE_CLOSE:
 				if ( iPayloadLen >= 2u ) {
 					iCloseCode = (uint16)(((uint8)pPayload[0] << 8u) | (uint8)pPayload[1]);
-					pConn->iLastCloseCode = iCloseCode;
 				}
 				#if defined(XNET_DEBUG_CLOSE_DIAG)
 					fprintf(stderr, "[CLOSE_DIAG][WS-SERVER] recv close stream=%p code=%u posted=%ld open=%ld len=%zu\n",
@@ -46832,7 +48475,7 @@ static void __xwsServerConsumeFrames(xwsconn* pConn, xnetchain* pChain)
 						(long)__xwsAtomicLoad(&pConn->iOpen),
 						iPayloadLen);
 				#endif
-				__xwsServerEmitCloseOnce(pServer, pConn, __xwsServerResolveCloseReason(pConn, XRT_NET_CLOSED));
+				__xwsServerEmitCloseOnce(pServer, pConn, XRT_NET_CLOSED);
 				if ( __xwsAtomicCompareExchange(&pConn->iClosePosted, 1, 0) == 0 ) {
 					if ( pConn->pStream ) (void)__xwsPostClose(pConn->pStream, false, iCloseCode, NULL, true);
 				} else if ( pConn->pStream ) {
@@ -46841,7 +48484,6 @@ static void __xwsServerConsumeFrames(xwsconn* pConn, xnetchain* pChain)
 				XNET_FREE(pPayload);
 				return;
 			default:
-				pConn->iLastCloseCode = XWS_CLOSE_PROTOCOL;
 				(void)__xwsPostClose(pConn->pStream, false, XWS_CLOSE_PROTOCOL, "bad opcode", true);
 				XNET_FREE(pPayload);
 				return;
@@ -46862,7 +48504,6 @@ static bool __xwsListenerOnAccept(ptr pOwner, xnetlistener* pListener, xnetstrea
 		memset(pConn, 0, sizeof(xwsconn));
 		xrtNetStreamSetUserData(pStream, pConn);
 	}
-	pConn->iLastCloseCode = 0u;
 	pConn->pServer = pServer;
 	pConn->pStream = pStream;
 	__xwsServerAddConn(pServer, pConn);
@@ -46928,7 +48569,7 @@ static void __xwsServerStreamOnClose(ptr pOwner, xnetstream* pStream, xnet_resul
 			pConn ? (long)__xwsAtomicLoad(&pConn->iCloseNotified) : -1L);
 	#endif
 	(void)pStream;
-	__xwsServerEmitCloseOnce(pServer, pConn, __xwsServerResolveCloseReason(pConn, iReason));
+	__xwsServerEmitCloseOnce(pServer, pConn, iReason);
 	__xwsConnPostCleanup(pConn);
 }
 static void __xwsServerStreamOnError(ptr pOwner, xnetstream* pStream, int iSysErr)
@@ -46986,7 +48627,6 @@ XXAPI void xrtWsClientConfigInit(xwsclientconfig* pCfg)
 	memset(pCfg, 0, sizeof(xwsclientconfig));
 	pCfg->iConnectTimeoutMs = 5000u;
 	pCfg->iRecvLimit = 1024u * 1024u;
-	pCfg->iMessageLimit = pCfg->iRecvLimit;
 	pCfg->bVerifyPeer = true;
 }
 XXAPI void xrtWsServerConfigInit(xwsserverconfig* pCfg)
@@ -46995,7 +48635,6 @@ XXAPI void xrtWsServerConfigInit(xwsserverconfig* pCfg)
 	memset(pCfg, 0, sizeof(xwsserverconfig));
 	pCfg->iBacklog = 128u;
 	pCfg->iRecvLimit = 1024u * 1024u;
-	pCfg->iMessageLimit = pCfg->iRecvLimit;
 }
 XXAPI xwsclient* xrtWsClientCreate(xnetengine* pEngine, const xwsclientconfig* pCfg, const xwsclientevents* pEvents, ptr pUserData)
 {
@@ -47083,7 +48722,6 @@ XXAPI xnet_result xrtWsClientClose(xwsclient* pClient, uint16 iCode, const char*
 {
 	if ( !pClient || !pClient->pStream ) return XRT_NET_ERROR;
 	if ( __xwsAtomicCompareExchange(&pClient->iClosePosted, 1, 0) != 0 ) return XRT_NET_OK;
-	pClient->iLastCloseCode = iCode ? iCode : XWS_CLOSE_NORMAL;
 	return __xwsPostClose(pClient->pStream, true, iCode, sReason, false);
 }
 XXAPI xwsserver* xrtWsServerCreate(xnetengine* pEngine, const xwsserverconfig* pCfg, const xwsserverevents* pEvents, ptr pUserData)
@@ -47193,7 +48831,6 @@ XXAPI xnet_result xrtWsConnClose(xwsconn* pConn, uint16 iCode, const char* sReas
 {
 	if ( !pConn || !pConn->pStream ) return XRT_NET_ERROR;
 	if ( __xwsAtomicCompareExchange(&pConn->iClosePosted, 1, 0) != 0 ) return XRT_NET_OK;
-	pConn->iLastCloseCode = iCode ? iCode : XWS_CLOSE_NORMAL;
 	return __xwsPostClose(pConn->pStream, false, iCode, sReason, false);
 }
 #endif
@@ -51000,28 +52637,10 @@ XXAPI void xrtListWalk(xlist objList, List_EachProc procEach, ptr pArg)
 
 /* 
  * regex.h - 正则表达式引擎实现
- * 基于 bbre 0.0.2 (https://github.com/max-nurzia/bbre)
+ * 基于 bbre 0.0.2 (https://github.com/mnurzia/bbre)
  * MIT License - Copyright (c) 2024 Max Nurzia
- * 
- * 注意：此文件包含 bbre 的完整实现代码
- * 头文件声明位于 xrt.h 中
- * 
- * 依赖说明：
- *   此文件通过 xrt.h 间接引用以下标准库头文件：
- *   <assert.h>, <limits.h>, <stdarg.h>, <stdlib.h>, <string.h>
- *   因此不需要在此处重复包含
  */
-// 条件编译保护 - 如果禁用了 regex 模块，则跳过整个实现
 #ifndef XRT_NO_REGEX
-// 假设 xrt.h 已经被包含，提供了所有必要的标准库头文件
-// 如果没有被包含，则需要以下头文件：
-#if !defined(_STDIO_H) && !defined(_STDLIB_H)
-  #include <assert.h>
-  #include <limits.h>
-  #include <stdarg.h>
-  #include <stdlib.h>
-  #include <string.h>
-#endif
 #ifdef BBRE_CONFIG_HEADER_FILE
   #include BBRE_CONFIG_HEADER_FILE
 #endif
@@ -51135,7 +52754,7 @@ typedef struct bbre_rune_range {
   bbre_uint h; /* max ordinal */
 } bbre_rune_range;
 /* Enumeration of the various flags a group can set or clear. Note that some of
- * these flags are duplicates of `bbre_flags`, and some are not. I think it's a
+ * these flags are duplicates of `xregexflags`, and some are not. I think it's a
  * good idea to keep the ABI flags separate from our internal flags. */
 typedef enum bbre_group_flag {
   BBRE_GROUP_FLAG_INSENSITIVE = 1,   /* case-insensitive matching */
@@ -51185,7 +52804,7 @@ typedef enum bbre_group_flag {
  * inside of the instructions, stores the exit points. This list is tracked by
  * `head` and `tail`. */
 /* When the compiler is evaluating a character class (resolving ands/ors/nots)
- * it uses head and tail to refer to offsets in the `bbre.cc_store` array--
+ * it uses head and tail to refer to offsets in the `xregex.cc_store` array--
  * `head` and `tail`, in this case, form the ends of a linked list containing
  * all of the character class components (rune ranges).*/
 typedef struct bbre_compframe {
@@ -51273,11 +52892,11 @@ typedef enum bbre_prog_entry {
   BBRE_PROG_ENTRY_MAX = 4
 } bbre_prog_entry;
 /* A builder class for regular expressions. */
-struct bbre_builder {
-  bbre_alloc alloc;      /* allocator function */
+struct xrt_regex_builder {
+  xregexalloc alloc;      /* allocator function */
   const bbre_byte *expr; /* the expression itself */
   size_t expr_size;      /* the length of the expression in bytes */
-  bbre_flags flags;      /* regex flags used for parsing / the root AST */
+  xregexflags flags;      /* regex flags used for parsing / the root AST */
 };
 /* Forward declaration */
 typedef struct bbre_exec bbre_exec;
@@ -51288,7 +52907,7 @@ typedef struct bbre_error {
 } bbre_error;
 /* The compiled form of a regular expression. */
 typedef struct bbre_prog {
-  bbre_alloc alloc;                     /* allocator function */
+  xregexalloc alloc;                     /* allocator function */
   bbre_buf(bbre_inst) insts;            /* The compiled instructions */
   bbre_buf(bbre_uint) set_idxs;         /* pattern index for each instruction */
   bbre_uint entry[BBRE_PROG_ENTRY_MAX]; /* entry points for the program */
@@ -51301,8 +52920,8 @@ typedef struct bbre_group_name {
   size_t name_size; /* The size of the name (allocation is this + 1) */
 } bbre_group_name;
 /* A compiled regular expression. */
-struct bbre {
-  bbre_alloc alloc;                      /* allocator function */
+struct xrt_regex {
+  xregexalloc alloc;                      /* allocator function */
   bbre_buf(bbre_uint) ast;               /* AST arena */
   bbre_uint ast_root_hdl;                /* AST root node reference */
   bbre_buf(bbre_group_name) group_names; /* Named group names */
@@ -51317,13 +52936,13 @@ struct bbre {
   bbre_exec *exec; /* local execution context, NULL until actually used */
 };
 /* A builder class for regular expression sets. */
-struct bbre_set_builder {
-  bbre_alloc alloc;            /* allocator function */
-  bbre_buf(const bbre *) pats; /* patterns that compose this set */
+struct xrt_regex_set_builder {
+  xregexalloc alloc;            /* allocator function */
+  bbre_buf(const xregex *) pats; /* patterns that compose this set */
 };
 /* A set of compiled regular expressions. */
-struct bbre_set {
-  bbre_alloc alloc; /* allocator function */
+struct xrt_regex_set {
+  xregexalloc alloc; /* allocator function */
   bbre_prog prog;   /* compiled program */
   bbre_exec *exec;  /* local execution context, NULL until actually used */
   bbre_error error; /* error info */
@@ -51461,7 +53080,7 @@ typedef struct bbre_dfa {
   bbre_buf(bbre_uint) set_buf;
 } bbre_dfa;
 /* Execution context that is shared between the NFA and DFA, and embedded in
- * both `bbre` and `bbre_set` structs. */
+ * both `xregex` and `xregexset` structs. */
 struct bbre_exec {
   /* Source thread set; the threads that resulted from the previous character */
   /* Also used to keep track of which threads were found when exploring epsilon
@@ -51471,7 +53090,7 @@ struct bbre_exec {
    * epsilon transitions in `src` */
   bbre_sset dst;
   /* Allocator callback */
-  bbre_alloc alloc;
+  xregexalloc alloc;
   /* NFA program */
   const bbre_prog *prog;
   /* NFA executor */
@@ -51506,11 +53125,11 @@ bbre_default_alloc(void *user, void *in_ptr, size_t prev, size_t next)
 }
   #define BBRE_DEFAULT_ALLOC bbre_default_alloc
 #endif
-/* Call alloc->cb and get/free memory, given a `bbre_alloc` object. */
+/* Call alloc->procAlloc and get/free memory, given a `xregexalloc` object. */
 static void *
-bbre_alloci(bbre_alloc *alloc, void *old_ptr, size_t old_size, size_t new_size)
+bbre_alloci(xregexalloc *alloc, void *old_ptr, size_t old_size, size_t new_size)
 {
-  return alloc->cb(alloc->user, old_ptr, old_size, new_size);
+  return alloc->procAlloc(alloc->pUserData, old_ptr, old_size, new_size);
 }
 /* For a library like this, you really need a convenient way to represent
  * dynamically-sized arrays of many different types. There's a million ways to
@@ -51600,7 +53219,7 @@ static size_t bbre_buf_size_t(void *buf) { return bbre_buf_get_hdr(buf)->size; }
  * different from C++'s std::vector::reserve() in that it actually sets the used
  * size of the dynamic array. The caller must initialize the newly available
  * elements. */
-static int bbre_buf_resize_t(bbre_alloc *a, void **buf, size_t size)
+static int bbre_buf_resize_t(xregexalloc *a, void **buf, size_t size)
 {
   bbre_buf_hdr *hdr = NULL;
   size_t next_alloc;
@@ -51628,7 +53247,7 @@ static int bbre_buf_resize_t(bbre_alloc *a, void **buf, size_t size)
       hdr->alloc ? sizeof(bbre_buf_hdr) + hdr->alloc : /* sentinel */ 0,
       sizeof(bbre_buf_hdr) + next_alloc);
   if (!next_ptr) {
-    err = BBRE_ERR_MEM;
+    err = XRT_REGEX_ERR_MEM;
     goto error;
   }
   hdr = next_ptr;
@@ -51648,7 +53267,7 @@ static void bbre_buf_init_t(void **b)
   assert(bbre_buf_get_hdr(*b)->size == 0 && bbre_buf_get_hdr(*b)->alloc == 0);
 }
 /* Destroy a dynamic array. */
-static void bbre_buf_destroy_t(bbre_alloc *a, void **buf)
+static void bbre_buf_destroy_t(xregexalloc *a, void **buf)
 {
   bbre_buf_hdr *hdr;
   assert(buf && *buf);
@@ -51657,7 +53276,7 @@ static void bbre_buf_destroy_t(bbre_alloc *a, void **buf)
     bbre_alloci(a, hdr, sizeof(*hdr) + hdr->alloc, 0);
 }
 /* Increase size by `incr`. */
-static int bbre_buf_grow_t(bbre_alloc *a, void **buf, size_t incr)
+static int bbre_buf_grow_t(xregexalloc *a, void **buf, size_t incr)
 {
   assert(buf);
   return bbre_buf_resize_t(a, buf, bbre_buf_size_t(*buf) + incr);
@@ -51696,7 +53315,7 @@ static void bbre_buf_clear(void *buf)
 /* Push an element. */
 #define bbre_buf_push(r, b, e)                                                 \
   (bbre_buf_grow_t((r), (void **)(b), bbre_buf_esz(b))                         \
-       ? BBRE_ERR_MEM                                                          \
+       ? XRT_REGEX_ERR_MEM                                                          \
        : (((*(b))                                                              \
                [bbre_buf_tail_t((void *)(*b), bbre_buf_esz(b)) /               \
                 bbre_buf_esz(b)]) = (e),                                       \
@@ -51715,14 +53334,14 @@ static void bbre_buf_clear(void *buf)
 #define bbre_buf_size(b) (bbre_buf_size_t((void *)(b)) / sizeof(*(b)))
 /* Destroy a dynamic array. */
 #define bbre_buf_destroy(r, b) (bbre_buf_destroy_t((r), (void **)(b)))
-static bbre_alloc bbre_alloc_make(const bbre_alloc *input)
+static xregexalloc bbre_alloc_make(const xregexalloc *input)
 {
-  bbre_alloc out;
+  xregexalloc out;
   if (input)
     out = *input;
   else {
-    out.cb = bbre_default_alloc;
-    out.user = NULL;
+    out.procAlloc = bbre_default_alloc;
+    out.pUserData = NULL;
   }
   return out;
 }
@@ -51770,24 +53389,24 @@ static bbre_uint bbre_hash(bbre_uint x)
   return x;
 }
 /* Create and propagate a parsing error.
- * Returns `BBRE_ERR_PARSE` unconditionally. */
-static int bbre_err_parse(bbre *r, const char *msg)
+ * Returns `XRT_REGEX_ERR_PARSE` unconditionally. */
+static int bbre_err_parse(xregex *r, const char *msg)
 {
   bbre_error_set(&r->error, msg);
   r->error.pos = r->expr_pos;
-  return BBRE_ERR_PARSE;
+  return XRT_REGEX_ERR_PARSE;
 }
 /* Check if we are at the end of the regex string. */
-static int bbre_parse_has_more(bbre *r) { return r->expr_pos != r->expr_size; }
+static int bbre_parse_has_more(xregex *r) { return r->expr_pos != r->expr_size; }
 /* These functions are defined near the automatically-generated parts of the
  * file (the end) for readability purposes. */
 static bbre_uint
 bbre_utf8_decode(bbre_uint *state, bbre_uint *codep, bbre_uint byte);
-static int bbre_parse_check_well_formed_utf8(bbre *r);
+static int bbre_parse_check_well_formed_utf8(xregex *r);
 /* Get the next input codepoint. This function assumes that there is a valid
  * codepoint left in the input string, so it will abort the program if there is
  * none. */
-static bbre_uint bbre_parse_next(bbre *r)
+static bbre_uint bbre_parse_next(xregex *r)
 {
   bbre_uint state = 0, codep;
   assert(bbre_parse_has_more(r));
@@ -51798,7 +53417,7 @@ static bbre_uint bbre_parse_next(bbre *r)
 }
 /* Get the next input codepoint, or raise a parse error with the given error
  * message if there is no more input. */
-static int bbre_parse_next_or(bbre *r, bbre_uint *codep, const char *else_msg)
+static int bbre_parse_next_or(xregex *r, bbre_uint *codep, const char *else_msg)
 {
   int err = 0;
   assert(else_msg);
@@ -51812,7 +53431,7 @@ error:
 }
 /* Helper function to check the next character of input without advancing the
  * parser past it. */
-static bbre_uint bbre_peek_next(bbre *r)
+static bbre_uint bbre_peek_next(xregex *r)
 {
   size_t prev_pos = r->expr_pos;
   bbre_uint out = bbre_parse_next(r);
@@ -51824,7 +53443,7 @@ static bbre_uint bbre_peek_next(bbre *r)
 /* Make a new AST node within the regular expression. Variadic for convenience
  * when creating new nodes, which is done frequently in the parser. */
 static int
-bbre_ast_make(bbre *r, bbre_uint *out_node_hdl, bbre_ast_type type, ...)
+bbre_ast_make(xregex *r, bbre_uint *out_node_hdl, bbre_ast_type type, ...)
 {
   va_list in_args;
   bbre_uint args[6], arg_idx = 0, i = 0;
@@ -51840,7 +53459,7 @@ bbre_ast_make(bbre *r, bbre_uint *out_node_hdl, bbre_ast_type type, ...)
   for (i = 0; i < arg_idx; i++) {
     if (bbre_buf_size(r->ast) == BBRE_LIMIT_AST_SIZE) {
       bbre_error_set(&r->error, "regular expression is too complex");
-      err = BBRE_ERR_LIMIT;
+      err = XRT_REGEX_ERR_LIMIT;
       goto error;
     }
     if ((err = bbre_buf_push(&r->alloc, &r->ast, args[i])))
@@ -51851,7 +53470,7 @@ error:
   return err;
 }
 /* Decompose a given AST node, given its reference, into `out_args`. */
-static void bbre_ast_decompose(bbre *r, bbre_uint node_hdl, bbre_uint *out_args)
+static void bbre_ast_decompose(xregex *r, bbre_uint node_hdl, bbre_uint *out_args)
 {
   bbre_uint *in_args = r->ast + node_hdl;
   bbre_uint i;
@@ -51859,13 +53478,13 @@ static void bbre_ast_decompose(bbre *r, bbre_uint node_hdl, bbre_uint *out_args)
     out_args[i] = in_args[i + 1];
 }
 /* Get the type of the given AST node. */
-static bbre_uint *bbre_ast_type_ptr(bbre *r, bbre_uint node_hdl)
+static bbre_uint *bbre_ast_type_ptr(xregex *r, bbre_uint node_hdl)
 {
   assert(node_hdl != BBRE_NIL);
   return r->ast + node_hdl;
 }
 /* Get a pointer to the `n`'th parameter of the given AST node. */
-static bbre_uint *bbre_ast_param_ptr(bbre *r, bbre_uint node_hdl, bbre_uint n)
+static bbre_uint *bbre_ast_param_ptr(xregex *r, bbre_uint node_hdl, bbre_uint n)
 {
   assert(bbre_ast_type_infos[*bbre_ast_type_ptr(r, node_hdl)].size > n);
   return r->ast + node_hdl + 1 + n;
@@ -51880,7 +53499,7 @@ static int bbre_ast_type_is_cc(bbre_ast_type ast_type)
 }
 /* Based on node precedence, pop nodes on the operator stack. This will pop
  * nodes until a node of equal or greater precedence is at the top. */
-static bbre_uint bbre_ast_pop_prec(bbre *r, bbre_ast_type pop_type)
+static bbre_uint bbre_ast_pop_prec(xregex *r, bbre_ast_type pop_type)
 {
   bbre_uint popped_hdl = BBRE_NIL;
   assert(bbre_buf_size(r->op_stk));
@@ -51899,7 +53518,7 @@ static bbre_uint bbre_ast_pop_prec(bbre *r, bbre_ast_type pop_type)
   return popped_hdl;
 }
 /* Link the top node on the AST stack to the preceding node on the stack. */
-static void bbre_ast_fix(bbre *r)
+static void bbre_ast_fix(xregex *r)
 {
   bbre_uint top_hdl;
   assert(bbre_buf_size(r->op_stk) > 0);
@@ -51916,7 +53535,7 @@ static void bbre_ast_fix(bbre *r)
 }
 /* Push an AST node to the operator stack, and fixup the furthest right child
  * pointer of the parent node. */
-static int bbre_ast_push(bbre *r, bbre_uint node_hdl)
+static int bbre_ast_push(xregex *r, bbre_uint node_hdl)
 {
   int err = 0;
   if ((err = bbre_buf_push(&r->alloc, &r->op_stk, node_hdl)))
@@ -51926,7 +53545,7 @@ error:
   return err;
 }
 /* Create a CAT node on the top of the stack. */
-static int bbre_ast_cat(bbre *r, bbre_uint right_child_hdl)
+static int bbre_ast_cat(xregex *r, bbre_uint right_child_hdl)
 {
   int err = 0;
   bbre_uint *top;
@@ -51947,15 +53566,15 @@ error:
 }
 /* Create a BBRE_AST_TYPE_CC_NOT node with the given character class. */
 static int
-bbre_ast_cls_invert(bbre *r, bbre_uint *out_node_hdl, bbre_uint child_hdl)
+bbre_ast_cls_invert(xregex *r, bbre_uint *out_node_hdl, bbre_uint child_hdl)
 {
   assert(bbre_ast_type_is_cc(*bbre_ast_type_ptr(r, child_hdl)));
   return bbre_ast_make(r, out_node_hdl, BBRE_AST_TYPE_CC_NOT, child_hdl);
 }
 /* Helper function to add a character to the argument stack.
- * Returns `BBRE_ERR_MEM` if out of memory. */
+ * Returns `XRT_REGEX_ERR_MEM` if out of memory. */
 static int bbre_parse_escape_addchr(
-    bbre *r, bbre_uint ch, bbre_uint allowed_outputs, bbre_uint *out_node_hdl)
+    xregex *r, bbre_uint ch, bbre_uint allowed_outputs, bbre_uint *out_node_hdl)
 {
   int err = 0;
   (void)allowed_outputs, assert(allowed_outputs & (1 << BBRE_AST_TYPE_CHR));
@@ -51966,7 +53585,7 @@ error:
 }
 /* Convert a hexadecimal digit to a number.
  * Returns ERR_PARSE on invalid hex digit. */
-static int bbre_parse_hexdig(bbre *r, bbre_uint ch, bbre_uint *hex_digit)
+static int bbre_parse_hexdig(xregex *r, bbre_uint ch, bbre_uint *hex_digit)
 {
   int err = 0;
   if (ch >= '0' && ch <= '9')
@@ -51990,18 +53609,18 @@ static int bbre_parse_is_octdig(bbre_uint ch)
  * to look up a charclass by name and create an AST node representing that
  * charclass.*/
 static int bbre_builtin_cc_ascii(
-    bbre *r, const bbre_byte *name, size_t name_len, bbre_uint *out_node_hdl);
+    xregex *r, const bbre_byte *name, size_t name_len, bbre_uint *out_node_hdl);
 static int bbre_builtin_cc_unicode_property(
-    bbre *r, const bbre_byte *name, size_t name_len, bbre_uint *out_node_hdl);
+    xregex *r, const bbre_byte *name, size_t name_len, bbre_uint *out_node_hdl);
 static int bbre_builtin_cc_perl(
-    bbre *r, const bbre_byte *name, size_t name_len, bbre_uint *out_node_hdl);
+    xregex *r, const bbre_byte *name, size_t name_len, bbre_uint *out_node_hdl);
 /* This function is called after receiving a \ character when parsing an
  * expression or character class. Since some escape sequences are forbidden
  * within different contexts (for example: charclasses), a bitmap
  * `allowed_outputs` encodes, at each bit position, the respective ast_type that
  * is allowed to be created in this context. */
 static int
-bbre_parse_escape(bbre *r, bbre_uint allowed_outputs, bbre_uint *out_node_hdl)
+bbre_parse_escape(xregex *r, bbre_uint allowed_outputs, bbre_uint *out_node_hdl)
 {
   bbre_uint ch;
   int err = 0;
@@ -52205,7 +53824,7 @@ error:
   return err;
 }
 /* Parse a decimal number, up to `max_digits`, into *out. */
-static int bbre_parse_number(bbre *r, bbre_uint *out, bbre_uint max_digits)
+static int bbre_parse_number(xregex *r, bbre_uint *out, bbre_uint max_digits)
 {
   int err = 0;
   bbre_uint ch, acc = 0, ndigs = 0;
@@ -52230,7 +53849,7 @@ error:
 }
 /* Parse a regular expression, storing its resulting AST node into *root. */
 static int
-bbre_parse(bbre *r, const bbre_byte *ts, size_t tsz, bbre_flags start_flags)
+bbre_parse(xregex *r, const bbre_byte *ts, size_t tsz, xregexflags start_flags)
 {
   int err;
   r->expr = ts;
@@ -52395,7 +54014,7 @@ bbre_parse(bbre *r, const bbre_byte *ts, size_t tsz, bbre_flags start_flags)
       assert(BBRE_IMPLIES(named_group, !inline_group));
       if (named_group && (name_end - name_start) > BBRE_LIMIT_GROUP_NAME_SIZE) {
         bbre_error_set(&r->error, "group name exceeds maximum length");
-        err = BBRE_ERR_LIMIT;
+        err = XRT_REGEX_ERR_LIMIT;
         goto error;
       }
       if (!inline_group) {
@@ -52417,7 +54036,7 @@ bbre_parse(bbre *r, const bbre_byte *ts, size_t tsz, bbre_flags start_flags)
         if (named_group) {
           if (!(name.name =
                     bbre_alloci(&r->alloc, name.name, 0, name.name_size + 1))) {
-            err = BBRE_ERR_MEM;
+            err = XRT_REGEX_ERR_MEM;
             goto error;
           }
           memcpy(name.name, r->expr + name_start, name.name_size);
@@ -52425,7 +54044,7 @@ bbre_parse(bbre *r, const bbre_byte *ts, size_t tsz, bbre_flags start_flags)
         }
         if ((err = bbre_buf_push(&r->alloc, &r->group_names, name))) {
           /* clean up allocated name, preserves atomicity */
-          bbre_alloci(&r->alloc, name.name, name.name_size, 0);
+          bbre_alloci(&r->alloc, name.name, name.name_size + 1, 0);
           goto error;
         }
       }
@@ -52610,12 +54229,12 @@ bbre_parse(bbre *r, const bbre_byte *ts, size_t tsz, bbre_flags start_flags)
            BBRE_GROUP_FLAG_EXPRESSION |
                /* convert ABI flags to internal flags */
                BBRE_GROUP_FLAG_INSENSITIVE *
-                   !!(start_flags & BBRE_FLAG_INSENSITIVE) |
+                   !!(start_flags & XRT_REGEX_FLAG_INSENSITIVE) |
                BBRE_GROUP_FLAG_MULTILINE *
-                   !!(start_flags & BBRE_FLAG_MULTILINE) |
+                   !!(start_flags & XRT_REGEX_FLAG_MULTILINE) |
                BBRE_GROUP_FLAG_DOTNEWLINE *
-                   !!(start_flags & BBRE_FLAG_DOTNEWLINE) |
-               BBRE_GROUP_FLAG_UNGREEDY * !!(start_flags & BBRE_FLAG_UNGREEDY),
+                   !!(start_flags & XRT_REGEX_FLAG_DOTNEWLINE) |
+               BBRE_GROUP_FLAG_UNGREEDY * !!(start_flags & XRT_REGEX_FLAG_UNGREEDY),
            0, 0)))
     goto error;
 error:
@@ -52660,7 +54279,7 @@ static bbre_uint bbre_inst_match_param_idx(bbre_uint param)
   return param >> 1;
 }
 /* Initialize a NFA program. */
-static void bbre_prog_init(bbre_prog *prog, bbre_alloc alloc, bbre_error *error)
+static void bbre_prog_init(bbre_prog *prog, xregexalloc alloc, bbre_error *error)
 {
   prog->alloc = alloc;
   bbre_buf_init(&prog->insts), bbre_buf_init(&prog->set_idxs);
@@ -52717,7 +54336,7 @@ static int bbre_prog_emit(bbre_prog *prog, bbre_inst i, bbre_uint pat_idx)
 {
   int err = 0;
   if (bbre_prog_size(prog) == BBRE_PROG_LIMIT_MAX_INSTS) {
-    err = BBRE_ERR_LIMIT;
+    err = XRT_REGEX_ERR_LIMIT;
     bbre_error_set(prog->error, "maximum compiled program size exceeded");
     goto error;
   }
@@ -52733,7 +54352,7 @@ error:
  * The LSB of `pc_secondary` encodes whether or not to use the `next` or the
  * `param` field for the target instruction. The rest of the bits in
  * `pc_secondary` encode the actual PC. */
-static bbre_inst bbre_patch_set(bbre *r, bbre_uint pc_secondary, bbre_uint val)
+static bbre_inst bbre_patch_set(xregex *r, bbre_uint pc_secondary, bbre_uint val)
 {
   bbre_inst prev = bbre_prog_get(&r->prog, pc_secondary >> 1);
   assert(pc_secondary);
@@ -52750,7 +54369,7 @@ static bbre_inst bbre_patch_set(bbre *r, bbre_uint pc_secondary, bbre_uint val)
 /* Add `dest_pc` to `f`'s linked list of patches. If `secondary` is 1, then the
  * secondary branch target of the instruction at `dest_pc` will be used. */
 static void
-bbre_patch_add(bbre *r, bbre_compframe *f, bbre_uint dest_pc, int secondary)
+bbre_patch_add(xregex *r, bbre_compframe *f, bbre_uint dest_pc, int secondary)
 {
   bbre_uint out_val = dest_pc << 1 | !!secondary;
   assert(dest_pc);
@@ -52764,7 +54383,7 @@ bbre_patch_add(bbre *r, bbre_compframe *f, bbre_uint dest_pc, int secondary)
   }
 }
 /* Concatenate the patches in `p` with the patches in `q`. */
-static void bbre_patch_merge(bbre *r, bbre_compframe *p, bbre_compframe *q)
+static void bbre_patch_merge(xregex *r, bbre_compframe *p, bbre_compframe *q)
 {
   if (!p->head) {
     p->head = q->head;
@@ -52788,7 +54407,7 @@ static void bbre_patch_xfer(bbre_compframe *dst, bbre_compframe *src)
 }
 /* Rip through the patch list in `f`, setting each branch target in the
  * instruction list to `dest_pc`. */
-static void bbre_patch_apply(bbre *r, bbre_compframe *f, bbre_uint dest_pc)
+static void bbre_patch_apply(xregex *r, bbre_compframe *f, bbre_uint dest_pc)
 {
   bbre_uint i = f->head;
   while (i) {
@@ -52799,9 +54418,9 @@ static void bbre_patch_apply(bbre *r, bbre_compframe *f, bbre_uint dest_pc)
 }
 /* This function is automatically generated and is defined later on. */
 static int bbre_compcc_fold_range(
-    bbre *r, bbre_rune_range range, bbre_compframe *frame, bbre_uint prev);
+    xregex *r, bbre_rune_range range, bbre_compframe *frame, bbre_uint prev);
 static int bbre_compile_ranges_append(
-    bbre *r, bbre_compframe *frame, bbre_uint prev, bbre_rune_range range)
+    xregex *r, bbre_compframe *frame, bbre_uint prev, bbre_rune_range range)
 {
   int err = 0;
   bbre_cc_elem elem = {0};
@@ -52842,14 +54461,14 @@ error:
   return err;
 }
 static void bbre_compile_ranges_append_unwrapped(
-    bbre *r, bbre_compframe *frame, bbre_uint prev, bbre_rune_range range)
+    xregex *r, bbre_compframe *frame, bbre_uint prev, bbre_rune_range range)
 {
   int err = bbre_compile_ranges_append(r, frame, prev, range);
   assert(!err);
   (void)(err); /* for when assert() is not defined */
 }
 static bbre_rune_range
-bbre_compile_ranges_pop_front(bbre *r, bbre_compframe *frame)
+bbre_compile_ranges_pop_front(xregex *r, bbre_compframe *frame)
 {
   bbre_uint ref;
   assert(frame->head && frame->tail); /* list must contain elements */
@@ -52862,7 +54481,7 @@ bbre_compile_ranges_pop_front(bbre *r, bbre_compframe *frame)
 }
 /* Link two nonempty lists. */
 static void
-bbre_compile_ranges_link(bbre *r, bbre_compframe *a, bbre_compframe *b)
+bbre_compile_ranges_link(xregex *r, bbre_compframe *a, bbre_compframe *b)
 {
   assert(a->head && a->tail && b->head && b->tail);
   r->compcc.store[a->tail].next_hdl = b->head;
@@ -52870,7 +54489,7 @@ bbre_compile_ranges_link(bbre *r, bbre_compframe *a, bbre_compframe *b)
 }
 /* An excellent algorithm by Simon Tatham, of PuTTY fame:
  * https://www.chiark.greenend.org.uk/~sgtatham/algorithms/listsort.c */
-static void bbre_compile_ranges_normalize(bbre *r, bbre_compframe *frame)
+static void bbre_compile_ranges_normalize(xregex *r, bbre_compframe *frame)
 {
   bbre_uint num_merges = 0, p, q, k = 1, p_size, q_size;
   if (!frame->head || !(frame->flags & BBRE_GROUP_FLAG_CC_DENORM))
@@ -52944,7 +54563,7 @@ done:
   return;
 }
 /* Helper function to casefold a character class being built in frame. */
-static int bbre_compile_ranges_casefold(bbre *r, bbre_compframe *frame)
+static int bbre_compile_ranges_casefold(xregex *r, bbre_compframe *frame)
 {
   int err = 0;
   bbre_compframe new_frame = *frame;
@@ -52965,7 +54584,7 @@ error:
  * `node` is the contents of the node itself, and `out_hdl` is the output node
  * ID (i.e. arena index) */
 static int bbre_compcc_tree_new(
-    bbre *r, bbre_buf(bbre_compcc_tree) * cc_out, bbre_compcc_tree node,
+    xregex *r, bbre_buf(bbre_compcc_tree) * cc_out, bbre_compcc_tree node,
     bbre_uint *out_hdl)
 {
   int err = 0;
@@ -52987,7 +54606,7 @@ error:
  * bbre_byte_range_to_u32()), `parent_hdl` is the node ID of the parent node to
  * add to, and `out_hdl` is the output node ID. */
 static int bbre_compcc_tree_append(
-    bbre *r, bbre_buf(bbre_compcc_tree) * cc, bbre_uint byte_range,
+    xregex *r, bbre_buf(bbre_compcc_tree) * cc, bbre_uint byte_range,
     bbre_uint parent_hdl, bbre_uint *out_hdl)
 {
   bbre_compcc_tree *parent_node, child_node = {0};
@@ -53016,7 +54635,7 @@ error:
 /* Given a rune range and first/rest bits, add node(s) to the tree and
  * optionally compile the rest. */
 static int bbre_compcc_tree_build_one(
-    bbre *r, bbre_buf(bbre_compcc_tree) * cc_out, bbre_uint parent,
+    xregex *r, bbre_buf(bbre_compcc_tree) * cc_out, bbre_uint parent,
     bbre_uint min, bbre_uint max, bbre_uint rest_bits, bbre_uint first_bits)
 {
   bbre_uint rest_mask = (1 << rest_bits) - 1 /* mask for only rest bits */,
@@ -53129,7 +54748,7 @@ error:
  * rune range amount UTF-8 length boundaries, then calls
  * `bbre_compcc_tree_build_one` on each split range. */
 static int bbre_compcc_tree_build(
-    bbre *r, bbre_compframe *frame_in, bbre_buf(bbre_compcc_tree) * cc_out)
+    xregex *r, bbre_compframe *frame_in, bbre_buf(bbre_compcc_tree) * cc_out)
 {
   size_t len_idx = 0 /* current UTF-8 length */,
          min_bound = 0 /* current UTF-8 length minimum bound */;
@@ -53217,7 +54836,7 @@ static void bbre_compcc_tree_merge_one(
 }
 /* Initialize tree reduction hash table. */
 static int bbre_compcc_hash_init(
-    bbre *r, const bbre_buf(bbre_compcc_tree) cc_tree_in,
+    xregex *r, const bbre_buf(bbre_compcc_tree) cc_tree_in,
     bbre_buf(bbre_uint) * cc_ht_out)
 {
   int err = 0;
@@ -53233,7 +54852,7 @@ error:
  * subtrees. This is the final optimization opportunity for reducing the
  * resulting amount of instructions. */
 static void bbre_compcc_tree_hash(
-    bbre *r, bbre_buf(bbre_compcc_tree) cc_tree_in, bbre_uint parent_hdl)
+    xregex *r, bbre_buf(bbre_compcc_tree) cc_tree_in, bbre_uint parent_hdl)
 {
   /* We also flip sibling -> sibling links backwards -- this reorders the byte
    * ranges into ascending order. */
@@ -53293,7 +54912,7 @@ static void bbre_compcc_tree_hash(
 }
 /* Reduce nodes in the tree (eliminate common suffixes) */
 static void bbre_compcc_tree_reduce(
-    bbre *r, bbre_buf(bbre_compcc_tree) cc_tree_in, bbre_buf(bbre_uint) cc_ht,
+    xregex *r, bbre_buf(bbre_compcc_tree) cc_tree_in, bbre_buf(bbre_uint) cc_ht,
     bbre_uint node_hdl, bbre_uint *my_out_hdl)
 {
   bbre_uint prev_sibling_hdl = 0;
@@ -53347,7 +54966,7 @@ done:
  * instructions, once they are compiled. `frame` allows us to keep track of
  * patch exit points. */
 static int bbre_compcc_tree_render(
-    bbre *r, bbre_buf(bbre_compcc_tree) cc_tree_in, bbre_uint node_hdl,
+    xregex *r, bbre_buf(bbre_compcc_tree) cc_tree_in, bbre_uint node_hdl,
     bbre_uint *my_out_pc, bbre_compframe *frame)
 {
   int err = 0;
@@ -53472,7 +55091,7 @@ static void bbre_compcc_tree_xpose(
  * allocated for the resulting instructions, `ranges` is the normalized set of
  * rune ranges that comprise this character class, and `reversed` tells us
  * whether to compile the charclass in reverse. */
-static int bbre_compcc(bbre *r, bbre_compframe *frame, int reversed)
+static int bbre_compcc(xregex *r, bbre_compframe *frame, int reversed)
 {
   int err = 0;
   bbre_uint start_pc = 0; /* start PC of the compiled charclass, this is filled
@@ -53511,7 +55130,7 @@ static int bbre_compcc(bbre *r, bbre_compframe *frame, int reversed)
     bbre_buf_clear(&r->compcc.tree_2);
     for (i = 1 /* skip sentinel */; i < bbre_buf_size(r->compcc.tree); i++) {
       if ((err = bbre_compcc_tree_new(
-               r, &r->compcc.tree_2, r->compcc.tree[i], NULL)) == BBRE_ERR_MEM)
+               r, &r->compcc.tree_2, r->compcc.tree[i], NULL)) == XRT_REGEX_ERR_MEM)
         goto error;
       assert(!err);
     }
@@ -53558,7 +55177,7 @@ bbre_inst_relocate(bbre_inst inst, bbre_uint src, bbre_uint dst)
  * instructions, and return the duplicate in `dst` as if it was just compiled by
  * an iteration of the compiler loop. */
 static int bbre_compile_dup(
-    bbre *r, bbre_compframe *src, bbre_uint src_end, bbre_compframe *dst,
+    xregex *r, bbre_compframe *src, bbre_uint src_end, bbre_compframe *dst,
     bbre_uint dest_pc)
 {
   bbre_uint i;
@@ -53629,11 +55248,11 @@ error:
 }
 /* This function reads from the builtin CC ROM and is defined later. */
 static int bbre_builtin_cc_decode(
-    bbre *r, bbre_uint start, bbre_uint num_range, bbre_compframe *frame);
+    xregex *r, bbre_uint start, bbre_uint num_range, bbre_compframe *frame);
 /* Main compiler function. Given an AST node through `ast_root`, convert it to
  * compiled instructions. Optionally generate the reversed program if `reverse`
  * is specified. */
-static int bbre_compile_internal(bbre *r, bbre_uint ast_root, bbre_uint reverse)
+static int bbre_compile_internal(xregex *r, bbre_uint ast_root, bbre_uint reverse)
 {
   int err = 0;
   bbre_compframe
@@ -54097,15 +55716,15 @@ static int bbre_compile_internal(bbre *r, bbre_uint ast_root, bbre_uint reverse)
 error:
   return err;
 }
-static int bbre_set_compile(bbre_set *set, const bbre **rs, size_t n);
-int bbre_set_init_internal(bbre_set **pset, const bbre_alloc *palloc)
+static int bbre_set_compile(xregexset *set, const xregex **rs, size_t n);
+int bbre_set_init_internal(xregexset **pset, const xregexalloc *palloc)
 {
   int err = 0;
-  bbre_set *set;
-  bbre_alloc alloc = bbre_alloc_make(palloc);
-  *pset = bbre_alloci(&alloc, NULL, 0, sizeof(bbre_set));
+  xregexset *set;
+  xregexalloc alloc = bbre_alloc_make(palloc);
+  *pset = bbre_alloci(&alloc, NULL, 0, sizeof(xregexset));
   if (!*pset) {
-    err = BBRE_ERR_MEM;
+    err = XRT_REGEX_ERR_MEM;
     goto error;
   }
   set = *pset;
@@ -54116,7 +55735,7 @@ int bbre_set_init_internal(bbre_set **pset, const bbre_alloc *palloc)
 error:
   return err;
 }
-static int bbre_set_compile(bbre_set *set, const bbre **rs, size_t n)
+static int bbre_set_compile(xregexset *set, const xregex **rs, size_t n)
 {
   int err = 0;
   size_t i;
@@ -54130,7 +55749,7 @@ static int bbre_set_compile(bbre_set *set, const bbre **rs, size_t n)
   set->prog.entry[0] = bbre_prog_size(&set->prog);
   for (i = 0; i < n; i++) {
     /* relocate all subpatterns */
-    const bbre *r = rs[i];
+    const xregex *r = rs[i];
     bbre_uint src_pc, dst_pc;
     if (i) {
       assert(prev_split);
@@ -54268,7 +55887,7 @@ bbre_save_slots_new(bbre_exec *exec, bbre_save_slots *s, bbre_uint *next)
           &exec->alloc, s->slots, s->slots_alloc * sizeof(size_t),
           new_alloc * sizeof(size_t));
       if (!new_slots) {
-        err = BBRE_ERR_MEM;
+        err = XRT_REGEX_ERR_MEM;
         goto error;
       }
       s->slots = new_slots, s->slots_alloc = new_alloc;
@@ -54353,7 +55972,7 @@ static void bbre_nfa_init(bbre_nfa *n)
 }
 #define BBRE_BITS_PER_U32 (sizeof(bbre_uint) * CHAR_BIT)
 static int
-bbre_bmp_init(bbre_alloc alloc, bbre_buf(bbre_uint) * b, bbre_uint size)
+bbre_bmp_init(xregexalloc alloc, bbre_buf(bbre_uint) * b, bbre_uint size)
 {
   bbre_uint i;
   int err = 0;
@@ -54474,7 +56093,7 @@ static int bbre_nfa_eps(bbre_exec *exec, size_t pos, bbre_assert_flag ass)
        * one of its branch targets set to the address of the instruction
        * itself. I observed this happening after a fuzzington run that
        * produced a regexp with nested empty-width quantifiers: a{0,0}*.
-       * The way that bbre works now, this is harmless. Preventing these
+       * The way that xregex works now, this is harmless. Preventing these
        * instructions from being emitted would add some complexity to the
        * program for no clear benefit. */
       /* assert(pri.pc != thrd.pc && sec.pc != thrd.pc); */
@@ -54579,7 +56198,7 @@ bbre_make_assert_flag(bbre_uint prev_ch, bbre_uint next_ch)
       bbre_is_word_char(prev_ch), next_ch);
 }
 static int bbre_nfa_end(
-    bbre_exec *exec, size_t pos, bbre_uint max_span, bbre_span *out_span,
+    bbre_exec *exec, size_t pos, bbre_uint max_span, xregexspan *out_span,
     unsigned int *out_which_span, bbre_uint prev_ch)
 {
   int err = 0;
@@ -54593,12 +56212,12 @@ static int bbre_nfa_end(
   slot = exec->nfa.pri_stk[sets];
   for (j = 0; (j < max_span) && out_span; j++) {
     int span_good;
-    out_span[j].begin = bbre_save_slots_get(&exec->nfa.slots, slot, j * 2);
-    out_span[j].end = bbre_save_slots_get(&exec->nfa.slots, slot, j * 2 + 1);
+    out_span[j].iBegin = bbre_save_slots_get(&exec->nfa.slots, slot, j * 2);
+    out_span[j].iEnd = bbre_save_slots_get(&exec->nfa.slots, slot, j * 2 + 1);
     span_good =
-        !(out_span[j].begin == BBRE_UNSET_POSN ||
-          out_span[j].end == BBRE_UNSET_POSN);
-    out_span[j].begin *= span_good, out_span[j].end *= span_good;
+        !(out_span[j].iBegin == BBRE_UNSET_POSN ||
+          out_span[j].iEnd == BBRE_UNSET_POSN);
+    out_span[j].iBegin *= span_good, out_span[j].iEnd *= span_good;
     if (out_which_span)
       out_which_span[j] = span_good;
     if (j == 0)
@@ -54698,7 +56317,7 @@ static int bbre_dfa_construct(
         &exec->alloc, NULL, 0,
         sizeof(bbre_dfa_state *) * BBRE_DFA_MAX_NUM_STATES);
     if (!next_cache) {
-      err = BBRE_ERR_MEM;
+      err = XRT_REGEX_ERR_MEM;
       goto error;
     }
     memset(next_cache, 0, sizeof(bbre_dfa_state *) * BBRE_DFA_MAX_NUM_STATES);
@@ -54764,7 +56383,7 @@ static int bbre_dfa_construct(
         next_state = bbre_alloci(
             &exec->alloc, d->states[table_pos], prev_alloc, next_alloc);
         if (!next_state) {
-          err = BBRE_ERR_MEM;
+          err = XRT_REGEX_ERR_MEM;
           goto error;
         }
         d->states[table_pos] = next_state;
@@ -55045,15 +56664,15 @@ error:
   return err;
 }
 static int bbre_exec_init(
-    bbre_exec **pexec, const bbre_prog *prog, const bbre_alloc *palloc)
+    bbre_exec **pexec, const bbre_prog *prog, const xregexalloc *palloc)
 {
   int err = 0;
-  bbre_alloc alloc = bbre_alloc_make(palloc);
+  xregexalloc alloc = bbre_alloc_make(palloc);
   bbre_exec *exec = bbre_alloci(&alloc, NULL, 0, sizeof(bbre_exec));
   *pexec = exec;
   assert(bbre_prog_size(prog));
   if (!exec) {
-    err = BBRE_ERR_MEM;
+    err = XRT_REGEX_ERR_MEM;
     goto error;
   }
   memset(exec, 0, sizeof(bbre_exec));
@@ -55076,7 +56695,7 @@ static void bbre_exec_destroy(bbre_exec *exec)
 done:
   return;
 }
-static int bbre_compile(bbre *r)
+static int bbre_compile(xregex *r)
 {
   int err = 0;
   assert(!bbre_prog_size(&r->prog));
@@ -55088,7 +56707,7 @@ error:
   return err;
 }
 static int bbre_exec_match(
-    bbre_exec *exec, const char *s, size_t n, size_t pos, bbre_span *out_span,
+    bbre_exec *exec, const char *s, size_t n, size_t pos, xregexspan *out_span,
     unsigned int *which_spans, bbre_uint max_span)
 {
   int err = 0;
@@ -55103,18 +56722,18 @@ static int bbre_exec_match(
     goto error;
   } else if (max_span == 1) {
     err = bbre_dfa_match(
-        exec, (bbre_byte *)s, n, pos, &out_span[0].end,
+        exec, (bbre_byte *)s, n, pos, &out_span[0].iEnd,
         BBRE_DFA_MATCH_FLAG_PRI);
     if (err <= 0)
       goto error;
     err = bbre_dfa_match(
-        exec, (bbre_byte *)s, n, out_span[0].end, &out_span[0].begin,
+        exec, (bbre_byte *)s, n, out_span[0].iEnd, &out_span[0].iBegin,
         BBRE_DFA_MATCH_FLAG_REVERSED);
     if (err < 0)
       goto error;
     assert(
-        err == 1 && out_span[0].begin != BBRE_UNSET_POSN &&
-        out_span[0].end != BBRE_UNSET_POSN);
+        err == 1 && out_span[0].iBegin != BBRE_UNSET_POSN &&
+        out_span[0].iEnd != BBRE_UNSET_POSN);
     if (which_spans)
       *which_spans = 1;
     err = 1;
@@ -55134,7 +56753,7 @@ error:
   return err;
 }
 static int bbre_match_internal(
-    bbre *r, const char *s, size_t n, size_t pos, bbre_span *out_spans,
+    xregex *r, const char *s, size_t n, size_t pos, xregexspan *out_spans,
     bbre_uint *which_spans, bbre_uint out_spans_size)
 {
   int err = 0;
@@ -55177,7 +56796,7 @@ error:
   return err;
 }
 static int bbre_set_match_internal(
-    bbre_set *set, const char *s, size_t n, size_t pos, bbre_uint *out_idxs,
+    xregexset *set, const char *s, size_t n, size_t pos, bbre_uint *out_idxs,
     bbre_uint out_idxs_size, bbre_uint *out_num_idxs)
 {
   int err = 0;
@@ -55191,16 +56810,16 @@ error:
   return err;
 }
 /* API */
-int bbre_builder_init(
-    bbre_builder **pbuild, const char *s, size_t n, const bbre_alloc *palloc)
+int xrtRegexBuilderCreate(
+    xregexbuilder **pbuild, const char *s, size_t n, const xregexalloc *palloc)
 {
   int err = 0;
-  bbre_builder *build;
-  bbre_alloc alloc = bbre_alloc_make(palloc);
-  build = bbre_alloci(&alloc, NULL, 0, sizeof(bbre_builder));
+  xregexbuilder *build;
+  xregexalloc alloc = bbre_alloc_make(palloc);
+  build = bbre_alloci(&alloc, NULL, 0, sizeof(xregexbuilder));
   *pbuild = build;
   if (!build) {
-    err = BBRE_ERR_MEM;
+    err = XRT_REGEX_ERR_MEM;
     goto error;
   }
   memset(build, 0, sizeof(*build));
@@ -55211,45 +56830,45 @@ int bbre_builder_init(
 error:
   return err;
 }
-void bbre_builder_destroy(bbre_builder *build)
+void xrtRegexBuilderDestroy(xregexbuilder *build)
 {
   if (!build)
     goto done;
-  bbre_alloci(&build->alloc, build, sizeof(bbre_builder), 0);
+  bbre_alloci(&build->alloc, build, sizeof(xregexbuilder), 0);
 done:
   return;
 }
-void bbre_builder_flags(bbre_builder *build, bbre_flags flags)
+void xrtRegexBuilderSetFlags(xregexbuilder *build, xregexflags flags)
 {
   build->flags = flags;
 }
-bbre *bbre_init_pattern(const char *pat_nt)
+xregex *xrtRegexCreate(const char *pat_nt)
 {
   int err = 0;
-  bbre *r = NULL;
-  bbre_builder *spec = NULL;
-  if ((err = bbre_builder_init(&spec, pat_nt, strlen(pat_nt), NULL)))
+  xregex *r = NULL;
+  xregexbuilder *spec = NULL;
+  if ((err = xrtRegexBuilderCreate(&spec, pat_nt, strlen(pat_nt), NULL)))
     goto error;
-  if ((err = bbre_init(&r, (const bbre_builder*)spec, NULL)))
+  if ((err = xrtRegexCreateFromBuilder(&r, spec, NULL)))
     goto error;
-  bbre_builder_destroy(spec);
+  xrtRegexBuilderDestroy(spec);
   return r;
 error:
-  /* bbre_builder_destroy() accepts NULL */
-  bbre_builder_destroy(spec);
-  bbre_destroy(r);
+  /* xrtRegexBuilderDestroy() accepts NULL */
+  xrtRegexBuilderDestroy(spec);
+  xrtRegexDestroy(r);
   return NULL;
 }
-/* Initialize a bare `bbre` (no regexp parsed yet) */
-static int bbre_init_internal(bbre **pr, const bbre_alloc *palloc)
+/* Initialize a bare `xregex` (no regexp parsed yet) */
+static int bbre_init_internal(xregex **pr, const xregexalloc *palloc)
 {
   int err = 0;
-  bbre *r;
-  bbre_alloc alloc = bbre_alloc_make(palloc);
-  r = bbre_alloci(&alloc, NULL, 0, sizeof(bbre));
+  xregex *r;
+  xregexalloc alloc = bbre_alloc_make(palloc);
+  r = bbre_alloci(&alloc, NULL, 0, sizeof(xregex));
   *pr = r;
   if (!r) {
-    err = BBRE_ERR_MEM;
+    err = XRT_REGEX_ERR_MEM;
     goto error;
   }
   r->alloc = alloc;
@@ -55267,7 +56886,8 @@ static int bbre_init_internal(bbre **pr, const bbre_alloc *palloc)
 error:
   return err;
 }
-int bbre_init(bbre **pr, const bbre_builder *spec, const bbre_alloc *palloc)
+int xrtRegexCreateFromBuilder(
+    xregex **pr, const xregexbuilder *spec, const xregexalloc *palloc)
 {
   int err = 0;
   if ((err = bbre_init_internal(pr, palloc)))
@@ -55280,7 +56900,7 @@ int bbre_init(bbre **pr, const bbre_builder *spec, const bbre_alloc *palloc)
 error:
   return err;
 }
-void bbre_destroy(bbre *r)
+void xrtRegexDestroy(xregex *r)
 {
   size_t i;
   if (!r)
@@ -55288,7 +56908,7 @@ void bbre_destroy(bbre *r)
   bbre_buf_destroy(&r->alloc, (void **)&r->ast);
   for (i = 0; i < bbre_buf_size(r->group_names); i++)
     bbre_alloci(
-        &r->alloc, r->group_names[i].name, r->group_names[i].name_size, 0);
+        &r->alloc, r->group_names[i].name, r->group_names[i].name_size + 1, 0);
   bbre_buf_destroy(&r->alloc, &r->group_names);
   bbre_buf_destroy(&r->alloc, &r->op_stk),
       bbre_buf_destroy(&r->alloc, &r->comp_stk);
@@ -55302,64 +56922,64 @@ void bbre_destroy(bbre *r)
 done:
   return;
 }
-const char *bbre_get_err_msg(const bbre *reg) { return reg->error.msg; }
-size_t bbre_get_err_pos(const bbre *reg) { return reg->error.pos; }
-int bbre_is_match(bbre *reg, const char *text, size_t text_size)
+const char *xrtRegexGetErrorMsg(const xregex *reg) { return reg->error.msg; }
+size_t xrtRegexGetErrorPos(const xregex *reg) { return reg->error.pos; }
+int xrtRegexIsMatch(xregex *reg, const char *text, size_t text_size)
 {
   return bbre_match_internal(reg, text, text_size, 0, NULL, NULL, 0);
 }
-int bbre_find(
-    bbre *reg, const char *text, size_t text_size, bbre_span *out_bounds)
+int xrtRegexFind(
+    xregex *reg, const char *text, size_t text_size, xregexspan *out_bounds)
 {
   return bbre_match_internal(reg, text, text_size, 0, out_bounds, NULL, 1);
 }
-int bbre_captures(
-    bbre *reg, const char *text, size_t text_size, bbre_span *out_captures,
-    bbre_uint out_captures_size)
+int xrtRegexCaptures(
+    xregex *reg, const char *text, size_t text_size, xregexspan *out_captures,
+    uint32 out_captures_size)
 {
   return bbre_match_internal(
-      reg, text, text_size, 0, out_captures, NULL, out_captures_size);
+      reg, text, text_size, 0, out_captures, NULL, (bbre_uint)out_captures_size);
 }
-int bbre_which_captures(
-    bbre *reg, const char *text, size_t text_size, bbre_span *out_captures,
-    unsigned int *out_captures_did_match, unsigned int out_captures_size)
+int xrtRegexWhichCaptures(
+    xregex *reg, const char *text, size_t text_size, xregexspan *out_captures,
+    uint32 *out_captures_did_match, uint32 out_captures_size)
 {
   return bbre_match_internal(
-      reg, text, text_size, 0, out_captures, out_captures_did_match,
-      out_captures_size);
+      reg, text, text_size, 0, out_captures, (bbre_uint*)out_captures_did_match,
+      (bbre_uint)out_captures_size);
 }
-int bbre_is_match_at(bbre *reg, const char *text, size_t text_size, size_t pos)
+int xrtRegexIsMatchAt(xregex *reg, const char *text, size_t text_size, size_t pos)
 {
   return bbre_match_internal(reg, text, text_size, pos, NULL, NULL, 0);
 }
-int bbre_find_at(
-    bbre *reg, const char *text, size_t text_size, size_t pos,
-    bbre_span *out_bounds)
+int xrtRegexFindAt(
+    xregex *reg, const char *text, size_t text_size, size_t pos,
+    xregexspan *out_bounds)
 {
   return bbre_match_internal(reg, text, text_size, pos, out_bounds, NULL, 1);
 }
-int bbre_captures_at(
-    bbre *reg, const char *text, size_t text_size, size_t pos,
-    bbre_span *out_captures, bbre_uint num_captures)
+int xrtRegexCapturesAt(
+    xregex *reg, const char *text, size_t text_size, size_t pos,
+    xregexspan *out_captures, uint32 num_captures)
 {
   return bbre_match_internal(
-      reg, text, text_size, pos, out_captures, NULL, num_captures);
+      reg, text, text_size, pos, out_captures, NULL, (bbre_uint)num_captures);
 }
-int bbre_which_captures_at(
-    bbre *reg, const char *text, size_t text_size, size_t pos,
-    bbre_span *out_captures, unsigned int *out_captures_did_match,
-    unsigned int out_captures_size)
+int xrtRegexWhichCapturesAt(
+    xregex *reg, const char *text, size_t text_size, size_t pos,
+    xregexspan *out_captures, uint32 *out_captures_did_match,
+    uint32 out_captures_size)
 {
   return bbre_match_internal(
-      reg, text, text_size, pos, out_captures, out_captures_did_match,
-      out_captures_size);
+      reg, text, text_size, pos, out_captures, (bbre_uint*)out_captures_did_match,
+      (bbre_uint)out_captures_size);
 }
-unsigned int bbre_capture_count(const bbre *reg)
+uint32 xrtRegexCaptureCount(const xregex *reg)
 {
-  return bbre_buf_size(reg->group_names) + 1;
+  return (uint32)(bbre_buf_size(reg->group_names) + 1);
 }
-const char *bbre_capture_name(
-    const bbre *reg, unsigned int capture_idx, size_t *out_name_size)
+const char *xrtRegexCaptureName(
+    const xregex *reg, uint32 capture_idx, size_t *out_name_size)
 {
   const char *out = NULL;
   size_t size = 0;
@@ -55376,15 +56996,15 @@ done:
     *out_name_size = size;
   return out;
 }
-int bbre_set_builder_init(bbre_set_builder **pspec, const bbre_alloc *palloc)
+int xrtRegexSetBuilderCreate(xregexsetbuilder **pspec, const xregexalloc *palloc)
 {
   int err = 0;
-  bbre_set_builder *spec;
-  bbre_alloc alloc = bbre_alloc_make(palloc);
-  spec = bbre_alloci(&alloc, NULL, 0, sizeof(bbre_builder));
+  xregexsetbuilder *spec;
+  xregexalloc alloc = bbre_alloc_make(palloc);
+  spec = bbre_alloci(&alloc, NULL, 0, sizeof(xregexsetbuilder));
   *pspec = spec;
   if (!spec) {
-    err = BBRE_ERR_MEM;
+    err = XRT_REGEX_ERR_MEM;
     goto error;
   }
   memset(spec, 0, sizeof(*spec));
@@ -55393,58 +57013,58 @@ int bbre_set_builder_init(bbre_set_builder **pspec, const bbre_alloc *palloc)
 error:
   return err;
 }
-void bbre_set_builder_destroy(bbre_set_builder *spec)
+void xrtRegexSetBuilderDestroy(xregexsetbuilder *spec)
 {
   if (!spec)
     goto done;
   bbre_buf_destroy(&spec->alloc, &spec->pats);
-  bbre_alloci(&spec->alloc, spec, sizeof(bbre_builder), 0);
+  bbre_alloci(&spec->alloc, spec, sizeof(xregexsetbuilder), 0);
 done:
   return;
 }
-int bbre_set_builder_add(bbre_set_builder *set, const bbre *b)
+int xrtRegexSetBuilderAdd(xregexsetbuilder *set, const xregex *b)
 {
   return bbre_buf_push(&set->alloc, &set->pats, b);
 }
-bbre_set *bbre_set_init_patterns(const char *const *pats_nt, size_t num_pats)
+xregexset *xrtRegexSetCreate(const char *const *pats_nt, size_t num_pats)
 {
   int err = 0;
   size_t i;
-  bbre_alloc a = bbre_alloc_make(NULL);
-  bbre **regs = bbre_alloci(&a, NULL, 0, sizeof(bbre *) * num_pats);
-  bbre_set *set = NULL;
-  bbre_set_builder *spec = NULL;
+  xregexalloc a = bbre_alloc_make(NULL);
+  xregex **regs = bbre_alloci(&a, NULL, 0, sizeof(xregex *) * num_pats);
+  xregexset *set = NULL;
+  xregexsetbuilder *spec = NULL;
   if (!regs)
     goto done;
   for (i = 0; i < num_pats; i++)
     regs[i] = NULL;
   for (i = 0; i < num_pats; i++) {
-    regs[i] = bbre_init_pattern(pats_nt[i]);
+    regs[i] = xrtRegexCreate(pats_nt[i]);
     if (!regs[i])
       goto done;
   }
-  if ((err = bbre_set_builder_init(&spec, &a)))
+  if ((err = xrtRegexSetBuilderCreate(&spec, &a)))
     goto done;
   for (i = 0; i < num_pats; i++) {
-    if ((err = bbre_set_builder_add(spec, regs[i])))
+    if ((err = xrtRegexSetBuilderAdd(spec, regs[i])))
       goto done;
   }
-  if ((err = bbre_set_init(&set, spec, &a))) {
-    bbre_set_destroy(set);
+  if ((err = xrtRegexSetCreateFromBuilder(&set, spec, &a))) {
+    xrtRegexSetDestroy(set);
     set = NULL;
     goto done;
   }
 done:
-  bbre_set_builder_destroy(spec);
+  xrtRegexSetBuilderDestroy(spec);
   if (regs) {
     for (i = 0; i < num_pats; i++)
-      bbre_destroy(regs[i]);
-    bbre_alloci(&a, regs, sizeof(bbre *) * num_pats, 0);
+      xrtRegexDestroy(regs[i]);
+    bbre_alloci(&a, regs, sizeof(xregex *) * num_pats, 0);
   }
   return set;
 }
-int bbre_set_init(
-    bbre_set **pset, const bbre_set_builder *spec, const bbre_alloc *palloc)
+int xrtRegexSetCreateFromBuilder(
+    xregexset **pset, const xregexsetbuilder *spec, const xregexalloc *palloc)
 {
   int err = 0;
   if ((err = bbre_set_init_internal(pset, palloc)))
@@ -55454,7 +57074,7 @@ int bbre_set_init(
 error:
   return err;
 }
-void bbre_set_destroy(bbre_set *set)
+void xrtRegexSetDestroy(xregexset *set)
 {
   if (!set)
     goto done;
@@ -55465,41 +57085,78 @@ void bbre_set_destroy(bbre_set *set)
 done:
   return;
 }
-int bbre_set_is_match(bbre_set *set, const char *text, size_t text_size)
+const char *xrtRegexSetGetErrorMsg(const xregexset *set)
+{
+  return set->error.msg;
+}
+size_t xrtRegexSetGetErrorPos(const xregexset *set)
+{
+  return set->error.pos;
+}
+int xrtRegexSetIsMatch(xregexset *set, const char *text, size_t text_size)
 {
   return bbre_set_match_internal(set, text, text_size, 0, NULL, 0, NULL);
 }
-int bbre_set_matches(
-    bbre_set *set, const char *text, size_t text_size, bbre_uint *out_idxs,
-    bbre_uint out_idxs_size, bbre_uint *out_num_idxs)
+int xrtRegexSetMatches(
+    xregexset *set, const char *text, size_t text_size, uint32 *out_idxs,
+    uint32 out_idxs_size, uint32 *out_num_idxs)
 {
   return bbre_set_match_internal(
-      set, text, text_size, 0, out_idxs, out_idxs_size, out_num_idxs);
+      set, text, text_size, 0, (bbre_uint*)out_idxs, (bbre_uint)out_idxs_size,
+      (bbre_uint*)out_num_idxs);
 }
-int bbre_set_is_match_at(
-    bbre_set *set, const char *text, size_t text_size, size_t pos)
+int xrtRegexSetIsMatchAt(
+    xregexset *set, const char *text, size_t text_size, size_t pos)
 {
   return bbre_set_match_internal(set, text, text_size, pos, NULL, 0, NULL);
 }
-int bbre_set_matches_at(
-    bbre_set *set, const char *s, size_t n, size_t pos, bbre_uint *out_idxs,
-    bbre_uint out_idxs_size, bbre_uint *out_num_idxs)
+int xrtRegexSetMatchesAt(
+    xregexset *set, const char *s, size_t n, size_t pos, uint32 *out_idxs,
+    uint32 out_idxs_size, uint32 *out_num_idxs)
 {
   return bbre_set_match_internal(
-      set, s, n, pos, out_idxs, out_idxs_size, out_num_idxs);
+      set, s, n, pos, (bbre_uint*)out_idxs, (bbre_uint)out_idxs_size,
+      (bbre_uint*)out_num_idxs);
 }
-int bbre_clone(bbre **pout, const bbre *reg, const bbre_alloc *alloc)
+static int bbre_group_names_clone(xregex *out, const xregex *in)
+{
+  int err = 0;
+  size_t i;
+  for (i = 0; i < bbre_buf_size(in->group_names); i++) {
+    const bbre_group_name *src_name = &in->group_names[i];
+    bbre_group_name dst_name;
+    dst_name.name = NULL;
+    dst_name.name_size = src_name->name_size;
+    if (src_name->name) {
+      dst_name.name = bbre_alloci(&out->alloc, NULL, 0, dst_name.name_size + 1);
+      if (!dst_name.name) {
+        err = XRT_REGEX_ERR_MEM;
+        goto error;
+      }
+      memcpy(dst_name.name, src_name->name, dst_name.name_size + 1);
+    }
+    if ((err = bbre_buf_push(&out->alloc, &out->group_names, dst_name))) {
+      bbre_alloci(&out->alloc, dst_name.name, dst_name.name_size + 1, 0);
+      goto error;
+    }
+  }
+error:
+  return err;
+}
+int xrtRegexClone(xregex **pout, const xregex *reg, const xregexalloc *alloc)
 {
   int err = 0;
   if ((err = bbre_init_internal(pout, alloc)))
     goto error;
   if ((err = bbre_prog_clone(&(*pout)->prog, &reg->prog)))
     goto error;
+  if ((err = bbre_group_names_clone(*pout, reg)))
+    goto error;
 error:
   return err;
 }
-int bbre_set_clone(
-    bbre_set **pout, const bbre_set *set, const bbre_alloc *alloc)
+int xrtRegexSetClone(
+    xregexset **pout, const xregexset *set, const xregexalloc *alloc)
 {
   int err = 0;
   if ((err = bbre_set_init_internal(pout, alloc)))
@@ -55509,8 +57166,6 @@ int bbre_set_clone(
 error:
   return err;
 }
-static const char *const bbre_version_str;
-const char *bbre_version(void) { return bbre_version_str; }
 /* Below is a UTF-8 decoder implemented as a compact DFA. This was heavily
  * inspired by Bjoern Hoehrmann's ubiquitous "Flexible and Economical UTF-8
  * Decoder" (https://bjoern.hoehrmann.de/utf-8/decoder/dfa/). I chose to write
@@ -55571,7 +57226,7 @@ bbre_utf8_decode(bbre_uint *state, bbre_uint *codep, bbre_uint byte)
   return *state;
 }
 /* Check that the input string is well-formed UTF-8. */
-static int bbre_parse_check_well_formed_utf8(bbre *r)
+static int bbre_parse_check_well_formed_utf8(xregex *r)
 {
   bbre_uint state = 0, codep;
   int err = 0;
@@ -55801,7 +57456,7 @@ static int bbre_compcc_fold_next(bbre_uint rune)
        (rune & 0x01)];
 }
 static int bbre_compcc_fold_range(
-    bbre *r, bbre_rune_range range, bbre_compframe *frame, bbre_uint prev)
+    xregex *r, bbre_rune_range range, bbre_compframe *frame, bbre_uint prev)
 {
   bbre_uint current, x0, x1, x2, x3, x4, x5, begin = range.l, end = range.h;
   int err = 0;
@@ -56390,7 +58045,7 @@ static int bbre_builtin_cc_next_bit(const bbre_uint **p, bbre_uint *idx)
   return (int)!!out;
 }
 static int bbre_builtin_cc_make(
-    bbre *r, const bbre_byte *name, size_t name_len,
+    xregex *r, const bbre_byte *name, size_t name_len,
     const bbre_builtin_cc *start, bbre_uint *out_hdl)
 {
   const bbre_builtin_cc *p = NULL, *found = NULL;
@@ -56437,7 +58092,7 @@ error:
   return err;
 }
 static int bbre_builtin_cc_decode(
-    bbre *r, bbre_uint start, bbre_uint num_range, bbre_compframe *frame)
+    xregex *r, bbre_uint start, bbre_uint num_range, bbre_compframe *frame)
 {
   const bbre_uint *read; /* pointer to compressed data */
   bbre_uint i, bit_idx, prev = BBRE_UTF_MAX + 1, accum = 0, range[2];
@@ -56489,26 +58144,23 @@ error:
   return err;
 }
 static int bbre_builtin_cc_unicode_property(
-    bbre *r, const bbre_byte *name, size_t name_len, bbre_uint *out_hdl)
+    xregex *r, const bbre_byte *name, size_t name_len, bbre_uint *out_hdl)
 {
   return bbre_builtin_cc_make(
       r, name, name_len, bbre_builtin_ccs_unicode_property, out_hdl);
 }
 static int bbre_builtin_cc_ascii(
-    bbre *r, const bbre_byte *name, size_t name_len, bbre_uint *out_hdl)
+    xregex *r, const bbre_byte *name, size_t name_len, bbre_uint *out_hdl)
 {
   return bbre_builtin_cc_make(
       r, name, name_len, bbre_builtin_ccs_ascii, out_hdl);
 }
 static int bbre_builtin_cc_perl(
-    bbre *r, const bbre_byte *name, size_t name_len, bbre_uint *out_hdl)
+    xregex *r, const bbre_byte *name, size_t name_len, bbre_uint *out_hdl)
 {
   return bbre_builtin_cc_make(
       r, name, name_len, bbre_builtin_ccs_perl, out_hdl);
 }
-/*{ Generated by `versioner.py` */
-static const char *const bbre_version_str = "0.0.2";
-/*} Generated by `versioner.py` */
 #ifdef BBRE_DEBUG_UTILS
 /* Inject a header file after everything. This is used during development for
  * tools that need access to ABI-unstable internal structures. */
@@ -56565,6 +58217,8 @@ XXAPI void xvoAddRef(xvalue pVal)
 }
 bool xvoListClear_FreeProc(int64 pKey, xvalue* ppVal, xlist pList)
 {
+	(void)pKey;
+	(void)pList;
 	xvoUnref(*ppVal);
 	return FALSE;
 }
@@ -56575,6 +58229,8 @@ static void xvoCollNode_FreeProc(xavltree pColl, Coll_Key* pKey)
 }
 bool xvoTableClear_FreeProc(Dict_Key* pKey, xvalue* ppVal, xdict pTbl)
 {
+	(void)pKey;
+	(void)pTbl;
 	xvoUnref(*ppVal);
 	return FALSE;
 }
@@ -57617,21 +59273,22 @@ XXAPI bool xvoCollSetParent(xvalue pColl, xvalue pParentColl)
 	return TRUE;
 }
 // Table 读数据
-XXAPI xvalue xvoTableGetValue(xvalue pTbl, str key, uint32 kl)
+XXAPI xvalue xvoTableGetValue(xvalue pTbl, const void* key, uint32 kl)
 {
+	str sKey = (str)key;
 	if ( pTbl == NULL ) {
 		return &XVO_VALUE_NULL;
 	}
 	if ( pTbl->Type != XVO_DT_TABLE ) {
 		return &XVO_VALUE_NULL;
 	}
-	if ( key == NULL ) {
-		key = xCore.sNull;
+	if ( sKey == NULL ) {
+		sKey = xCore.sNull;
 		kl = 0;
 	} else if ( kl == 0 ) {
-		kl = strlen(key);
+		kl = strlen((const char*)sKey);
 	}
-	xvalue pVal = xrtDictGetPtr(pTbl->vTable, key, kl);
+	xvalue pVal = xrtDictGetPtr(pTbl->vTable, sKey, kl);
 	if ( pVal ) {
 		return pVal;
 	} else {
@@ -57639,25 +59296,26 @@ XXAPI xvalue xvoTableGetValue(xvalue pTbl, str key, uint32 kl)
 	}
 }
 // Table 写数据
-XXAPI bool xvoTableSetValue(xvalue pTbl, str key, uint32 kl, xvalue pVal, bool bColloc)
+XXAPI bool xvoTableSetValue(xvalue pTbl, const void* key, uint32 kl, xvalue pVal, bool bColloc)
 {
+	str sKey = (str)key;
 	if ( (pTbl == NULL) || (pVal == NULL) ) {
 		return FALSE;
 	}
 	if ( pTbl->Type != XVO_DT_TABLE ) {
 		return FALSE;
 	}
-	if ( key == NULL ) {
-		key = xCore.sNull;
+	if ( sKey == NULL ) {
+		sKey = xCore.sNull;
 		kl = 0;
 	} else if ( kl == 0 ) {
-		kl = strlen(key);
+		kl = strlen((const char*)sKey);
 	}
 	if ( !xvoPrepareStoreWithOwner_Inline(&pTbl->vTable->Owner, pVal) ) {
 		return FALSE;
 	}
 	xvalue pOldVal = NULL;
-	int iRet = xrtDictSetPtr(pTbl->vTable, key, kl, pVal, (ptr*)&pOldVal);
+	int iRet = xrtDictSetPtr(pTbl->vTable, sKey, kl, pVal, (ptr*)&pOldVal);
 	if ( iRet == FALSE ) {
 		return FALSE;
 	}
@@ -58019,31 +59677,31 @@ XXAPI void xvoPrintValue(xvalue objVal, int iLevel, int iMode, int64 iKey, str s
 		if ( objVal == NULL ) {
 			printf("(empty) %lld = (empty)\n", iKey);
 		} else if ( objVal->Type == XVO_DT_NULL ) {
-			printf("(null ) [%x] %lld = (null)\n", objVal, iKey);
+			printf("(null ) [%p] %lld = (null)\n", (void*)objVal, iKey);
 		} else if ( objVal->Type == XVO_DT_BOOL ) {
-			printf("(bool ) [%x] %lld = (%s)\n", objVal, iKey, xvoGetText(objVal));
+			printf("(bool ) [%p] %lld = (%s)\n", (void*)objVal, iKey, xvoGetText(objVal));
 		} else if ( objVal->Type == XVO_DT_INT ) {
-			printf("( int ) [%x] %lld = %lld\n", objVal, iKey, xvoGetInt(objVal));
+			printf("( int ) [%p] %lld = %lld\n", (void*)objVal, iKey, xvoGetInt(objVal));
 		} else if ( objVal->Type == XVO_DT_FLOAT ) {
-			printf("(float) [%x] %lld = %lf\n", objVal, iKey, xvoGetFloat(objVal));
+			printf("(float) [%p] %lld = %lf\n", (void*)objVal, iKey, xvoGetFloat(objVal));
 		} else if ( objVal->Type == XVO_DT_TEXT ) {
-			printf("(text ) [%x] %lld = \"%s\"\n", objVal, iKey, xvoGetText(objVal));
+			printf("(text ) [%p] %lld = \"%s\"\n", (void*)objVal, iKey, xvoGetText(objVal));
 		} else if ( objVal->Type == XVO_DT_TIME ) {
-			printf("(time ) [%x] %lld = < %s >\n", objVal, iKey, xvoGetText(objVal));
+			printf("(time ) [%p] %lld = < %s >\n", (void*)objVal, iKey, xvoGetText(objVal));
 		} else if ( objVal->Type == XVO_DT_POINT ) {
-			printf("(point) [%x] %lld = 0x%x\n", objVal, iKey, xvoGetPoint(objVal));
+			printf("(point) [%p] %lld = %p\n", (void*)objVal, iKey, xvoGetPoint(objVal));
 		} else if ( objVal->Type == XVO_DT_FUNC ) {
-			printf("(func ) [%x] %lld = address:0x%x\n", objVal, iKey, xvoGetFunc(objVal));
+			printf("(func ) [%p] %lld = address:0x%" PRIxPTR "\n", (void*)objVal, iKey, (uintptr)xvoGetFunc(objVal));
 		} else if ( objVal->Type == XVO_DT_ARRAY ) {
-			printf("(array) [%x] %lld = (array), count : %d\n", objVal, iKey, xvoArrayItemCount(objVal));
+			printf("(array) [%p] %lld = (array), count : %d\n", (void*)objVal, iKey, xvoArrayItemCount(objVal));
 		} else if ( objVal->Type == XVO_DT_LIST ) {
-			printf("(list ) [%x] %lld = (list), count : %d\n", objVal, iKey, xvoListItemCount(objVal));
+			printf("(list ) [%p] %lld = (list), count : %d\n", (void*)objVal, iKey, xvoListItemCount(objVal));
 		} else if ( objVal->Type == XVO_DT_TABLE ) {
-			printf("(table) [%x] %lld = (table), count : %d\n", objVal, iKey, xvoTableItemCount(objVal));
+			printf("(table) [%p] %lld = (table), count : %d\n", (void*)objVal, iKey, xvoTableItemCount(objVal));
 		} else if ( objVal->Type == XVO_DT_COLL ) {
-			printf("(coll ) [%x] %lld = (coll), count : %d\n", objVal, iKey, xvoCollItemCount(objVal));
+			printf("(coll ) [%p] %lld = (coll), count : %d\n", (void*)objVal, iKey, xvoCollItemCount(objVal));
 		} else if ( objVal->Type == XVO_DT_CLASS ) {
-			printf("(class) [%x] %lld = (class), size : %d\n", objVal, iKey, objVal->Size);
+			printf("(class) [%p] %lld = (class), size : %d\n", (void*)objVal, iKey, objVal->Size);
 		} else {
 			printf("Unknown data type\n");
 		}
@@ -58052,31 +59710,31 @@ XXAPI void xvoPrintValue(xvalue objVal, int iLevel, int iMode, int64 iKey, str s
 		if ( objVal == NULL ) {
 			printf("(empty) \"%s\" = (empty)\n", sKey);
 		} else if ( objVal->Type == XVO_DT_NULL ) {
-			printf("(null ) [%x] \"%s\" = (null)\n", objVal, sKey);
+			printf("(null ) [%p] \"%s\" = (null)\n", (void*)objVal, sKey);
 		} else if ( objVal->Type == XVO_DT_BOOL ) {
-			printf("(bool ) [%x] \"%s\" = (%s)\n", objVal, sKey, xvoGetText(objVal));
+			printf("(bool ) [%p] \"%s\" = (%s)\n", (void*)objVal, sKey, xvoGetText(objVal));
 		} else if ( objVal->Type == XVO_DT_INT ) {
-			printf("( int ) [%x] \"%s\" = %lld\n", objVal, sKey, xvoGetInt(objVal));
+			printf("( int ) [%p] \"%s\" = %lld\n", (void*)objVal, sKey, xvoGetInt(objVal));
 		} else if ( objVal->Type == XVO_DT_FLOAT ) {
-			printf("(float) [%x] \"%s\" = %lf\n", objVal, sKey, xvoGetFloat(objVal));
+			printf("(float) [%p] \"%s\" = %lf\n", (void*)objVal, sKey, xvoGetFloat(objVal));
 		} else if ( objVal->Type == XVO_DT_TEXT ) {
-			printf("(text ) [%x] \"%s\" = \"%s\"\n", objVal, sKey, xvoGetText(objVal));
+			printf("(text ) [%p] \"%s\" = \"%s\"\n", (void*)objVal, sKey, xvoGetText(objVal));
 		} else if ( objVal->Type == XVO_DT_TIME ) {
-			printf("(time ) [%x] \"%s\" = < %s >\n", objVal, sKey, xvoGetText(objVal));
+			printf("(time ) [%p] \"%s\" = < %s >\n", (void*)objVal, sKey, xvoGetText(objVal));
 		} else if ( objVal->Type == XVO_DT_POINT ) {
-			printf("(point) [%x] \"%s\" = 0x%x\n", objVal, sKey, xvoGetPoint(objVal));
+			printf("(point) [%p] \"%s\" = %p\n", (void*)objVal, sKey, xvoGetPoint(objVal));
 		} else if ( objVal->Type == XVO_DT_FUNC ) {
-			printf("(func ) [%x] \"%s\" = address:0x%x\n", objVal, sKey, xvoGetFunc(objVal));
+			printf("(func ) [%p] \"%s\" = address:0x%" PRIxPTR "\n", (void*)objVal, sKey, (uintptr)xvoGetFunc(objVal));
 		} else if ( objVal->Type == XVO_DT_ARRAY ) {
-			printf("(array) [%x] \"%s\" = (array), count : %d\n", objVal, sKey, xvoArrayItemCount(objVal));
+			printf("(array) [%p] \"%s\" = (array), count : %d\n", (void*)objVal, sKey, xvoArrayItemCount(objVal));
 		} else if ( objVal->Type == XVO_DT_LIST ) {
-			printf("(list ) [%x] \"%s\" = (list), count : %d\n", objVal, sKey, xvoListItemCount(objVal));
+			printf("(list ) [%p] \"%s\" = (list), count : %d\n", (void*)objVal, sKey, xvoListItemCount(objVal));
 		} else if ( objVal->Type == XVO_DT_TABLE ) {
-			printf("(table) [%x] \"%s\" = (table), count : %d\n", objVal, sKey, xvoTableItemCount(objVal));
+			printf("(table) [%p] \"%s\" = (table), count : %d\n", (void*)objVal, sKey, xvoTableItemCount(objVal));
 		} else if ( objVal->Type == XVO_DT_COLL ) {
-			printf("(coll ) [%x] \"%s\" = (coll), count : %d\n", objVal, sKey, xvoCollItemCount(objVal));
+			printf("(coll ) [%p] \"%s\" = (coll), count : %d\n", (void*)objVal, sKey, xvoCollItemCount(objVal));
 		} else if ( objVal->Type == XVO_DT_CLASS ) {
-			printf("(class) [%x] \"%s\" = (class), size : %d\n", objVal, sKey, objVal->Size);
+			printf("(class) [%p] \"%s\" = (class), size : %d\n", (void*)objVal, sKey, objVal->Size);
 		} else {
 			printf("Unknown data type\n");
 		}
@@ -58085,31 +59743,31 @@ XXAPI void xvoPrintValue(xvalue objVal, int iLevel, int iMode, int64 iKey, str s
 		if ( objVal == NULL ) {
 			printf("(empty)\n");
 		} else if ( objVal->Type == XVO_DT_NULL ) {
-			printf("(null ) [%x] (null)\n", objVal);
+			printf("(null ) [%p] (null)\n", (void*)objVal);
 		} else if ( objVal->Type == XVO_DT_BOOL ) {
-			printf("(bool ) [%x] (%s)\n", objVal, xvoGetText(objVal));
+			printf("(bool ) [%p] (%s)\n", (void*)objVal, xvoGetText(objVal));
 		} else if ( objVal->Type == XVO_DT_INT ) {
-			printf("( int ) [%x] %lld\n", objVal, xvoGetInt(objVal));
+			printf("( int ) [%p] %lld\n", (void*)objVal, xvoGetInt(objVal));
 		} else if ( objVal->Type == XVO_DT_FLOAT ) {
-			printf("(float) [%x] %lf\n", objVal, xvoGetFloat(objVal));
+			printf("(float) [%p] %lf\n", (void*)objVal, xvoGetFloat(objVal));
 		} else if ( objVal->Type == XVO_DT_TEXT ) {
-			printf("(text ) [%x] \"%s\"\n", objVal, xvoGetText(objVal));
+			printf("(text ) [%p] \"%s\"\n", (void*)objVal, xvoGetText(objVal));
 		} else if ( objVal->Type == XVO_DT_TIME ) {
-			printf("(time ) [%x] < %s >\n", objVal, xvoGetText(objVal));
+			printf("(time ) [%p] < %s >\n", (void*)objVal, xvoGetText(objVal));
 		} else if ( objVal->Type == XVO_DT_POINT ) {
-			printf("(point) [%x] 0x%x\n", objVal, xvoGetPoint(objVal));
+			printf("(point) [%p] %p\n", (void*)objVal, xvoGetPoint(objVal));
 		} else if ( objVal->Type == XVO_DT_FUNC ) {
-			printf("(func ) [%x] address:0x%x\n", objVal, xvoGetFunc(objVal));
+			printf("(func ) [%p] address:0x%" PRIxPTR "\n", (void*)objVal, (uintptr)xvoGetFunc(objVal));
 		} else if ( objVal->Type == XVO_DT_ARRAY ) {
-			printf("(array) [%x] (array), count : %d\n", objVal, xvoArrayItemCount(objVal));
+			printf("(array) [%p] (array), count : %d\n", (void*)objVal, xvoArrayItemCount(objVal));
 		} else if ( objVal->Type == XVO_DT_LIST ) {
-			printf("(list ) [%x] (list), count : %d\n", objVal, xvoListItemCount(objVal));
+			printf("(list ) [%p] (list), count : %d\n", (void*)objVal, xvoListItemCount(objVal));
 		} else if ( objVal->Type == XVO_DT_TABLE ) {
-			printf("(table) [%x] (table), count : %d\n", objVal, xvoTableItemCount(objVal));
+			printf("(table) [%p] (table), count : %d\n", (void*)objVal, xvoTableItemCount(objVal));
 		} else if ( objVal->Type == XVO_DT_COLL ) {
-			printf("(coll ) [%x] (coll), count : %d\n", objVal, xvoCollItemCount(objVal));
+			printf("(coll ) [%p] (coll), count : %d\n", (void*)objVal, xvoCollItemCount(objVal));
 		} else if ( objVal->Type == XVO_DT_CLASS ) {
-			printf("(class) [%x] (class), size : %d\n", objVal, objVal->Size);
+			printf("(class) [%p] (class), size : %d\n", (void*)objVal, objVal->Size);
 		} else {
 			printf("Unknown data type : %d\n", objVal->Type);
 		}
@@ -59607,7 +61265,7 @@ overflow2:
     goto end2;
 }
 #define jnum_to_func(rtype, fname)                      \
-XXAPI rtype fname(const char* pStr)                     \
+XXAPI rtype fname(const void* pStr)                     \
 {                                                       \
     jnum_type_t type;                                   \
     jnum_value_t value;                                 \
@@ -59741,17 +61399,15 @@ jnum_to_func(double, xrtStrToNum)
 #define JSON_PARSE_READ_SIZE_DEF        8192
 #define JSON_PARSE_NUM_DIV_DEF          8
 typedef struct _json_parse_t {
-    size_t size;
-    size_t offset;
-    bool reuse_flag;
-    char *str;
-    void (*skip_blank)(struct _json_parse_t *parse_ptr);
-    int (*parse_string)(struct _json_parse_t *parse_ptr, char end_ch, char **ppstr,
-        json_strinfo_t *pinfo, bool is_key);
-    int (*parse_value)(struct _json_parse_t *parse_ptr, json_object **root);
-    json_sax_parser_t parser;
-    json_sax_cb_t cb;
-    json_sax_ret_t ret;
+	size_t size;
+	size_t offset;
+	char *str;
+	void (*skip_blank)(struct _json_parse_t *parse_ptr);
+	int (*parse_string)(struct _json_parse_t *parse_ptr, char end_ch, char **ppstr,
+		json_strinfo_t *pinfo, bool is_key);
+	json_sax_parser_t parser;
+	json_sax_cb_t cb;
+	json_sax_ret_t ret;
 } json_parse_t;
 #define IS_BLANK(c)      ((((c) + 0xdf) & 0xff) > 0xdf)
 #define IS_DIGIT(c)      ((c) >= '0' && (c) <= '9')
@@ -61270,6 +62926,1294 @@ XXAPI int xrtStringifyJSON_File(str sFile, xvalue varVal, int bFormat)
 		return FALSE;
 	}
 }
+
+// ========================================
+// File: D:/git/xrt/lib/xson.h
+// ========================================
+
+typedef enum
+{
+	XSON_PARSE_RESULT_FAIL = -1,
+	XSON_PARSE_RESULT_OK = 0,
+	XSON_PARSE_RESULT_SKIP = 1,
+	XSON_PARSE_RESULT_NONE = 2
+} xson_parse_result_t;
+typedef enum
+{
+	XSON_CONTAINER_AUTO = 0,
+	XSON_CONTAINER_ARRAY = 1,
+	XSON_CONTAINER_LIST = 2,
+	XSON_CONTAINER_DICT = 3,
+	XSON_CONTAINER_SET = 4
+} xson_container_t;
+typedef enum
+{
+	XSON_WRITE_RESULT_FAIL = -1,
+	XSON_WRITE_RESULT_OK = 0,
+	XSON_WRITE_RESULT_SKIP = 1
+} xson_write_result_t;
+typedef struct
+{
+	json_parse_t tJSON;
+	uint32 iFlags;
+} xson_parse_t;
+typedef struct
+{
+	char* sText;
+	size_t iSize;
+	size_t iUsed;
+	int bFormat;
+	uint32 iFlags;
+} xson_print_t;
+static bool _xson_is_ident_start(char ch)
+{
+	return (((ch >= 'a') && (ch <= 'z')) || ((ch >= 'A') && (ch <= 'Z')) || (ch == '_'));
+}
+static bool _xson_is_ident_char(char ch)
+{
+	return _xson_is_ident_start(ch) || ((ch >= '0') && (ch <= '9'));
+}
+static char _xson_peek(xson_parse_t* pParse)
+{
+	if ( pParse == NULL ) {
+		return '\0';
+	}
+	if ( pParse->tJSON.offset >= pParse->tJSON.size ) {
+		return '\0';
+	}
+	return pParse->tJSON.str[pParse->tJSON.offset];
+}
+static void _xson_skip_blank(xson_parse_t* pParse)
+{
+	if ( pParse == NULL ) {
+		return;
+	}
+	pParse->tJSON.skip_blank(&pParse->tJSON);
+}
+static bool _xson_match_prefix(xson_parse_t* pParse, const char* sName, char chNext)
+{
+	size_t iLen;
+	size_t iRemain;
+	if ( pParse == NULL || sName == NULL ) {
+		return FALSE;
+	}
+	iLen = strlen(sName);
+	iRemain = pParse->tJSON.size - pParse->tJSON.offset;
+	if ( iRemain <= iLen ) {
+		return FALSE;
+	}
+	if ( memcmp(pParse->tJSON.str + pParse->tJSON.offset, sName, iLen) != 0 ) {
+		return FALSE;
+	}
+	return pParse->tJSON.str[pParse->tJSON.offset + iLen] == chNext;
+}
+static void _xson_trim_slice(const char** ppText, size_t* pSize)
+{
+	const char* sText;
+	size_t iSize;
+	if ( ppText == NULL || pSize == NULL ) {
+		return;
+	}
+	sText = *ppText;
+	iSize = *pSize;
+	while ( iSize > 0 && IS_BLANK((unsigned char)*sText) ) {
+		sText++;
+		iSize--;
+	}
+	while ( iSize > 0 && IS_BLANK((unsigned char)sText[iSize - 1]) ) {
+		iSize--;
+	}
+	*ppText = sText;
+	*pSize = iSize;
+}
+static void _xson_free_json_string(json_string_t* pStr)
+{
+	if ( pStr == NULL ) {
+		return;
+	}
+	if ( pStr->info.alloced && pStr->str ) {
+		json_free(pStr->str);
+	}
+	memset(pStr, 0, sizeof(*pStr));
+}
+static int _xson_skip_string(xson_parse_t* pParse, char chEnd)
+{
+	char* sText = NULL;
+	json_strinfo_t tInfo = { 0 };
+	if ( pParse == NULL ) {
+		return -1;
+	}
+	if ( pParse->tJSON.parse_string(&pParse->tJSON, chEnd, &sText, &tInfo, FALSE) < 0 ) {
+		return -1;
+	}
+	if ( tInfo.alloced && sText ) {
+		json_free(sText);
+	}
+	if ( _xson_peek(pParse) != chEnd ) {
+		return -1;
+	}
+	pParse->tJSON.offset++;
+	return 0;
+}
+static int _xson_skip_group(xson_parse_t* pParse)
+{
+	char ch;
+	char chEnd;
+	if ( pParse == NULL ) {
+		return -1;
+	}
+	ch = _xson_peek(pParse);
+	if ( ch == '[' ) {
+		chEnd = ']';
+	} else if ( ch == '{' ) {
+		chEnd = '}';
+	} else if ( ch == '(' ) {
+		chEnd = ')';
+	} else {
+		return -1;
+	}
+	pParse->tJSON.offset++;
+	while ( pParse->tJSON.offset < pParse->tJSON.size ) {
+		ch = _xson_peek(pParse);
+		if ( ch == chEnd ) {
+			pParse->tJSON.offset++;
+			return 0;
+		}
+		if ( ch == '\"' ) {
+			pParse->tJSON.offset++;
+			if ( _xson_skip_string(pParse, '\"') < 0 ) {
+				return -1;
+			}
+			continue;
+		}
+		#if JSON_PARSE_SPECIAL_QUOTES
+		if ( ch == '\'' ) {
+			pParse->tJSON.offset++;
+			if ( _xson_skip_string(pParse, '\'') < 0 ) {
+				return -1;
+			}
+			continue;
+		}
+		#endif
+		if ( ch == '[' || ch == '{' || ch == '(' ) {
+			if ( _xson_skip_group(pParse) < 0 ) {
+				return -1;
+			}
+			continue;
+		}
+		pParse->tJSON.offset++;
+	}
+	return -1;
+}
+static bool _xson_probe_list(xson_parse_t* pParse)
+{
+	size_t iSaved;
+	char ch;
+	if ( pParse == NULL ) {
+		return FALSE;
+	}
+	iSaved = pParse->tJSON.offset;
+	_xson_skip_blank(pParse);
+	ch = _xson_peek(pParse);
+	if ( ch == '+' || ch == '-' ) {
+		pParse->tJSON.offset++;
+	}
+	ch = _xson_peek(pParse);
+	if ( !IS_DIGIT((unsigned char)ch) ) {
+		pParse->tJSON.offset = iSaved;
+		return FALSE;
+	}
+	while ( IS_DIGIT((unsigned char)_xson_peek(pParse)) ) {
+		pParse->tJSON.offset++;
+	}
+	_xson_skip_blank(pParse);
+	ch = _xson_peek(pParse);
+	pParse->tJSON.offset = iSaved;
+	return ch == ':';
+}
+static bool _xson_probe_dict(xson_parse_t* pParse)
+{
+	size_t iSaved;
+	char ch;
+	if ( pParse == NULL ) {
+		return FALSE;
+	}
+	iSaved = pParse->tJSON.offset;
+	_xson_skip_blank(pParse);
+	ch = _xson_peek(pParse);
+	if ( ch == '\"' ) {
+		pParse->tJSON.offset++;
+		if ( _xson_skip_string(pParse, '\"') < 0 ) {
+			pParse->tJSON.offset = iSaved;
+			return FALSE;
+		}
+		_xson_skip_blank(pParse);
+		ch = _xson_peek(pParse);
+		pParse->tJSON.offset = iSaved;
+		return ch == ':';
+	}
+	#if JSON_PARSE_SPECIAL_QUOTES
+	if ( ch == '\'' ) {
+		pParse->tJSON.offset++;
+		if ( _xson_skip_string(pParse, '\'') < 0 ) {
+			pParse->tJSON.offset = iSaved;
+			return FALSE;
+		}
+		_xson_skip_blank(pParse);
+		ch = _xson_peek(pParse);
+		pParse->tJSON.offset = iSaved;
+		return ch == ':';
+	}
+	if ( ch == ':' ) {
+		pParse->tJSON.offset = iSaved;
+		return JSON_PARSE_EMPTY_KEY ? TRUE : FALSE;
+	}
+	if ( ch != '\0' ) {
+		while ( pParse->tJSON.offset < pParse->tJSON.size ) {
+			ch = _xson_peek(pParse);
+			if ( ch == ':' || ch == ',' || ch == '}' || IS_BLANK((unsigned char)ch) ) {
+				break;
+			}
+			pParse->tJSON.offset++;
+		}
+		_xson_skip_blank(pParse);
+		ch = _xson_peek(pParse);
+		pParse->tJSON.offset = iSaved;
+		return ch == ':';
+	}
+	#endif
+	pParse->tJSON.offset = iSaved;
+	return FALSE;
+}
+static int _xson_parse_list_index(xson_parse_t* pParse, int64* pIndex)
+{
+	size_t iSaved;
+	uint64 iLimit;
+	uint64 iValue;
+	bool bNegative;
+	char ch;
+	if ( pParse == NULL || pIndex == NULL ) {
+		return -1;
+	}
+	iSaved = pParse->tJSON.offset;
+	_xson_skip_blank(pParse);
+	bNegative = FALSE;
+	ch = _xson_peek(pParse);
+	if ( ch == '+' || ch == '-' ) {
+		bNegative = (ch == '-');
+		pParse->tJSON.offset++;
+	}
+	if ( !IS_DIGIT((unsigned char)_xson_peek(pParse)) ) {
+		pParse->tJSON.offset = iSaved;
+		return -1;
+	}
+	iLimit = bNegative ? ((uint64)INT64_MAX + 1ULL) : (uint64)INT64_MAX;
+	iValue = 0;
+	while ( IS_DIGIT((unsigned char)_xson_peek(pParse)) ) {
+		uint64 iDigit = (uint64)(_xson_peek(pParse) - '0');
+		if ( iValue > ((iLimit - iDigit) / 10ULL) ) {
+			pParse->tJSON.offset = iSaved;
+			return -1;
+		}
+		iValue = (iValue * 10ULL) + iDigit;
+		pParse->tJSON.offset++;
+	}
+	_xson_skip_blank(pParse);
+	if ( _xson_peek(pParse) != ':' ) {
+		pParse->tJSON.offset = iSaved;
+		return -1;
+	}
+	pParse->tJSON.offset++;
+	if ( bNegative ) {
+		if ( iValue == ((uint64)INT64_MAX + 1ULL) ) {
+			*pIndex = INT64_MIN;
+		} else {
+			*pIndex = -(int64)iValue;
+		}
+	} else {
+		*pIndex = (int64)iValue;
+	}
+	return 0;
+}
+static bool _xson_parse_time_text(const char* sText, size_t iSize, xtime* pTime)
+{
+	size_t iPos = 0;
+	int64 iYear = 0;
+	int iMonth;
+	int iDay;
+	int iHour;
+	int iMinute;
+	int iSecond;
+	bool bNegative = FALSE;
+	if ( sText == NULL || pTime == NULL ) {
+		return FALSE;
+	}
+	_xson_trim_slice(&sText, &iSize);
+	if ( iSize < 19 ) {
+		return FALSE;
+	}
+	if ( sText[iPos] == '-' ) {
+		bNegative = TRUE;
+		iPos++;
+	}
+	if ( iPos >= iSize || !IS_DIGIT((unsigned char)sText[iPos]) ) {
+		return FALSE;
+	}
+	while ( iPos < iSize && IS_DIGIT((unsigned char)sText[iPos]) ) {
+		iYear = (iYear * 10) + (sText[iPos] - '0');
+		iPos++;
+	}
+	if ( bNegative ) {
+		iYear = -iYear;
+	}
+	if ( (iSize - iPos) != 15 ) {
+		return FALSE;
+	}
+	if ( sText[iPos] != '-' || sText[iPos + 3] != '-' || sText[iPos + 6] != ' ' ||
+		sText[iPos + 9] != ':' || sText[iPos + 12] != ':' ) {
+		return FALSE;
+	}
+	if ( !IS_DIGIT((unsigned char)sText[iPos + 1]) || !IS_DIGIT((unsigned char)sText[iPos + 2]) ||
+		!IS_DIGIT((unsigned char)sText[iPos + 4]) || !IS_DIGIT((unsigned char)sText[iPos + 5]) ||
+		!IS_DIGIT((unsigned char)sText[iPos + 7]) || !IS_DIGIT((unsigned char)sText[iPos + 8]) ||
+		!IS_DIGIT((unsigned char)sText[iPos + 10]) || !IS_DIGIT((unsigned char)sText[iPos + 11]) ||
+		!IS_DIGIT((unsigned char)sText[iPos + 13]) || !IS_DIGIT((unsigned char)sText[iPos + 14]) ) {
+		return FALSE;
+	}
+	iMonth = ((sText[iPos + 1] - '0') * 10) + (sText[iPos + 2] - '0');
+	iDay = ((sText[iPos + 4] - '0') * 10) + (sText[iPos + 5] - '0');
+	iHour = ((sText[iPos + 7] - '0') * 10) + (sText[iPos + 8] - '0');
+	iMinute = ((sText[iPos + 10] - '0') * 10) + (sText[iPos + 11] - '0');
+	iSecond = ((sText[iPos + 13] - '0') * 10) + (sText[iPos + 14] - '0');
+	*pTime = xrtDateTimeSerial(iYear, iMonth, iDay, iHour, iMinute, iSecond);
+	return TRUE;
+}
+static size_t _xson_base64_decoded_size(const char* sText, size_t iSize)
+{
+	size_t iRet;
+	if ( sText == NULL || iSize == 0 || (iSize % 4) != 0 ) {
+		return 0;
+	}
+	iRet = (iSize / 4) * 3;
+	if ( sText[iSize - 1] == '=' ) {
+		iRet--;
+	}
+	if ( sText[iSize - 2] == '=' ) {
+		iRet--;
+	}
+	return iRet;
+}
+static xson_parse_result_t _xson_parse_value(xson_parse_t* pParse, xvalue* ppVal);
+static xson_parse_result_t _xson_parse_array_like(xson_parse_t* pParse, int iKind, xvalue* ppVal)
+{
+	xvalue pResult;
+	char ch;
+	if ( pParse == NULL || ppVal == NULL || _xson_peek(pParse) != '[' ) {
+		return XSON_PARSE_RESULT_FAIL;
+	}
+	pParse->tJSON.offset++;
+	_xson_skip_blank(pParse);
+	if ( _xson_peek(pParse) == ']' ) {
+		pParse->tJSON.offset++;
+		if ( iKind == XSON_CONTAINER_LIST ) {
+			*ppVal = xvoCreateList();
+		} else {
+			*ppVal = xvoCreateArray();
+		}
+		return (*ppVal != NULL) ? XSON_PARSE_RESULT_OK : XSON_PARSE_RESULT_FAIL;
+	}
+	if ( iKind == XSON_CONTAINER_AUTO ) {
+		iKind = _xson_probe_list(pParse) ? XSON_CONTAINER_LIST : XSON_CONTAINER_ARRAY;
+	}
+	if ( iKind == XSON_CONTAINER_LIST ) {
+		pResult = xvoCreateList();
+	} else {
+		pResult = xvoCreateArray();
+	}
+	if ( pResult == NULL ) {
+		return XSON_PARSE_RESULT_FAIL;
+	}
+	for ( ;; ) {
+		xson_parse_result_t iRet;
+		xvalue pItem = NULL;
+		int64 iIndex = 0;
+		if ( iKind == XSON_CONTAINER_LIST ) {
+			if ( _xson_parse_list_index(pParse, &iIndex) < 0 ) {
+				xvoUnref(pResult);
+				return XSON_PARSE_RESULT_FAIL;
+			}
+		}
+		iRet = _xson_parse_value(pParse, &pItem);
+		if ( iRet == XSON_PARSE_RESULT_FAIL ) {
+			xvoUnref(pResult);
+			return XSON_PARSE_RESULT_FAIL;
+		}
+		if ( iRet == XSON_PARSE_RESULT_OK ) {
+			bool bStored;
+			if ( iKind == XSON_CONTAINER_LIST ) {
+				bStored = xvoListSetValue(pResult, iIndex, pItem, TRUE);
+			} else {
+				bStored = xvoArrayAppendValue(pResult, pItem, TRUE);
+			}
+			if ( bStored == FALSE ) {
+				xvoUnref(pItem);
+				xvoUnref(pResult);
+				return XSON_PARSE_RESULT_FAIL;
+			}
+		}
+		_xson_skip_blank(pParse);
+		ch = _xson_peek(pParse);
+		if ( ch == ',' ) {
+			pParse->tJSON.offset++;
+			_xson_skip_blank(pParse);
+			#if JSON_PARSE_LAST_COMMA
+			if ( _xson_peek(pParse) == ']' ) {
+				break;
+			}
+			#endif
+			continue;
+		}
+		if ( ch == ']' ) {
+			break;
+		}
+		xvoUnref(pResult);
+		return XSON_PARSE_RESULT_FAIL;
+	}
+	pParse->tJSON.offset++;
+	*ppVal = pResult;
+	return XSON_PARSE_RESULT_OK;
+}
+static xson_parse_result_t _xson_parse_object_like(xson_parse_t* pParse, int iKind, xvalue* ppVal)
+{
+	xvalue pResult;
+	char ch;
+	if ( pParse == NULL || ppVal == NULL || _xson_peek(pParse) != '{' ) {
+		return XSON_PARSE_RESULT_FAIL;
+	}
+	pParse->tJSON.offset++;
+	_xson_skip_blank(pParse);
+	if ( _xson_peek(pParse) == '}' ) {
+		pParse->tJSON.offset++;
+		if ( iKind == XSON_CONTAINER_SET ) {
+			*ppVal = xvoCreateColl();
+		} else {
+			*ppVal = xvoCreateTable();
+		}
+		return (*ppVal != NULL) ? XSON_PARSE_RESULT_OK : XSON_PARSE_RESULT_FAIL;
+	}
+	if ( iKind == XSON_CONTAINER_AUTO ) {
+		iKind = _xson_probe_dict(pParse) ? XSON_CONTAINER_DICT : XSON_CONTAINER_SET;
+	}
+	if ( iKind == XSON_CONTAINER_DICT ) {
+		pResult = xvoCreateTable();
+	} else {
+		pResult = xvoCreateColl();
+	}
+	if ( pResult == NULL ) {
+		return XSON_PARSE_RESULT_FAIL;
+	}
+	for ( ;; ) {
+		xson_parse_result_t iRet;
+		xvalue pItem = NULL;
+		if ( iKind == XSON_CONTAINER_DICT ) {
+			json_string_t tKey = { 0 };
+			bool bStored;
+			if ( _json_parse_key(&pParse->tJSON, &tKey) < 0 ) {
+				xvoUnref(pResult);
+				return XSON_PARSE_RESULT_FAIL;
+			}
+			iRet = _xson_parse_value(pParse, &pItem);
+			if ( iRet == XSON_PARSE_RESULT_FAIL ) {
+				_xson_free_json_string(&tKey);
+				xvoUnref(pResult);
+				return XSON_PARSE_RESULT_FAIL;
+			}
+			if ( iRet == XSON_PARSE_RESULT_OK ) {
+				bStored = xvoTableSetValue(pResult, tKey.str, tKey.info.len, pItem, TRUE);
+				if ( bStored == FALSE ) {
+					_xson_free_json_string(&tKey);
+					xvoUnref(pItem);
+					xvoUnref(pResult);
+					return XSON_PARSE_RESULT_FAIL;
+				}
+			}
+			_xson_free_json_string(&tKey);
+		} else {
+			bool bStored;
+			iRet = _xson_parse_value(pParse, &pItem);
+			if ( iRet == XSON_PARSE_RESULT_FAIL ) {
+				xvoUnref(pResult);
+				return XSON_PARSE_RESULT_FAIL;
+			}
+			if ( iRet == XSON_PARSE_RESULT_OK ) {
+				bStored = xvoCollSetValue(pResult, pItem, TRUE);
+				if ( bStored == FALSE ) {
+					xvoUnref(pItem);
+					xvoUnref(pResult);
+					return XSON_PARSE_RESULT_FAIL;
+				}
+			}
+		}
+		_xson_skip_blank(pParse);
+		ch = _xson_peek(pParse);
+		if ( ch == ',' ) {
+			pParse->tJSON.offset++;
+			_xson_skip_blank(pParse);
+			#if JSON_PARSE_LAST_COMMA
+			if ( _xson_peek(pParse) == '}' ) {
+				break;
+			}
+			#endif
+			continue;
+		}
+		if ( ch == '}' ) {
+			break;
+		}
+		xvoUnref(pResult);
+		return XSON_PARSE_RESULT_FAIL;
+	}
+	pParse->tJSON.offset++;
+	*ppVal = pResult;
+	return XSON_PARSE_RESULT_OK;
+}
+static xson_parse_result_t _xson_parse_time_value(xson_parse_t* pParse, xvalue* ppVal)
+{
+	const char* sText;
+	size_t iSize;
+	xtime tValue;
+	if ( pParse == NULL || ppVal == NULL || _xson_peek(pParse) != '(' ) {
+		return XSON_PARSE_RESULT_FAIL;
+	}
+	pParse->tJSON.offset++;
+	sText = pParse->tJSON.str + pParse->tJSON.offset;
+	iSize = 0;
+	while ( pParse->tJSON.offset < pParse->tJSON.size ) {
+		if ( _xson_peek(pParse) == ')' ) {
+			break;
+		}
+		pParse->tJSON.offset++;
+		iSize++;
+	}
+	if ( _xson_peek(pParse) != ')' ) {
+		return XSON_PARSE_RESULT_FAIL;
+	}
+	pParse->tJSON.offset++;
+	if ( _xson_parse_time_text(sText, iSize, &tValue) == FALSE ) {
+		return XSON_PARSE_RESULT_FAIL;
+	}
+	*ppVal = xvoCreateTime(tValue);
+	return (*ppVal != NULL) ? XSON_PARSE_RESULT_OK : XSON_PARSE_RESULT_FAIL;
+}
+static xson_parse_result_t _xson_parse_class_value(xson_parse_t* pParse, xvalue* ppVal)
+{
+	const char* sText;
+	size_t iSize;
+	size_t iDecodedSize;
+	ptr pData;
+	xvalue pVal;
+	if ( pParse == NULL || ppVal == NULL || _xson_peek(pParse) != '(' ) {
+		return XSON_PARSE_RESULT_FAIL;
+	}
+	pParse->tJSON.offset++;
+	sText = pParse->tJSON.str + pParse->tJSON.offset;
+	iSize = 0;
+	while ( pParse->tJSON.offset < pParse->tJSON.size ) {
+		if ( _xson_peek(pParse) == ')' ) {
+			break;
+		}
+		pParse->tJSON.offset++;
+		iSize++;
+	}
+	if ( _xson_peek(pParse) != ')' ) {
+		return XSON_PARSE_RESULT_FAIL;
+	}
+	pParse->tJSON.offset++;
+	_xson_trim_slice(&sText, &iSize);
+	iDecodedSize = _xson_base64_decoded_size(sText, iSize);
+	if ( iDecodedSize == 0 ) {
+		return XSON_PARSE_RESULT_FAIL;
+	}
+	pData = xrtBase64Decode((str)sText, iSize, NULL);
+	if ( pData == NULL || pData == xCore.sNull ) {
+		return XSON_PARSE_RESULT_FAIL;
+	}
+	pVal = xvoCreateClass((uint32)iDecodedSize);
+	if ( pVal == NULL ) {
+		xrtFree(pData);
+		return XSON_PARSE_RESULT_FAIL;
+	}
+	memcpy(pVal->vStruct, pData, iDecodedSize);
+	xrtFree(pData);
+	*ppVal = pVal;
+	return XSON_PARSE_RESULT_OK;
+}
+static xson_parse_result_t _xson_parse_prefixed_value(xson_parse_t* pParse, xvalue* ppVal)
+{
+	size_t iNameLen;
+	char chNext;
+	if ( pParse == NULL || ppVal == NULL ) {
+		return XSON_PARSE_RESULT_FAIL;
+	}
+	if ( _xson_match_prefix(pParse, "array", '[') ) {
+		pParse->tJSON.offset += 5;
+		return _xson_parse_array_like(pParse, XSON_CONTAINER_ARRAY, ppVal);
+	}
+	if ( _xson_match_prefix(pParse, "list", '[') ) {
+		pParse->tJSON.offset += 4;
+		return _xson_parse_array_like(pParse, XSON_CONTAINER_LIST, ppVal);
+	}
+	if ( _xson_match_prefix(pParse, "dict", '{') ) {
+		pParse->tJSON.offset += 4;
+		return _xson_parse_object_like(pParse, XSON_CONTAINER_DICT, ppVal);
+	}
+	if ( _xson_match_prefix(pParse, "set", '{') ) {
+		pParse->tJSON.offset += 3;
+		return _xson_parse_object_like(pParse, XSON_CONTAINER_SET, ppVal);
+	}
+	if ( _xson_match_prefix(pParse, "time", '(') ) {
+		pParse->tJSON.offset += 4;
+		return _xson_parse_time_value(pParse, ppVal);
+	}
+	if ( _xson_match_prefix(pParse, "class", '(') ) {
+		pParse->tJSON.offset += 5;
+		return _xson_parse_class_value(pParse, ppVal);
+	}
+	iNameLen = 0;
+	while ( (pParse->tJSON.offset + iNameLen) < pParse->tJSON.size &&
+		_xson_is_ident_char(pParse->tJSON.str[pParse->tJSON.offset + iNameLen]) ) {
+		iNameLen++;
+	}
+	if ( (pParse->tJSON.offset + iNameLen) < pParse->tJSON.size ) {
+		chNext = pParse->tJSON.str[pParse->tJSON.offset + iNameLen];
+	} else {
+		chNext = '\0';
+	}
+	if ( iNameLen > 0 && (chNext == '[' || chNext == '{' || chNext == '(') ) {
+		if ( (pParse->iFlags & XSON_F_IGNORE_UNSUPPORTED_DECODE) == 0 ) {
+			return XSON_PARSE_RESULT_FAIL;
+		}
+		pParse->tJSON.offset += iNameLen;
+		if ( _xson_skip_group(pParse) < 0 ) {
+			return XSON_PARSE_RESULT_FAIL;
+		}
+		return XSON_PARSE_RESULT_SKIP;
+	}
+	return XSON_PARSE_RESULT_NONE;
+}
+static xson_parse_result_t _xson_parse_json_scalar(xson_parse_t* pParse, xvalue* ppVal)
+{
+	json_strinfo_t tKeyInfo = { 0 };
+	json_number_t tNumber = { 0 };
+	json_strinfo_t tStrInfo = { 0 };
+	char* sText = NULL;
+	char* sPtr;
+	xvalue pVal = NULL;
+	int iType;
+	if ( pParse == NULL || ppVal == NULL ) {
+		return XSON_PARSE_RESULT_FAIL;
+	}
+	sPtr = pParse->tJSON.str + pParse->tJSON.offset;
+	if ( _json_parse_single_value(&pParse->tJSON, sPtr, &tKeyInfo, &tNumber, &sText, &tStrInfo) < 0 ) {
+		return XSON_PARSE_RESULT_FAIL;
+	}
+	iType = tKeyInfo.type;
+	if ( iType == JSON_NULL ) {
+		pVal = xvoCreateNull();
+	} else if ( iType == JSON_BOOL ) {
+		pVal = xvoCreateBool(tNumber.vbool);
+	} else if ( iType == JSON_INT ) {
+		pVal = xvoCreateInt(tNumber.vint);
+	} else if ( iType == JSON_HEX ) {
+		pVal = xvoCreateInt(tNumber.vhex);
+	} else if ( iType == JSON_LINT ) {
+		pVal = xvoCreateInt(tNumber.vlint);
+	} else if ( iType == JSON_LHEX ) {
+		pVal = xvoCreateInt((int64)tNumber.vlhex);
+	} else if ( iType == JSON_DOUBLE ) {
+		pVal = xvoCreateFloat(tNumber.vdbl);
+	} else if ( iType == JSON_STRING ) {
+		if ( tStrInfo.alloced ) {
+			pVal = xvoCreateText(sText, tStrInfo.len, TRUE);
+			sText = NULL;
+		} else {
+			pVal = xvoCreateText(sText, tStrInfo.len, FALSE);
+		}
+	}
+	if ( tStrInfo.alloced && sText ) {
+		json_free(sText);
+	}
+	if ( pVal == NULL ) {
+		return XSON_PARSE_RESULT_FAIL;
+	}
+	*ppVal = pVal;
+	return XSON_PARSE_RESULT_OK;
+}
+static xson_parse_result_t _xson_parse_value(xson_parse_t* pParse, xvalue* ppVal)
+{
+	xson_parse_result_t iRet;
+	char ch;
+	if ( pParse == NULL || ppVal == NULL ) {
+		return XSON_PARSE_RESULT_FAIL;
+	}
+	_xson_skip_blank(pParse);
+	ch = _xson_peek(pParse);
+	if ( ch == '[' ) {
+		return _xson_parse_array_like(pParse, XSON_CONTAINER_AUTO, ppVal);
+	}
+	if ( ch == '{' ) {
+		return _xson_parse_object_like(pParse, XSON_CONTAINER_AUTO, ppVal);
+	}
+	if ( _xson_is_ident_start(ch) ) {
+		iRet = _xson_parse_prefixed_value(pParse, ppVal);
+		if ( iRet != XSON_PARSE_RESULT_NONE ) {
+			return iRet;
+		}
+	}
+	return _xson_parse_json_scalar(pParse, ppVal);
+}
+static xvalue _xson_parse_text(str sText, size_t iSize, uint32 iFlags)
+{
+	xson_parse_t tParse = { 0 };
+	xson_parse_result_t iRet;
+	xvalue pRoot = NULL;
+	if ( sText == NULL ) {
+		return xvoCreateNull();
+	}
+	tParse.tJSON.str = (char*)sText;
+	tParse.tJSON.size = iSize ? iSize : strlen(sText);
+	tParse.tJSON.offset = 0;
+	tParse.tJSON.skip_blank = _skip_blank_rapid;
+	tParse.tJSON.parse_string = _json_sax_parse_string;
+	tParse.iFlags = iFlags;
+	_xson_skip_blank(&tParse);
+	iRet = _xson_parse_value(&tParse, &pRoot);
+	if ( iRet != XSON_PARSE_RESULT_OK ) {
+		if ( pRoot ) {
+			xvoUnref(pRoot);
+		}
+		return xvoCreateNull();
+	}
+	_xson_skip_blank(&tParse);
+	if ( _xson_peek(&tParse) != '\0' ) {
+		xvoUnref(pRoot);
+		return xvoCreateNull();
+	}
+	return pRoot;
+}
+static bool _xson_print_reserve(xson_print_t* pPrint, size_t iNeed)
+{
+	size_t iNewSize;
+	char* sNew;
+	if ( pPrint == NULL ) {
+		return FALSE;
+	}
+	if ( (pPrint->iUsed + iNeed + 1) <= pPrint->iSize ) {
+		return TRUE;
+	}
+	iNewSize = pPrint->iSize ? pPrint->iSize : 256;
+	while ( (pPrint->iUsed + iNeed + 1) > iNewSize ) {
+		if ( iNewSize < 4096 ) {
+			iNewSize <<= 1;
+		} else {
+			iNewSize += 4096;
+		}
+	}
+	sNew = xrtRealloc(pPrint->sText, iNewSize);
+	if ( sNew == NULL ) {
+		return FALSE;
+	}
+	pPrint->sText = sNew;
+	pPrint->iSize = iNewSize;
+	return TRUE;
+}
+static bool _xson_print_append_raw(xson_print_t* pPrint, const char* sText, size_t iSize)
+{
+	if ( iSize == 0 ) {
+		return TRUE;
+	}
+	if ( _xson_print_reserve(pPrint, iSize) == FALSE ) {
+		return FALSE;
+	}
+	memcpy(pPrint->sText + pPrint->iUsed, sText, iSize);
+	pPrint->iUsed += iSize;
+	pPrint->sText[pPrint->iUsed] = '\0';
+	return TRUE;
+}
+static bool _xson_print_append_cstr(xson_print_t* pPrint, const char* sText)
+{
+	if ( sText == NULL ) {
+		return FALSE;
+	}
+	return _xson_print_append_raw(pPrint, sText, strlen(sText));
+}
+static bool _xson_print_append_char(xson_print_t* pPrint, char ch)
+{
+	if ( _xson_print_reserve(pPrint, 1) == FALSE ) {
+		return FALSE;
+	}
+	pPrint->sText[pPrint->iUsed++] = ch;
+	pPrint->sText[pPrint->iUsed] = '\0';
+	return TRUE;
+}
+static bool _xson_print_append_indent(xson_print_t* pPrint, int iDepth)
+{
+	if ( pPrint->bFormat == FALSE ) {
+		return TRUE;
+	}
+	if ( _xson_print_append_char(pPrint, '\n') == FALSE ) {
+		return FALSE;
+	}
+	for ( int i = 0; i < iDepth; ++i ) {
+		if ( _xson_print_append_char(pPrint, '\t') == FALSE ) {
+			return FALSE;
+		}
+	}
+	return TRUE;
+}
+static bool _xson_print_append_i64(xson_print_t* pPrint, int64 iValue)
+{
+	char sBuff[32];
+	int iSize = xrtI64ToStr(iValue, sBuff);
+	if ( iSize < 0 ) {
+		return FALSE;
+	}
+	return _xson_print_append_raw(pPrint, sBuff, (size_t)iSize);
+}
+static bool _xson_print_append_double(xson_print_t* pPrint, double fValue)
+{
+	char sBuff[64];
+	int iSize = xrtNumToStr(fValue, sBuff);
+	if ( iSize < 0 ) {
+		return FALSE;
+	}
+	return _xson_print_append_raw(pPrint, sBuff, (size_t)iSize);
+}
+static bool _xson_print_append_json_string(xson_print_t* pPrint, const char* sText, size_t iSize)
+{
+	static const char sHex[] = "0123456789abcdef";
+	size_t i;
+	if ( _xson_print_append_char(pPrint, '\"') == FALSE ) {
+		return FALSE;
+	}
+	for ( i = 0; i < iSize; ++i ) {
+		unsigned char ch = (unsigned char)sText[i];
+		switch ( ch ) {
+		case '\"':
+			if ( _xson_print_append_raw(pPrint, "\\\"", 2) == FALSE ) { return FALSE; }
+			break;
+		case '\\':
+			if ( _xson_print_append_raw(pPrint, "\\\\", 2) == FALSE ) { return FALSE; }
+			break;
+		case '\b':
+			if ( _xson_print_append_raw(pPrint, "\\b", 2) == FALSE ) { return FALSE; }
+			break;
+		case '\f':
+			if ( _xson_print_append_raw(pPrint, "\\f", 2) == FALSE ) { return FALSE; }
+			break;
+		case '\n':
+			if ( _xson_print_append_raw(pPrint, "\\n", 2) == FALSE ) { return FALSE; }
+			break;
+		case '\r':
+			if ( _xson_print_append_raw(pPrint, "\\r", 2) == FALSE ) { return FALSE; }
+			break;
+		case '\t':
+			if ( _xson_print_append_raw(pPrint, "\\t", 2) == FALSE ) { return FALSE; }
+			break;
+		case '\v':
+			if ( _xson_print_append_raw(pPrint, "\\v", 2) == FALSE ) { return FALSE; }
+			break;
+		default:
+			if ( ch < 0x20 ) {
+				char sEsc[6];
+				sEsc[0] = '\\';
+				sEsc[1] = 'u';
+				sEsc[2] = '0';
+				sEsc[3] = '0';
+				sEsc[4] = sHex[(ch >> 4) & 0x0F];
+				sEsc[5] = sHex[ch & 0x0F];
+				if ( _xson_print_append_raw(pPrint, sEsc, 6) == FALSE ) { return FALSE; }
+			} else {
+				if ( _xson_print_append_char(pPrint, (char)ch) == FALSE ) { return FALSE; }
+			}
+			break;
+		}
+	}
+	return _xson_print_append_char(pPrint, '\"');
+}
+static xson_write_result_t _xson_write_value(xson_print_t* pPrint, xvalue varVal, int iDepth, bool bRoot);
+typedef struct
+{
+	xson_print_t* pPrint;
+	int iDepth;
+	int iCount;
+	bool bError;
+} xson_walk_ctx_t;
+static xson_write_result_t _xson_write_array(xson_print_t* pPrint, xvalue varVal, int iDepth)
+{
+	int iCount = 0;
+	if ( _xson_print_append_char(pPrint, '[') == FALSE ) {
+		return XSON_WRITE_RESULT_FAIL;
+	}
+	for ( int i = 0; i < (int)varVal->vArray->Count; ++i ) {
+		xvalue pItem = xvoArrayGetValue(varVal, (uint32)i);
+		size_t iMark = pPrint->iUsed;
+		xson_write_result_t iRet;
+		if ( iCount > 0 ) {
+			if ( _xson_print_append_char(pPrint, ',') == FALSE ) {
+				return XSON_WRITE_RESULT_FAIL;
+			}
+		}
+		if ( pPrint->bFormat ) {
+			if ( _xson_print_append_indent(pPrint, iDepth + 1) == FALSE ) {
+				return XSON_WRITE_RESULT_FAIL;
+			}
+		}
+		iRet = _xson_write_value(pPrint, pItem, iDepth + 1, FALSE);
+		if ( iRet == XSON_WRITE_RESULT_SKIP ) {
+			pPrint->iUsed = iMark;
+			pPrint->sText[pPrint->iUsed] = '\0';
+			continue;
+		}
+		if ( iRet == XSON_WRITE_RESULT_FAIL ) {
+			return XSON_WRITE_RESULT_FAIL;
+		}
+		iCount++;
+	}
+	if ( pPrint->bFormat && iCount > 0 ) {
+		if ( _xson_print_append_indent(pPrint, iDepth) == FALSE ) {
+			return XSON_WRITE_RESULT_FAIL;
+		}
+	}
+	if ( _xson_print_append_char(pPrint, ']') == FALSE ) {
+		return XSON_WRITE_RESULT_FAIL;
+	}
+	return XSON_WRITE_RESULT_OK;
+}
+static bool _xson_write_list_proc(int64 iKey, xvalue* ppVal, xson_walk_ctx_t* pCtx)
+{
+	size_t iMark;
+	xson_write_result_t iRet;
+	if ( pCtx == NULL || pCtx->pPrint == NULL || ppVal == NULL ) {
+		return TRUE;
+	}
+	iMark = pCtx->pPrint->iUsed;
+	if ( pCtx->iCount > 0 ) {
+		if ( _xson_print_append_char(pCtx->pPrint, ',') == FALSE ) {
+			pCtx->bError = TRUE;
+			return TRUE;
+		}
+	}
+	if ( pCtx->pPrint->bFormat ) {
+		if ( _xson_print_append_indent(pCtx->pPrint, pCtx->iDepth + 1) == FALSE ) {
+			pCtx->bError = TRUE;
+			return TRUE;
+		}
+	}
+	if ( _xson_print_append_i64(pCtx->pPrint, iKey) == FALSE ) {
+		pCtx->bError = TRUE;
+		return TRUE;
+	}
+	if ( pCtx->pPrint->bFormat ) {
+		if ( _xson_print_append_raw(pCtx->pPrint, ":\t", 2) == FALSE ) {
+			pCtx->bError = TRUE;
+			return TRUE;
+		}
+	} else {
+		if ( _xson_print_append_char(pCtx->pPrint, ':') == FALSE ) {
+			pCtx->bError = TRUE;
+			return TRUE;
+		}
+	}
+	iRet = _xson_write_value(pCtx->pPrint, ppVal[0], pCtx->iDepth + 1, FALSE);
+	if ( iRet == XSON_WRITE_RESULT_SKIP ) {
+		pCtx->pPrint->iUsed = iMark;
+		pCtx->pPrint->sText[pCtx->pPrint->iUsed] = '\0';
+		return FALSE;
+	}
+	if ( iRet == XSON_WRITE_RESULT_FAIL ) {
+		pCtx->bError = TRUE;
+		return TRUE;
+	}
+	pCtx->iCount++;
+	return FALSE;
+}
+static xson_write_result_t _xson_write_list(xson_print_t* pPrint, xvalue varVal, int iDepth)
+{
+	xson_walk_ctx_t tCtx = { pPrint, iDepth, 0, FALSE };
+	if ( _xson_print_append_raw(pPrint, "list[", 5) == FALSE ) {
+		return XSON_WRITE_RESULT_FAIL;
+	}
+	xrtListWalk(varVal->vList, (ptr)_xson_write_list_proc, &tCtx);
+	if ( tCtx.bError ) {
+		return XSON_WRITE_RESULT_FAIL;
+	}
+	if ( pPrint->bFormat && tCtx.iCount > 0 ) {
+		if ( _xson_print_append_indent(pPrint, iDepth) == FALSE ) {
+			return XSON_WRITE_RESULT_FAIL;
+		}
+	}
+	if ( _xson_print_append_char(pPrint, ']') == FALSE ) {
+		return XSON_WRITE_RESULT_FAIL;
+	}
+	return XSON_WRITE_RESULT_OK;
+}
+static bool _xson_write_dict_proc(Dict_Key* pKey, xvalue* ppVal, xson_walk_ctx_t* pCtx)
+{
+	size_t iMark;
+	xson_write_result_t iRet;
+	if ( pCtx == NULL || pCtx->pPrint == NULL || pKey == NULL || ppVal == NULL ) {
+		return TRUE;
+	}
+	iMark = pCtx->pPrint->iUsed;
+	if ( pCtx->iCount > 0 ) {
+		if ( _xson_print_append_char(pCtx->pPrint, ',') == FALSE ) {
+			pCtx->bError = TRUE;
+			return TRUE;
+		}
+	}
+	if ( pCtx->pPrint->bFormat ) {
+		if ( _xson_print_append_indent(pCtx->pPrint, pCtx->iDepth + 1) == FALSE ) {
+			pCtx->bError = TRUE;
+			return TRUE;
+		}
+	}
+	if ( _xson_print_append_json_string(pCtx->pPrint, pKey->Key, pKey->KeyLen) == FALSE ) {
+		pCtx->bError = TRUE;
+		return TRUE;
+	}
+	if ( pCtx->pPrint->bFormat ) {
+		if ( _xson_print_append_raw(pCtx->pPrint, ":\t", 2) == FALSE ) {
+			pCtx->bError = TRUE;
+			return TRUE;
+		}
+	} else {
+		if ( _xson_print_append_char(pCtx->pPrint, ':') == FALSE ) {
+			pCtx->bError = TRUE;
+			return TRUE;
+		}
+	}
+	iRet = _xson_write_value(pCtx->pPrint, ppVal[0], pCtx->iDepth + 1, FALSE);
+	if ( iRet == XSON_WRITE_RESULT_SKIP ) {
+		pCtx->pPrint->iUsed = iMark;
+		pCtx->pPrint->sText[pCtx->pPrint->iUsed] = '\0';
+		return FALSE;
+	}
+	if ( iRet == XSON_WRITE_RESULT_FAIL ) {
+		pCtx->bError = TRUE;
+		return TRUE;
+	}
+	pCtx->iCount++;
+	return FALSE;
+}
+static xson_write_result_t _xson_write_dict(xson_print_t* pPrint, xvalue varVal, int iDepth)
+{
+	xson_walk_ctx_t tCtx = { pPrint, iDepth, 0, FALSE };
+	if ( _xson_print_append_char(pPrint, '{') == FALSE ) {
+		return XSON_WRITE_RESULT_FAIL;
+	}
+	xrtDictWalk(varVal->vTable, (ptr)_xson_write_dict_proc, &tCtx);
+	if ( tCtx.bError ) {
+		return XSON_WRITE_RESULT_FAIL;
+	}
+	if ( pPrint->bFormat && tCtx.iCount > 0 ) {
+		if ( _xson_print_append_indent(pPrint, iDepth) == FALSE ) {
+			return XSON_WRITE_RESULT_FAIL;
+		}
+	}
+	if ( _xson_print_append_char(pPrint, '}') == FALSE ) {
+		return XSON_WRITE_RESULT_FAIL;
+	}
+	return XSON_WRITE_RESULT_OK;
+}
+static bool _xson_write_set_proc(Coll_Key* pKey, xson_walk_ctx_t* pCtx)
+{
+	size_t iMark;
+	xson_write_result_t iRet;
+	if ( pCtx == NULL || pCtx->pPrint == NULL || pKey == NULL ) {
+		return TRUE;
+	}
+	iMark = pCtx->pPrint->iUsed;
+	if ( pCtx->iCount > 0 ) {
+		if ( _xson_print_append_char(pCtx->pPrint, ',') == FALSE ) {
+			pCtx->bError = TRUE;
+			return TRUE;
+		}
+	}
+	if ( pCtx->pPrint->bFormat ) {
+		if ( _xson_print_append_indent(pCtx->pPrint, pCtx->iDepth + 1) == FALSE ) {
+			pCtx->bError = TRUE;
+			return TRUE;
+		}
+	}
+	iRet = _xson_write_value(pCtx->pPrint, pKey->Value, pCtx->iDepth + 1, FALSE);
+	if ( iRet == XSON_WRITE_RESULT_SKIP ) {
+		pCtx->pPrint->iUsed = iMark;
+		pCtx->pPrint->sText[pCtx->pPrint->iUsed] = '\0';
+		return FALSE;
+	}
+	if ( iRet == XSON_WRITE_RESULT_FAIL ) {
+		pCtx->bError = TRUE;
+		return TRUE;
+	}
+	pCtx->iCount++;
+	return FALSE;
+}
+static xson_write_result_t _xson_write_set(xson_print_t* pPrint, xvalue varVal, int iDepth)
+{
+	xson_walk_ctx_t tCtx = { pPrint, iDepth, 0, FALSE };
+	if ( _xson_print_append_raw(pPrint, "set{", 4) == FALSE ) {
+		return XSON_WRITE_RESULT_FAIL;
+	}
+	xrtAVLTreeWalk(varVal->vColl, (ptr)_xson_write_set_proc, &tCtx);
+	if ( tCtx.bError ) {
+		return XSON_WRITE_RESULT_FAIL;
+	}
+	if ( pPrint->bFormat && tCtx.iCount > 0 ) {
+		if ( _xson_print_append_indent(pPrint, iDepth) == FALSE ) {
+			return XSON_WRITE_RESULT_FAIL;
+		}
+	}
+	if ( _xson_print_append_char(pPrint, '}') == FALSE ) {
+		return XSON_WRITE_RESULT_FAIL;
+	}
+	return XSON_WRITE_RESULT_OK;
+}
+static bool _xson_is_unsupported_value(xvalue varVal)
+{
+	if ( varVal == NULL ) {
+		return FALSE;
+	}
+	return (varVal->Type == XVO_DT_POINT) || (varVal->Type == XVO_DT_FUNC) || (varVal->Type == XVO_DT_CUSTOM);
+}
+static xson_write_result_t _xson_write_value(xson_print_t* pPrint, xvalue varVal, int iDepth, bool bRoot)
+{
+	str sText;
+	str sBase64;
+	if ( pPrint == NULL || varVal == NULL ) {
+		return XSON_WRITE_RESULT_FAIL;
+	}
+	if ( _xson_is_unsupported_value(varVal) ) {
+		if ( ((pPrint->iFlags & XSON_F_IGNORE_UNSUPPORTED_ENCODE) != 0) && (bRoot == FALSE) ) {
+			return XSON_WRITE_RESULT_SKIP;
+		}
+		return XSON_WRITE_RESULT_FAIL;
+	}
+	switch ( varVal->Type ) {
+	case XVO_DT_NULL:
+		return _xson_print_append_raw(pPrint, "null", 4) ? XSON_WRITE_RESULT_OK : XSON_WRITE_RESULT_FAIL;
+	case XVO_DT_BOOL:
+		if ( varVal->vBool ) {
+			return _xson_print_append_raw(pPrint, "true", 4) ? XSON_WRITE_RESULT_OK : XSON_WRITE_RESULT_FAIL;
+		}
+		return _xson_print_append_raw(pPrint, "false", 5) ? XSON_WRITE_RESULT_OK : XSON_WRITE_RESULT_FAIL;
+	case XVO_DT_INT:
+		return _xson_print_append_i64(pPrint, varVal->vInt) ? XSON_WRITE_RESULT_OK : XSON_WRITE_RESULT_FAIL;
+	case XVO_DT_FLOAT:
+		return _xson_print_append_double(pPrint, varVal->vFloat) ? XSON_WRITE_RESULT_OK : XSON_WRITE_RESULT_FAIL;
+	case XVO_DT_TEXT:
+		sText = varVal->vText ? varVal->vText : xCore.sNull;
+		return _xson_print_append_json_string(pPrint, sText, varVal->Size) ? XSON_WRITE_RESULT_OK : XSON_WRITE_RESULT_FAIL;
+	case XVO_DT_TIME:
+		if ( _xson_print_append_raw(pPrint, "time(", 5) == FALSE ) {
+			return XSON_WRITE_RESULT_FAIL;
+		}
+		sText = xvoGetText(varVal);
+		if ( _xson_print_append_cstr(pPrint, sText) == FALSE ) {
+			return XSON_WRITE_RESULT_FAIL;
+		}
+		return _xson_print_append_char(pPrint, ')') ? XSON_WRITE_RESULT_OK : XSON_WRITE_RESULT_FAIL;
+	case XVO_DT_ARRAY:
+		return _xson_write_array(pPrint, varVal, iDepth);
+	case XVO_DT_LIST:
+		return _xson_write_list(pPrint, varVal, iDepth);
+	case XVO_DT_COLL:
+		return _xson_write_set(pPrint, varVal, iDepth);
+	case XVO_DT_TABLE:
+		return _xson_write_dict(pPrint, varVal, iDepth);
+	case XVO_DT_CLASS:
+		if ( varVal->vStruct == NULL || varVal->Size == 0 ) {
+			return XSON_WRITE_RESULT_FAIL;
+		}
+		sBase64 = xrtBase64Encode(varVal->vStruct, varVal->Size, NULL);
+		if ( sBase64 == NULL || sBase64 == xCore.sNull ) {
+			return XSON_WRITE_RESULT_FAIL;
+		}
+		if ( _xson_print_append_raw(pPrint, "class(", 6) == FALSE ) {
+			xrtFree(sBase64);
+			return XSON_WRITE_RESULT_FAIL;
+		}
+		if ( _xson_print_append_cstr(pPrint, sBase64) == FALSE ) {
+			xrtFree(sBase64);
+			return XSON_WRITE_RESULT_FAIL;
+		}
+		xrtFree(sBase64);
+		return _xson_print_append_char(pPrint, ')') ? XSON_WRITE_RESULT_OK : XSON_WRITE_RESULT_FAIL;
+	default:
+		return XSON_WRITE_RESULT_FAIL;
+	}
+}
+XXAPI xvalue xrtParseXSON(str sText, size_t iSize)
+{
+	return xrtParseXSONEx(sText, iSize, 0);
+}
+XXAPI xvalue xrtParseXSONEx(str sText, size_t iSize, uint32 iFlags)
+{
+	return _xson_parse_text(sText, iSize, iFlags);
+}
+XXAPI xvalue xrtParseXSON_File(str sFile)
+{
+	return xrtParseXSON_FileEx(sFile, 0);
+}
+XXAPI xvalue xrtParseXSON_FileEx(str sFile, uint32 iFlags)
+{
+	size_t iSize = 0;
+	str sText = xrtFileGetAll(sFile, &iSize);
+	xvalue pRet;
+	if ( sText == NULL ) {
+		return xvoCreateNull();
+	}
+	pRet = _xson_parse_text(sText, iSize, iFlags);
+	xrtFree(sText);
+	return pRet;
+}
+XXAPI str xrtStringifyXSON(xvalue varVal, int bFormat, uint32 iFlags, size_t* pRetSize)
+{
+	xson_print_t tPrint = { 0 };
+	xson_write_result_t iRet;
+	if ( varVal == NULL ) {
+		return NULL;
+	}
+	tPrint.sText = NULL;
+	tPrint.iSize = 0;
+	tPrint.iUsed = 0;
+	tPrint.bFormat = bFormat;
+	tPrint.iFlags = iFlags;
+	if ( _xson_print_reserve(&tPrint, 64) == FALSE ) {
+		return NULL;
+	}
+	tPrint.sText[0] = '\0';
+	iRet = _xson_write_value(&tPrint, varVal, 0, TRUE);
+	if ( iRet != XSON_WRITE_RESULT_OK ) {
+		xrtFree(tPrint.sText);
+		return NULL;
+	}
+	if ( pRetSize ) {
+		*pRetSize = tPrint.iUsed;
+	}
+	return tPrint.sText;
+}
+XXAPI int xrtStringifyXSON_File(str sFile, xvalue varVal, int bFormat, uint32 iFlags)
+{
+	size_t iSize = 0;
+	str sText = xrtStringifyXSON(varVal, bFormat, iFlags, &iSize);
+	int iRet;
+	if ( sText == NULL ) {
+		return FALSE;
+	}
+	iRet = xrtFilePutAll(sFile, sText, iSize);
+	xrtFree(sText);
+	return iRet;
+}
 #endif
 #ifndef XRT_NO_TEMPLATE
 
@@ -61278,2834 +64222,4086 @@ XXAPI int xrtStringifyJSON_File(str sFile, xvalue varVal, int bFormat)
 // ========================================
 
 
-/*
-	符号列表：
-		{						模板起始符号				需要转义				{{
-		! $ % & ? * = @ #		模板操作符号				不需要转义
-		:						参数分隔符				需要转义				\:
-		}						模板结束符号				需要转义				\}
-		\						语句内转义符号			语句内需要转义		\\
-*/
-/*
-	高级语法：
-		
-		1. define : 注册子模板，子模板可使用 {=子模板名称}、{*变量值:子模板名称} 等方式代入
-			{#define:子模板名称}
-				子模板内容
-			{#end}
-			注：子模板不可嵌套，内部可使用 {$__self} 变量访问代入值
-		
-		2. if : 条件判断
-			{#if:表达式}
-				语句
-			{#elseif:表达式}
-				语句
-			{#else}
-				语句
-			{#end}
-			注：xTemplateEngine 不对表达式做处理，不要宿主程序自行解析
-		
-		3. for
-			{#for:1:10:1}
-				语句
-			{#end}
-			注：内部可使用 {#__index} 访问当前循环索引
-		
-		4. foreach
-			{#foreach:变量名}
-				语句
-			{#end}
-			注：内部可使用 {#__index} 访问当前循环索引，{$__value} 访问当前值（如果当前值是字符串的话）
-		
-		5. script
-			{#script:脚本语言}
-				语句
-			{#end}
-			注：脚本语句块不可嵌套，另外脚本语句块不解析任何转义符，只在遇到 {#end} 时结束语句
-		
-		6. include
-			{#include:文件名}
-		
-*/
-// 字符串对比函数（strncmp）
-#define XTE_STRNCMP		strncasecmp
-// 循环最大迭代次数（防止无限循环攻击）
-#ifndef XTE_LOOP_MAX_ITERATIONS
-#define XTE_LOOP_MAX_ITERATIONS 100000
+#define XTE_PRIVATE_INVALID_INDEX		0xFFFFFFFFu
+#define XTE_PRIVATE_FILE_VERSION		2u
+#define XTE_ERROR_OK					0
+#define XTE_ERROR_MALLOC				1
+#define XTE_ERROR_PARSE					2
+#define XTE_ERROR_UNSUPPORTED			3
+#define XTE_ERROR_UNKNOWN_STATEMENT		4
+#define XTE_ERROR_RENDER				5
+#define XTE_ERROR_FILE					6
+#define XTE_PRIVATE_ARG_HAS_EXPR		0x0001u
+#define XTE_PRIVATE_ARG_NAMED			0x0002u
+#define XTE_PRIVATE_LOOP_MAX_ITERATIONS	100000u
+typedef struct
+{
+	const XTE_StatementDef* pDef;
+} XTE_PrivateStatementReg;
+typedef struct
+{
+	const XTE_FunctionDef* pDef;
+} XTE_PrivateFunctionReg;
+typedef struct
+{
+	uint32 iNameOff;
+	uint32 iNameSize;
+	XTE_NodeSpan tBody;
+} XTE_PrivateSubTemplateItem;
+typedef struct
+{
+	const char* sText;
+	uint32 iSize;
+} XTE_PrivateView;
+typedef struct
+{
+	const char* sOpen;
+	const char* sClose;
+	uint32 iOpenSize;
+	uint32 iCloseSize;
+} XTE_PrivateBracket;
+typedef struct
+{
+	char* sName;
+	uint32 iNameSize;
+	char* sRaw;
+	uint32 iRawSize;
+	uint32 iFlags;
+} XTE_PrivateAstArg;
+typedef struct XTE_PrivateAstNode_Struct XTE_PrivateAstNode;
+typedef struct
+{
+	xarray_struct arrNode;
+} XTE_PrivateAstList;
+struct XTE_PrivateAstNode_Struct
+{
+	uint32 iType;
+	uint32 iFlags;
+	uint32 iPos;
+	uint32 iSize;
+	union {
+		struct {
+			char* sText;
+			uint32 iTextSize;
+		} Text;
+		struct {
+			uint32 iOutputType;
+			char* sExpr;
+			uint32 iExprSize;
+			char* sFormat;
+			uint32 iFormatSize;
+			char* sFuncName;
+			uint32 iFuncNameSize;
+			xarray_struct arrArg;
+		} Output;
+		struct {
+			char* sExpr;
+			uint32 iExprSize;
+			char* sTrueText;
+			uint32 iTrueSize;
+			char* sFalseText;
+			uint32 iFalseSize;
+		} InlineBool;
+		struct {
+			const XTE_StatementDef* pDef;
+			char* sStmtName;
+			uint32 iStmtNameSize;
+			xarray_struct arrArg;
+			XTE_PrivateAstList tBody;
+			char* sRawBody;
+			uint32 iRawBodySize;
+		} Statement;
+	} Data;
+};
+typedef struct
+{
+	xteengine hEngine;
+	const char* sText;
+	uint32 iSize;
+	uint32 iPos;
+	uint32 iBasePos;
+	const char* sRootText;
+	uint32 iRootSize;
+	XTE_PrivateBracket tBracket;
+	XTE_Error* pError;
+} XTE_PrivateParser;
+struct XTE_Engine_Struct
+{
+	xarray_struct arrStatement;
+	xarray_struct arrFunction;
+};
+struct XTE_Template_Struct
+{
+	xteengine hEngine;
+	int bOwnEngine;
+	XTE_Error LastError;
+	xbuffer_struct tStringPool;
+	xarray_struct arrNode;
+	xarray_struct arrExpr;
+	xarray_struct arrArg;
+	xarray_struct arrSubTemplate;
+	XTE_NodeSpan tRoot;
+};
+struct XTE_RenderCtx_Struct
+{
+	xteengine hEngine;
+	xtetemplate hTemplate;
+	XTE_Writer* pWriter;
+	xdict pIncludeMap;
+	xvalue pLocal;
+	xvalue pCurrent;
+	xvalue pRoot;
+	xvalue pGlobal;
+	XTE_Error* pError;
+	uint32 iFlags;
+	uint32 iLoopDepth;
+};
+static XTE_Node* xte_private_template_get_node(xtetemplate hTemplate, uint32 iIndex);
+static XTE_ExprNode* xte_private_template_get_expr(xtetemplate hTemplate, uint32 iIndex);
+static XTE_ArgItem* xte_private_template_get_arg(xtetemplate hTemplate, uint32 iIndex);
+static XTE_PrivateSubTemplateItem* xte_private_template_get_subtemplate(xtetemplate hTemplate, uint32 iIndex);
+static const char* xte_private_pool_ptr(xtetemplate hTemplate, uint32 iOff);
+static uint32 xte_private_pool_add_copy(xtetemplate hTemplate, const char* sText, uint32 iSize);
+static int xte_private_value_truthy(xvalue pVal);
+static char* xte_private_value_to_text(xvalue pVal);
+#ifdef XTE_ENABLE_FILE
+typedef struct
+{
+	char sMagic[8];
+	uint32 iVersion;
+	uint32 iFlags;
+	uint32 iStringPoolSize;
+	uint32 iNodeCount;
+	uint32 iExprCount;
+	uint32 iArgCount;
+	XTE_NodeSpan tRoot;
+} XTE_PrivateFileHeader;
 #endif
-// 错误列表
-/*
-	0		成功							success
-	1		内存申请失败					malloc failed
-	2		Token 列表添加失败			token list append failed
-	3		无法识别的符号				unrecognized symbols
-	4		不允许使用空符号				empty symbols are not allowed
-	5		参数数量过多					too many parameters
-	6		语句未结束					statement not ended
-	7		未定义标识符					Undefined identifier
-*/
-const char* XTE_ERROR_DESC[] = {
-	"success",
-	"malloc failed",
-	"token list append failed",
-	"unrecognized symbols",
-	"empty symbols are not allowed",
-	"too many parameters",
-	"statement not ended",
-	"Undefined identifier",
-	"Missing parameters",
-	"Nesting of define statements is not allowed.",
-	"syntax error"
-};
-// 内存申请失败错误返回对象（避免返回 NULL）
-XTE_TokenList_Struct XTE_LEXER_ERROR_MALLOC = {
-	0,
-	1,
-	"malloc failed",
-	0,
-	0,
-	0,
-	0,
-	0,
-	0,
-	{
-		NULL,
-		0,
-		0,
-		0,
-		0
-	}
-};
-// 创建关键字列表（失败返回 NULL）
-xarray xteCreateIdentList()
+static void xte_private_clear_error(XTE_Error* pError)
 {
-	return xrtArrayCreate(sizeof(XTE_IdentInfo_Struct), XRT_OBJMODE_LOCAL);
-}
-// 销毁关键字列表
-void xteDestroyIdentList(xarray objList)
-{
-	if ( objList ) {
-		for ( int i = 1; i <= objList->Count; i++ ) {
-			XTE_IdentInfo objID = xrtArrayGet_Inline(objList, i);
-			if ( objID->Ident ) {
-				xrtFree(objID->Ident);
-			}
-		}
-		xrtArrayDestroy(objList);
+	if ( pError ) {
+		memset(pError, 0, sizeof(*pError));
 	}
 }
-// 添加一个关键字到列表
-int xteAddIdentToList(xarray objList, char* sID, unsigned int iSize, unsigned int iIndex, unsigned int iType, unsigned int iMinParamCount, unsigned int iMaxParamCount)
+static void xte_private_copy_error(XTE_Error* pDst, const XTE_Error* pSrc)
 {
-	// 自动计算关键字长度
-	if ( iSize == 0 ) {
-		iSize = strlen(sID);
-		if ( iSize == 0 ) {
-			return 0;
-		}
-	}
-	if ( objList ) {
-		// 创建关键字字符串副本
-		char* sKey = xrtMalloc(iSize + 1);
-		if ( sKey == NULL ) {
-			return 0;
-		}
-		memcpy(sKey, sID, iSize);
-		sKey[iSize] = 0;
-		// 添加关键字到列表
-		unsigned int idx = xrtArrayAppend(objList, 1);
-		if ( idx == 0 ) {
-			xrtFree(sKey);
-			return 0;
-		}
-		XTE_IdentInfo objID = xrtArrayGet_Inline(objList, idx);
-		objID->Ident = sKey;
-		objID->TokenIndex = iIndex;
-		objID->Type = iType;
-		objID->Size = iSize;
-		objID->MinParamCount = iMinParamCount;
-		objID->MaxParamCount = iMaxParamCount;
-		objID->Hash = xrtHash32(sKey, iSize);
-		return idx;
-	}
-	return 0;
-}
-// Trim buffer 前后空白字符（原地修改）
-static void xte_private_trim_buffer(xbuffer objBuf)
-{
-	if ( objBuf == NULL || objBuf->Length == 0 ) return;
-	
-	char* buf = objBuf->Buffer;
-	size_t len = objBuf->Length;
-	size_t start = 0;
-	size_t end = len;
-	
-	// 跳过前导空白
-	while ( start < len && (buf[start] == ' ' || buf[start] == '\t') ) {
-		start++;
-	}
-	
-	// 跳过尾部空白
-	while ( end > start && (buf[end - 1] == ' ' || buf[end - 1] == '\t') ) {
-		end--;
-	}
-	
-	// 如果有变化，移动数据
-	if ( start > 0 || end < len ) {
-		size_t newLen = end - start;
-		if ( start > 0 && newLen > 0 ) {
-			memmove(buf, buf + start, newLen);
-		}
-		objBuf->Length = newLen;
-		buf[newLen] = '\0';
+	if ( pDst && pSrc ) {
+		*pDst = *pSrc;
 	}
 }
-// 构建分词器解析错误
-#define XTE_OnLexerError(id) { objRet->Success=0; objRet->ErrorCode=id; objRet->ErrorDesc=XTE_ERROR_DESC[id]; objRet->ErrorLine=iLine; objRet->ErrorLinePos=iLinePos; objRet->ErrorPos=i; objRet->ErrorRefLine=iRefLine; objRet->ErrorRefLinePos=iRefLinePos; objRet->ErrorRefPos=iRefPos; if(objBuf){xrtBufferDestroy(objBuf);}; xte_private_free_tokenlist(&objRet->Tokens); return objRet; }
-// 释放 XTE_TokenList
-void xte_private_free_tokenlist(xarray arrToken)
+static void xte_private_fill_error_pos(const char* sText, uint32 iSize, uint32 iPos, XTE_Error* pError, int iCode, const char* sDesc)
 {
-	if ( arrToken->Memory ) {
-		for ( int i = 1; i <= arrToken->Count; i++ ) {
-			XTE_TokenItem objTok = xrtArrayGet_Inline(arrToken, i);
-			if ( objTok->Text ) {
-				xrtFree(objTok->Text);
-			}
-			for ( int iParam = 0; iParam < objTok->ParamCount; iParam++ ) {
-				if ( objTok->ParamText[iParam] ) {
-					xrtFree(objTok->ParamText[iParam]);
-				}
-			}
-		}
-		xrtArrayUnit(arrToken);
-	}
-}
-void xteLexerFree(XTE_TokenList arrToken)
-{
-	if ( arrToken != &XTE_LEXER_ERROR_MALLOC ) {
-		xte_private_free_tokenlist(&arrToken->Tokens);
-		xrtFree(arrToken);
-	}
-}
-// 解析模板文件为 Token 列表
-XTE_TokenList xteLexer(char* sText, size_t iSize, xarray objIdentList, char* sBracket)
-{
-	// 创建返回值结构体
-	XTE_TokenList objRet = xrtMalloc(sizeof(XTE_TokenList_Struct));
-	if ( objRet == NULL ) {
-		return &XTE_LEXER_ERROR_MALLOC;
-	}
-	objRet->ErrorLine = 0;
-	objRet->ErrorLinePos = 0;
-	objRet->ErrorPos = 0;
-	objRet->ErrorRefLine = 0;
-	objRet->ErrorRefLinePos = 0;
-	objRet->ErrorRefPos = 0;
-	xrtArrayInit(&objRet->Tokens, sizeof(XTE_TokenItem_Struct), XRT_OBJMODE_LOCAL);
-	// 自动计算文本长度
-	if ( iSize == 0 ) {
-		iSize = strlen(sText);
-		if ( iSize == 0 ) {
-			objRet->Success = -1;
-			objRet->ErrorCode = 0;
-			objRet->ErrorDesc = XTE_ERROR_DESC[0];
-			return objRet;
-		}
-	}
-	// 默认使用花括号作为模板符号
-	if ( sBracket == NULL ) {
-		sBracket = "{}";
-	}
-	// 行号信息
-	size_t i = 0;
-	size_t iPos = 0;
-	size_t iRefLine = 1;
-	size_t iRefLinePos = 1;
-	size_t iRefPos = 0;
-	size_t iLine = 1;
-	size_t iLinePos = 0;
-	// 创建临时缓冲区对象
-	xbuffer objBuf = xrtBufferCreate(0);
-	if ( objBuf == NULL ) {
-		XTE_OnLexerError(1);
-	}
-	// 遍历获取 Token
-	int iMode = XTE_TK_TEXT;
-	XTE_TokenItem objCurTok;
-	size_t iSkip = 0;
-	for ( i = 0; i < iSize; i++ ) {
-		// 处理行号和行位置
-		if ( sText[i] == '\n' ) {
-			iLine++;
-			iLinePos = 0;
-		} else if ( sText[i] != '\r' ) {
-			iLinePos++;
-		}
-		// 处理跳过字符
-		if ( iSkip ) {
-			iSkip--;
-			continue;
-		}
-		// Token 扫描逻辑
-		if ( iMode == XTE_TK_TEXT ) {
-			// XTE_TK_TEXT 采集模式
-			if ( sText[i] == sBracket[0] && (i + 1 < iSize) ) {
-				if ( sText[i + 1] == sBracket[0] ) {
-					// 处理 {{ 转义符
-					xrtBufferAppend(objBuf, &sText[iPos], (i - iPos) + 1, XBUF_UTF8);
-					iSkip++;
-					iPos = i + 2;
-				} else {
-					// 将符号前的内容添加到临时缓冲区
-					if ( i > iPos ) {
-						xrtBufferAppend(objBuf, &sText[iPos], i - iPos, XBUF_UTF8);
-					}
-					// 如果临时缓冲区存在数据，则创建一个 XTE_TK_TEXT 节点
-					if ( objBuf->Length > 0 ) {
-						unsigned int idx = xrtArrayAppend(&objRet->Tokens, 1);
-						if ( idx == 0 ) {
-							XTE_OnLexerError(2);
-						}
-						XTE_TokenItem objTok = xrtArrayGet_Inline(&objRet->Tokens, idx);
-						objTok->Type = XTE_TK_TEXT;
-						objTok->Text = xrtMalloc(objBuf->Length + 1);
-						if ( objTok->Text == NULL ) {
-							XTE_OnLexerError(1);
-						}
-						objTok->Size = objBuf->Length;
-						memcpy(objTok->Text, objBuf->Buffer, objBuf->Length);
-						objTok->Text[objBuf->Length] = 0;
-						objTok->ParamCount = 0;
-						objTok->IdentInfo = NULL;
-						objTok->RefLine = iRefLine;
-						objTok->RefLinePos = iRefLinePos;
-						objTok->RefPos = iRefPos + 1;
-						objTok->RefSize = i - iRefPos;
-						xrtBufferClear(objBuf);
-					}
-					// 更新引用位置信息
-					iRefLine = iLine;
-					iRefLinePos = iLinePos;
-					iRefPos = i;
-					// 创建一个新的 TokenItem
-					unsigned int idx = xrtArrayAppend(&objRet->Tokens, 1);
-					if ( idx == 0 ) {
-						XTE_OnLexerError(2);
-					}
-					objCurTok = xrtArrayGet_Inline(&objRet->Tokens, idx);
-					// 根据下一个符号判断 Token 类型
-					if ( sText[i + 1] == '!' ) {
-						objCurTok->Type = XTE_TK_COMMEN;
-					} else if ( sText[i + 1] == '$' ) {
-						objCurTok->Type = XTE_TK_VAR;
-					} else if ( sText[i + 1] == '%' ) {
-						objCurTok->Type = XTE_TK_NUM;
-					} else if ( sText[i + 1] == '&' ) {
-						objCurTok->Type = XTE_TK_TIME;
-					} else if ( sText[i + 1] == '?' ) {
-						objCurTok->Type = XTE_TK_BOOL;
-					} else if ( sText[i + 1] == '*' ) {
-						objCurTok->Type = XTE_TK_ARR;
-					} else if ( sText[i + 1] == '@' ) {
-						objCurTok->Type = XTE_TK_PROC;
-					} else if ( sText[i + 1] == '=' ) {
-						objCurTok->Type = XTE_TK_SUBTEMPLATE;
-					} else if ( sText[i + 1] == '#' ) {
-						if ( objIdentList ) {
-							objCurTok->Type = XTE_TK_SYMBOL;
-						} else {
-							// objIdentList 传递为空时，不支持 {# xxx } 的写法
-							XTE_OnLexerError(3);
-						}
-					} else {
-						// 无法识别的 Token 类型 - 将 { 回归到文本 buffer 中
-						objRet->Tokens.Count--;  // 回退刚刚创建的 token
-						xrtBufferAppend(objBuf, &sBracket[0], 1, XBUF_UTF8);  // 将 { 追加到 buffer
-						// 回到文本采集模式，继续从下一个字符解析
-						iMode = XTE_TK_TEXT;
-						iPos = i + 1;
-						continue;
-					}
-					// 切换为对应的 Token 信息采集模式
-					iMode = objCurTok->Type;
-					objCurTok->Size = 0;
-					objCurTok->Text = NULL;
-					objCurTok->ParamCount = 0;
-					for ( int iParam = 0; iParam < XTE_PARAM_MAXCOUNT; iParam++ ) {
-						objCurTok->ParamText[iParam] = NULL;
-						objCurTok->ParamSize[iParam] = 0;
-					}
-					objCurTok->IdentInfo = NULL;
-					objCurTok->RefLine = iRefLine;
-					objCurTok->RefLinePos = iRefLinePos;
-					objCurTok->RefPos = iRefPos + 1;
-					iSkip++;
-					iPos = i + 2;
-				}
-			}
-		} else if ( iMode == XTE_MODE_BLOCK ) {
-			// XTE_MODE_BLOCK 采集模式（只在遇到 {#end} 时退出）
-			if ( (i + 5 < iSize) && (sText[i] == sBracket[0]) && (sText[i+1] == '#') && (sText[i+2] == 'e') && (sText[i+3] == 'n') && (sText[i+4] == 'd') && (sText[i+5] == sBracket[1]) ) {
-				objCurTok->Size = i - iPos;
-				objCurTok->Text = xrtMalloc(objCurTok->Size + 1);
-				if ( objCurTok->Text == NULL ) {
-					XTE_OnLexerError(1);
-				}
-				memcpy(objCurTok->Text, &sText[iPos], objCurTok->Size);
-				objCurTok->Text[objCurTok->Size] = 0;
-				// 更新引用位置信息
-				iRefLine = iLine;
-				iRefLinePos = iLinePos + 6;
-				objCurTok->RefSize = i - iRefPos + 6;
-				iRefPos = i + 6;
-				// 语句结束，切换为文本采集模式
-				iSkip += 5;
-				iPos = i + 6;
-				iMode = XTE_TK_TEXT;
-			}
-		} else if ( iMode == XTE_TK_COMMEN ) {
-			// XTE_TK_COMMEN 采集模式（跳过转义符，不处理参数列表，这样可以加快效率）
-			if ( sText[i] == '\\' ) {
-				// 转义符处理
-				iSkip++;
-			} else if ( sText[i] == sBracket[1] ) {
-				// 语句结尾处理
-				objCurTok->Size = i - iPos;
-				if ( objCurTok->Size > 0 ) {
-					objCurTok->Text = xrtMalloc(objCurTok->Size + 1);
-					if ( objCurTok->Text == NULL ) {
-						XTE_OnLexerError(1);
-					}
-					memcpy(objCurTok->Text, &sText[iPos], objCurTok->Size);
-					objCurTok->Text[objCurTok->Size] = 0;
-				}
-				objCurTok->ParamCount = 0;
-				// 更新引用位置信息
-				iRefLine = iLine;
-				iRefLinePos = iLinePos + 1;
-				objCurTok->RefSize = i - iRefPos + 1;
-				iRefPos = i + 1;
-				// 语句结束，切换为文本采集模式
-				iMode = XTE_TK_TEXT;
-				iPos = i + 1;
-			}
-		} else {
-			// 通用 XTE_TK_* 的 Token 信息采集模式
-			if ( sText[i] == '\\' ) {
-				// 转义符处理
-				if ( i > iPos ) {
-					xrtBufferAppend(objBuf, &sText[iPos], i - iPos, XBUF_UTF8);
-				}
-				iSkip++;
-				xrtBufferAppend(objBuf, &sText[i+1], 1, XBUF_UTF8);
-				iPos = i + 2;
-			} else if ( (sText[i] == ':') || (sText[i] == sBracket[1]) ) {
-				// 参数处理
-				if ( i > iPos ) {
-					xrtBufferAppend(objBuf, &sText[iPos], i - iPos, XBUF_UTF8);
-				}
-				// 如果 objCurTok->Text 为 NULL 则将 objBuf 传递给 objCurTok->Text，否则传递到 ParamText
-				if ( objCurTok->Text ) {
-					if ( objCurTok->ParamCount < XTE_PARAM_MAXCOUNT ) {
-						// 如果是 {# xxx } 语句，检查参数数量是否超出允许最大数量
-						if ( objCurTok->IdentInfo ) {
-							if ( objCurTok->ParamCount >= objCurTok->IdentInfo->MaxParamCount ) {
-								// 参数数量超出允许的最大数量
-								XTE_OnLexerError(5);
-							}
-						}
-						// 更新参数数据（先 trim 空格）
-						xte_private_trim_buffer(objBuf);
-						objCurTok->ParamSize[objCurTok->ParamCount] = objBuf->Length;
-						if ( objBuf->Length > 0 ) {
-							objCurTok->ParamText[objCurTok->ParamCount] = xrtMalloc(objBuf->Length + 1);
-							if ( objCurTok->ParamText[objCurTok->ParamCount] == NULL ) {
-								XTE_OnLexerError(1);
-							}
-							memcpy(objCurTok->ParamText[objCurTok->ParamCount], objBuf->Buffer, objBuf->Length);
-							objCurTok->ParamText[objCurTok->ParamCount][objBuf->Length] = 0;
-						}
-						objCurTok->ParamCount++;
-					} else {
-						// 参数数量超出允许的最大数量
-						XTE_OnLexerError(5);
-					}
-				} else {
-					// 先 trim 空格
-					xte_private_trim_buffer(objBuf);
-					if ( objBuf->Length > 0 ) {
-						// 如果是 {# xxx } 语句，先判断是否支持对应关键字
-						if ( objCurTok->Type == XTE_TK_SYMBOL ) {
-							unsigned int iHash = 0;
-							for ( int iIdent = 1; iIdent <= objIdentList->Count; iIdent++ ) {
-								XTE_IdentInfo objID = xrtArrayGet_Inline(objIdentList, iIdent);
-								if ( objID->Size == objBuf->Length ) {
-									if ( iHash == 0 ) {
-										iHash = xrtHash32(objBuf->Buffer, objBuf->Length);
-									}
-									if ( objID->Hash == iHash ) {
-										if ( XTE_STRNCMP(objBuf->Buffer, objID->Ident, objBuf->Length) == 0 ) {
-											objCurTok->IdentInfo = objID;
-											break;
-										}
-									}
-								}
-							}
-							// 找不到标识符时，报错
-							if ( objCurTok->IdentInfo == NULL ) {
-								XTE_OnLexerError(7);
-							}
-							// 使用标识符对应的分类覆盖 XTE_TK_SYMBOL
-							objCurTok->Type = objCurTok->IdentInfo->TokenIndex;
-						}
-						// 更新 Text 及关联字段
-						objCurTok->Size = objBuf->Length;
-						objCurTok->Text = xrtMalloc(objCurTok->Size + 1);
-						if ( objCurTok->Text == NULL ) {
-							XTE_OnLexerError(1);
-						}
-						memcpy(objCurTok->Text, objBuf->Buffer, objBuf->Length);
-						objCurTok->Text[objCurTok->Size] = 0;
-					} else {
-						// objCurTok->Text 不允许 0 长度
-						XTE_OnLexerError(4);
-					}
-				}
-				xrtBufferClear(objBuf);
-				iPos = i + 1;
-				// 语句结尾处理
-				if ( sText[i] == sBracket[1] ) {
-					if ( objCurTok->IdentInfo ) {
-						// 如果是 {# xxx } 语句，检查参数数量是否低于允许最小数量
-						if ( objCurTok->ParamCount < objCurTok->IdentInfo->MinParamCount ) {
-							XTE_OnLexerError(8);
-						}
-						// 语句块采集类，进入专用的处理流程
-						if ( objCurTok->IdentInfo->Type == XTE_IDTPE_BLOCK ) {
-							xrtFree(objCurTok->Text);
-							objCurTok->Text = NULL;
-							iMode = XTE_MODE_BLOCK;
-						}
-					}
-					// 直接结束的语句，更新引用位置信息，切换为文本采集模式
-					if ( iMode != XTE_MODE_BLOCK ) {
-						iRefLine = iLine;
-						iRefLinePos = iLinePos + 1;
-						objCurTok->RefSize = i - iRefPos + 1;
-						iRefPos = i + 1;
-						iMode = XTE_TK_TEXT;
-					}
-				}
-			}
-		}
-	}
-	// 收尾操作
-	if ( iMode == XTE_TK_TEXT ) {
-		// 如果临时缓冲区存在数据，将尾部字符串添加为 XTE_TK_TEXT 节点
-		if ( i > iPos ) {
-			xrtBufferAppend(objBuf, &sText[iPos], i - iPos, XBUF_UTF8);
-		}
-		if ( objBuf->Length > 0 ) {
-			unsigned int idx = xrtArrayAppend(&objRet->Tokens, 1);
-			if ( idx == 0 ) {
-				XTE_OnLexerError(2);
-			}
-			XTE_TokenItem objTok = xrtArrayGet_Inline(&objRet->Tokens, idx);
-			objTok->Type = XTE_TK_TEXT;
-			objTok->Text = xrtMalloc(objBuf->Length + 1);
-			if ( objTok->Text == NULL ) {
-				XTE_OnLexerError(1);
-			}
-			objTok->Size = objBuf->Length;
-			memcpy(objTok->Text, objBuf->Buffer, objBuf->Length);
-			objTok->Text[objBuf->Length] = 0;
-			objTok->ParamCount = 0;
-			objTok->RefLine = iRefLine;
-			objTok->RefLinePos = iRefLinePos;
-			objTok->RefPos = iRefPos + 1;
-			objTok->RefSize = i - iRefPos;
-			xrtBufferClear(objBuf);
-		}
-	} else {
-		// 如果仍进行 XTE_TK_* 信息采集，代表词法有错误，语句没有正确结束
-		XTE_OnLexerError(6);
-	}
-	// 返回 Token 列表
-	objRet->Success = -1;
-	objRet->ErrorCode = 0;
-	objRet->ErrorDesc = XTE_ERROR_DESC[0];
-	return objRet;
-}
-// ==================== 路径解析器 ====================
-/*
-	支持的路径语法：
-		- a.b.c          通过点号访问嵌套属性
-		- arr[0]         通过数字索引访问数组
-		- obj["key"]     通过字符串键访问表
-		- arr[0].name    组合访问
-*/
-// 路径解析器：支持 a.b.c 和 arr[0] 语法
-// 返回解析到的 xvalue，失败返回 &XVO_VALUE_NULL
-xvalue xteResolvePath(const char* path, size_t pathLen, xvalue tblVal, xvalue tblRoot, xvalue tblENV)
-{
-	// 空路径检查
-	if ( path == NULL || pathLen == 0 ) {
-		if ( path != NULL ) {
-			pathLen = strlen(path);
-		}
-		if ( pathLen == 0 ) {
-			return &XVO_VALUE_NULL;
-		}
-	}
-	
-	// 快速路径：如果没有 . 和 [ 则直接查找
-	int hasAccessor = 0;
-	for ( size_t i = 0; i < pathLen; i++ ) {
-		if ( path[i] == '.' || path[i] == '[' ) {
-			hasAccessor = 1;
-			break;
-		}
-	}
-	
-	if ( !hasAccessor ) {
-		// 简单路径，直接查找
-		xvalue result = &XVO_VALUE_NULL;
-		if ( tblVal && tblVal->Type == XVO_DT_TABLE ) {
-			result = xvoTableGetValue(tblVal, (str)path, pathLen);
-		}
-		if ( result == &XVO_VALUE_NULL && tblRoot && tblRoot->Type == XVO_DT_TABLE ) {
-			result = xvoTableGetValue(tblRoot, (str)path, pathLen);
-		}
-		if ( result == &XVO_VALUE_NULL && tblENV && tblENV->Type == XVO_DT_TABLE ) {
-			result = xvoTableGetValue(tblENV, (str)path, pathLen);
-		}
-		return result;
-	}
-	
-	// 复杂路径解析
-	xvalue current = NULL;
-	size_t pos = 0;
-	size_t segStart = 0;
-	int isFirst = 1;
-	
-	while ( pos <= pathLen ) {
-		char ch = (pos < pathLen) ? path[pos] : '\0';
-		
-		// 到达分隔符或结尾
-		if ( ch == '.' || ch == '[' || ch == '\0' ) {
-			// 提取当前段
-			size_t segLen = pos - segStart;
-			
-			if ( segLen > 0 ) {
-				const char* seg = path + segStart;
-				
-				if ( isFirst ) {
-					// 第一段：从三个表中查找
-					isFirst = 0;
-					if ( tblVal && tblVal->Type == XVO_DT_TABLE ) {
-						current = xvoTableGetValue(tblVal, (str)seg, segLen);
-					}
-					if ( (current == NULL || current == &XVO_VALUE_NULL) && tblRoot && tblRoot->Type == XVO_DT_TABLE ) {
-						current = xvoTableGetValue(tblRoot, (str)seg, segLen);
-					}
-					if ( (current == NULL || current == &XVO_VALUE_NULL) && tblENV && tblENV->Type == XVO_DT_TABLE ) {
-						current = xvoTableGetValue(tblENV, (str)seg, segLen);
-					}
-				} else {
-					// 后续段：从当前值中查找
-					if ( current == NULL || current == &XVO_VALUE_NULL ) {
-						return &XVO_VALUE_NULL;
-					}
-					if ( current->Type == XVO_DT_TABLE ) {
-						current = xvoTableGetValue(current, (str)seg, segLen);
-					} else {
-						return &XVO_VALUE_NULL;
-					}
-				}
-			}
-			
-			// 处理 [ ] 索引访问
-			if ( ch == '[' ) {
-				pos++;
-				size_t idxStart = pos;
-				
-				// 查找匹配的 ]
-				while ( pos < pathLen && path[pos] != ']' ) {
-					pos++;
-				}
-				
-				if ( pos >= pathLen ) {
-					// 没有找到 ]
-					return &XVO_VALUE_NULL;
-				}
-				
-				size_t idxLen = pos - idxStart;
-				const char* idxStr = path + idxStart;
-				
-				// 确保 current 有效
-				if ( current == NULL || current == &XVO_VALUE_NULL ) {
-					// 第一个 [] 之前没有标识符，错误
-					return &XVO_VALUE_NULL;
-				}
-				
-				if ( idxLen > 0 ) {
-					// 判断是数字索引还是字符串键
-					if ( (idxStr[0] == '"' || idxStr[0] == '\'') && idxLen >= 2 ) {
-						// 字符串键: ["key"] 或 ['key']
-						const char* key = idxStr + 1;
-						size_t keyLen = idxLen - 2;
-						if ( current->Type == XVO_DT_TABLE ) {
-							current = xvoTableGetValue(current, (str)key, keyLen);
-						} else {
-							return &XVO_VALUE_NULL;
-						}
-					} else {
-						// 数字索引: [0]
-						int index = 0;
-						for ( size_t k = 0; k < idxLen; k++ ) {
-							if ( idxStr[k] >= '0' && idxStr[k] <= '9' ) {
-								index = index * 10 + (idxStr[k] - '0');
-							} else {
-								// 非数字，尝试作为键名处理
-								if ( current->Type == XVO_DT_TABLE ) {
-									current = xvoTableGetValue(current, (str)idxStr, idxLen);
-								} else {
-									return &XVO_VALUE_NULL;
-								}
-								goto next_segment;
-							}
-						}
-						// 数字索引访问
-						if ( current->Type == XVO_DT_ARRAY ) {
-							current = xvoArrayGetValue(current, index);
-						} else if ( current->Type == XVO_DT_LIST ) {
-							current = xvoListGetValue(current, index);
-						} else if ( current->Type == XVO_DT_TABLE ) {
-							// 表也可以用数字作为键
-							current = xvoTableGetValue(current, (str)idxStr, idxLen);
-						} else {
-							return &XVO_VALUE_NULL;
-						}
-					}
-				}
-				
-				next_segment:
-				pos++; // 跳过 ]
-				segStart = pos;
-				
-				// 跳过 ] 后的 .
-				if ( pos < pathLen && path[pos] == '.' ) {
-					pos++;
-					segStart = pos;
-				}
-				continue;
-			}
-			
-			// 跳过 .
-			if ( ch == '.' ) {
-				pos++;
-				segStart = pos;
-				continue;
-			}
-			
-			// 结尾
-			break;
-		}
-		
-		pos++;
-	}
-	
-	return (current != NULL) ? current : &XVO_VALUE_NULL;
-}
-// 简单版模板引擎语法转换套件（编译后得到一个列表，不支持语法结构）
-/*
-	支持的写法：
-		{!xxx}				注释
-		{$xxx}				代入变量
-		{%xxx}				代入数组变量
-		{&xxx}				代入时间变量
-		{?xxx}				根据变量逻辑值代入不用内容
-		{*xxx}				代入数组变量（套子模板）
-		{=xxx}				代入子变量（可指定代入值，代入值可以是任何数据类型，__self 表示代入值）
-		{@xxx}				代入函数运行结果
-		{#include}			引用文件（需要自行处理文件I/O）
-		{#define}			定义子模板
-		{#script}			运行脚本块（可指定脚本引擎）
-*/
-// 内存申请失败错误返回对象（避免返回 NULL）
-XTE_LiteStruct XTE_LITE_ERROR_MALLOC = {
-	0,
-	1,
-	"malloc failed",
-	0,
-	0,
-	0,
-	0,
-	0,
-	0,
-	{ NULL, 0, 0, 0 },							// Tokens (xarray_struct)
-	{ NULL, 0, 0, 0 },							// Actions (xparray_struct)
-	{ 0 }
-};
-// xTemplate Engine Lite 模板管理器数据结构
-typedef struct {
-	xdict_struct Templates;					// 已加载模板列表（哈希表）
-} XTE_LiteManageStruct, *XTE_LiteManage;
-// 构建语法器解析错误
-#define XTE_OnParseError(id) { objRet->Success=0; objRet->ErrorCode=id; objRet->ErrorDesc=XTE_ERROR_DESC[id]; objRet->ErrorLine=objTok->RefLine; objRet->ErrorLinePos=objTok->RefLinePos; objRet->ErrorPos=objTok->RefPos; if(objRefTok){ objRet->ErrorRefLine=objRefTok->RefLine; objRet->ErrorRefLinePos=objRefTok->RefLinePos; objRet->ErrorRefPos=objRefTok->RefPos; }else{ objRet->ErrorRefLine=objTok->RefLine; objRet->ErrorRefLinePos=objTok->RefLinePos; objRet->ErrorRefPos=objTok->RefPos; } return objRet; }
-// 将 XTE_TokenList 转换为 XTE_LiteObject（XTE_TokenList将被释放）
-XTE_LiteObject xteParseFromTokenList(XTE_TokenList objToks)
-{
-	// 创建返回值结构体
-	XTE_LiteObject objRet = xrtMalloc(sizeof(XTE_LiteStruct));
-	if ( objRet == NULL ) {
-		xteLexerFree(objToks);							// 如果一开始就失败了，objToks 会被无条件释放
-		return &XTE_LITE_ERROR_MALLOC;
-	}
-	// Token 必须解析成功，否则返回 Lexer 报告的错误
-	if ( objToks->Success == 0 ) {
-		objRet->Success = 0;
-		objRet->ErrorCode = objToks->ErrorCode;
-		objRet->ErrorDesc = objToks->ErrorDesc;
-		objRet->ErrorLine = objToks->ErrorLine;
-		objRet->ErrorLinePos = objToks->ErrorLinePos;
-		objRet->ErrorPos = objToks->ErrorPos;
-		objRet->ErrorRefLine = objToks->ErrorRefLine;
-		objRet->ErrorRefLinePos = objToks->ErrorRefLinePos;
-		objRet->ErrorRefPos = objToks->ErrorRefPos;
-		xteLexerFree(objToks);							// 如果一开始就失败了，objToks 会被无条件释放
-		return objRet;
-	}
-	// 转移 Token 数组所有权（结构体复制）
-	objRet->Tokens = objToks->Tokens;
-	objToks->Tokens.Memory = NULL;		// 防止 xteLexerFree 释放数组
-	xteLexerFree(objToks);				// 安全释放 TokenList 外壳
-	// 初始化数据结构
-	xrtPtrArrayInit(&objRet->Actions, XRT_OBJMODE_LOCAL);
-	xrtDictInit(&objRet->SubTemplates, sizeof(xparray_struct), XRT_OBJMODE_LOCAL);
-	// 遍历 Token 列表，添加到 Actions 列表
-	XTE_TokenItem objRefTok = NULL;
-	xparray objCurTemplate = NULL;
-	for ( int i = 1; i <= objRet->Tokens.Count; i++ ) {
-		XTE_TokenItem objTok = xrtArrayGet_Inline(&objRet->Tokens, i);
-		if ( objTok->Type == XTE_TK_DEFINE ) {
-			// 定义子模板语句开始
-			if ( objCurTemplate ) {
-				XTE_OnParseError(9);
-			} else {
-				objCurTemplate = xrtDictSet(&objRet->SubTemplates, objTok->ParamText[0], objTok->ParamSize[0], NULL);
-				if ( objCurTemplate == NULL ) {
-					XTE_OnParseError(2);
-				}
-				objRefTok = objTok;
-				xrtPtrArrayInit(objCurTemplate, XRT_OBJMODE_LOCAL);
-			}
-		} else if ( objTok->Type == XTE_TK_END ) {
-			// 语句结束
-			if ( objCurTemplate ) {
-				// 在 define 块内，结束 define 块
-				objCurTemplate = NULL;
-			} else {
-				// 不在 define 块内，这可能是 if/for/foreach 的 end，添加到 Actions
-				unsigned int idx = xrtPtrArrayAppend(&objRet->Actions, objTok);
-				if ( idx == 0 ) {
-					XTE_OnParseError(2);
-				}
-			}
-		} else if ( objTok->Type == XTE_TK_ELSEIF || objTok->Type == XTE_TK_ELSE ) {
-			// elseif/else 也需要添加到 Actions
-			if ( objCurTemplate ) {
-				unsigned int idx = xrtPtrArrayAppend(objCurTemplate, objTok);
-				if ( idx == 0 ) {
-					XTE_OnParseError(2);
-				}
-			} else {
-				unsigned int idx = xrtPtrArrayAppend(&objRet->Actions, objTok);
-				if ( idx == 0 ) {
-					XTE_OnParseError(2);
-				}
-			}
-		} else if ( objTok->Type == XTE_TK_COMMEN ) {
-			// 丢弃注释语句
-		} else {
-			// 其他语句、指令或文本块（根据当前子模板决定存入位置）
-			if ( objCurTemplate ) {
-				unsigned int idx = xrtPtrArrayAppend(objCurTemplate, objTok);
-				if ( idx == 0 ) {
-					XTE_OnParseError(2);
-				}
-			} else {
-				unsigned int idx = xrtPtrArrayAppend(&objRet->Actions, objTok);
-				if ( idx == 0 ) {
-					XTE_OnParseError(2);
-				}
-			}
-		}
-	}
-	// 检查 define 块是否未闭合
-	if ( objCurTemplate != NULL ) {
-		// define 块未闭合，报错
-		objRet->Success = 0;
-		objRet->ErrorCode = 6;  // statement not ended
-		objRet->ErrorDesc = XTE_ERROR_DESC[6];
-		if ( objRefTok ) {
-			objRet->ErrorLine = objRefTok->RefLine;
-			objRet->ErrorLinePos = objRefTok->RefLinePos;
-			objRet->ErrorPos = objRefTok->RefPos;
-			objRet->ErrorRefLine = objRefTok->RefLine;
-			objRet->ErrorRefLinePos = objRefTok->RefLinePos;
-			objRet->ErrorRefPos = objRefTok->RefPos;
-		}
-		return objRet;
-	}
-	
-	// 返回 Token 列表
-	objRet->Success = -1;
-	objRet->ErrorCode = 0;
-	objRet->ErrorDesc = XTE_ERROR_DESC[0];
-	return objRet;
-}
-// 模板引擎全局状态（静态初始化方案）
-// 注: XTE_IDENT_LIST 在 xrtInit 时初始化一次，后续只读，无需线程同步
-static xarray XTE_IDENT_LIST = NULL;
-static xdict XTE_EXPR_CACHE = NULL;  // 表达式 AST 缓存
-static int XTE_INITIALIZED = 0;
-// 初始化模板引擎（由 xrtInit 调用，用户无感）
-static int xte_private_init(void)
-{
-	if ( XTE_INITIALIZED ) {
-		return 1;  // 已初始化
-	}
-	
-	// 创建标识符列表
-	XTE_IDENT_LIST = xteCreateIdentList();
-	if ( XTE_IDENT_LIST == NULL ) {
-		return 0;
-	}
-	
-	// 注册内置标识符
-	xteAddIdentToList(XTE_IDENT_LIST, "end"     , 3, XTE_TK_END     , XTE_IDTPE_DEFAULT, 0, 0);
-	xteAddIdentToList(XTE_IDENT_LIST, "include" , 7, XTE_TK_INCLUDE , XTE_IDTPE_DEFAULT, 1, 1);
-	xteAddIdentToList(XTE_IDENT_LIST, "define"  , 6, XTE_TK_DEFINE  , XTE_IDTPE_DEFAULT, 1, 1);
-	xteAddIdentToList(XTE_IDENT_LIST, "script"  , 6, XTE_TK_SCRIPT  , XTE_IDTPE_BLOCK  , 1, 1);
-	// 控制语句
-	xteAddIdentToList(XTE_IDENT_LIST, "if"      , 2, XTE_TK_IF      , XTE_IDTPE_DEFAULT, 1, 1);
-	xteAddIdentToList(XTE_IDENT_LIST, "elseif"  , 6, XTE_TK_ELSEIF  , XTE_IDTPE_DEFAULT, 1, 1);
-	xteAddIdentToList(XTE_IDENT_LIST, "else"    , 4, XTE_TK_ELSE    , XTE_IDTPE_DEFAULT, 0, 0);
-	xteAddIdentToList(XTE_IDENT_LIST, "for"     , 3, XTE_TK_FOR     , XTE_IDTPE_DEFAULT, 3, 4);
-	xteAddIdentToList(XTE_IDENT_LIST, "foreach" , 7, XTE_TK_FOREACH , XTE_IDTPE_DEFAULT, 1, 2);
-	xteAddIdentToList(XTE_IDENT_LIST, "break"   , 5, XTE_TK_BREAK   , XTE_IDTPE_DEFAULT, 0, 0);
-	xteAddIdentToList(XTE_IDENT_LIST, "continue", 8, XTE_TK_CONTINUE, XTE_IDTPE_DEFAULT, 0, 0);
-	
-	// 创建表达式 AST 缓存
-	XTE_EXPR_CACHE = xrtDictCreate(sizeof(ptr), XRT_OBJMODE_LOCAL);  // 存储指针需要 sizeof(ptr) 空间
-	if ( XTE_EXPR_CACHE == NULL ) {
-		xteDestroyIdentList(XTE_IDENT_LIST);
-		XTE_IDENT_LIST = NULL;
-		return 0;
-	}
-	
-	XTE_INITIALIZED = 1;
-	return 1;
-}
-// 缓存的表达式 AST 清理回调
-static int xte_private_free_expr_cache(Dict_Key* pKey, XTE_ExprResult result, void* pArg)
-{
-	if ( result ) {
-		xteExprFree(result);
-	}
-	return 0;
-}
-// 清理模板引擎（由 xrtUnit 调用，用户无感）
-static void xte_private_unit(void)
-{
-	if ( !XTE_INITIALIZED ) {
+	uint32 i = 0;
+	uint32 iLine = 1;
+	uint32 iColumn = 1;
+	if ( pError == NULL ) {
 		return;
 	}
-	
-	if ( XTE_IDENT_LIST ) {
-		xteDestroyIdentList(XTE_IDENT_LIST);  // 修复: 使用正确的销毁函数避免内存泄漏
-		XTE_IDENT_LIST = NULL;
+	memset(pError, 0, sizeof(*pError));
+	pError->iCode = iCode;
+	pError->sDesc = sDesc;
+	pError->iPos = iPos;
+	while ( (i < iSize) && (i < iPos) ) {
+		if ( sText[i] == '\n' ) {
+			iLine++;
+			iColumn = 1;
+		} else {
+			iColumn++;
+		}
+		i++;
 	}
-	
-	// 清理表达式 AST 缓存
-	if ( XTE_EXPR_CACHE ) {
-		xrtDictWalk(XTE_EXPR_CACHE, (void*)xte_private_free_expr_cache, NULL);
-		xrtDictDestroy(XTE_EXPR_CACHE);
-		XTE_EXPR_CACHE = NULL;
-	}
-	
-	XTE_INITIALIZED = 0;
+	pError->iLine = iLine;
+	pError->iColumn = iColumn;
+	pError->iRefLine = iLine;
+	pError->iRefColumn = iColumn;
+	pError->iRefPos = iPos;
 }
-// 解析返回语法列表
-XTE_LiteObject xteParse(char* sText, size_t iSize, char* sBracket)
+static void xte_private_set_parser_error(XTE_PrivateParser* pParser, uint32 iLocalPos, int iCode, const char* sDesc)
 {
-	// 检查是否已初始化
-	if ( !XTE_INITIALIZED ) {
-		// 自动初始化（兼容未调用 xrtInit 的情况）
-		if ( !xte_private_init() ) {
-			return &XTE_LITE_ERROR_MALLOC;
+	uint32 iAbsPos = pParser->iBasePos + iLocalPos;
+	xte_private_fill_error_pos(pParser->sRootText, pParser->iRootSize, iAbsPos, pParser->pError, iCode, sDesc);
+}
+static int xte_private_str_eq(const char* sTextA, uint32 iSizeA, const char* sTextB, uint32 iSizeB)
+{
+	if ( iSizeA != iSizeB ) {
+		return 0;
+	}
+	if ( iSizeA == 0u ) {
+		return 1;
+	}
+	return memcmp(sTextA, sTextB, iSizeA) == 0;
+}
+static void xte_private_trim_view(XTE_PrivateView* pView)
+{
+	while ( pView->iSize && ((pView->sText[0] == ' ') || (pView->sText[0] == '\t') || (pView->sText[0] == '\r') || (pView->sText[0] == '\n')) ) {
+		pView->sText++;
+		pView->iSize--;
+	}
+	while ( pView->iSize && ((pView->sText[pView->iSize - 1] == ' ') || (pView->sText[pView->iSize - 1] == '\t') || (pView->sText[pView->iSize - 1] == '\r') || (pView->sText[pView->iSize - 1] == '\n')) ) {
+		pView->iSize--;
+	}
+}
+static int xte_private_is_ident_start(char ch)
+{
+	return ((ch >= 'a') && (ch <= 'z')) || ((ch >= 'A') && (ch <= 'Z')) || (ch == '_');
+}
+static int xte_private_is_ident_char(char ch)
+{
+	return xte_private_is_ident_start(ch) || ((ch >= '0') && (ch <= '9'));
+}
+static int xte_private_setup_bracket(const XTE_ParseOptions* pOptions, XTE_PrivateBracket* pBracket)
+{
+	const char* sBracket = NULL;
+	size_t iLen = 0;
+	if ( pBracket == NULL ) {
+		return 0;
+	}
+	sBracket = pOptions ? pOptions->sBracket : NULL;
+	if ( (sBracket == NULL) || (sBracket[0] == 0) ) {
+		pBracket->sOpen = "{";
+		pBracket->sClose = "}";
+		pBracket->iOpenSize = 1;
+		pBracket->iCloseSize = 1;
+		return 1;
+	}
+	iLen = strlen(sBracket);
+	if ( (iLen < 2u) || ((iLen % 2u) != 0u) ) {
+		return 0;
+	}
+	pBracket->sOpen = sBracket;
+	pBracket->iOpenSize = (uint32)(iLen / 2u);
+	pBracket->sClose = &sBracket[pBracket->iOpenSize];
+	pBracket->iCloseSize = pBracket->iOpenSize;
+	return 1;
+}
+static void xte_private_init(void)
+{
+}
+static void xte_private_unit(void)
+{
+}
+static int xte_private_match_open(const XTE_PrivateBracket* pBracket, const char* sText, uint32 iSize, uint32 iPos)
+{
+	if ( (iPos + pBracket->iOpenSize) > iSize ) {
+		return 0;
+	}
+	return memcmp(&sText[iPos], pBracket->sOpen, pBracket->iOpenSize) == 0;
+}
+static int xte_private_match_close(const XTE_PrivateBracket* pBracket, const char* sText, uint32 iSize, uint32 iPos)
+{
+	if ( (iPos + pBracket->iCloseSize) > iSize ) {
+		return 0;
+	}
+	return memcmp(&sText[iPos], pBracket->sClose, pBracket->iCloseSize) == 0;
+}
+static char* xte_private_copy_view(const char* sText, uint32 iSize)
+{
+	return xrtCopyStr((str)sText, iSize);
+}
+static char* xte_private_copy_view_unescaped(const char* sText, uint32 iSize)
+{
+	xbuffer_struct tBuf = { 0 };
+	uint32 i = 0;
+	char chZero = 0;
+	char* sRet = NULL;
+	xrtBufferInit(&tBuf, 0);
+	for ( i = 0; i < iSize; i++ ) {
+		char ch = sText[i];
+		if ( (ch == '\\') && ((i + 1u) < iSize) ) {
+			i++;
+			ch = sText[i];
+		}
+		if ( !xrtBufferAppend(&tBuf, &ch, 1, XBUF_BINARY) ) {
+			xrtBufferUnit(&tBuf);
+			return NULL;
 		}
 	}
-	// 词法解析
-	XTE_TokenList objToks = xteLexer(sText, iSize, XTE_IDENT_LIST, sBracket);
-	// 语法解析
-	return xteParseFromTokenList(objToks);
+	if ( !xrtBufferAppend(&tBuf, &chZero, 1, XBUF_BINARY) ) {
+		xrtBufferUnit(&tBuf);
+		return NULL;
+	}
+	sRet = xrtMalloc(tBuf.Length);
+	if ( sRet ) {
+		memcpy(sRet, tBuf.Buffer, tBuf.Length);
+	}
+	xrtBufferUnit(&tBuf);
+	return sRet;
 }
-// 释放 XTE_LiteObject 对象
-int xte_private_free_subtemplate(Dict_Key* pKey, xparray objAction, void* pArg)
+static int xte_private_is_integer_view(const char* sText, uint32 iSize)
 {
-	xrtPtrArrayUnit(objAction);
+	uint32 i = 0;
+	if ( iSize == 0u ) {
+		return 0;
+	}
+	if ( (sText[0] == '-') || (sText[0] == '+') ) {
+		if ( iSize == 1u ) {
+			return 0;
+		}
+		i = 1;
+	}
+	for ( ; i < iSize; i++ ) {
+		if ( (sText[i] < '0') || (sText[i] > '9') ) {
+			return 0;
+		}
+	}
+	return 1;
+}
+static int xte_private_is_number_view(const char* sText, uint32 iSize)
+{
+	uint32 i = 0;
+	int bDot = 0;
+	int bDigit = 0;
+	if ( iSize == 0u ) {
+		return 0;
+	}
+	if ( (sText[0] == '-') || (sText[0] == '+') ) {
+		if ( iSize == 1u ) {
+			return 0;
+		}
+		i = 1;
+	}
+	for ( ; i < iSize; i++ ) {
+		if ( (sText[i] >= '0') && (sText[i] <= '9') ) {
+			bDigit = 1;
+			continue;
+		}
+		if ( (sText[i] == '.') && !bDot ) {
+			bDot = 1;
+			continue;
+		}
+		return 0;
+	}
+	return bDigit;
+}
+static int xte_private_is_expr_sep_char(char ch)
+{
+	return (ch == 0)
+		|| (ch == ' ')
+		|| (ch == '\t')
+		|| (ch == '\r')
+		|| (ch == '\n')
+		|| (ch == '(')
+		|| (ch == ')')
+		|| (ch == '!')
+		|| (ch == '=')
+		|| (ch == '>')
+		|| (ch == '<')
+		|| (ch == '~')
+		|| (ch == '&')
+		|| (ch == '|');
+}
+static int xte_private_expr_has_keyword(const char* sText, uint32 iSize, const char* sKeyword)
+{
+	uint32 i = 0;
+	uint32 iKeywordSize = (uint32)strlen(sKeyword);
+	if ( iSize < iKeywordSize ) {
+		return 0;
+	}
+	for ( i = 0; i + iKeywordSize <= iSize; i++ ) {
+		char chPrev = (i == 0u) ? 0 : sText[i - 1u];
+		char chNext = ((i + iKeywordSize) < iSize) ? sText[i + iKeywordSize] : 0;
+		if ( !xte_private_is_expr_sep_char(chPrev) ) {
+			continue;
+		}
+		if ( memcmp(&sText[i], sKeyword, iKeywordSize) != 0 ) {
+			continue;
+		}
+		if ( !xte_private_is_expr_sep_char(chNext) ) {
+			continue;
+		}
+		return 1;
+	}
 	return 0;
 }
-void xteParseFree(XTE_LiteObject objLite)
+static int xte_private_expr_is_complex(const char* sText, uint32 iSize)
 {
-	if ( objLite != &XTE_LITE_ERROR_MALLOC ) {
-		xrtDictWalk(&objLite->SubTemplates, (void*)xte_private_free_subtemplate, NULL);
-		xrtDictUnit(&objLite->SubTemplates);
-		xrtPtrArrayUnit(&objLite->Actions);
-		xrtArrayUnit(&objLite->Tokens);
-		xrtFree(objLite);
+	uint32 i = 0;
+	char chQuote = 0;
+	int bEscape = 0;
+	for ( i = 0; i < iSize; i++ ) {
+		char ch = sText[i];
+		if ( chQuote != 0 ) {
+			if ( bEscape ) {
+				bEscape = 0;
+				continue;
+			}
+			if ( ch == '\\' ) {
+				bEscape = 1;
+				continue;
+			}
+			if ( ch == chQuote ) {
+				chQuote = 0;
+			}
+			continue;
+		}
+		if ( (ch == '\'') || (ch == '"') ) {
+			chQuote = ch;
+			continue;
+		}
+		if ( (ch == '(') || (ch == ')') || (ch == '!') || (ch == '=') || (ch == '>') || (ch == '<') || (ch == '~') ) {
+			return 1;
+		}
+	}
+	if ( xte_private_expr_has_keyword(sText, iSize, "and")
+		|| xte_private_expr_has_keyword(sText, iSize, "or")
+		|| xte_private_expr_has_keyword(sText, iSize, "not") ) {
+		return 1;
+	}
+	return 0;
+}
+typedef enum
+{
+	XTE_PRIVATE_CMP_NONE = 0,
+	XTE_PRIVATE_CMP_EQ,
+	XTE_PRIVATE_CMP_NE,
+	XTE_PRIVATE_CMP_APPROX,
+	XTE_PRIVATE_CMP_GT,
+	XTE_PRIVATE_CMP_LT,
+	XTE_PRIVATE_CMP_GTE,
+	XTE_PRIVATE_CMP_LTE
+} XTE_PrivateCompareOp;
+typedef struct
+{
+	XTE_RenderCtx* pRender;
+	const char* sText;
+	uint32 iSize;
+	uint32 iPos;
+	int bError;
+} XTE_PrivateExprParser;
+static void xte_private_expr_skip_space(XTE_PrivateExprParser* pParser)
+{
+	while ( (pParser->iPos < pParser->iSize)
+		&& ((pParser->sText[pParser->iPos] == ' ')
+			|| (pParser->sText[pParser->iPos] == '\t')
+			|| (pParser->sText[pParser->iPos] == '\r')
+			|| (pParser->sText[pParser->iPos] == '\n')) ) {
+		pParser->iPos++;
 	}
 }
-// 完整版模板引擎语法转换套件
-/*
-	支持的写法（包含简单版支持的所有写法，这里只列出额外支持的）：
-		{#if:xxx} ... {#elseif:xxx} ... {#else} ... {#end}			条件判断语句
-		{#for:1:10:1} ... {#end}									计次循环语句（可代入 __index）
-		{#foreach:xxx} ... {#end}									迭代循环语句（可代入 __index、__value）
-	支持自定义语句：
-		{#xxx:xxx...}												自定义单标签语句
-		{#xxx:xxx...} ... {#end}									自定义语句块
-	高级语法支持嵌套使用，自定义语句仅提供有限的支持
-*/
-#ifdef XTE_USE_FULL
-	
-	
-	
-	// 
-	
-	
-	
-#endif
-/* -------------------- 控制语句辅助函数 (Phase 3) -------------------- */
-// 找到配对的 end （支持嵌套）
-// 返回 end 的索引（基于1），找不到返回 -1
-static int xte_find_matching_end(xparray arrAction, int startIdx)
+static int xte_private_expr_match_char(XTE_PrivateExprParser* pParser, char ch)
 {
-	int depth = 1;
-	for ( int i = startIdx; i <= arrAction->Count; i++ ) {
-		XTE_TokenItem tok = (XTE_TokenItem)xrtPtrArrayGet_Inline(arrAction, i);
-		if ( tok->Type == XTE_TK_IF || tok->Type == XTE_TK_FOR || tok->Type == XTE_TK_FOREACH ) {
-			depth++;
-		} else if ( tok->Type == XTE_TK_END ) {
-			depth--;
-			if ( depth == 0 ) {
-				return i;
+	xte_private_expr_skip_space(pParser);
+	if ( (pParser->iPos < pParser->iSize) && (pParser->sText[pParser->iPos] == ch) ) {
+		pParser->iPos++;
+		return 1;
+	}
+	return 0;
+}
+static int xte_private_expr_match_keyword(XTE_PrivateExprParser* pParser, const char* sKeyword)
+{
+	uint32 iKeywordSize = (uint32)strlen(sKeyword);
+	char chNext = 0;
+	xte_private_expr_skip_space(pParser);
+	if ( (pParser->iPos + iKeywordSize) > pParser->iSize ) {
+		return 0;
+	}
+	if ( memcmp(&pParser->sText[pParser->iPos], sKeyword, iKeywordSize) != 0 ) {
+		return 0;
+	}
+	chNext = ((pParser->iPos + iKeywordSize) < pParser->iSize) ? pParser->sText[pParser->iPos + iKeywordSize] : 0;
+	if ( !xte_private_is_expr_sep_char(chNext) ) {
+		return 0;
+	}
+	pParser->iPos += iKeywordSize;
+	return 1;
+}
+static int xte_private_value_is_numeric(xvalue pVal)
+{
+	if ( pVal == NULL ) {
+		return 0;
+	}
+	switch ( pVal->Type ) {
+		case XVO_DT_BOOL:
+		case XVO_DT_INT:
+		case XVO_DT_FLOAT:
+		case XVO_DT_TIME:
+			return 1;
+		case XVO_DT_TEXT:
+			return xte_private_is_number_view(xvoGetText(pVal), xvoGetSize(pVal));
+		default:
+			return 0;
+	}
+}
+static double xte_private_value_to_number(xvalue pVal)
+{
+	if ( pVal == NULL ) {
+		return 0.0;
+	}
+	switch ( pVal->Type ) {
+		case XVO_DT_BOOL:
+			return xvoGetBool(pVal) ? 1.0 : 0.0;
+		case XVO_DT_INT:
+			return (double)xvoGetInt(pVal);
+		case XVO_DT_FLOAT:
+			return xvoGetFloat(pVal);
+		case XVO_DT_TIME:
+			return (double)xvoGetTime(pVal);
+		case XVO_DT_TEXT:
+			return xrtStrToNum(xvoGetText(pVal));
+		default:
+			return 0.0;
+	}
+}
+static int xte_private_compare_values(xvalue pLeft, xvalue pRight, XTE_PrivateCompareOp iOp)
+{
+	if ( xte_private_value_is_numeric(pLeft) && xte_private_value_is_numeric(pRight) ) {
+		double fLeft = xte_private_value_to_number(pLeft);
+		double fRight = xte_private_value_to_number(pRight);
+		double fDiff = fLeft - fRight;
+		double fAbs = (fDiff < 0.0) ? -fDiff : fDiff;
+		switch ( iOp ) {
+			case XTE_PRIVATE_CMP_EQ:
+				return fLeft == fRight;
+			case XTE_PRIVATE_CMP_NE:
+				return fLeft != fRight;
+			case XTE_PRIVATE_CMP_APPROX:
+				return fAbs <= 0.000000001;
+			case XTE_PRIVATE_CMP_GT:
+				return fLeft > fRight;
+			case XTE_PRIVATE_CMP_LT:
+				return fLeft < fRight;
+			case XTE_PRIVATE_CMP_GTE:
+				return fLeft >= fRight;
+			case XTE_PRIVATE_CMP_LTE:
+				return fLeft <= fRight;
+			default:
+				return 0;
+		}
+	}
+	{
+		char* sLeft = xte_private_value_to_text(pLeft);
+		char* sRight = xte_private_value_to_text(pRight);
+		int iCmp = strcmp(sLeft ? sLeft : "", sRight ? sRight : "");
+		int bRet = 0;
+		switch ( iOp ) {
+			case XTE_PRIVATE_CMP_EQ:
+			case XTE_PRIVATE_CMP_APPROX:
+				bRet = (iCmp == 0);
+				break;
+			case XTE_PRIVATE_CMP_NE:
+				bRet = (iCmp != 0);
+				break;
+			case XTE_PRIVATE_CMP_GT:
+				bRet = (iCmp > 0);
+				break;
+			case XTE_PRIVATE_CMP_LT:
+				bRet = (iCmp < 0);
+				break;
+			case XTE_PRIVATE_CMP_GTE:
+				bRet = (iCmp >= 0);
+				break;
+			case XTE_PRIVATE_CMP_LTE:
+				bRet = (iCmp <= 0);
+				break;
+			default:
+				bRet = 0;
+				break;
+		}
+		xrtFree(sLeft);
+		xrtFree(sRight);
+		return bRet;
+	}
+}
+static xvalue xte_private_expr_parse_value(XTE_PrivateExprParser* pParser)
+{
+	uint32 iStart = 0;
+	uint32 iEnd = 0;
+	xte_private_expr_skip_space(pParser);
+	if ( pParser->iPos >= pParser->iSize ) {
+		pParser->bError = 1;
+		return xvoCreateNull();
+	}
+	if ( (pParser->sText[pParser->iPos] == '\'') || (pParser->sText[pParser->iPos] == '"') ) {
+		char chQuote = pParser->sText[pParser->iPos++];
+		int bEscape = 0;
+		iStart = pParser->iPos;
+		while ( pParser->iPos < pParser->iSize ) {
+			char ch = pParser->sText[pParser->iPos];
+			if ( bEscape ) {
+				bEscape = 0;
+				pParser->iPos++;
+				continue;
 			}
+			if ( ch == '\\' ) {
+				bEscape = 1;
+				pParser->iPos++;
+				continue;
+			}
+			if ( ch == chQuote ) {
+				char* sValue = xte_private_copy_view_unescaped(&pParser->sText[iStart], pParser->iPos - iStart);
+				xvalue pValue = NULL;
+				pParser->iPos++;
+				if ( sValue == NULL ) {
+					pParser->bError = 1;
+					return xvoCreateNull();
+				}
+				pValue = xvoCreateText(sValue, (uint32)strlen(sValue), TRUE);
+				if ( pValue == NULL ) {
+					xrtFree(sValue);
+					pParser->bError = 1;
+					return xvoCreateNull();
+				}
+				return pValue;
+			}
+			pParser->iPos++;
+		}
+		pParser->bError = 1;
+		return xvoCreateNull();
+	}
+	iStart = pParser->iPos;
+	while ( pParser->iPos < pParser->iSize ) {
+		char ch = pParser->sText[pParser->iPos];
+		if ( (ch == ' ')
+			|| (ch == '\t')
+			|| (ch == '\r')
+			|| (ch == '\n')
+			|| (ch == ')')
+			|| (ch == '!')
+			|| (ch == '=')
+			|| (ch == '>')
+			|| (ch == '<')
+			|| (ch == '~')
+			|| (ch == '&')
+			|| (ch == '|') ) {
+			break;
+		}
+		pParser->iPos++;
+	}
+	iEnd = pParser->iPos;
+	if ( iEnd <= iStart ) {
+		pParser->bError = 1;
+		return xvoCreateNull();
+	}
+	if ( xte_private_str_eq(&pParser->sText[iStart], iEnd - iStart, "true", 4) ) {
+		return xvoCreateBool(TRUE);
+	}
+	if ( xte_private_str_eq(&pParser->sText[iStart], iEnd - iStart, "false", 5) ) {
+		return xvoCreateBool(FALSE);
+	}
+	if ( xte_private_str_eq(&pParser->sText[iStart], iEnd - iStart, "null", 4) ) {
+		return xvoCreateNull();
+	}
+	if ( xte_private_is_integer_view(&pParser->sText[iStart], iEnd - iStart) ) {
+		char* sTemp = xte_private_copy_view(&pParser->sText[iStart], iEnd - iStart);
+		int64 iVal = 0;
+		if ( sTemp == NULL ) {
+			pParser->bError = 1;
+			return xvoCreateNull();
+		}
+		iVal = xrtStrToI64(sTemp);
+		xrtFree(sTemp);
+		return xvoCreateInt(iVal);
+	}
+	if ( xte_private_is_number_view(&pParser->sText[iStart], iEnd - iStart) ) {
+		char* sTemp = xte_private_copy_view(&pParser->sText[iStart], iEnd - iStart);
+		double fVal = 0.0;
+		if ( sTemp == NULL ) {
+			pParser->bError = 1;
+			return xvoCreateNull();
+		}
+		fVal = xrtStrToNum(sTemp);
+		xrtFree(sTemp);
+		return xvoCreateFloat(fVal);
+	}
+	return xvoCopy(xteResolvePath(
+		&pParser->sText[iStart],
+		iEnd - iStart,
+		pParser->pRender->pCurrent,
+		pParser->pRender->pRoot,
+		pParser->pRender->pLocal,
+		pParser->pRender->pGlobal));
+}
+static int xte_private_expr_parse_compare_op(XTE_PrivateExprParser* pParser, XTE_PrivateCompareOp* pOp)
+{
+	xte_private_expr_skip_space(pParser);
+	if ( (pParser->iPos + 2u) <= pParser->iSize ) {
+		if ( memcmp(&pParser->sText[pParser->iPos], ">=", 2) == 0 ) {
+			pParser->iPos += 2u;
+			*pOp = XTE_PRIVATE_CMP_GTE;
+			return 1;
+		}
+		if ( memcmp(&pParser->sText[pParser->iPos], "<=", 2) == 0 ) {
+			pParser->iPos += 2u;
+			*pOp = XTE_PRIVATE_CMP_LTE;
+			return 1;
+		}
+		if ( memcmp(&pParser->sText[pParser->iPos], "!=", 2) == 0 ) {
+			pParser->iPos += 2u;
+			*pOp = XTE_PRIVATE_CMP_NE;
+			return 1;
+		}
+		if ( memcmp(&pParser->sText[pParser->iPos], "~=", 2) == 0 ) {
+			pParser->iPos += 2u;
+			*pOp = XTE_PRIVATE_CMP_APPROX;
+			return 1;
+		}
+		if ( memcmp(&pParser->sText[pParser->iPos], "==", 2) == 0 ) {
+			pParser->iPos += 2u;
+			*pOp = XTE_PRIVATE_CMP_EQ;
+			return 1;
+		}
+	}
+	if ( pParser->iPos >= pParser->iSize ) {
+		return 0;
+	}
+	switch ( pParser->sText[pParser->iPos] ) {
+		case '=':
+			pParser->iPos++;
+			*pOp = XTE_PRIVATE_CMP_EQ;
+			return 1;
+		case '>':
+			pParser->iPos++;
+			*pOp = XTE_PRIVATE_CMP_GT;
+			return 1;
+		case '<':
+			pParser->iPos++;
+			*pOp = XTE_PRIVATE_CMP_LT;
+			return 1;
+		default:
+			return 0;
+	}
+}
+static int xte_private_expr_parse_or(XTE_PrivateExprParser* pParser, int* pOut);
+static int xte_private_expr_parse_primary_bool(XTE_PrivateExprParser* pParser, int* pOut)
+{
+	xvalue pLeft = NULL;
+	xvalue pRight = NULL;
+	XTE_PrivateCompareOp iOp = XTE_PRIVATE_CMP_NONE;
+	xte_private_expr_skip_space(pParser);
+	if ( xte_private_expr_match_char(pParser, '(') ) {
+		if ( !xte_private_expr_parse_or(pParser, pOut) ) {
+			return 0;
+		}
+		if ( !xte_private_expr_match_char(pParser, ')') ) {
+			pParser->bError = 1;
+			return 0;
+		}
+		return 1;
+	}
+	pLeft = xte_private_expr_parse_value(pParser);
+	if ( pParser->bError ) {
+		xvoUnref(pLeft);
+		return 0;
+	}
+	if ( xte_private_expr_parse_compare_op(pParser, &iOp) ) {
+		pRight = xte_private_expr_parse_value(pParser);
+		if ( pParser->bError ) {
+			xvoUnref(pLeft);
+			xvoUnref(pRight);
+			return 0;
+		}
+		*pOut = xte_private_compare_values(pLeft, pRight, iOp);
+		xvoUnref(pLeft);
+		xvoUnref(pRight);
+		return 1;
+	}
+	*pOut = xte_private_value_truthy(pLeft);
+	xvoUnref(pLeft);
+	return 1;
+}
+static int xte_private_expr_parse_unary(XTE_PrivateExprParser* pParser, int* pOut)
+{
+	if ( xte_private_expr_match_keyword(pParser, "not") || xte_private_expr_match_char(pParser, '!') ) {
+		if ( !xte_private_expr_parse_unary(pParser, pOut) ) {
+			return 0;
+		}
+		*pOut = !(*pOut);
+		return 1;
+	}
+	return xte_private_expr_parse_primary_bool(pParser, pOut);
+}
+static int xte_private_expr_parse_and(XTE_PrivateExprParser* pParser, int* pOut)
+{
+	int bValue = 0;
+	if ( !xte_private_expr_parse_unary(pParser, &bValue) ) {
+		return 0;
+	}
+	while ( 1 ) {
+		int bRight = 0;
+		if ( !(xte_private_expr_match_keyword(pParser, "and")
+			|| ((pParser->iPos + 2u) <= pParser->iSize && memcmp(&pParser->sText[pParser->iPos], "&&", 2) == 0 && (pParser->iPos += 2u, 1))) ) {
+			break;
+		}
+		if ( !xte_private_expr_parse_unary(pParser, &bRight) ) {
+			return 0;
+		}
+		bValue = bValue && bRight;
+	}
+	*pOut = bValue;
+	return 1;
+}
+static int xte_private_expr_parse_or(XTE_PrivateExprParser* pParser, int* pOut)
+{
+	int bValue = 0;
+	if ( !xte_private_expr_parse_and(pParser, &bValue) ) {
+		return 0;
+	}
+	while ( 1 ) {
+		int bRight = 0;
+		if ( !(xte_private_expr_match_keyword(pParser, "or")
+			|| ((pParser->iPos + 2u) <= pParser->iSize && memcmp(&pParser->sText[pParser->iPos], "||", 2) == 0 && (pParser->iPos += 2u, 1))) ) {
+			break;
+		}
+		if ( !xte_private_expr_parse_and(pParser, &bRight) ) {
+			return 0;
+		}
+		bValue = bValue || bRight;
+	}
+	*pOut = bValue;
+	return 1;
+}
+static int xte_private_eval_bool_expr(XTE_RenderCtx* pCtx, const char* sText, uint32 iSize, int* pOut)
+{
+	XTE_PrivateExprParser tParser = { 0 };
+	int bValue = 0;
+	if ( sText == NULL ) {
+		return 0;
+	}
+	if ( iSize == 0u ) {
+		iSize = (uint32)strlen(sText);
+	}
+	tParser.pRender = pCtx;
+	tParser.sText = sText;
+	tParser.iSize = iSize;
+	if ( !xte_private_expr_parse_or(&tParser, &bValue) ) {
+		return 0;
+	}
+	xte_private_expr_skip_space(&tParser);
+	if ( (tParser.iPos != tParser.iSize) || tParser.bError ) {
+		return 0;
+	}
+	if ( pOut ) {
+		*pOut = bValue;
+	}
+	return 1;
+}
+static uint32 xte_private_split_colon(const char* sText, uint32 iSize, XTE_PrivateView* arrView, uint32 iMaxCount)
+{
+	uint32 i = 0;
+	uint32 iStart = 0;
+	uint32 iCount = 0;
+	int bEscape = 0;
+	for ( i = 0; i <= iSize; i++ ) {
+		int bSplit = 0;
+		if ( i == iSize ) {
+			bSplit = 1;
+		} else if ( !bEscape && (sText[i] == ':') ) {
+			bSplit = 1;
+		}
+		if ( bSplit ) {
+			if ( iCount < iMaxCount ) {
+				arrView[iCount].sText = &sText[iStart];
+				arrView[iCount].iSize = i - iStart;
+			}
+			iCount++;
+			iStart = i + 1u;
+			bEscape = 0;
+			continue;
+		}
+		if ( (!bEscape) && (sText[i] == '\\') ) {
+			bEscape = 1;
+		} else {
+			bEscape = 0;
+		}
+	}
+	return iCount;
+}
+static int xte_private_find_unescaped_eq(const char* sText, uint32 iSize)
+{
+	uint32 i = 0;
+	int bEscape = 0;
+	for ( i = 0; i < iSize; i++ ) {
+		if ( !bEscape && (sText[i] == '=') ) {
+			return (int)i;
+		}
+		if ( (!bEscape) && (sText[i] == '\\') ) {
+			bEscape = 1;
+		} else {
+			bEscape = 0;
 		}
 	}
 	return -1;
 }
-// if 分支结构
-typedef struct {
-	int startIdx;       // 分支起始索引（不含 if/elseif/else 本身）
-	int endIdx;         // 分支结束索引（不含 elseif/else/end）
-	char* condition;    // 条件表达式（else 为 NULL）
-	size_t condLen;     // 条件长度
-} XTE_IfBranch;
-// 解析 if 语句的所有分支
-// branches: 输出数组，最多 XTE_PARAM_MAXCOUNT 个分支
-// 返回: 分支数量，同时设置 endIdx 为整个 if 结构的 end 索引
-static int xte_parse_if_branches(xparray arrAction, int ifIdx, XTE_IfBranch* branches, int* pEndIdx)
+static int xte_private_writer_write(XTE_Writer* pWriter, const char* sText, size_t iSize)
 {
-	int branchCount = 0;
-	int depth = 1;
-	
-	// 第一个分支从if后开始
-	XTE_TokenItem ifTok = (XTE_TokenItem)xrtPtrArrayGet_Inline(arrAction, ifIdx);
-	branches[branchCount].startIdx = ifIdx + 1;
-	branches[branchCount].condition = ifTok->ParamText[0];
-	branches[branchCount].condLen = ifTok->ParamSize[0];
-	
-	for ( int i = ifIdx + 1; i <= arrAction->Count; i++ ) {
-		XTE_TokenItem tok = (XTE_TokenItem)xrtPtrArrayGet_Inline(arrAction, i);
-		
-		if ( tok->Type == XTE_TK_IF || tok->Type == XTE_TK_FOR || tok->Type == XTE_TK_FOREACH ) {
-			depth++;
-		} else if ( depth == 1 && tok->Type == XTE_TK_ELSEIF ) {
-			// 结束当前分支
-			branches[branchCount].endIdx = i - 1;
-			branchCount++;
-			if ( branchCount >= XTE_PARAM_MAXCOUNT ) break;
-			// 开始新分支
-			branches[branchCount].startIdx = i + 1;
-			branches[branchCount].condition = tok->ParamText[0];
-			branches[branchCount].condLen = tok->ParamSize[0];
-		} else if ( depth == 1 && tok->Type == XTE_TK_ELSE ) {
-			// 结束当前分支
-			branches[branchCount].endIdx = i - 1;
-			branchCount++;
-			if ( branchCount >= XTE_PARAM_MAXCOUNT ) break;
-			// else 分支（无条件）
-			branches[branchCount].startIdx = i + 1;
-			branches[branchCount].condition = NULL;
-			branches[branchCount].condLen = 0;
-		} else if ( tok->Type == XTE_TK_END ) {
-			depth--;
-			if ( depth == 0 ) {
-				// 结束最后一个分支
-				branches[branchCount].endIdx = i - 1;
-				branchCount++;
-				*pEndIdx = i;
-				return branchCount;
-			}
-		}
-	}
-	// 找不到 end
-	*pEndIdx = -1;
-	return 0;
-}
-// 执行 Action 列表的一段范围 [startIdx, endIdx]
-static void xte_exec_range(xparray arrAction, int startIdx, int endIdx, 
-                           XTE_LiteObject objTemplate, xvalue tblVal, xvalue tblRoot, xvalue tblENV, 
-                           xdict tblInclude, xbuffer objBuf);
-// 前向声明 xteMakeActions (内部版本，支持 break/continue)
-static char* xteMakeActions_ex(xparray arrAction, XTE_LiteObject objTemplate, xvalue tblVal, xvalue tblRoot, xvalue tblENV, xdict tblInclude, size_t* pRetSize, int* pBreakFlag, int* pContinueFlag);
-// foreach 表迭代回调结构
-typedef struct {
-	xbuffer Buf;
-	xparray Action;
-	XTE_LiteObject Template;
-	xvalue RootVal;
-	xdict Include;
-	int Index;
-	int* BreakFlag;      // 指向外层循环的 break 标志
-	int* ContinueFlag;   // 指向外层循环的 continue 标志
-	int MaxIterations;   // 最大迭代次数限制
-} XTE_ForeachTableCtx;
-// foreach 表迭代回调函数
-// 注意: Dict_EachProc 传递的是存储区域地址，字典存储的是 xvalue 指针，所以 pVal 是 xvalue* 类型
-static int xte_foreach_table_proc(Dict_Key* pKey, ptr pVal, void* pArg)
-{
-	xvalue* ppVal = (xvalue*)pVal;  // pVal 是指向 xvalue 指针的地址
-	xvalue itemVal = *ppVal;        // 解引用获取真正的 xvalue
-	if ( pKey == NULL || itemVal == NULL || pArg == NULL ) {
-		return FALSE;
-	}
-	XTE_ForeachTableCtx* ctx = (XTE_ForeachTableCtx*)pArg;
-	
-	// 检查是否已经要求 break
-	if ( ctx->BreakFlag && *ctx->BreakFlag ) {
-		return TRUE;  // 停止遍历
-	}
-	
-	// 检查迭代次数限制
-	if ( ctx->Index >= ctx->MaxIterations ) {
-		return TRUE;  // 超出最大迭代次数，停止遍历
-	}
-	
-	xvalue loopEnv = xvoCreateTable();
-	xvoTableSetInt(loopEnv, "__index__", 0, ctx->Index);
-	xvoTableSetValue(loopEnv, "__value__", 0, itemVal, FALSE);
-	xvoTableSetText(loopEnv, "__key__", 0, pKey->Key, pKey->KeyLen, FALSE);
-	
-	// 重置 continue 标志（每次迭代开始时清除）
-	if ( ctx->ContinueFlag ) {
-		*ctx->ContinueFlag = 0;
-	}
-	
-	size_t loopSize = 0;
-	char* loopResult = xteMakeActions_ex(ctx->Action, ctx->Template, itemVal, ctx->RootVal, loopEnv, ctx->Include, &loopSize, ctx->BreakFlag, ctx->ContinueFlag);
-	if ( loopResult ) {
-		xrtBufferAppend(ctx->Buf, loopResult, loopSize, XBUF_UTF8);
-		xrtFree(loopResult);
-	}
-	xvoUnref(loopEnv);
-	ctx->Index++;
-	
-	// 检查 break 标志，如果设置了则停止遍历
-	if ( ctx->BreakFlag && *ctx->BreakFlag ) {
-		return TRUE;
-	}
-	return FALSE;
-}
-// 根据 XTE_LiteObject 模板对象生成文档
-// 注意: Dict_EachProc 传递的是存储区域地址，字典存储的是 xvalue 指针，所以 pVal 是 xvalue* 类型
-int xte_private_Make_EachTableProc(Dict_Key* pKey, ptr pVal, void* pArg)
-{
-	xvalue* ppVal = (xvalue*)pVal;  // pVal 是指向 xvalue 指针的地址
-	xvalue itemVal = *ppVal;        // 解引用获取真正的 xvalue
-	struct {
-		xbuffer Buf;
-		XTE_TokenItem Tok;
-		xvalue RootEnv;
-		xvalue ENV;
-		xparray Action;
-		XTE_LiteObject Template;
-		xdict Include;
-	} *tblProcParam = pArg;
-	size_t iSizeRet = 0;
-	char* sEachPage = xteMakeActions(tblProcParam->Action, tblProcParam->Template, itemVal, tblProcParam->RootEnv, tblProcParam->ENV, tblProcParam->Include, &iSizeRet);
-	if ( sEachPage ) {
-		xrtBufferAppend(tblProcParam->Buf, sEachPage, iSizeRet, XBUF_UTF8);
-		xrtFree(sEachPage);
-	} else {
-		xrtBufferAppend(tblProcParam->Buf, "(foreach table generation failed : ", 0, XBUF_UTF8);
-		xrtBufferAppend(tblProcParam->Buf, tblProcParam->Tok->Text, tblProcParam->Tok->Size, XBUF_UTF8);
-		xrtBufferAppend(tblProcParam->Buf, " [", 2, XBUF_UTF8);
-		xrtBufferAppend(tblProcParam->Buf, pKey->Key, pKey->KeyLen, XBUF_UTF8);
-		xrtBufferAppend(tblProcParam->Buf, "])", 2, XBUF_UTF8);
-	}
-	return FALSE;
-}
-char* xteMakeActions_ex(xparray arrAction, XTE_LiteObject objTemplate, xvalue tblVal, xvalue tblRoot, xvalue tblENV, xdict tblInclude, size_t* pRetSize, int* pBreakFlag, int* pContinueFlag)
-{
-	// 检查环境表
-	if ( tblVal == NULL ) {
-		return NULL;
-	}
-	// 申请自增长缓冲区
-	xbuffer objBuf = xrtBufferCreate(0);
-	if ( objBuf == NULL ) {
-		return NULL;
-	}
-	if ( (tblVal->Type == XVO_DT_TABLE) || (tblVal->Type == XVO_DT_ARRAY) ) {
-		// 表或数组（支持全功能）
-		
-		// 遍历模板 Action 生成内容
-		for ( int i = 1; i <= arrAction->Count; i++ ) {
-			// 检查 break/continue 标志，如果已设置则立即跳出
-			if ( (pBreakFlag && *pBreakFlag) || (pContinueFlag && *pContinueFlag) ) {
-				break;
-			}
-			XTE_TokenItem objTok = (XTE_TokenItem)xrtPtrArrayGet_Inline(arrAction, i);
-			if ( objTok->Type == XTE_TK_TEXT ) {
-				// 文本节点
-				xrtBufferAppend(objBuf, objTok->Text, objTok->Size, XBUF_UTF8);
-			} else if ( objTok->Type == XTE_TK_VAR ) {
-				// 代入变量 - 转为字符串
-				char* sTemp = xvoTableGetText(tblVal, objTok->Text, objTok->Size);
-				if ( tblRoot && (sTemp == NULL) ) {
-					sTemp = xvoTableGetText(tblRoot, objTok->Text, objTok->Size);
-				}
-				if ( sTemp == NULL ) {
-					sTemp = xvoTableGetText(tblENV, objTok->Text, objTok->Size);
-				}
-				if ( sTemp ) {
-					xrtBufferAppend(objBuf, sTemp, 0, XBUF_UTF8);
-				}
-			} else if ( objTok->Type == XTE_TK_NUM ) {
-				// 代入数字 - 支持格式化
-				xvalue varNum = xvoTableGetValue(tblVal, objTok->Text, objTok->Size);
-				if ( tblRoot && (varNum == &XVO_VALUE_NULL) ) {
-					varNum = xvoTableGetValue(tblRoot, objTok->Text, objTok->Size);
-				}
-				if ( varNum == &XVO_VALUE_NULL ) {
-					varNum = xvoTableGetValue(tblENV, objTok->Text, objTok->Size);
-				}
-				str sFormat = (objTok->ParamCount > 0 && objTok->ParamText[0]) ? objTok->ParamText[0] : NULL;
-				str sResult = NULL;
-				if ( varNum == &XVO_VALUE_NULL || varNum->Type == XVO_DT_NULL ) {
-					// NULL - 作为 0 处理
-					sResult = xrtIntFormat(0, sFormat);
-				} else if ( varNum->Type == XVO_DT_BOOL ) {
-					// BOOL - TRUE=1, FALSE=0
-					sResult = xrtIntFormat(varNum->vBool ? 1 : 0, sFormat);
-				} else if ( varNum->Type == XVO_DT_INT ) {
-					sResult = xrtIntFormat(varNum->vInt, sFormat);
-				} else if ( varNum->Type == XVO_DT_FLOAT ) {
-					sResult = xrtNumFormat(varNum->vFloat, sFormat);
-				} else if ( varNum->Type == XVO_DT_TEXT && varNum->vText ) {
-					// 字符串类型 - 使用 xrtParseNumSkipSpace 解析
-					jnum_type_t numType = JNUM_NULL;
-					jnum_value_t numValue;
-					int parsed = xrtParseNumSkipSpace(varNum->vText, &numType, &numValue);
-					if ( parsed > 0 ) {
-						switch ( numType ) {
-							case JNUM_INT: sResult = xrtIntFormat((int64)numValue.vint, sFormat); break;
-							case JNUM_HEX: sResult = xrtIntFormat((int64)numValue.vhex, sFormat); break;
-							case JNUM_LINT: sResult = xrtIntFormat(numValue.vlint, sFormat); break;
-							case JNUM_LHEX: sResult = xrtIntFormat((int64)numValue.vlhex, sFormat); break;
-							case JNUM_DOUBLE: sResult = xrtNumFormat(numValue.vdbl, sFormat); break;
-							case JNUM_BOOL: sResult = xrtIntFormat(numValue.vbool ? 1 : 0, sFormat); break;
-							default: sResult = xrtIntFormat(0, sFormat); break;
-						}
-					} else {
-						sResult = xrtIntFormat(0, sFormat);
-					}
-				} else {
-					sResult = xrtIntFormat(0, sFormat);
-				}
-				if ( sResult ) {
-					xrtBufferAppend(objBuf, sResult, 0, XBUF_UTF8);
-					xrtFree(sResult);
-				}
-			} else if ( objTok->Type == XTE_TK_TIME ) {
-				// 代入时间 - 支持自定义格式
-				xvalue varTime = xvoTableGetValue(tblVal, objTok->Text, objTok->Size);
-				if ( tblRoot && (varTime == &XVO_VALUE_NULL) ) {
-					varTime = xvoTableGetValue(tblRoot, objTok->Text, objTok->Size);
-				}
-				if ( varTime == &XVO_VALUE_NULL ) {
-					varTime = xvoTableGetValue(tblENV, objTok->Text, objTok->Size);
-				}
-				if ( varTime != &XVO_VALUE_NULL ) {
-					xtime iTime = 0;
-					if ( varTime->Type == XVO_DT_INT ) {
-						iTime = varTime->vInt;
-					} else if ( varTime->Type == XVO_DT_TEXT && varTime->vText ) {
-						iTime = xrtStrToI64(varTime->vText);
-					}
-					str sResult = NULL;
-					if ( objTok->ParamCount > 0 && objTok->ParamText[0] && objTok->ParamSize[0] > 0 ) {
-						// 使用自定义格式
-						sResult = xrtTimeFormat(iTime, objTok->ParamText[0]);
-					} else {
-						// 默认格式
-						sResult = xrtTimeToStr(iTime, XRT_TIME_FORMAT_DATETIME);
-					}
-					if ( sResult ) {
-						xrtBufferAppend(objBuf, sResult, 0, XBUF_UTF8);
-						xrtFree(sResult);
-					}
-				}
-			} else if ( objTok->Type == XTE_TK_BOOL ) {
-				// 根据逻辑结果决定代入什么内容
-				xvalue varBool = xvoTableGetValue(tblVal, objTok->Text, objTok->Size);
-				if ( tblRoot && (varBool == &XVO_VALUE_NULL) ) {
-					varBool = xvoTableGetValue(tblRoot, objTok->Text, objTok->Size);
-				}
-				if ( varBool == &XVO_VALUE_NULL ) {
-					varBool = xvoTableGetValue(tblENV, objTok->Text, objTok->Size);
-				}
-				int bRet = xvoGetBool(varBool);
-				int idx = 1;
-				if ( bRet ) {
-					idx = 0;
-				}
-				if ( (objTok->ParamCount > idx) && objTok->ParamText[idx] ) {
-					if ( objTok->ParamText[idx][0] == '=' ) {
-						// 参数首字符为 = 则作为模板生成
-						do {
-							xparray arrSubAction = xrtDictGet(&objTemplate->SubTemplates, &objTok->ParamText[idx][1], objTok->ParamSize[idx] - 1);
-							if ( arrSubAction == NULL ) {
-								xrtBufferAppend(objBuf, "(cannot find sub template : ", 0, XBUF_UTF8);
-								xrtBufferAppend(objBuf, objTok->Text, objTok->Size, XBUF_UTF8);
-								xrtBufferAppend(objBuf, " [", 2, XBUF_UTF8);
-								xrtBufferAppend(objBuf, &objTok->ParamText[idx][1], objTok->ParamSize[idx] - 1, XBUF_UTF8);
-								xrtBufferAppend(objBuf, "])", 2, XBUF_UTF8);
-								break;
-							}
-							// 根据参数决定是否代入子表
-							xvalue tblParam = tblVal;
-							for ( int j = 2; j < objTok->ParamCount; j++ ) {
-								if ( tblParam->Type == XVO_DT_TABLE ) {
-									tblParam = xvoTableGetValue(tblParam, objTok->ParamText[j], objTok->ParamSize[j]);
-								} else if ( tblParam->Type == XVO_DT_ARRAY ) {
-									tblParam = xvoArrayGetValue(tblParam, xrtStrToU32(objTok->ParamText[j]));
-								} else {
-									xrtBufferAppend(objBuf, "(param type error : ", 0, XBUF_UTF8);
-									xrtBufferAppend(objBuf, objTok->Text, objTok->Size, XBUF_UTF8);
-									xrtBufferAppend(objBuf, " [", 2, XBUF_UTF8);
-									xrtBufferAppend(objBuf, objTok->ParamText[j], objTok->ParamSize[j], XBUF_UTF8);
-									xrtBufferAppend(objBuf, "])", 2, XBUF_UTF8);
-								}
-							}
-							// 根据模板生成页面
-							xvalue tblRootEnv = tblParam == tblVal ? NULL : tblVal;
-							size_t iSizeRet = 0;
-							char* sSubPage = xteMakeActions(arrSubAction, objTemplate, tblParam, tblRootEnv, tblENV, tblInclude, &iSizeRet);
-							if ( sSubPage == NULL ) {
-								xrtBufferAppend(objBuf, "(sub template generation failed : ", 0, XBUF_UTF8);
-								xrtBufferAppend(objBuf, objTok->Text, objTok->Size, XBUF_UTF8);
-								xrtBufferAppend(objBuf, " [", 2, XBUF_UTF8);
-								xrtBufferAppend(objBuf, &objTok->ParamText[idx][1], objTok->ParamSize[idx] - 1, XBUF_UTF8);
-								xrtBufferAppend(objBuf, "])", 2, XBUF_UTF8);
-								break;
-							}
-							xrtBufferAppend(objBuf, sSubPage, iSizeRet, XBUF_UTF8);
-							xrtFree(sSubPage);
-						} while (0);
-					} else if ( objTok->ParamText[idx][0] == '@' ) {
-						// 参数首字符为 @ 则作为函数调用参数
-						/*
-						while ( 1 ) {
-							XTE_FUNC pFunc = xvoTableGetFunc(tblVal, &objTok->ParamText[idx][1], objTok->ParamSize[idx] - 1);
-							if ( pFunc == NULL ) {
-								pFunc = xvoTableGetFunc(tblENV, &objTok->ParamText[idx][1], objTok->ParamSize[idx] - 1);
-							}
-							if ( pFunc == NULL ) {
-								xrtBufferAppend(objBuf, "(cannot find function : ", 0, XBUF_UTF8);
-								xrtBufferAppend(objBuf, objTok->Text, objTok->Size, XBUF_UTF8);
-								xrtBufferAppend(objBuf, " [", 2, XBUF_UTF8);
-								xrtBufferAppend(objBuf, &objTok->ParamText[idx][1], objTok->ParamSize[idx] - 1, XBUF_UTF8);
-								xrtBufferAppend(objBuf, "])", 2, XBUF_UTF8);
-								break;
-							}
-							// 传递参数，调用函数，代入返回值，参数首字符为 @ 则引用变量
-							xvalue varParam = xvoValueCreateText(objTok->ParamText[2], FALSE);
-							xvalue varRet = pFunc(tblVal, varParam);
-							char* sTemp = xvoValueGetText(varRet);
-							if ( sTemp ) {
-								xrtBufferAppend(objBuf, sTemp, 0, XBUF_UTF8);
-							}
-							break;
-						}
-						*/
-					} else if ( objTok->ParamText[idx][0] == '$' ) {
-						// 参数首字符为 $ 则作为字符串获取内容
-						char* sRet = xvoTableGetText(tblVal, &objTok->ParamText[idx][1], objTok->ParamSize[idx] - 1);
-						if ( sRet ) {
-							xrtBufferAppend(objBuf, sRet, 0, XBUF_UTF8);
-						} else {
-							sRet = xvoTableGetText(tblENV, &objTok->ParamText[idx][1], objTok->ParamSize[idx] - 1);
-							if ( sRet ) {
-								xrtBufferAppend(objBuf, sRet, 0, XBUF_UTF8);
-							}
-						}
-					} else if ( objTok->ParamText[idx][0] == ' ' ) {
-						// 参数首字符为空格则跳过这个空格输出参数文本（忽略首空格）
-						xrtBufferAppend(objBuf, &objTok->ParamText[idx][1], objTok->ParamSize[idx] - 1, XBUF_UTF8);
-					} else if ( objTok->ParamText[idx][0] == 0 ) {
-						// 跳过参数
-					} else {
-						xrtBufferAppend(objBuf, objTok->ParamText[idx], objTok->ParamSize[idx], XBUF_UTF8);
-					}
-				}
-			} else if ( objTok->Type == XTE_TK_ARR ) {
-				// 遍历元素 表 or 数组，代入子模板
-				do {
-					xparray arrSubAction = xrtDictGet(&objTemplate->SubTemplates, objTok->Text, objTok->Size);
-					if ( arrSubAction == NULL ) {
-						xrtBufferAppend(objBuf, "(cannot find sub template : ", 0, XBUF_UTF8);
-						xrtBufferAppend(objBuf, objTok->Text, objTok->Size, XBUF_UTF8);
-						xrtBufferAppend(objBuf, ")", 1, XBUF_UTF8);
-						break;
-					}
-					// 根据参数决定是否代入子表（没有参数就代入自己）
-					xvalue tblParam = tblVal;
-					for ( int j = 0; j < objTok->ParamCount; j++ ) {
-						if ( tblParam->Type == XVO_DT_TABLE ) {
-							tblParam = xvoTableGetValue(tblParam, objTok->ParamText[j], objTok->ParamSize[j]);
-						} else if ( tblParam->Type == XVO_DT_ARRAY ) {
-							tblParam = xvoArrayGetValue(tblParam, xrtStrToU32(objTok->ParamText[j]));
-						} else {
-							xrtBufferAppend(objBuf, "(param type error : ", 0, XBUF_UTF8);
-							xrtBufferAppend(objBuf, objTok->Text, objTok->Size, XBUF_UTF8);
-							xrtBufferAppend(objBuf, " [", 2, XBUF_UTF8);
-							xrtBufferAppend(objBuf, objTok->ParamText[j], objTok->ParamSize[j], XBUF_UTF8);
-							xrtBufferAppend(objBuf, "])", 2, XBUF_UTF8);
-						}
-					}
-					xvalue tblRootEnv = tblParam == tblVal ? NULL : tblVal;
-					// 根据模板生成页面
-					if ( tblParam->Type == XVO_DT_TABLE ) {
-						// 遍历表
-						struct {
-							xbuffer Buf;
-							XTE_TokenItem Tok;
-							xvalue RootEnd;
-							xvalue ENV;
-							xparray Action;
-							XTE_LiteObject Template;
-							xdict Include;
-						} tblProcParam = { objBuf, objTok, tblRootEnv, tblENV, arrSubAction, objTemplate, tblInclude };
-						xrtDictWalk(tblParam->vTable, (void*)xte_private_Make_EachTableProc, &tblProcParam);
-					} else if ( tblParam->Type == XVO_DT_ARRAY ) {
-						// 遍历数组
-						for ( int k = 0; k < tblParam->vArray->Count; k++ ) {
-							xvalue tblEachItem = xvoArrayGetValue(tblParam, k);
-							size_t iSizeRet = 0;
-							char* sEachPage = xteMakeActions(arrSubAction, objTemplate, tblEachItem, tblRootEnv, tblENV, tblInclude, &iSizeRet);
-							if ( sEachPage ) {
-								xrtBufferAppend(objBuf, sEachPage, iSizeRet, XBUF_UTF8);
-								xrtFree(sEachPage);
-							} else {
-								// 数组元素生成失败，记录错误但继续处理其他元素
-								xrtBufferAppend(objBuf, "(foreach array generation failed : ", 0, XBUF_UTF8);
-								xrtBufferAppend(objBuf, objTok->Text, objTok->Size, XBUF_UTF8);
-								xrtBufferAppend(objBuf, " [", 2, XBUF_UTF8);
-								char sk[8];
-								xrtI32ToStr(k, sk);
-								xrtBufferAppend(objBuf, sk, 0, XBUF_UTF8);
-								xrtBufferAppend(objBuf, "])", 2, XBUF_UTF8);
-								// 不再 break，继续处理其他元素
-							}
-						}
-					} else {
-						xrtBufferAppend(objBuf, "(param type error : ", 0, XBUF_UTF8);
-						xrtBufferAppend(objBuf, objTok->Text, objTok->Size, XBUF_UTF8);
-						xrtBufferAppend(objBuf, ")", 1, XBUF_UTF8);
-					}
-				} while (0);
-			} else if ( objTok->Type == XTE_TK_PROC ) {
-				// 调用函数（目前只支持传递一个参数）
-				/*
-				while ( 1 ) {
-					XTE_FUNC pFunc = xvoTableGetFunc(tblVal, objTok->Text, objTok->Size);
-					if ( tblRoot && (pFunc == NULL) ) {
-						pFunc = xvoTableGetFunc(tblRoot, objTok->Text, objTok->Size);
-					}
-					if ( pFunc == NULL ) {
-						pFunc = xvoTableGetFunc(tblENV, objTok->Text, objTok->Size);
-					}
-					if ( pFunc == NULL ) {
-						xrtBufferAppend(objBuf, "(cannot find function : ", 0, XBUF_UTF8);
-						xrtBufferAppend(objBuf, objTok->Text, objTok->Size, XBUF_UTF8);
-						xrtBufferAppend(objBuf, ")", 1, XBUF_UTF8);
-						break;
-					}
-					// 传递参数，调用函数，代入返回值
-					xvalue varParam = xvoValueCreateText(objTok->ParamText[0], FALSE);
-					xvalue varRet = pFunc(tblVal, varParam);
-					char* sTemp = xvoValueGetText(varRet);
-					if ( sTemp ) {
-						xrtBufferAppend(objBuf, sTemp, 0, XBUF_UTF8);
-					}
-					break;
-				}
-				*/
-			} else if ( objTok->Type == XTE_TK_SUBTEMPLATE ) {
-				// 代入子模板
-				do {
-					xparray arrSubAction = xrtDictGet(&objTemplate->SubTemplates, objTok->Text, objTok->Size);
-					if ( arrSubAction == NULL ) {
-						xrtBufferAppend(objBuf, "(cannot find sub template : ", 0, XBUF_UTF8);
-						xrtBufferAppend(objBuf, objTok->Text, objTok->Size, XBUF_UTF8);
-						xrtBufferAppend(objBuf, ")", 1, XBUF_UTF8);
-						break;
-					}
-					// 根据参数决定是否代入子表
-					xvalue tblParam = tblVal;
-					for ( int j = 0; j < objTok->ParamCount; j++ ) {
-						if ( tblParam->Type == XVO_DT_TABLE ) {
-							tblParam = xvoTableGetValue(tblParam, objTok->ParamText[j], objTok->ParamSize[j]);
-						} else if ( tblParam->Type == XVO_DT_ARRAY ) {
-							tblParam = xvoArrayGetValue(tblParam, xrtStrToU32(objTok->ParamText[j]));
-						} else {
-							xrtBufferAppend(objBuf, "(param type error : ", 0, XBUF_UTF8);
-							xrtBufferAppend(objBuf, objTok->Text, objTok->Size, XBUF_UTF8);
-							xrtBufferAppend(objBuf, " [", 2, XBUF_UTF8);
-							xrtBufferAppend(objBuf, objTok->ParamText[j], objTok->ParamSize[j], XBUF_UTF8);
-							xrtBufferAppend(objBuf, "])", 2, XBUF_UTF8);
-						}
-					}
-					// 根据模板生成页面
-					xvalue tblRootEnv = tblParam == tblVal ? NULL : tblVal;
-					size_t iSizeRet = 0;
-					char* sSubPage = xteMakeActions(arrSubAction, objTemplate, tblParam, tblRootEnv, tblENV, tblInclude, &iSizeRet);
-					if ( sSubPage == NULL ) {
-						xrtBufferAppend(objBuf, "(sub template generation failed : ", 0, XBUF_UTF8);
-						xrtBufferAppend(objBuf, objTok->Text, objTok->Size, XBUF_UTF8);
-						xrtBufferAppend(objBuf, ")", 1, XBUF_UTF8);
-						break;
-					}
-					xrtBufferAppend(objBuf, sSubPage, iSizeRet, XBUF_UTF8);
-					xrtFree(sSubPage);
-				} while (0);
-			} else if ( objTok->Type == XTE_TK_INCLUDE ) {
-				// 引用外部模板
-				do {
-					XTE_LiteObject objIncTemplate = xrtDictGetPtr(tblInclude, objTok->ParamText[0], objTok->ParamSize[0]);
-					if ( objIncTemplate == NULL ) {
-						xrtBufferAppend(objBuf, "(cannot find file : ", 0, XBUF_UTF8);
-						xrtBufferAppend(objBuf, objTok->ParamText[0], objTok->ParamSize[0], XBUF_UTF8);
-						xrtBufferAppend(objBuf, ")", 1, XBUF_UTF8);
-						break;
-					}
-					// 根据参数决定是否代入子表
-					xvalue tblParam = tblVal;
-					for ( int j = 1; j < objTok->ParamCount; j++ ) {
-						if ( tblParam->Type == XVO_DT_TABLE ) {
-							tblParam = xvoTableGetValue(tblParam, objTok->ParamText[j], objTok->ParamSize[j]);
-						} else if ( tblParam->Type == XVO_DT_ARRAY ) {
-							tblParam = xvoArrayGetValue(tblParam, xrtStrToU32(objTok->ParamText[j]));
-						} else {
-							xrtBufferAppend(objBuf, "(param type error : ", 0, XBUF_UTF8);
-							xrtBufferAppend(objBuf, objTok->ParamText[0], objTok->ParamSize[0], XBUF_UTF8);
-							xrtBufferAppend(objBuf, " [", 2, XBUF_UTF8);
-							xrtBufferAppend(objBuf, objTok->ParamText[j], objTok->ParamSize[j], XBUF_UTF8);
-							xrtBufferAppend(objBuf, "])", 2, XBUF_UTF8);
-						}
-					}
-					// 根据模板生成页面
-					xvalue tblRootEnv = tblParam == tblVal ? NULL : tblVal;
-					size_t iSizeRet = 0;
-					char* sIncPage = xteMakeActions(&objIncTemplate->Actions, objIncTemplate, tblParam, tblRootEnv, tblENV, tblInclude, &iSizeRet);
-					if ( sIncPage == NULL ) {
-						xrtBufferAppend(objBuf, "(template generation failed : ", 0, XBUF_UTF8);
-						xrtBufferAppend(objBuf, objTok->ParamText[0], objTok->ParamSize[0], XBUF_UTF8);
-						xrtBufferAppend(objBuf, ")", 1, XBUF_UTF8);
-						break;
-					}
-					xrtBufferAppend(objBuf, sIncPage, iSizeRet, XBUF_UTF8);
-					xrtFree(sIncPage);
-				} while (0);
-			} else if ( objTok->Type == XTE_TK_IF ) {
-				// if/elseif/else 条件语句
-				XTE_IfBranch branches[XTE_PARAM_MAXCOUNT];
-				int endIdx = -1;
-				int branchCount = xte_parse_if_branches(arrAction, i, branches, &endIdx);
-				
-				if ( branchCount > 0 && endIdx > 0 ) {
-					// 遍历所有分支，找到第一个条件为真的分支执行
-					for ( int b = 0; b < branchCount; b++ ) {
-						int shouldExec = 0;
-						if ( branches[b].condition == NULL ) {
-							// else 分支，直接执行
-							shouldExec = 1;
-						} else {
-							// 评估条件表达式
-							shouldExec = xteExprEvalBool(branches[b].condition, branches[b].condLen, tblVal, tblRoot, tblENV);
-						}
-						if ( shouldExec ) {
-							// 执行该分支的内容
-							for ( int j = branches[b].startIdx; j <= branches[b].endIdx; j++ ) {
-								XTE_TokenItem subTok = (XTE_TokenItem)xrtPtrArrayGet_Inline(arrAction, j);
-								// 检查 break/continue 标志，如果已设置则跳出分支执行
-								if ( (pBreakFlag && *pBreakFlag) || (pContinueFlag && *pContinueFlag) ) {
-									break;
-								}
-								// 递归调用主逻辑处理各种 Token
-								if ( subTok->Type == XTE_TK_TEXT ) {
-									xrtBufferAppend(objBuf, subTok->Text, subTok->Size, XBUF_UTF8);
-								} else if ( subTok->Type == XTE_TK_IF || subTok->Type == XTE_TK_FOR || subTok->Type == XTE_TK_FOREACH ) {
-									// 嵌套控制语句，构建临时 Action 列表并递归执行
-									int nestedEnd = xte_find_matching_end(arrAction, j + 1);
-									if ( nestedEnd > 0 && nestedEnd <= arrAction->Count ) {
-										xparray_struct tempAction = { 0, 0, 0 };
-										xrtPtrArrayInit(&tempAction, XRT_OBJMODE_LOCAL);
-										for ( int k = j; k <= nestedEnd; k++ ) {
-											xrtPtrArrayAppend(&tempAction, xrtPtrArrayGet_Inline(arrAction, k));
-										}
-										size_t nestedSize = 0;
-										char* nestedResult = xteMakeActions_ex(&tempAction, objTemplate, tblVal, tblRoot, tblENV, tblInclude, &nestedSize, pBreakFlag, pContinueFlag);
-										if ( nestedResult ) {
-											xrtBufferAppend(objBuf, nestedResult, nestedSize, XBUF_UTF8);
-											xrtFree(nestedResult);
-										}
-										xrtPtrArrayUnit(&tempAction);
-										j = nestedEnd; // 跳过嵌套块
-									}
-								} else if ( subTok->Type == XTE_TK_BREAK ) {
-									// 直接处理 break
-									if ( pBreakFlag ) {
-										*pBreakFlag = 1;
-									}
-									break;
-								} else if ( subTok->Type == XTE_TK_CONTINUE ) {
-									// 直接处理 continue
-									if ( pContinueFlag ) {
-										*pContinueFlag = 1;
-									}
-									break;
-								} else {
-									// 其他 Token，构建单元素 Action 列表执行
-									xparray_struct singleAction = { 0, 0, 0 };
-									xrtPtrArrayInit(&singleAction, XRT_OBJMODE_LOCAL);
-									xrtPtrArrayAppend(&singleAction, subTok);
-									size_t singleSize = 0;
-									char* singleResult = xteMakeActions_ex(&singleAction, objTemplate, tblVal, tblRoot, tblENV, tblInclude, &singleSize, pBreakFlag, pContinueFlag);
-									if ( singleResult ) {
-										xrtBufferAppend(objBuf, singleResult, singleSize, XBUF_UTF8);
-										xrtFree(singleResult);
-									}
-									xrtPtrArrayUnit(&singleAction);
-								}
-							}
-							break; // 只执行第一个为真的分支
-						}
-					}
-					i = endIdx; // 跳过整个 if 结构
-				}
-			} else if ( objTok->Type == XTE_TK_FOR ) {
-				// for 计次循环：{#for:start:end:step}
-				int endIdx = xte_find_matching_end(arrAction, i + 1);
-				if ( endIdx > 0 && objTok->ParamCount >= 2 ) {
-					int64 forStart = xrtStrToI64(objTok->ParamText[0]);
-					int64 forEnd = xrtStrToI64(objTok->ParamText[1]);
-					int64 forStep = (objTok->ParamCount >= 3) ? xrtStrToI64(objTok->ParamText[2]) : 1;
-					
-					// 修复步长为0的无限循环问题
-					if ( forStep == 0 ) {
-						forStep = (forStart <= forEnd) ? 1 : -1;
-					}
-					// 修复步长方向不匹配的问题（防止无限循环）
-					if ( (forStart < forEnd && forStep < 0) || (forStart > forEnd && forStep > 0) ) {
-						// 方向不匹配，跳过循环体
-						i = endIdx;
-						continue;
-					}
-					
-					// 构建循环体 Action 列表
-					xparray_struct loopAction = { 0, 0, 0 };
-					xrtPtrArrayInit(&loopAction, XRT_OBJMODE_LOCAL);
-					for ( int k = i + 1; k < endIdx; k++ ) {
-						xrtPtrArrayAppend(&loopAction, xrtPtrArrayGet_Inline(arrAction, k));
-					}
-					
-					// 创建循环环境变量
-					xvalue loopEnv = xvoCreateTable();
-					
-					// 循环内部的 break/continue 标志
-					int loopBreak = 0, loopContinue = 0;
-					
-					// 执行循环
-					int loopIterations = 0;  // 迭代计数器
-					if ( forStep > 0 ) {
-						for ( int64 idx = forStart; idx <= forEnd; idx += forStep ) {
-							if ( ++loopIterations > XTE_LOOP_MAX_ITERATIONS ) break;  // 超出最大迭代次数
-							loopContinue = 0;  // 每次迭代重置 continue
-							xvoTableSetInt(loopEnv, "__index__", 0, idx);
-							size_t loopSize = 0;
-							char* loopResult = xteMakeActions_ex(&loopAction, objTemplate, tblVal, tblRoot, loopEnv, tblInclude, &loopSize, &loopBreak, &loopContinue);
-							if ( loopResult ) {
-								xrtBufferAppend(objBuf, loopResult, loopSize, XBUF_UTF8);
-								xrtFree(loopResult);
-							}
-							if ( loopBreak ) break;  // break 跳出循环
-							// continue 已在下一次迭代开始时重置
-						}
-					} else {
-						for ( int64 idx = forStart; idx >= forEnd; idx += forStep ) {
-							if ( ++loopIterations > XTE_LOOP_MAX_ITERATIONS ) break;  // 超出最大迭代次数
-							loopContinue = 0;  // 每次迭代重置 continue
-							xvoTableSetInt(loopEnv, "__index__", 0, idx);
-							size_t loopSize = 0;
-							char* loopResult = xteMakeActions_ex(&loopAction, objTemplate, tblVal, tblRoot, loopEnv, tblInclude, &loopSize, &loopBreak, &loopContinue);
-							if ( loopResult ) {
-								xrtBufferAppend(objBuf, loopResult, loopSize, XBUF_UTF8);
-								xrtFree(loopResult);
-							}
-							if ( loopBreak ) break;  // break 跳出循环
-						}
-					}
-					
-					xvoUnref(loopEnv);
-					xrtPtrArrayUnit(&loopAction);
-					i = endIdx; // 跳过循环体
-				}
-			} else if ( objTok->Type == XTE_TK_FOREACH ) {
-				// foreach 迭代循环：{#foreach:items} 或 {#foreach:items:alias}
-				int endIdx = xte_find_matching_end(arrAction, i + 1);
-				if ( endIdx > 0 && objTok->ParamCount >= 1 ) {
-					// 获取迭代对象
-					xvalue iterObj = xteResolvePath(objTok->ParamText[0], objTok->ParamSize[0], tblVal, tblRoot, tblENV);
-					
-					if ( iterObj != &XVO_VALUE_NULL && (iterObj->Type == XVO_DT_ARRAY || iterObj->Type == XVO_DT_TABLE) ) {
-						// 构建循环体 Action 列表
-						xparray_struct loopAction = { 0, 0, 0 };
-						xrtPtrArrayInit(&loopAction, XRT_OBJMODE_LOCAL);
-						for ( int k = i + 1; k < endIdx; k++ ) {
-							xrtPtrArrayAppend(&loopAction, xrtPtrArrayGet_Inline(arrAction, k));
-						}
-						
-						if ( iterObj->Type == XVO_DT_ARRAY ) {
-						// 迭代数组
-						int loopBreak = 0, loopContinue = 0;
-						int loopLimit = (iterObj->vArray->Count > XTE_LOOP_MAX_ITERATIONS) ? XTE_LOOP_MAX_ITERATIONS : iterObj->vArray->Count;
-						for ( int idx = 0; idx < loopLimit; idx++ ) {
-							loopContinue = 0;  // 每次迭代重置 continue
-							xvalue itemVal = xvoArrayGetValue(iterObj, idx);
-							// 创建循环环境
-							xvalue loopEnv = xvoCreateTable();
-							xvoTableSetInt(loopEnv, "__index__", 0, idx);
-							xvoTableSetValue(loopEnv, "__value__", 0, itemVal, FALSE);
-							
-							size_t loopSize = 0;
-							char* loopResult = xteMakeActions_ex(&loopAction, objTemplate, itemVal, tblVal, loopEnv, tblInclude, &loopSize, &loopBreak, &loopContinue);
-							if ( loopResult ) {
-								xrtBufferAppend(objBuf, loopResult, loopSize, XBUF_UTF8);
-								xrtFree(loopResult);
-							}
-							xvoUnref(loopEnv);
-							if ( loopBreak ) break;  // break 跳出循环
-						}
-					} else {
-						// 迭代表（使用 xrtDictWalk）
-						int loopBreak = 0, loopContinue = 0;
-						XTE_ForeachTableCtx foreachCtx = { objBuf, &loopAction, objTemplate, tblVal, tblInclude, 0, &loopBreak, &loopContinue, XTE_LOOP_MAX_ITERATIONS };
-						xrtDictWalk(iterObj->vTable, (void*)xte_foreach_table_proc, &foreachCtx);
-					}
-						
-						xrtPtrArrayUnit(&loopAction);
-					}
-					i = endIdx; // 跳过循环体
-				}
-			} else if ( objTok->Type == XTE_TK_BREAK ) {
-				// {#break} - 跳出循环
-				if ( pBreakFlag ) {
-					*pBreakFlag = 1;
-				}
-				break;  // 立即跳出当前 Action 遍历
-			} else if ( objTok->Type == XTE_TK_CONTINUE ) {
-				// {#continue} - 继续下一轮循环
-				if ( pContinueFlag ) {
-					*pContinueFlag = 1;
-				}
-				break;  // 跳出当前 Action 遍历，由上层循环检查 continue 标志
-			} else if ( objTok->Type == XTE_TK_SCRIPT ) {
-				// 执行脚本
-				printf("\t★★★ Token Type [%d] : XTE_TK_SCRIPT (%d)\n", i, objTok->Type);
-			} else {
-				printf("\t★★★ Error : Unknown Token Type ID [%d] : %d\n", i, objTok->Type);
-			}
-		}
-	} else {
-		// 其他值（只支持代入 __self__ 值）
-		
-		// 遍历模板 Action 生成内容
-		for ( int i = 1; i <= arrAction->Count; i++ ) {
-			// 检查 break/continue 标志，如果已设置则立即跳出
-			if ( (pBreakFlag && *pBreakFlag) || (pContinueFlag && *pContinueFlag) ) {
-				break;
-			}
-			XTE_TokenItem objTok = (XTE_TokenItem)xrtPtrArrayGet_Inline(arrAction, i);
-			if ( objTok->Type == XTE_TK_TEXT ) {
-				// 文本节点
-				xrtBufferAppend(objBuf, objTok->Text, objTok->Size, XBUF_UTF8);
-			} else if ( objTok->Type == XTE_TK_VAR ) {
-				// 代入变量 - 转为字符串
-				// 注: 使用 xvoTableGetValue 检查键是否存在，避免 xvoGetText 返回空字符串导致搜索停止
-				xvalue varVal = &XVO_VALUE_NULL;
-				if ( objTok->Text && objTok->Size == 8 && memcmp(objTok->Text, "__self__", 8) == 0 ) {
-					varVal = tblVal;
-				}
-				if ( tblRoot && (varVal == &XVO_VALUE_NULL) ) {
-					varVal = xvoTableGetValue(tblRoot, objTok->Text, objTok->Size);
-				}
-				if ( varVal == &XVO_VALUE_NULL ) {
-					varVal = xvoTableGetValue(tblENV, objTok->Text, objTok->Size);
-				}
-				if ( varVal != &XVO_VALUE_NULL ) {
-					char* sTemp = xvoGetText(varVal);
-					if ( sTemp ) {
-						xrtBufferAppend(objBuf, sTemp, 0, XBUF_UTF8);
-					}
-				}
-			} else if ( objTok->Type == XTE_TK_NUM ) {
-				// 代入数字 - 支持格式化
-				xvalue varNum = &XVO_VALUE_NULL;
-				if ( objTok->Text && objTok->Size == 8 && memcmp(objTok->Text, "__self__", 8) == 0 ) {
-					varNum = tblVal;
-				}
-				if ( tblRoot && (varNum == &XVO_VALUE_NULL) ) {
-					varNum = xvoTableGetValue(tblRoot, objTok->Text, objTok->Size);
-				}
-				if ( varNum == &XVO_VALUE_NULL ) {
-					varNum = xvoTableGetValue(tblENV, objTok->Text, objTok->Size);
-				}
-				str sFormat = (objTok->ParamCount > 0 && objTok->ParamText[0]) ? objTok->ParamText[0] : NULL;
-				str sResult = NULL;
-				if ( varNum == &XVO_VALUE_NULL || varNum->Type == XVO_DT_NULL ) {
-					// NULL - 作为 0 处理
-					sResult = xrtIntFormat(0, sFormat);
-				} else if ( varNum->Type == XVO_DT_BOOL ) {
-					// BOOL - TRUE=1, FALSE=0
-					sResult = xrtIntFormat(varNum->vBool ? 1 : 0, sFormat);
-				} else if ( varNum->Type == XVO_DT_INT ) {
-					sResult = xrtIntFormat(varNum->vInt, sFormat);
-				} else if ( varNum->Type == XVO_DT_FLOAT ) {
-					sResult = xrtNumFormat(varNum->vFloat, sFormat);
-				} else if ( varNum->Type == XVO_DT_TEXT && varNum->vText ) {
-					// 字符串类型 - 使用 xrtParseNumSkipSpace 解析
-					jnum_type_t numType = JNUM_NULL;
-					jnum_value_t numValue;
-					int parsed = xrtParseNumSkipSpace(varNum->vText, &numType, &numValue);
-					if ( parsed > 0 ) {
-						switch ( numType ) {
-							case JNUM_INT: sResult = xrtIntFormat((int64)numValue.vint, sFormat); break;
-							case JNUM_HEX: sResult = xrtIntFormat((int64)numValue.vhex, sFormat); break;
-							case JNUM_LINT: sResult = xrtIntFormat(numValue.vlint, sFormat); break;
-							case JNUM_LHEX: sResult = xrtIntFormat((int64)numValue.vlhex, sFormat); break;
-							case JNUM_DOUBLE: sResult = xrtNumFormat(numValue.vdbl, sFormat); break;
-							case JNUM_BOOL: sResult = xrtIntFormat(numValue.vbool ? 1 : 0, sFormat); break;
-							default: sResult = xrtIntFormat(0, sFormat); break;
-						}
-					} else {
-						sResult = xrtIntFormat(0, sFormat);
-					}
-				} else {
-					sResult = xrtIntFormat(0, sFormat);
-				}
-				if ( sResult ) {
-					xrtBufferAppend(objBuf, sResult, 0, XBUF_UTF8);
-					xrtFree(sResult);
-				}
-			} else if ( objTok->Type == XTE_TK_TIME ) {
-				// 代入时间 - 支持自定义格式
-				xvalue varTime = &XVO_VALUE_NULL;
-				if ( objTok->Text && objTok->Size == 8 && memcmp(objTok->Text, "__self__", 8) == 0 ) {
-					varTime = tblVal;
-				}
-				if ( tblRoot && (varTime == &XVO_VALUE_NULL) ) {
-					varTime = xvoTableGetValue(tblRoot, objTok->Text, objTok->Size);
-				}
-				if ( varTime == &XVO_VALUE_NULL ) {
-					varTime = xvoTableGetValue(tblENV, objTok->Text, objTok->Size);
-				}
-				if ( varTime != &XVO_VALUE_NULL ) {
-					xtime iTime = 0;
-					if ( varTime->Type == XVO_DT_INT ) {
-						iTime = varTime->vInt;
-					} else if ( varTime->Type == XVO_DT_TEXT && varTime->vText ) {
-						iTime = xrtStrToI64(varTime->vText);
-					}
-					str sResult = NULL;
-					if ( objTok->ParamCount > 0 && objTok->ParamText[0] && objTok->ParamSize[0] > 0 ) {
-						// 使用自定义格式
-						sResult = xrtTimeFormat(iTime, objTok->ParamText[0]);
-					} else {
-						// 默认格式
-						sResult = xrtTimeToStr(iTime, XRT_TIME_FORMAT_DATETIME);
-					}
-					if ( sResult ) {
-						xrtBufferAppend(objBuf, sResult, 0, XBUF_UTF8);
-						xrtFree(sResult);
-					}
-				}
-			} else if ( objTok->Type == XTE_TK_BOOL ) {
-				// 根据逻辑结果决定代入什么内容
-				xvalue varBool = &XVO_VALUE_NULL;
-				if ( objTok->Text && objTok->Size == 8 && memcmp(objTok->Text, "__self__", 8) == 0 ) {
-					varBool = tblVal;
-				}
-				if ( tblRoot && (varBool == &XVO_VALUE_NULL) ) {
-					varBool = xvoTableGetValue(tblRoot, objTok->Text, objTok->Size);
-				}
-				if ( varBool == &XVO_VALUE_NULL ) {
-					varBool = xvoTableGetValue(tblENV, objTok->Text, objTok->Size);
-				}
-				int bRet = xvoGetBool(varBool);
-				int idx = 1;
-				if ( bRet ) {
-					idx = 0;
-				}
-				// 修复: 添加 ParamText[idx] 空指针检查
-				if ( objTok->ParamCount > idx && objTok->ParamText[idx] ) {
-					if ( objTok->ParamText[idx][0] == '=' ) {
-						// 参数首字符为 = 则作为模板生成
-						do {
-							xparray arrSubAction = xrtDictGet(&objTemplate->SubTemplates, &objTok->ParamText[idx][1], objTok->ParamSize[idx] - 1);
-							if ( arrSubAction == NULL ) {
-								xrtBufferAppend(objBuf, "(cannot find sub template : ", 0, XBUF_UTF8);
-								xrtBufferAppend(objBuf, objTok->Text, objTok->Size, XBUF_UTF8);
-								xrtBufferAppend(objBuf, " [", 2, XBUF_UTF8);
-								xrtBufferAppend(objBuf, &objTok->ParamText[idx][1], objTok->ParamSize[idx] - 1, XBUF_UTF8);
-								xrtBufferAppend(objBuf, "])", 2, XBUF_UTF8);
-								break;
-							}
-							// 根据模板生成页面
-							size_t iSizeRet = 0;
-							char* sSubPage = xteMakeActions(arrSubAction, objTemplate, tblVal, NULL, tblENV, tblInclude, &iSizeRet);
-							if ( sSubPage == NULL ) {
-								xrtBufferAppend(objBuf, "(sub template generation failed : ", 0, XBUF_UTF8);
-								xrtBufferAppend(objBuf, objTok->Text, objTok->Size, XBUF_UTF8);
-								xrtBufferAppend(objBuf, " [", 2, XBUF_UTF8);
-								xrtBufferAppend(objBuf, &objTok->ParamText[idx][1], objTok->ParamSize[idx] - 1, XBUF_UTF8);
-								xrtBufferAppend(objBuf, "])", 2, XBUF_UTF8);
-								break;
-							}
-							xrtBufferAppend(objBuf, sSubPage, iSizeRet, XBUF_UTF8);
-							xrtFree(sSubPage);
-						} while (0);
-					} else if ( objTok->ParamText[idx][0] == '@' ) {
-						// 参数首字符为 @ 则作为函数调用参数
-						/*
-						while ( 1 ) {
-							XTE_FUNC pFunc = NULL;
-							if ( strcmp(&objTok->ParamText[idx][1], "__self__") == 0 ) {
-								pFunc = xvoGetFunc(tblVal);
-							}
-							if ( pFunc == NULL ) {
-								pFunc = xvoTableGetFunc(tblENV, &objTok->ParamText[idx][1], objTok->ParamSize[idx] - 1);
-							}
-							if ( pFunc == NULL ) {
-								xrtBufferAppend(objBuf, "(cannot find function : ", 0, XBUF_UTF8);
-								xrtBufferAppend(objBuf, objTok->Text, objTok->Size, XBUF_UTF8);
-								xrtBufferAppend(objBuf, " [", 2, XBUF_UTF8);
-								xrtBufferAppend(objBuf, &objTok->ParamText[idx][1], objTok->ParamSize[idx] - 1, XBUF_UTF8);
-								xrtBufferAppend(objBuf, "])", 2, XBUF_UTF8);
-								break;
-							}
-							// 传递参数，调用函数，代入返回值
-							xvalue varParam = xvoCreateText(objTok->ParamText[2], FALSE);
-							xvalue varRet = pFunc(tblVal, varParam);
-							char* sTemp = xvoGetText(varRet);
-							if ( sTemp ) {
-								xrtBufferAppend(objBuf, sTemp, 0, XBUF_UTF8);
-							}
-							break;
-						}
-						*/
-					} else if ( objTok->ParamText[idx][0] == '$' ) {
-						// 参数首字符为 $ 则作为字符串获取内容
-						char* sRet = xvoTableGetText(tblVal, &objTok->ParamText[idx][1], objTok->ParamSize[idx] - 1);
-						if ( sRet ) {
-							xrtBufferAppend(objBuf, sRet, 0, XBUF_UTF8);
-						} else {
-							sRet = xvoTableGetText(tblENV, &objTok->ParamText[idx][1], objTok->ParamSize[idx] - 1);
-							if ( sRet ) {
-								xrtBufferAppend(objBuf, sRet, 0, XBUF_UTF8);
-							}
-						}
-					} else if ( objTok->ParamText[idx][0] == ' ' ) {
-						// 参数首字符为空格则跳过这个空格输出参数文本（忽略首空格）
-						xrtBufferAppend(objBuf, &objTok->ParamText[idx][1], objTok->ParamSize[idx] - 1, XBUF_UTF8);
-					} else {
-						xrtBufferAppend(objBuf, objTok->ParamText[idx], objTok->ParamSize[idx], XBUF_UTF8);
-					}
-				}
-			}
-		}
-	}
-	// 移出 objBuf->Buffer 返回，销毁 objBuf
-	char* sRet = objBuf->Buffer;
-	if ( pRetSize ) {
-		*pRetSize = objBuf->Length;
-	}
-	objBuf->Buffer = NULL;
-	xrtBufferDestroy(objBuf);
-	return sRet;
-}
-// 公共接口：生成模板内容
-char* xteMakeActions(xparray arrAction, XTE_LiteObject objTemplate, xvalue tblVal, xvalue tblRoot, xvalue tblENV, xdict tblInclude, size_t* pRetSize)
-{
-	return xteMakeActions_ex(arrAction, objTemplate, tblVal, tblRoot, tblENV, tblInclude, pRetSize, NULL, NULL);
-}
-char* xteMake(XTE_LiteObject objTemplate, xvalue tblVal, xvalue tblENV, xdict tblInclude, size_t* pRetSize)
-{
-	return xteMakeActions(&objTemplate->Actions, objTemplate, tblVal, NULL, tblENV, tblInclude, pRetSize);
-}
-/* ================================ 表达式解析器 (Expression Parser) ================================ */
-// 表达式错误描述
-static const char* XTE_EXPR_ERROR_SUCCESS = "success";
-static const char* XTE_EXPR_ERROR_MALLOC = "malloc failed";
-static const char* XTE_EXPR_ERROR_UNEXPECTED_CHAR = "unexpected character";
-static const char* XTE_EXPR_ERROR_UNTERMINATED_STRING = "unterminated string";
-static const char* XTE_EXPR_ERROR_UNEXPECTED_TOKEN = "unexpected token";
-static const char* XTE_EXPR_ERROR_EXPECTED_RPAREN = "expected ')'";
-static const char* XTE_EXPR_ERROR_EXPECTED_OPERAND = "expected operand";
-// 词法分析器状态
-typedef struct {
-	const char* Expr;			// 表达式字符串
-	size_t Len;					// 表达式长度
-	size_t Pos;					// 当前位置
-	XTE_ExprToken_Struct Current;	// 当前 Token
-	const char* Error;			// 错误描述
-} XTE_ExprLexer_Struct, *XTE_ExprLexer;
-// 跳过空白字符
-static inline void xte_expr_skip_whitespace(XTE_ExprLexer lex)
-{
-	while ( lex->Pos < lex->Len ) {
-		char c = lex->Expr[lex->Pos];
-		if ( c == ' ' || c == '\t' || c == '\r' || c == '\n' ) {
-			lex->Pos++;
-		} else {
-			break;
-		}
-	}
-}
-// 判断字符是否为标识符字符
-static inline int xte_expr_is_ident_char(char c, int first)
-{
-	if ( (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' ) {
+	if ( iSize == 0u ) {
 		return 1;
 	}
-	if ( !first && ((c >= '0' && c <= '9') || c == '.' || c == '[' || c == ']') ) {
-		return 1;
-	}
-	return 0;
-}
-// 解析数字
-static void xte_expr_parse_number(XTE_ExprLexer lex)
-{
-	size_t start = lex->Pos;
-	int isFloat = 0;
-	int hasDigit = 0;
-	
-	// 负号
-	if ( lex->Pos < lex->Len && lex->Expr[lex->Pos] == '-' ) {
-		lex->Pos++;
-	}
-	
-	// 整数部分
-	while ( lex->Pos < lex->Len && lex->Expr[lex->Pos] >= '0' && lex->Expr[lex->Pos] <= '9' ) {
-		lex->Pos++;
-		hasDigit = 1;
-	}
-	
-	// 小数点
-	if ( lex->Pos < lex->Len && lex->Expr[lex->Pos] == '.' ) {
-		lex->Pos++;
-		isFloat = 1;
-		while ( lex->Pos < lex->Len && lex->Expr[lex->Pos] >= '0' && lex->Expr[lex->Pos] <= '9' ) {
-			lex->Pos++;
-			hasDigit = 1;
-		}
-	}
-	
-	// 科学计数法 (e/E)
-	if ( hasDigit && lex->Pos < lex->Len && (lex->Expr[lex->Pos] == 'e' || lex->Expr[lex->Pos] == 'E') ) {
-		lex->Pos++;
-		isFloat = 1;
-		if ( lex->Pos < lex->Len && (lex->Expr[lex->Pos] == '+' || lex->Expr[lex->Pos] == '-') ) {
-			lex->Pos++;
-		}
-		while ( lex->Pos < lex->Len && lex->Expr[lex->Pos] >= '0' && lex->Expr[lex->Pos] <= '9' ) {
-			lex->Pos++;
-		}
-	}
-	
-	lex->Current.Type = XTE_ETK_NUM;
-	lex->Current.IsFloat = isFloat;
-	lex->Current.Pos = start;
-	
-	if ( isFloat ) {
-		lex->Current.Value.NumVal = strtod(lex->Expr + start, NULL);
-	} else {
-		lex->Current.Value.IntVal = atoll(lex->Expr + start);
-	}
-}
-// 解析字符串
-static void xte_expr_parse_string(XTE_ExprLexer lex)
-{
-	char quote = lex->Expr[lex->Pos];
-	size_t start = lex->Pos + 1;
-	lex->Pos++;
-	
-	while ( lex->Pos < lex->Len ) {
-		char c = lex->Expr[lex->Pos];
-		if ( c == quote ) {
-			// 结束引号
-			lex->Current.Type = XTE_ETK_STR;
-			lex->Current.Value.Str.Ptr = lex->Expr + start;
-			lex->Current.Value.Str.Len = lex->Pos - start;
-			lex->Current.Pos = start - 1;
-			lex->Pos++;
-			return;
-		}
-		if ( c == '\\' && lex->Pos + 1 < lex->Len ) {
-			// 转义字符，跳过下一个
-			lex->Pos += 2;
-		} else {
-			lex->Pos++;
-		}
-	}
-	
-	// 未结束的字符串
-	lex->Error = XTE_EXPR_ERROR_UNTERMINATED_STRING;
-	lex->Current.Type = XTE_ETK_EOF;
-}
-// 解析标识符或关键字
-static void xte_expr_parse_ident(XTE_ExprLexer lex)
-{
-	size_t start = lex->Pos;
-	int bracketDepth = 0;
-	
-	// 解析标识符，支持 a.b.c 和 arr[0] 语法
-	while ( lex->Pos < lex->Len ) {
-		char c = lex->Expr[lex->Pos];
-		if ( c == '[' ) {
-			bracketDepth++;
-			lex->Pos++;
-		} else if ( c == ']' ) {
-			if ( bracketDepth > 0 ) {
-				bracketDepth--;
-				lex->Pos++;
-			} else {
-				break;
-			}
-		} else if ( bracketDepth > 0 ) {
-			// 括号内允许数字和空格
-			lex->Pos++;
-		} else if ( xte_expr_is_ident_char(c, lex->Pos == start) ) {
-			lex->Pos++;
-		} else {
-			break;
-		}
-	}
-	
-	size_t len = lex->Pos - start;
-	const char* str = lex->Expr + start;
-	
-	// 检查关键字
-	if ( len == 3 && strncasecmp(str, "and", 3) == 0 ) {
-		lex->Current.Type = XTE_ETK_OP_AND;
-	} else if ( len == 2 && strncasecmp(str, "or", 2) == 0 ) {
-		lex->Current.Type = XTE_ETK_OP_OR;
-	} else if ( len == 3 && strncasecmp(str, "not", 3) == 0 ) {
-		lex->Current.Type = XTE_ETK_OP_NOT;
-	} else if ( len == 4 && strncasecmp(str, "true", 4) == 0 ) {
-		lex->Current.Type = XTE_ETK_BOOL;
-		lex->Current.Value.BoolVal = 1;
-	} else if ( len == 5 && strncasecmp(str, "false", 5) == 0 ) {
-		lex->Current.Type = XTE_ETK_BOOL;
-		lex->Current.Value.BoolVal = 0;
-	} else {
-		// 普通标识符
-		lex->Current.Type = XTE_ETK_IDENT;
-		lex->Current.Value.Str.Ptr = str;
-		lex->Current.Value.Str.Len = len;
-	}
-	lex->Current.Pos = start;
-}
-// 获取下一个 Token
-static void xte_expr_next_token(XTE_ExprLexer lex)
-{
-	xte_expr_skip_whitespace(lex);
-	
-	if ( lex->Pos >= lex->Len ) {
-		lex->Current.Type = XTE_ETK_EOF;
-		lex->Current.Pos = lex->Pos;
-		return;
-	}
-	
-	char c = lex->Expr[lex->Pos];
-	
-	// 数字
-	if ( (c >= '0' && c <= '9') || (c == '-' && lex->Pos + 1 < lex->Len && lex->Expr[lex->Pos + 1] >= '0' && lex->Expr[lex->Pos + 1] <= '9') ) {
-		xte_expr_parse_number(lex);
-		return;
-	}
-	
-	// 字符串
-	if ( c == '"' || c == '\'' ) {
-		xte_expr_parse_string(lex);
-		return;
-	}
-	
-	// 标识符或关键字
-	if ( xte_expr_is_ident_char(c, 1) ) {
-		xte_expr_parse_ident(lex);
-		return;
-	}
-	
-	// 运算符和括号
-	size_t start = lex->Pos;
-	switch ( c ) {
-		case '(':
-			lex->Current.Type = XTE_ETK_LPAREN;
-			lex->Pos++;
-			break;
-		case ')':
-			lex->Current.Type = XTE_ETK_RPAREN;
-			lex->Pos++;
-			break;
-		case '=':
-			lex->Current.Type = XTE_ETK_OP_EQ;
-			lex->Pos++;
-			break;
-		case '!':
-			if ( lex->Pos + 1 < lex->Len && lex->Expr[lex->Pos + 1] == '=' ) {
-				lex->Current.Type = XTE_ETK_OP_NE;
-				lex->Pos += 2;
-			} else {
-				lex->Error = XTE_EXPR_ERROR_UNEXPECTED_CHAR;
-				lex->Current.Type = XTE_ETK_EOF;
-			}
-			break;
-		case '~':
-			if ( lex->Pos + 1 < lex->Len && lex->Expr[lex->Pos + 1] == '=' ) {
-				lex->Current.Type = XTE_ETK_OP_AE;
-				lex->Pos += 2;
-			} else {
-				lex->Error = XTE_EXPR_ERROR_UNEXPECTED_CHAR;
-				lex->Current.Type = XTE_ETK_EOF;
-			}
-			break;
-		case '>':
-			if ( lex->Pos + 1 < lex->Len && lex->Expr[lex->Pos + 1] == '=' ) {
-				lex->Current.Type = XTE_ETK_OP_GE;
-				lex->Pos += 2;
-			} else {
-				lex->Current.Type = XTE_ETK_OP_GT;
-				lex->Pos++;
-			}
-			break;
-		case '<':
-			if ( lex->Pos + 1 < lex->Len && lex->Expr[lex->Pos + 1] == '=' ) {
-				lex->Current.Type = XTE_ETK_OP_LE;
-				lex->Pos += 2;
-			} else {
-				lex->Current.Type = XTE_ETK_OP_LT;
-				lex->Pos++;
-			}
-			break;
-		default:
-			lex->Error = XTE_EXPR_ERROR_UNEXPECTED_CHAR;
-			lex->Current.Type = XTE_ETK_EOF;
-			break;
-	}
-	lex->Current.Pos = start;
-}
-// 初始化词法分析器
-static void xte_expr_lexer_init(XTE_ExprLexer lex, const char* expr, size_t len)
-{
-	lex->Expr = expr;
-	lex->Len = (len > 0) ? len : strlen(expr);
-	lex->Pos = 0;
-	lex->Error = NULL;
-	memset(&lex->Current, 0, sizeof(XTE_ExprToken_Struct));
-	xte_expr_next_token(lex);
-}
-/* -------------------- 语法解析器 (Parser) -------------------- */
-// 运算符优先级（数字越大优先级越低）
-static int xte_expr_get_precedence(uint32 op)
-{
-	switch ( op ) {
-		case XTE_ETK_OP_OR:		return 1;
-		case XTE_ETK_OP_AND:	return 2;
-		case XTE_ETK_OP_EQ:
-		case XTE_ETK_OP_NE:
-		case XTE_ETK_OP_AE:		return 3;
-		case XTE_ETK_OP_GT:
-		case XTE_ETK_OP_LT:
-		case XTE_ETK_OP_GE:
-		case XTE_ETK_OP_LE:		return 4;
-		default:				return 0;
-	}
-}
-// 创建字面量节点
-static XTE_ASTNode xte_ast_create_literal_int(int64 val)
-{
-	XTE_ASTNode node = xrtMalloc(sizeof(XTE_ASTNode_Struct));
-	if ( node ) {
-		node->Type = XTE_AST_LITERAL;
-		node->Data.Literal.LitType = XTE_LIT_INT;
-		node->Data.Literal.Val.IntVal = val;
-	}
-	return node;
-}
-static XTE_ASTNode xte_ast_create_literal_float(double val)
-{
-	XTE_ASTNode node = xrtMalloc(sizeof(XTE_ASTNode_Struct));
-	if ( node ) {
-		node->Type = XTE_AST_LITERAL;
-		node->Data.Literal.LitType = XTE_LIT_FLOAT;
-		node->Data.Literal.Val.NumVal = val;
-	}
-	return node;
-}
-static XTE_ASTNode xte_ast_create_literal_bool(int val)
-{
-	XTE_ASTNode node = xrtMalloc(sizeof(XTE_ASTNode_Struct));
-	if ( node ) {
-		node->Type = XTE_AST_LITERAL;
-		node->Data.Literal.LitType = XTE_LIT_BOOL;
-		node->Data.Literal.Val.BoolVal = val;
-	}
-	return node;
-}
-static XTE_ASTNode xte_ast_create_literal_string(const char* str, size_t len)
-{
-	XTE_ASTNode node = xrtMalloc(sizeof(XTE_ASTNode_Struct));
-	if ( node ) {
-		node->Type = XTE_AST_LITERAL;
-		node->Data.Literal.LitType = XTE_LIT_STRING;
-		node->Data.Literal.Val.Str.Ptr = xrtMalloc(len + 1);
-		if ( node->Data.Literal.Val.Str.Ptr ) {
-			memcpy(node->Data.Literal.Val.Str.Ptr, str, len);
-			node->Data.Literal.Val.Str.Ptr[len] = '\0';
-			node->Data.Literal.Val.Str.Len = len;
-		} else {
-			xrtFree(node);
-			return NULL;
-		}
-	}
-	return node;
-}
-// 创建变量节点
-static XTE_ASTNode xte_ast_create_variable(const char* path, size_t len)
-{
-	XTE_ASTNode node = xrtMalloc(sizeof(XTE_ASTNode_Struct));
-	if ( node ) {
-		node->Type = XTE_AST_VARIABLE;
-		node->Data.Variable.Path = xrtMalloc(len + 1);
-		if ( node->Data.Variable.Path ) {
-			memcpy(node->Data.Variable.Path, path, len);
-			node->Data.Variable.Path[len] = '\0';
-			node->Data.Variable.PathLen = len;
-		} else {
-			xrtFree(node);
-			return NULL;
-		}
-	}
-	return node;
-}
-// 创建一元运算节点
-static XTE_ASTNode xte_ast_create_unary(uint32 op, XTE_ASTNode operand)
-{
-	XTE_ASTNode node = xrtMalloc(sizeof(XTE_ASTNode_Struct));
-	if ( node ) {
-		node->Type = XTE_AST_UNARY;
-		node->Data.Unary.Op = op;
-		node->Data.Unary.Operand = operand;
-	}
-	return node;
-}
-// 创建二元运算节点
-static XTE_ASTNode xte_ast_create_binary(uint32 op, XTE_ASTNode left, XTE_ASTNode right)
-{
-	XTE_ASTNode node = xrtMalloc(sizeof(XTE_ASTNode_Struct));
-	if ( node ) {
-		node->Type = XTE_AST_BINARY;
-		node->Data.Binary.Op = op;
-		node->Data.Binary.Left = left;
-		node->Data.Binary.Right = right;
-	}
-	return node;
-}
-// 释放 AST 节点
-static void xte_ast_free_node(XTE_ASTNode node)
-{
-	if ( node == NULL ) return;
-	
-	switch ( node->Type ) {
-		case XTE_AST_LITERAL:
-			if ( node->Data.Literal.LitType == XTE_LIT_STRING ) {
-				xrtFree(node->Data.Literal.Val.Str.Ptr);
-			}
-			break;
-		case XTE_AST_VARIABLE:
-			xrtFree(node->Data.Variable.Path);
-			break;
-		case XTE_AST_UNARY:
-			xte_ast_free_node(node->Data.Unary.Operand);
-			break;
-		case XTE_AST_BINARY:
-			xte_ast_free_node(node->Data.Binary.Left);
-			xte_ast_free_node(node->Data.Binary.Right);
-			break;
-	}
-	xrtFree(node);
-}
-// 前向声明
-static XTE_ASTNode xte_expr_parse_expression(XTE_ExprLexer lex, int minPrec);
-// 解析原子表达式（字面量、变量、括号、一元运算）
-static XTE_ASTNode xte_expr_parse_atom(XTE_ExprLexer lex)
-{
-	XTE_ASTNode node = NULL;
-	
-	switch ( lex->Current.Type ) {
-		case XTE_ETK_NUM:
-			if ( lex->Current.IsFloat ) {
-				node = xte_ast_create_literal_float(lex->Current.Value.NumVal);
-			} else {
-				node = xte_ast_create_literal_int(lex->Current.Value.IntVal);
-			}
-			xte_expr_next_token(lex);
-			break;
-		
-		case XTE_ETK_STR:
-			node = xte_ast_create_literal_string(lex->Current.Value.Str.Ptr, lex->Current.Value.Str.Len);
-			xte_expr_next_token(lex);
-			break;
-		
-		case XTE_ETK_BOOL:
-			node = xte_ast_create_literal_bool(lex->Current.Value.BoolVal);
-			xte_expr_next_token(lex);
-			break;
-		
-		case XTE_ETK_IDENT:
-			node = xte_ast_create_variable(lex->Current.Value.Str.Ptr, lex->Current.Value.Str.Len);
-			xte_expr_next_token(lex);
-			break;
-		
-		case XTE_ETK_LPAREN:
-			xte_expr_next_token(lex);	// 跳过 '('
-			node = xte_expr_parse_expression(lex, 0);
-			if ( lex->Current.Type != XTE_ETK_RPAREN ) {
-				lex->Error = XTE_EXPR_ERROR_EXPECTED_RPAREN;
-				xte_ast_free_node(node);
-				return NULL;
-			}
-			xte_expr_next_token(lex);	// 跳过 ')'
-			break;
-		
-		case XTE_ETK_OP_NOT:
-			xte_expr_next_token(lex);	// 跳过 'not'
-			{
-				XTE_ASTNode operand = xte_expr_parse_atom(lex);
-				if ( operand == NULL ) {
-					return NULL;
-				}
-				node = xte_ast_create_unary(XTE_ETK_OP_NOT, operand);
-				if ( node == NULL ) {
-					xte_ast_free_node(operand);
-					return NULL;
-				}
-			}
-			break;
-		
-		default:
-			lex->Error = XTE_EXPR_ERROR_EXPECTED_OPERAND;
-			return NULL;
-	}
-	
-	return node;
-}
-// 表达式解析最大递归深度
-#define XTE_EXPR_MAX_DEPTH 64
-// 解析表达式（优先级爬升法）- 带深度限制
-static XTE_ASTNode xte_expr_parse_expression_depth(XTE_ExprLexer lex, int minPrec, int depth)
-{
-	// 检查递归深度，防止栈溢出
-	if ( depth > XTE_EXPR_MAX_DEPTH ) {
-		lex->Error = "expression too deeply nested";
-		return NULL;
-	}
-	
-	XTE_ASTNode left = xte_expr_parse_atom(lex);
-	if ( left == NULL ) {
-		return NULL;
-	}
-	
-	// 处理二元运算符
-	while ( 1 ) {
-		uint32 op = lex->Current.Type;
-		int prec = xte_expr_get_precedence(op);
-		
-		if ( prec == 0 || prec < minPrec ) {
-			break;
-		}
-		
-		xte_expr_next_token(lex);	// 跳过运算符
-		
-		XTE_ASTNode right = xte_expr_parse_expression_depth(lex, prec + 1, depth + 1);
-		if ( right == NULL ) {
-			xte_ast_free_node(left);
-			return NULL;
-		}
-		
-		XTE_ASTNode newNode = xte_ast_create_binary(op, left, right);
-		if ( newNode == NULL ) {
-			xte_ast_free_node(left);
-			xte_ast_free_node(right);
-			return NULL;
-		}
-		left = newNode;
-	}
-	
-	return left;
-}
-// 解析表达式（优先级爬升法）
-static XTE_ASTNode xte_expr_parse_expression(XTE_ExprLexer lex, int minPrec)
-{
-	return xte_expr_parse_expression_depth(lex, minPrec, 0);
-}
-// 解析表达式字符串，返回解析结果
-XTE_ExprResult xteExprParse(const char* expr, size_t len)
-{
-	XTE_ExprResult result = xrtMalloc(sizeof(XTE_ExprResult_Struct));
-	if ( result == NULL ) {
-		return NULL;
-	}
-	
-	// 初始化词法分析器
-	XTE_ExprLexer_Struct lex;
-	xte_expr_lexer_init(&lex, expr, len);
-	
-	// 检查词法错误
-	if ( lex.Error ) {
-		result->Success = 0;
-		result->ErrorDesc = lex.Error;
-		result->ErrorPos = lex.Current.Pos;
-		result->Root = NULL;
-		return result;
-	}
-	
-	// 解析表达式
-	result->Root = xte_expr_parse_expression(&lex, 0);
-	
-	if ( lex.Error ) {
-		result->Success = 0;
-		result->ErrorDesc = lex.Error;
-		result->ErrorPos = lex.Current.Pos;
-		return result;
-	}
-	
-	if ( result->Root == NULL ) {
-		result->Success = 0;
-		result->ErrorDesc = XTE_EXPR_ERROR_MALLOC;
-		result->ErrorPos = 0;
-		return result;
-	}
-	
-	// 检查是否有多余内容
-	if ( lex.Current.Type != XTE_ETK_EOF ) {
-		result->Success = 0;
-		result->ErrorDesc = XTE_EXPR_ERROR_UNEXPECTED_TOKEN;
-		result->ErrorPos = lex.Current.Pos;
-		return result;
-	}
-	
-	result->Success = 1;
-	result->ErrorDesc = XTE_EXPR_ERROR_SUCCESS;
-	result->ErrorPos = 0;
-	return result;
-}
-// 释放表达式解析结果
-void xteExprFree(XTE_ExprResult result)
-{
-	if ( result ) {
-		xte_ast_free_node(result->Root);
-		xrtFree(result);
-	}
-}
-/* -------------------- 求值器 (Evaluator) -------------------- */
-// 将 xvalue 转换为布尔值
-static int xte_value_to_bool(xvalue val)
-{
-	if ( val == NULL || val->Type == XVO_DT_NULL ) {
+	if ( (pWriter == NULL) || (pWriter->procWrite == NULL) ) {
 		return 0;
 	}
-	switch ( val->Type ) {
+	if ( pWriter->procWrite(pWriter->pUserData, sText, iSize) == 0 ) {
+		return 0;
+	}
+	pWriter->iWritten += iSize;
+	return 1;
+}
+static int xte_private_buffer_writer_proc(void* pUserData, const char* sText, size_t iSize)
+{
+	return xrtBufferAppend((xbuffer)pUserData, (ptr)sText, iSize, XBUF_BINARY) ? 1 : 0;
+}
+static const XTE_StatementDef* xte_private_find_statement(xteengine hEngine, const char* sName, uint32 iNameSize)
+{
+	uint32 i = 0;
+	if ( hEngine == NULL ) {
+		return NULL;
+	}
+	for ( i = 0; i < hEngine->arrStatement.Count; i++ ) {
+		XTE_PrivateStatementReg* pReg = xrtArrayGet_Inline(&hEngine->arrStatement, i + 1u);
+		uint32 iLen = (uint32)strlen(pReg->pDef->sName);
+		if ( xte_private_str_eq(pReg->pDef->sName, iLen, sName, iNameSize) ) {
+			return pReg->pDef;
+		}
+	}
+	return NULL;
+}
+static const XTE_FunctionDef* xte_private_find_function(xteengine hEngine, const char* sName, uint32 iNameSize)
+{
+	uint32 i = 0;
+	if ( hEngine == NULL ) {
+		return NULL;
+	}
+	for ( i = 0; i < hEngine->arrFunction.Count; i++ ) {
+		XTE_PrivateFunctionReg* pReg = xrtArrayGet_Inline(&hEngine->arrFunction, i + 1u);
+		uint32 iLen = (uint32)strlen(pReg->pDef->sName);
+		if ( xte_private_str_eq(pReg->pDef->sName, iLen, sName, iNameSize) ) {
+			return pReg->pDef;
+		}
+	}
+	return NULL;
+}
+static int xte_private_statement_name_eq(xtetemplate hTemplate, const XTE_Node* pNode, const char* sName)
+{
+	if ( (hTemplate == NULL) || (pNode == NULL) || (pNode->iType != XTE_NODE_STATEMENT) || (sName == NULL) ) {
+		return 0;
+	}
+	return xte_private_str_eq(
+		xte_private_pool_ptr(hTemplate, pNode->Data.Statement.iStmtNameOff),
+		pNode->Data.Statement.iStmtNameSize,
+		sName,
+		(uint32)strlen(sName)
+	);
+}
+static void xte_private_fill_arg_list(xtetemplate hTemplate, uint32 iArgStart, uint32 iArgCount, XTE_ArgList* pArgs)
+{
+	memset(pArgs, 0, sizeof(*pArgs));
+	if ( hTemplate == NULL ) {
+		return;
+	}
+	pArgs->hTemplate = hTemplate;
+	pArgs->iCount = iArgCount;
+	pArgs->pItems = (iArgCount != 0u) ? xte_private_template_get_arg(hTemplate, iArgStart) : NULL;
+}
+static void xte_private_make_arg_list(xtetemplate hTemplate, const XTE_Node* pNode, XTE_ArgList* pArgs)
+{
+	if ( (hTemplate == NULL) || (pNode == NULL) || (pNode->iType != XTE_NODE_STATEMENT) ) {
+		memset(pArgs, 0, sizeof(*pArgs));
+		return;
+	}
+	xte_private_fill_arg_list(hTemplate, pNode->Data.Statement.iArgStart, pNode->Data.Statement.iArgCount, pArgs);
+}
+static void xte_private_fill_node_error(const XTE_Node* pNode, XTE_Error* pError, int iCode, const char* sDesc)
+{
+	if ( pError == NULL ) {
+		return;
+	}
+	memset(pError, 0, sizeof(*pError));
+	pError->iCode = iCode;
+	pError->sDesc = sDesc;
+	pError->iLine = 1u;
+	pError->iColumn = 1u;
+	pError->iRefLine = 1u;
+	pError->iRefColumn = 1u;
+	if ( pNode != NULL ) {
+		pError->iPos = pNode->iPos;
+		pError->iRefPos = pNode->iPos;
+	}
+}
+static int xte_private_bind_statement_node(xtetemplate hTemplate, XTE_Node* pNode, const XTE_StatementDef* pDef, int iDefaultCode, const char* sDefaultDesc)
+{
+	const char* sName = NULL;
+	XTE_ArgList tArgs = { 0 };
+	XTE_NodeSpan* pBody = NULL;
+	const char* sRawBody = NULL;
+	XTE_StmtParseCtx tCtx = { 0 };
+	void* pData = NULL;
+	if ( (hTemplate == NULL) || (pNode == NULL) || (pNode->iType != XTE_NODE_STATEMENT) ) {
+		return 1;
+	}
+	if ( pDef == NULL ) {
+		sName = xte_private_pool_ptr(hTemplate, pNode->Data.Statement.iStmtNameOff);
+		pDef = xte_private_find_statement(hTemplate->hEngine, sName, pNode->Data.Statement.iStmtNameSize);
+	}
+	if ( pDef == NULL ) {
+		xte_private_fill_node_error(pNode, &hTemplate->LastError, XTE_ERROR_UNKNOWN_STATEMENT, "template statement is not registered");
+		return 0;
+	}
+	if ( pNode->Data.Statement.pData != NULL ) {
+		if ( pDef->procFreeData != NULL ) {
+			pDef->procFreeData(pNode->Data.Statement.pData);
+		}
+		pNode->Data.Statement.pData = NULL;
+	}
+	if ( pDef->procParse == NULL ) {
+		return 1;
+	}
+	xte_private_make_arg_list(hTemplate, pNode, &tArgs);
+	pBody = (pNode->Data.Statement.tBody.iCount != 0u) ? &pNode->Data.Statement.tBody : NULL;
+	sRawBody = (pNode->Data.Statement.iRawBodyOff != XTE_PRIVATE_INVALID_INDEX) ? xte_private_pool_ptr(hTemplate, pNode->Data.Statement.iRawBodyOff) : NULL;
+	tCtx.hEngine = hTemplate->hEngine;
+	tCtx.hTemplate = hTemplate;
+	tCtx.pDef = pDef;
+	tCtx.pArgs = &tArgs;
+	tCtx.pBody = pBody;
+	tCtx.sRawBody = sRawBody;
+	tCtx.iRawBodySize = pNode->Data.Statement.iRawBodySize;
+	tCtx.pError = &hTemplate->LastError;
+	tCtx.pUserData = pDef->pUserData;
+	xte_private_clear_error(&hTemplate->LastError);
+	if ( pDef->procParse(&tCtx, &pData) == 0 ) {
+		if ( hTemplate->LastError.iCode == 0 ) {
+			xte_private_fill_node_error(pNode, &hTemplate->LastError, iDefaultCode, sDefaultDesc);
+		}
+		return 0;
+	}
+	pNode->Data.Statement.pData = pData;
+	return 1;
+}
+static int xte_private_rebuild_statement_data(xtetemplate hTemplate, int iDefaultCode, const char* sDefaultDesc)
+{
+	uint32 i = 0;
+	if ( hTemplate == NULL ) {
+		return 0;
+	}
+	for ( i = 0; i < hTemplate->arrNode.Count; i++ ) {
+		XTE_Node* pNode = xte_private_template_get_node(hTemplate, i);
+		if ( (pNode == NULL) || (pNode->iType != XTE_NODE_STATEMENT) ) {
+			continue;
+		}
+		if ( !xte_private_bind_statement_node(hTemplate, pNode, NULL, iDefaultCode, sDefaultDesc) ) {
+			return 0;
+		}
+	}
+	return 1;
+}
+static const XTE_PrivateSubTemplateItem* xte_private_find_subtemplate(xtetemplate hTemplate, const char* sName, uint32 iNameSize)
+{
+	uint32 i = 0;
+	if ( (hTemplate == NULL) || (sName == NULL) ) {
+		return NULL;
+	}
+	if ( iNameSize == 0u ) {
+		iNameSize = (uint32)strlen(sName);
+	}
+	for ( i = 0; i < hTemplate->arrSubTemplate.Count; i++ ) {
+		XTE_PrivateSubTemplateItem* pItem = xte_private_template_get_subtemplate(hTemplate, i);
+		const char* sItemName = NULL;
+		if ( pItem == NULL ) {
+			continue;
+		}
+		sItemName = xte_private_pool_ptr(hTemplate, pItem->iNameOff);
+		if ( xte_private_str_eq(sItemName, pItem->iNameSize, sName, iNameSize) ) {
+			return pItem;
+		}
+	}
+	return NULL;
+}
+static int xte_private_rebuild_subtemplates(xtetemplate hTemplate, int iErrorCode, const char* sDefaultDesc)
+{
+	uint32 i = 0;
+	if ( hTemplate == NULL ) {
+		return 0;
+	}
+	xrtArrayUnit(&hTemplate->arrSubTemplate);
+	xrtArrayInit(&hTemplate->arrSubTemplate, sizeof(XTE_PrivateSubTemplateItem), XRT_OBJMODE_LOCAL);
+	for ( i = 0; i < hTemplate->arrNode.Count; i++ ) {
+		XTE_Node* pNode = xte_private_template_get_node(hTemplate, i);
+		XTE_PrivateSubTemplateItem tItem = { 0 };
+		const char* sStmtName = NULL;
+		const char* sDefineName = NULL;
+		uint32 iDefineNameSize = 0;
+		uint32 iIndex = 0;
+		if ( (pNode == NULL) || (pNode->iType != XTE_NODE_STATEMENT) ) {
+			continue;
+		}
+		sStmtName = xte_private_pool_ptr(hTemplate, pNode->Data.Statement.iStmtNameOff);
+		if ( !xte_private_str_eq(sStmtName, pNode->Data.Statement.iStmtNameSize, "define", 6) ) {
+			continue;
+		}
+		sDefineName = (const char*)pNode->Data.Statement.pData;
+		if ( (sDefineName == NULL) || (sDefineName[0] == 0) ) {
+			xte_private_fill_node_error(pNode, &hTemplate->LastError, iErrorCode, sDefaultDesc);
+			return 0;
+		}
+		iDefineNameSize = (uint32)strlen(sDefineName);
+		if ( xte_private_find_subtemplate(hTemplate, sDefineName, iDefineNameSize) != NULL ) {
+			xte_private_fill_node_error(pNode, &hTemplate->LastError, iErrorCode, "template define name is duplicated");
+			return 0;
+		}
+		tItem.iNameOff = xte_private_pool_add_copy(hTemplate, sDefineName, iDefineNameSize);
+		tItem.iNameSize = iDefineNameSize;
+		tItem.tBody = pNode->Data.Statement.tBody;
+		if ( tItem.iNameOff == XTE_PRIVATE_INVALID_INDEX ) {
+			xte_private_fill_node_error(pNode, &hTemplate->LastError, XTE_ERROR_MALLOC, "template sub template alloc failed");
+			return 0;
+		}
+		iIndex = xrtArrayAppend(&hTemplate->arrSubTemplate, 1u);
+		if ( iIndex == 0u ) {
+			xte_private_fill_node_error(pNode, &hTemplate->LastError, XTE_ERROR_MALLOC, "template sub template alloc failed");
+			return 0;
+		}
+		memcpy(xrtArrayGet_Inline(&hTemplate->arrSubTemplate, iIndex), &tItem, sizeof(tItem));
+	}
+	return 1;
+}
+static void xte_private_ast_list_init(XTE_PrivateAstList* pList)
+{
+	xrtArrayInit(&pList->arrNode, sizeof(XTE_PrivateAstNode), XRT_OBJMODE_LOCAL);
+}
+static void xte_private_ast_node_unit(XTE_PrivateAstNode* pNode)
+{
+	uint32 i = 0;
+	switch ( pNode->iType ) {
+		case XTE_NODE_TEXT:
+			xrtFree(pNode->Data.Text.sText);
+			break;
+		case XTE_NODE_OUTPUT:
+			xrtFree(pNode->Data.Output.sExpr);
+			xrtFree(pNode->Data.Output.sFormat);
+			xrtFree(pNode->Data.Output.sFuncName);
+			if ( pNode->Data.Output.iOutputType == XTE_OUTPUT_FUNC ) {
+				for ( i = 0; i < pNode->Data.Output.arrArg.Count; i++ ) {
+					XTE_PrivateAstArg* pArg = xrtArrayGet_Inline(&pNode->Data.Output.arrArg, i + 1u);
+					xrtFree(pArg->sName);
+					xrtFree(pArg->sRaw);
+				}
+				xrtArrayUnit(&pNode->Data.Output.arrArg);
+			}
+			break;
+		case XTE_NODE_INLINE_BOOL:
+			xrtFree(pNode->Data.InlineBool.sExpr);
+			xrtFree(pNode->Data.InlineBool.sTrueText);
+			xrtFree(pNode->Data.InlineBool.sFalseText);
+			break;
+		case XTE_NODE_STATEMENT:
+			xrtFree(pNode->Data.Statement.sStmtName);
+			xrtFree(pNode->Data.Statement.sRawBody);
+			for ( i = 0; i < pNode->Data.Statement.arrArg.Count; i++ ) {
+				XTE_PrivateAstArg* pArg = xrtArrayGet_Inline(&pNode->Data.Statement.arrArg, i + 1u);
+				xrtFree(pArg->sName);
+				xrtFree(pArg->sRaw);
+			}
+			xrtArrayUnit(&pNode->Data.Statement.arrArg);
+			for ( i = 0; i < pNode->Data.Statement.tBody.arrNode.Count; i++ ) {
+				XTE_PrivateAstNode* pChild = xrtArrayGet_Inline(&pNode->Data.Statement.tBody.arrNode, i + 1u);
+				xte_private_ast_node_unit(pChild);
+			}
+			xrtArrayUnit(&pNode->Data.Statement.tBody.arrNode);
+			break;
+	}
+}
+static void xte_private_ast_list_unit(XTE_PrivateAstList* pList)
+{
+	uint32 i = 0;
+	for ( i = 0; i < pList->arrNode.Count; i++ ) {
+		XTE_PrivateAstNode* pNode = xrtArrayGet_Inline(&pList->arrNode, i + 1u);
+		xte_private_ast_node_unit(pNode);
+	}
+	xrtArrayUnit(&pList->arrNode);
+}
+static uint32 xte_private_ast_add_node(XTE_PrivateAstList* pList, const XTE_PrivateAstNode* pNode)
+{
+	uint32 iIndex = xrtArrayAppend(&pList->arrNode, 1);
+	if ( iIndex == 0u ) {
+		return XTE_PRIVATE_INVALID_INDEX;
+	}
+	memcpy(xrtArrayGet_Inline(&pList->arrNode, iIndex), pNode, sizeof(*pNode));
+	return iIndex - 1u;
+}
+static XTE_Node* xte_private_template_get_node(xtetemplate hTemplate, uint32 iIndex)
+{
+	if ( (hTemplate == NULL) || (iIndex >= hTemplate->arrNode.Count) ) {
+		return NULL;
+	}
+	return xrtArrayGet_Inline(&hTemplate->arrNode, iIndex + 1u);
+}
+static XTE_ExprNode* xte_private_template_get_expr(xtetemplate hTemplate, uint32 iIndex)
+{
+	if ( (hTemplate == NULL) || (iIndex >= hTemplate->arrExpr.Count) ) {
+		return NULL;
+	}
+	return xrtArrayGet_Inline(&hTemplate->arrExpr, iIndex + 1u);
+}
+static XTE_ArgItem* xte_private_template_get_arg(xtetemplate hTemplate, uint32 iIndex)
+{
+	if ( (hTemplate == NULL) || (iIndex >= hTemplate->arrArg.Count) ) {
+		return NULL;
+	}
+	return xrtArrayGet_Inline(&hTemplate->arrArg, iIndex + 1u);
+}
+static XTE_PrivateSubTemplateItem* xte_private_template_get_subtemplate(xtetemplate hTemplate, uint32 iIndex)
+{
+	if ( (hTemplate == NULL) || (iIndex >= hTemplate->arrSubTemplate.Count) ) {
+		return NULL;
+	}
+	return xrtArrayGet_Inline(&hTemplate->arrSubTemplate, iIndex + 1u);
+}
+static uint32 xte_private_pool_add_copy(xtetemplate hTemplate, const char* sText, uint32 iSize)
+{
+	char chZero = 0;
+	uint32 iOff = 0;
+	if ( hTemplate == NULL ) {
+		return XTE_PRIVATE_INVALID_INDEX;
+	}
+	iOff = hTemplate->tStringPool.Length;
+	if ( iSize && !xrtBufferAppend(&hTemplate->tStringPool, (ptr)sText, iSize, XBUF_BINARY) ) {
+		return XTE_PRIVATE_INVALID_INDEX;
+	}
+	if ( !xrtBufferAppend(&hTemplate->tStringPool, &chZero, 1, XBUF_BINARY) ) {
+		return XTE_PRIVATE_INVALID_INDEX;
+	}
+	return iOff;
+}
+static uint32 xte_private_pool_add_unescaped(xtetemplate hTemplate, const char* sText, uint32 iSize)
+{
+	char* sTemp = xte_private_copy_view_unescaped(sText, iSize);
+	uint32 iOff = XTE_PRIVATE_INVALID_INDEX;
+	if ( sTemp == NULL ) {
+		return XTE_PRIVATE_INVALID_INDEX;
+	}
+	iOff = xte_private_pool_add_copy(hTemplate, sTemp, (uint32)strlen(sTemp));
+	xrtFree(sTemp);
+	return iOff;
+}
+static const char* xte_private_pool_ptr(xtetemplate hTemplate, uint32 iOff)
+{
+	if ( (hTemplate == NULL) || (iOff >= hTemplate->tStringPool.Length) ) {
+		return NULL;
+	}
+	return &hTemplate->tStringPool.Buffer[iOff];
+}
+static uint32 xte_private_add_expr(xtetemplate hTemplate, const XTE_ExprNode* pExpr)
+{
+	uint32 iIndex = xrtArrayAppend(&hTemplate->arrExpr, 1);
+	if ( iIndex == 0u ) {
+		return XTE_PRIVATE_INVALID_INDEX;
+	}
+	memcpy(xrtArrayGet_Inline(&hTemplate->arrExpr, iIndex), pExpr, sizeof(*pExpr));
+	return iIndex - 1u;
+}
+static uint32 xte_private_add_arg(xtetemplate hTemplate, const XTE_ArgItem* pArg)
+{
+	uint32 iIndex = xrtArrayAppend(&hTemplate->arrArg, 1);
+	if ( iIndex == 0u ) {
+		return XTE_PRIVATE_INVALID_INDEX;
+	}
+	memcpy(xrtArrayGet_Inline(&hTemplate->arrArg, iIndex), pArg, sizeof(*pArg));
+	return iIndex - 1u;
+}
+static xvalue xte_private_lookup_first_value(const char* sName, uint32 iNameSize, xvalue pCurrent, xvalue pRoot, xvalue pLocal, xvalue pGlobal)
+{
+	xvalue pRet = &XVO_VALUE_NULL;
+	if ( pLocal && (pLocal->Type == XVO_DT_TABLE) ) {
+		pRet = xvoTableGetValue(pLocal, sName, iNameSize);
+		if ( pRet->Type != XVO_DT_NULL ) {
+			return pRet;
+		}
+	}
+	if ( pCurrent && (pCurrent->Type == XVO_DT_TABLE) ) {
+		pRet = xvoTableGetValue(pCurrent, sName, iNameSize);
+		if ( pRet->Type != XVO_DT_NULL ) {
+			return pRet;
+		}
+	}
+	if ( pRoot && (pRoot->Type == XVO_DT_TABLE) ) {
+		pRet = xvoTableGetValue(pRoot, sName, iNameSize);
+		if ( pRet->Type != XVO_DT_NULL ) {
+			return pRet;
+		}
+	}
+	if ( pGlobal && (pGlobal->Type == XVO_DT_TABLE) ) {
+		pRet = xvoTableGetValue(pGlobal, sName, iNameSize);
+		if ( pRet->Type != XVO_DT_NULL ) {
+			return pRet;
+		}
+	}
+	return &XVO_VALUE_NULL;
+}
+static int xte_private_find_tag_end(XTE_PrivateParser* pParser, uint32 iContentPos, uint32* pClosePos)
+{
+	uint32 i = iContentPos;
+	while ( i < pParser->iSize ) {
+		if ( pParser->sText[i] == '\\' ) {
+			i += 2u;
+			continue;
+		}
+		if ( xte_private_match_close(&pParser->tBracket, pParser->sText, pParser->iSize, i) ) {
+			*pClosePos = i;
+			return 1;
+		}
+		i++;
+	}
+	return 0;
+}
+static uint32 xte_private_find_next_tag(XTE_PrivateParser* pParser, uint32 iPos)
+{
+	while ( iPos < pParser->iSize ) {
+		if ( xte_private_match_open(&pParser->tBracket, pParser->sText, pParser->iSize, iPos) ) {
+			return iPos;
+		}
+		iPos++;
+	}
+	return XTE_PRIVATE_INVALID_INDEX;
+}
+static int xte_private_compile_expr(xtetemplate hTemplate, const char* sText, uint32 iSize, uint32* pExprIndex)
+{
+	XTE_PrivateView tView = { sText, iSize };
+	XTE_ExprNode tExpr = { 0 };
+	char* sTemp = NULL;
+	xte_private_trim_view(&tView);
+	if ( (tView.iSize >= 2u) && (((tView.sText[0] == '"') && (tView.sText[tView.iSize - 1u] == '"')) || ((tView.sText[0] == '\'') && (tView.sText[tView.iSize - 1u] == '\''))) ) {
+		tExpr.iType = XTE_EXPR_TEXT;
+		tExpr.iTextOff = xte_private_pool_add_unescaped(hTemplate, &tView.sText[1], tView.iSize - 2u);
+		tExpr.iTextSize = (tExpr.iTextOff == XTE_PRIVATE_INVALID_INDEX) ? 0u : (uint32)strlen(xte_private_pool_ptr(hTemplate, tExpr.iTextOff));
+	} else if ( xte_private_str_eq(tView.sText, tView.iSize, "true", 4) ) {
+		tExpr.iType = XTE_EXPR_BOOL;
+		tExpr.iBoolValue = 1;
+	} else if ( xte_private_str_eq(tView.sText, tView.iSize, "false", 5) ) {
+		tExpr.iType = XTE_EXPR_BOOL;
+		tExpr.iBoolValue = 0;
+	} else if ( xte_private_is_integer_view(tView.sText, tView.iSize) ) {
+		tExpr.iType = XTE_EXPR_INT;
+		sTemp = xte_private_copy_view(tView.sText, tView.iSize);
+		if ( sTemp == NULL ) {
+			return 0;
+		}
+		tExpr.iIntValue = xrtStrToI64(sTemp);
+		xrtFree(sTemp);
+	} else if ( xte_private_expr_is_complex(tView.sText, tView.iSize) ) {
+		tExpr.iType = XTE_EXPR_BOOL_EXPR;
+		tExpr.iTextOff = xte_private_pool_add_copy(hTemplate, tView.sText, tView.iSize);
+		tExpr.iTextSize = tView.iSize;
+	} else {
+		tExpr.iType = XTE_EXPR_PATH;
+		tExpr.iTextOff = xte_private_pool_add_copy(hTemplate, tView.sText, tView.iSize);
+		tExpr.iTextSize = tView.iSize;
+	}
+	if ( ((tExpr.iType == XTE_EXPR_TEXT) || (tExpr.iType == XTE_EXPR_PATH) || (tExpr.iType == XTE_EXPR_BOOL_EXPR)) && (tExpr.iTextOff == XTE_PRIVATE_INVALID_INDEX) ) {
+		return 0;
+	}
+	*pExprIndex = xte_private_add_expr(hTemplate, &tExpr);
+	return (*pExprIndex != XTE_PRIVATE_INVALID_INDEX);
+}
+static int xte_private_parse_text(XTE_PrivateParser* pParser, XTE_PrivateAstList* pList)
+{
+	xbuffer_struct tBuf = { 0 };
+	uint32 iStart = pParser->iPos;
+	uint32 iChunkPos = pParser->iPos;
+	XTE_PrivateAstNode tNode = { 0 };
+	xrtBufferInit(&tBuf, 0);
+	while ( pParser->iPos < pParser->iSize ) {
+		if ( !xte_private_match_open(&pParser->tBracket, pParser->sText, pParser->iSize, pParser->iPos) ) {
+			pParser->iPos++;
+			continue;
+		}
+		if ( xte_private_match_open(&pParser->tBracket, pParser->sText, pParser->iSize, pParser->iPos + pParser->tBracket.iOpenSize) ) {
+			if ( pParser->iPos > iChunkPos ) {
+				if ( !xrtBufferAppend(&tBuf, (ptr)&pParser->sText[iChunkPos], pParser->iPos - iChunkPos, XBUF_BINARY) ) {
+					xrtBufferUnit(&tBuf);
+					xte_private_set_parser_error(pParser, iStart, XTE_ERROR_MALLOC, "template text alloc failed");
+					return 0;
+				}
+			}
+			if ( !xrtBufferAppend(&tBuf, (ptr)pParser->tBracket.sOpen, pParser->tBracket.iOpenSize, XBUF_BINARY) ) {
+				xrtBufferUnit(&tBuf);
+				xte_private_set_parser_error(pParser, iStart, XTE_ERROR_MALLOC, "template text alloc failed");
+				return 0;
+			}
+			pParser->iPos += pParser->tBracket.iOpenSize * 2u;
+			iChunkPos = pParser->iPos;
+			continue;
+		}
+		break;
+	}
+	if ( pParser->iPos > iChunkPos ) {
+		if ( !xrtBufferAppend(&tBuf, (ptr)&pParser->sText[iChunkPos], pParser->iPos - iChunkPos, XBUF_BINARY) ) {
+			xrtBufferUnit(&tBuf);
+			xte_private_set_parser_error(pParser, iStart, XTE_ERROR_MALLOC, "template text alloc failed");
+			return 0;
+		}
+	}
+	tNode.iType = XTE_NODE_TEXT;
+	tNode.iPos = pParser->iBasePos + iStart;
+	tNode.iSize = pParser->iPos - iStart;
+	tNode.Data.Text.sText = xte_private_copy_view(tBuf.Buffer, tBuf.Length);
+	tNode.Data.Text.iTextSize = tBuf.Length;
+	xrtBufferUnit(&tBuf);
+	if ( tNode.Data.Text.sText == NULL ) {
+		xte_private_set_parser_error(pParser, iStart, XTE_ERROR_MALLOC, "template text alloc failed");
+		return 0;
+	}
+	if ( xte_private_ast_add_node(pList, &tNode) == XTE_PRIVATE_INVALID_INDEX ) {
+		xte_private_ast_node_unit(&tNode);
+		xte_private_set_parser_error(pParser, iStart, XTE_ERROR_MALLOC, "template node alloc failed");
+		return 0;
+	}
+	return 1;
+}
+static int xte_private_parse_output_node(XTE_PrivateParser* pParser, XTE_PrivateAstList* pList, uint32 iClosePos, char chKind)
+{
+	XTE_PrivateAstNode tNode = { 0 };
+	XTE_PrivateView arrView[3] = { 0 };
+	XTE_PrivateView tExprView = { 0 };
+	XTE_PrivateView tFmtView = { 0 };
+	uint32 iStart = pParser->iPos;
+	uint32 iTagStart = iStart + pParser->tBracket.iOpenSize + 1u;
+	uint32 iPartCount = xte_private_split_colon(&pParser->sText[iTagStart], iClosePos - iTagStart, arrView, 3u);
+	if ( iPartCount == 0u ) {
+		xte_private_set_parser_error(pParser, iStart, XTE_ERROR_PARSE, "template output tag is empty");
+		return 0;
+	}
+	tExprView = arrView[0];
+	xte_private_trim_view(&tExprView);
+	if ( tExprView.iSize == 0u ) {
+		xte_private_set_parser_error(pParser, iStart, XTE_ERROR_PARSE, "template output expression is empty");
+		return 0;
+	}
+	tNode.iType = XTE_NODE_OUTPUT;
+	tNode.iPos = pParser->iBasePos + iStart;
+	tNode.iSize = (iClosePos + pParser->tBracket.iCloseSize) - iStart;
+	if ( chKind == '$' ) {
+		tNode.Data.Output.iOutputType = XTE_OUTPUT_TEXT;
+	} else if ( chKind == '%' ) {
+		tNode.Data.Output.iOutputType = XTE_OUTPUT_NUM;
+	} else {
+		tNode.Data.Output.iOutputType = XTE_OUTPUT_TIME;
+	}
+	tNode.Data.Output.sExpr = xte_private_copy_view(tExprView.sText, tExprView.iSize);
+	tNode.Data.Output.iExprSize = tExprView.iSize;
+	if ( tNode.Data.Output.sExpr == NULL ) {
+		xte_private_set_parser_error(pParser, iStart, XTE_ERROR_MALLOC, "template output alloc failed");
+		return 0;
+	}
+	if ( iPartCount >= 2u ) {
+		tFmtView = arrView[1];
+		xte_private_trim_view(&tFmtView);
+		if ( tFmtView.iSize ) {
+			tNode.Data.Output.sFormat = xte_private_copy_view_unescaped(tFmtView.sText, tFmtView.iSize);
+			tNode.Data.Output.iFormatSize = (tNode.Data.Output.sFormat == NULL) ? 0u : (uint32)strlen(tNode.Data.Output.sFormat);
+			if ( tNode.Data.Output.sFormat == NULL ) {
+				xte_private_ast_node_unit(&tNode);
+				xte_private_set_parser_error(pParser, iStart, XTE_ERROR_MALLOC, "template output format alloc failed");
+				return 0;
+			}
+		}
+	}
+	if ( xte_private_ast_add_node(pList, &tNode) == XTE_PRIVATE_INVALID_INDEX ) {
+		xte_private_ast_node_unit(&tNode);
+		xte_private_set_parser_error(pParser, iStart, XTE_ERROR_MALLOC, "template node alloc failed");
+		return 0;
+	}
+	pParser->iPos = iClosePos + pParser->tBracket.iCloseSize;
+	return 1;
+}
+static int xte_private_parse_inline_bool_node(XTE_PrivateParser* pParser, XTE_PrivateAstList* pList, uint32 iClosePos)
+{
+	XTE_PrivateAstNode tNode = { 0 };
+	XTE_PrivateView arrView[3] = { 0 };
+	XTE_PrivateView tExprView = { 0 };
+	XTE_PrivateView tTrueView = { 0 };
+	XTE_PrivateView tFalseView = { 0 };
+	uint32 iStart = pParser->iPos;
+	uint32 iTagStart = iStart + pParser->tBracket.iOpenSize + 1u;
+	uint32 iPartCount = xte_private_split_colon(&pParser->sText[iTagStart], iClosePos - iTagStart, arrView, 3u);
+	if ( iPartCount < 2u ) {
+		xte_private_set_parser_error(pParser, iStart, XTE_ERROR_PARSE, "template inline bool requires at least 2 parts");
+		return 0;
+	}
+	tExprView = arrView[0];
+	tTrueView = arrView[1];
+	xte_private_trim_view(&tExprView);
+	if ( tExprView.iSize == 0u ) {
+		xte_private_set_parser_error(pParser, iStart, XTE_ERROR_PARSE, "template inline bool expression is empty");
+		return 0;
+	}
+	if ( iPartCount >= 3u ) {
+		tFalseView = arrView[2];
+	}
+	tNode.iType = XTE_NODE_INLINE_BOOL;
+	tNode.iPos = pParser->iBasePos + iStart;
+	tNode.iSize = (iClosePos + pParser->tBracket.iCloseSize) - iStart;
+	tNode.Data.InlineBool.sExpr = xte_private_copy_view(tExprView.sText, tExprView.iSize);
+	tNode.Data.InlineBool.iExprSize = tExprView.iSize;
+	tNode.Data.InlineBool.sTrueText = xte_private_copy_view_unescaped(tTrueView.sText, tTrueView.iSize);
+	tNode.Data.InlineBool.iTrueSize = (tNode.Data.InlineBool.sTrueText == NULL) ? 0u : (uint32)strlen(tNode.Data.InlineBool.sTrueText);
+	tNode.Data.InlineBool.sFalseText = xte_private_copy_view_unescaped(tFalseView.sText, tFalseView.iSize);
+	tNode.Data.InlineBool.iFalseSize = (tNode.Data.InlineBool.sFalseText == NULL) ? 0u : (uint32)strlen(tNode.Data.InlineBool.sFalseText);
+	if ( (tNode.Data.InlineBool.sExpr == NULL) || (tNode.Data.InlineBool.sTrueText == NULL) || ((tFalseView.iSize != 0u) && (tNode.Data.InlineBool.sFalseText == NULL)) ) {
+		xte_private_ast_node_unit(&tNode);
+		xte_private_set_parser_error(pParser, iStart, XTE_ERROR_MALLOC, "template inline bool alloc failed");
+		return 0;
+	}
+	if ( xte_private_ast_add_node(pList, &tNode) == XTE_PRIVATE_INVALID_INDEX ) {
+		xte_private_ast_node_unit(&tNode);
+		xte_private_set_parser_error(pParser, iStart, XTE_ERROR_MALLOC, "template node alloc failed");
+		return 0;
+	}
+	pParser->iPos = iClosePos + pParser->tBracket.iCloseSize;
+	return 1;
+}
+static int xte_private_scan_matching_end(XTE_PrivateParser* pParser, uint32 iSearchPos, uint32* pBodyEndPos, uint32* pAfterEndPos)
+{
+	uint32 iPos = iSearchPos;
+	uint32 iTagPos = 0;
+	while ( 1 ) {
+		uint32 iContentStart = 0;
+		uint32 iClosePos = 0;
+		uint32 iNameStart = 0;
+		uint32 iNameEnd = 0;
+		XTE_PrivateView tNameView = { 0 };
+		const XTE_StatementDef* pDef = NULL;
+		iTagPos = xte_private_find_next_tag(pParser, iPos);
+		if ( iTagPos == XTE_PRIVATE_INVALID_INDEX ) {
+			return 0;
+		}
+		if ( xte_private_match_open(&pParser->tBracket, pParser->sText, pParser->iSize, iTagPos + pParser->tBracket.iOpenSize) ) {
+			iPos = iTagPos + (pParser->tBracket.iOpenSize * 2u);
+			continue;
+		}
+		iContentStart = iTagPos + pParser->tBracket.iOpenSize;
+		if ( (iContentStart >= pParser->iSize) || (pParser->sText[iContentStart] != '#') ) {
+			iPos = iContentStart;
+			continue;
+		}
+		if ( !xte_private_find_tag_end(pParser, iContentStart + 1u, &iClosePos) ) {
+			return 0;
+		}
+		iNameStart = iContentStart + 1u;
+		while ( (iNameStart < iClosePos) && ((pParser->sText[iNameStart] == ' ') || (pParser->sText[iNameStart] == '\t')) ) {
+			iNameStart++;
+		}
+		iNameEnd = iNameStart;
+		while ( (iNameEnd < iClosePos) && xte_private_is_ident_char(pParser->sText[iNameEnd]) ) {
+			iNameEnd++;
+		}
+		tNameView.sText = &pParser->sText[iNameStart];
+		tNameView.iSize = iNameEnd - iNameStart;
+		if ( xte_private_str_eq(tNameView.sText, tNameView.iSize, "end", 3) ) {
+			*pBodyEndPos = iTagPos;
+			*pAfterEndPos = iClosePos + pParser->tBracket.iCloseSize;
+			return 1;
+		}
+		pDef = xte_private_find_statement(pParser->hEngine, tNameView.sText, tNameView.iSize);
+		if ( pDef && ((pDef->iFlags & XTE_STMT_BLOCK) != 0u) && ((pDef->iFlags & XTE_STMT_INLINE) == 0u) ) {
+			uint32 iNestedBodyEnd = 0;
+			uint32 iNestedAfterEnd = 0;
+			if ( !xte_private_scan_matching_end(pParser, iClosePos + pParser->tBracket.iCloseSize, &iNestedBodyEnd, &iNestedAfterEnd) ) {
+				return 0;
+			}
+			iPos = iNestedAfterEnd;
+		} else {
+			iPos = iClosePos + pParser->tBracket.iCloseSize;
+		}
+	}
+}
+static int xte_private_parse_arg_list(XTE_PrivateParser* pParser, const char* sArgText, uint32 iArgSize, uint32 iMinArgs, uint32 iMaxArgs, int bAllowNamedArgs, xarray pArrArg)
+{
+	XTE_PrivateView arrView[32] = { 0 };
+	uint32 i = 0;
+	uint32 iCount = xte_private_split_colon(sArgText, iArgSize, arrView, 32u);
+	if ( iCount > 32u ) {
+		xte_private_set_parser_error(pParser, pParser->iPos, XTE_ERROR_PARSE, "template tag has too many args");
+		return 0;
+	}
+	xrtArrayInit(pArrArg, sizeof(XTE_PrivateAstArg), XRT_OBJMODE_LOCAL);
+	for ( i = 0; i < iCount; i++ ) {
+		XTE_PrivateView tView = arrView[i];
+		XTE_PrivateAstArg tArg = { 0 };
+		int iEqPos = -1;
+		xte_private_trim_view(&tView);
+		iEqPos = bAllowNamedArgs ? xte_private_find_unescaped_eq(tView.sText, tView.iSize) : -1;
+		if ( iEqPos >= 0 ) {
+			XTE_PrivateView tNameView = { tView.sText, (uint32)iEqPos };
+			XTE_PrivateView tRawView = { tView.sText + iEqPos + 1u, tView.iSize - (uint32)iEqPos - 1u };
+			xte_private_trim_view(&tNameView);
+			xte_private_trim_view(&tRawView);
+			tArg.sName = xte_private_copy_view(tNameView.sText, tNameView.iSize);
+			tArg.iNameSize = tNameView.iSize;
+			tArg.sRaw = xte_private_copy_view(tRawView.sText, tRawView.iSize);
+			tArg.iRawSize = tRawView.iSize;
+			tArg.iFlags = XTE_PRIVATE_ARG_HAS_EXPR | XTE_PRIVATE_ARG_NAMED;
+		} else {
+			tArg.sRaw = xte_private_copy_view(tView.sText, tView.iSize);
+			tArg.iRawSize = tView.iSize;
+			tArg.iFlags = XTE_PRIVATE_ARG_HAS_EXPR;
+		}
+		if ( ((tArg.iNameSize != 0u) && (tArg.sName == NULL)) || (tArg.sRaw == NULL) ) {
+			xrtFree(tArg.sName);
+			xrtFree(tArg.sRaw);
+			xrtArrayUnit(pArrArg);
+			xte_private_set_parser_error(pParser, pParser->iPos, XTE_ERROR_MALLOC, "template arg alloc failed");
+			return 0;
+		}
+		if ( xrtArrayAppend(pArrArg, 1) == 0u ) {
+			xrtFree(tArg.sName);
+			xrtFree(tArg.sRaw);
+			xrtArrayUnit(pArrArg);
+			xte_private_set_parser_error(pParser, pParser->iPos, XTE_ERROR_MALLOC, "template arg alloc failed");
+			return 0;
+		}
+		memcpy(xrtArrayGet_Inline(pArrArg, pArrArg->Count), &tArg, sizeof(tArg));
+	}
+	if ( (iCount < iMinArgs) || ((iMaxArgs != 0u) && (iCount > iMaxArgs)) ) {
+		xrtArrayUnit(pArrArg);
+		xte_private_set_parser_error(pParser, pParser->iPos, XTE_ERROR_PARSE, "template arg count mismatch");
+		return 0;
+	}
+	return 1;
+}
+static int xte_private_parse_statement_args(XTE_PrivateParser* pParser, const XTE_StatementDef* pDef, const char* sArgText, uint32 iArgSize, xarray pArrArg)
+{
+	if ( pDef == NULL ) {
+		xte_private_set_parser_error(pParser, pParser->iPos, XTE_ERROR_PARSE, "template statement def is invalid");
+		return 0;
+	}
+	return xte_private_parse_arg_list(
+		pParser,
+		sArgText,
+		iArgSize,
+		pDef->iMinArgs,
+		pDef->iMaxArgs,
+		((pDef->iFlags & XTE_STMT_ALLOW_NAMED_ARGS) != 0u),
+		pArrArg);
+}
+static int xte_private_parse_function_output_node(XTE_PrivateParser* pParser, XTE_PrivateAstList* pList, uint32 iClosePos)
+{
+	uint32 iStart = pParser->iPos;
+	uint32 iContentStart = iStart + pParser->tBracket.iOpenSize + 1u;
+	uint32 iNameStart = iContentStart;
+	uint32 iNameEnd = iContentStart;
+	XTE_PrivateAstNode tNode = { 0 };
+	XTE_PrivateView tArgView = { 0 };
+	const XTE_FunctionDef* pDef = NULL;
+	while ( (iNameStart < iClosePos) && ((pParser->sText[iNameStart] == ' ') || (pParser->sText[iNameStart] == '\t')) ) {
+		iNameStart++;
+	}
+	while ( (iNameEnd < iClosePos) && xte_private_is_ident_char(pParser->sText[iNameEnd]) ) {
+		iNameEnd++;
+	}
+	if ( iNameEnd == iNameStart ) {
+		xte_private_set_parser_error(pParser, iStart, XTE_ERROR_PARSE, "template function name is empty");
+		return 0;
+	}
+	pDef = xte_private_find_function(pParser->hEngine, &pParser->sText[iNameStart], iNameEnd - iNameStart);
+	if ( pDef == NULL ) {
+		xte_private_set_parser_error(pParser, iStart, XTE_ERROR_PARSE, "template function is not registered");
+		return 0;
+	}
+	tNode.iType = XTE_NODE_OUTPUT;
+	tNode.iPos = pParser->iBasePos + iStart;
+	tNode.iSize = (iClosePos + pParser->tBracket.iCloseSize) - iStart;
+	tNode.Data.Output.iOutputType = XTE_OUTPUT_FUNC;
+	tNode.Data.Output.sFuncName = xte_private_copy_view(&pParser->sText[iNameStart], iNameEnd - iNameStart);
+	tNode.Data.Output.iFuncNameSize = iNameEnd - iNameStart;
+	xrtArrayInit(&tNode.Data.Output.arrArg, sizeof(XTE_PrivateAstArg), XRT_OBJMODE_LOCAL);
+	if ( tNode.Data.Output.sFuncName == NULL ) {
+		xte_private_ast_node_unit(&tNode);
+		xte_private_set_parser_error(pParser, iStart, XTE_ERROR_MALLOC, "template function alloc failed");
+		return 0;
+	}
+	if ( iNameEnd < iClosePos ) {
+		if ( pParser->sText[iNameEnd] == ':' ) {
+			tArgView.sText = &pParser->sText[iNameEnd + 1u];
+			tArgView.iSize = iClosePos - iNameEnd - 1u;
+		} else {
+			tArgView.sText = &pParser->sText[iNameEnd];
+			tArgView.iSize = iClosePos - iNameEnd;
+		}
+		xte_private_trim_view(&tArgView);
+	}
+	if ( tArgView.iSize ) {
+		if ( !xte_private_parse_arg_list(pParser, tArgView.sText, tArgView.iSize, pDef->iMinArgs, pDef->iMaxArgs, 1, &tNode.Data.Output.arrArg) ) {
+			xte_private_ast_node_unit(&tNode);
+			return 0;
+		}
+	} else if ( pDef->iMinArgs != 0u ) {
+		xte_private_ast_node_unit(&tNode);
+		xte_private_set_parser_error(pParser, iStart, XTE_ERROR_PARSE, "template arg count mismatch");
+		return 0;
+	}
+	if ( xte_private_ast_add_node(pList, &tNode) == XTE_PRIVATE_INVALID_INDEX ) {
+		xte_private_ast_node_unit(&tNode);
+		xte_private_set_parser_error(pParser, iStart, XTE_ERROR_MALLOC, "template node alloc failed");
+		return 0;
+	}
+	pParser->iPos = iClosePos + pParser->tBracket.iCloseSize;
+	return 1;
+}
+static int xte_private_parse_nodes(XTE_PrivateParser* pParser, XTE_PrivateAstList* pList, int bAllowEnd, int* pEndedByEnd);
+static int xte_private_parse_statement(XTE_PrivateParser* pParser, XTE_PrivateAstList* pList, uint32 iClosePos)
+{
+	uint32 iStart = pParser->iPos;
+	uint32 iContentStart = iStart + pParser->tBracket.iOpenSize + 1u;
+	uint32 iNameStart = iContentStart;
+	uint32 iNameEnd = iContentStart;
+	XTE_PrivateAstNode tNode = { 0 };
+	XTE_PrivateView tArgView = { 0 };
+	const XTE_StatementDef* pDef = NULL;
+	int bNeedBlock = 0;
+	int bUseBlock = 0;
+	while ( (iNameStart < iClosePos) && ((pParser->sText[iNameStart] == ' ') || (pParser->sText[iNameStart] == '\t')) ) {
+		iNameStart++;
+	}
+	while ( (iNameEnd < iClosePos) && xte_private_is_ident_char(pParser->sText[iNameEnd]) ) {
+		iNameEnd++;
+	}
+	if ( iNameEnd == iNameStart ) {
+		xte_private_set_parser_error(pParser, iStart, XTE_ERROR_PARSE, "template statement name is empty");
+		return 0;
+	}
+	pDef = xte_private_find_statement(pParser->hEngine, &pParser->sText[iNameStart], iNameEnd - iNameStart);
+	if ( pDef == NULL ) {
+		xte_private_set_parser_error(pParser, iStart, XTE_ERROR_UNKNOWN_STATEMENT, "template statement is not registered");
+		return 0;
+	}
+	tNode.iType = XTE_NODE_STATEMENT;
+	tNode.iPos = pParser->iBasePos + iStart;
+	tNode.iSize = (iClosePos + pParser->tBracket.iCloseSize) - iStart;
+	tNode.Data.Statement.pDef = pDef;
+	tNode.Data.Statement.sStmtName = xte_private_copy_view(&pParser->sText[iNameStart], iNameEnd - iNameStart);
+	tNode.Data.Statement.iStmtNameSize = iNameEnd - iNameStart;
+	xrtArrayInit(&tNode.Data.Statement.arrArg, sizeof(XTE_PrivateAstArg), XRT_OBJMODE_LOCAL);
+	xte_private_ast_list_init(&tNode.Data.Statement.tBody);
+	if ( tNode.Data.Statement.sStmtName == NULL ) {
+		xte_private_ast_node_unit(&tNode);
+		xte_private_set_parser_error(pParser, iStart, XTE_ERROR_MALLOC, "template statement alloc failed");
+		return 0;
+	}
+	if ( iNameEnd < iClosePos ) {
+		if ( pParser->sText[iNameEnd] == ':' ) {
+			tArgView.sText = &pParser->sText[iNameEnd + 1u];
+			tArgView.iSize = iClosePos - iNameEnd - 1u;
+		} else {
+			tArgView.sText = &pParser->sText[iNameEnd];
+			tArgView.iSize = iClosePos - iNameEnd;
+		}
+		xte_private_trim_view(&tArgView);
+	}
+	if ( tArgView.iSize ) {
+		if ( !xte_private_parse_statement_args(pParser, pDef, tArgView.sText, tArgView.iSize, &tNode.Data.Statement.arrArg) ) {
+			xte_private_ast_node_unit(&tNode);
+			return 0;
+		}
+	}
+	bNeedBlock = ((pDef->iFlags & XTE_STMT_BLOCK) != 0u) && ((pDef->iFlags & XTE_STMT_INLINE) == 0u);
+	if ( (pDef->iFlags & XTE_STMT_BLOCK) != 0u ) {
+		uint32 iBodyEndPos = 0;
+		uint32 iAfterEndPos = 0;
+		if ( xte_private_scan_matching_end(pParser, iClosePos + pParser->tBracket.iCloseSize, &iBodyEndPos, &iAfterEndPos) ) {
+			bUseBlock = 1;
+			if ( (pDef->iFlags & XTE_STMT_RAW_BODY) != 0u ) {
+				uint32 iRawStart = iClosePos + pParser->tBracket.iCloseSize;
+				uint32 iRawSize = iBodyEndPos - iRawStart;
+				tNode.Data.Statement.sRawBody = xte_private_copy_view(&pParser->sText[iRawStart], iRawSize);
+				tNode.Data.Statement.iRawBodySize = iRawSize;
+				if ( (iRawSize != 0u) && (tNode.Data.Statement.sRawBody == NULL) ) {
+					xte_private_ast_node_unit(&tNode);
+					xte_private_set_parser_error(pParser, iStart, XTE_ERROR_MALLOC, "template raw body alloc failed");
+					return 0;
+				}
+			} else {
+				XTE_PrivateParser tSubParser = *pParser;
+				int bEndedByEnd = 0;
+				tSubParser.sText = &pParser->sText[iClosePos + pParser->tBracket.iCloseSize];
+				tSubParser.iSize = iBodyEndPos - (iClosePos + pParser->tBracket.iCloseSize);
+				tSubParser.iPos = 0u;
+				tSubParser.iBasePos = pParser->iBasePos + iClosePos + pParser->tBracket.iCloseSize;
+				if ( !xte_private_parse_nodes(&tSubParser, &tNode.Data.Statement.tBody, 0, &bEndedByEnd) ) {
+					xte_private_ast_node_unit(&tNode);
+					return 0;
+				}
+			}
+			tNode.iSize = iAfterEndPos - iStart;
+			pParser->iPos = iAfterEndPos;
+		} else if ( bNeedBlock ) {
+			xte_private_ast_node_unit(&tNode);
+			xte_private_set_parser_error(pParser, iStart, XTE_ERROR_PARSE, "template block statement is not closed");
+			return 0;
+		}
+	}
+	if ( !bUseBlock ) {
+		pParser->iPos = iClosePos + pParser->tBracket.iCloseSize;
+	}
+	if ( xte_private_ast_add_node(pList, &tNode) == XTE_PRIVATE_INVALID_INDEX ) {
+		xte_private_ast_node_unit(&tNode);
+		xte_private_set_parser_error(pParser, iStart, XTE_ERROR_MALLOC, "template node alloc failed");
+		return 0;
+	}
+	return 1;
+}
+static int xte_private_parse_nodes(XTE_PrivateParser* pParser, XTE_PrivateAstList* pList, int bAllowEnd, int* pEndedByEnd)
+{
+	if ( pEndedByEnd ) {
+		*pEndedByEnd = 0;
+	}
+	while ( pParser->iPos < pParser->iSize ) {
+		uint32 iClosePos = 0;
+		uint32 iContentPos = 0;
+		char chKind = 0;
+		if ( !xte_private_match_open(&pParser->tBracket, pParser->sText, pParser->iSize, pParser->iPos) ) {
+			if ( !xte_private_parse_text(pParser, pList) ) {
+				return 0;
+			}
+			continue;
+		}
+		if ( xte_private_match_open(&pParser->tBracket, pParser->sText, pParser->iSize, pParser->iPos + pParser->tBracket.iOpenSize) ) {
+			if ( !xte_private_parse_text(pParser, pList) ) {
+				return 0;
+			}
+			continue;
+		}
+		iContentPos = pParser->iPos + pParser->tBracket.iOpenSize;
+		if ( !xte_private_find_tag_end(pParser, iContentPos, &iClosePos) ) {
+			xte_private_set_parser_error(pParser, pParser->iPos, XTE_ERROR_PARSE, "template tag is not closed");
+			return 0;
+		}
+		if ( iContentPos >= iClosePos ) {
+			xte_private_set_parser_error(pParser, pParser->iPos, XTE_ERROR_PARSE, "template tag is empty");
+			return 0;
+		}
+		chKind = pParser->sText[iContentPos];
+		if ( chKind == '!' ) {
+			pParser->iPos = iClosePos + pParser->tBracket.iCloseSize;
+			continue;
+		}
+		if ( chKind == '#' ) {
+			uint32 iNameStart = iContentPos + 1u;
+			uint32 iNameEnd = iNameStart;
+			while ( (iNameStart < iClosePos) && ((pParser->sText[iNameStart] == ' ') || (pParser->sText[iNameStart] == '\t')) ) {
+				iNameStart++;
+			}
+			while ( (iNameEnd < iClosePos) && xte_private_is_ident_char(pParser->sText[iNameEnd]) ) {
+				iNameEnd++;
+			}
+			if ( xte_private_str_eq(&pParser->sText[iNameStart], iNameEnd - iNameStart, "end", 3) ) {
+				if ( bAllowEnd ) {
+					pParser->iPos = iClosePos + pParser->tBracket.iCloseSize;
+					if ( pEndedByEnd ) {
+						*pEndedByEnd = 1;
+					}
+					return 1;
+				}
+				xte_private_set_parser_error(pParser, pParser->iPos, XTE_ERROR_PARSE, "template end tag is not allowed here");
+				return 0;
+			}
+			if ( !xte_private_parse_statement(pParser, pList, iClosePos) ) {
+				return 0;
+			}
+			continue;
+		}
+		if ( chKind == '@' ) {
+			if ( !xte_private_parse_function_output_node(pParser, pList, iClosePos) ) {
+				return 0;
+			}
+			continue;
+		}
+		if ( (chKind == '$') || (chKind == '%') || (chKind == '&') ) {
+			if ( !xte_private_parse_output_node(pParser, pList, iClosePos, chKind) ) {
+				return 0;
+			}
+			continue;
+		}
+		if ( chKind == '?' ) {
+			if ( !xte_private_parse_inline_bool_node(pParser, pList, iClosePos) ) {
+				return 0;
+			}
+			continue;
+		}
+		xte_private_set_parser_error(pParser, pParser->iPos, XTE_ERROR_UNSUPPORTED, "template tag kind is not supported");
+		return 0;
+	}
+	return 1;
+}
+static xtetemplate xte_private_template_create(xteengine hEngine, int bOwnEngine)
+{
+	xtetemplate hTemplate = xrtCalloc(1, sizeof(*hTemplate));
+	if ( hTemplate == NULL ) {
+		return NULL;
+	}
+	hTemplate->hEngine = hEngine;
+	hTemplate->bOwnEngine = bOwnEngine;
+	xrtBufferInit(&hTemplate->tStringPool, 0);
+	xrtArrayInit(&hTemplate->arrNode, sizeof(XTE_Node), XRT_OBJMODE_LOCAL);
+	xrtArrayInit(&hTemplate->arrExpr, sizeof(XTE_ExprNode), XRT_OBJMODE_LOCAL);
+	xrtArrayInit(&hTemplate->arrArg, sizeof(XTE_ArgItem), XRT_OBJMODE_LOCAL);
+	xrtArrayInit(&hTemplate->arrSubTemplate, sizeof(XTE_PrivateSubTemplateItem), XRT_OBJMODE_LOCAL);
+	return hTemplate;
+}
+static int xte_private_compile_ast_list(xtetemplate hTemplate, XTE_PrivateAstList* pList, XTE_NodeSpan* pSpan);
+static int xte_private_compile_ast_args(xtetemplate hTemplate, xarray pArrArg, uint32* pArgStart, uint32* pArgCount)
+{
+	uint32 i = 0;
+	*pArgStart = hTemplate->arrArg.Count;
+	*pArgCount = pArrArg->Count;
+	for ( i = 0; i < pArrArg->Count; i++ ) {
+		XTE_PrivateAstArg* pAstArg = xrtArrayGet_Inline(pArrArg, i + 1u);
+		XTE_ArgItem tArg = { 0 };
+		if ( pAstArg->iFlags & XTE_PRIVATE_ARG_NAMED ) {
+			tArg.iNameOff = xte_private_pool_add_copy(hTemplate, pAstArg->sName, pAstArg->iNameSize);
+			tArg.iNameSize = pAstArg->iNameSize;
+			if ( tArg.iNameOff == XTE_PRIVATE_INVALID_INDEX ) {
+				return 0;
+			}
+		}
+		tArg.iRawOff = xte_private_pool_add_copy(hTemplate, pAstArg->sRaw, pAstArg->iRawSize);
+		tArg.iRawSize = pAstArg->iRawSize;
+		if ( tArg.iRawOff == XTE_PRIVATE_INVALID_INDEX ) {
+			return 0;
+		}
+		tArg.iFlags = 0u;
+		if ( pAstArg->iFlags & XTE_PRIVATE_ARG_NAMED ) {
+			tArg.iFlags |= XTE_PRIVATE_ARG_NAMED;
+		}
+		if ( !xte_private_compile_expr(hTemplate, pAstArg->sRaw, pAstArg->iRawSize, &tArg.iExprIndex) ) {
+			return 0;
+		}
+		tArg.iFlags |= XTE_PRIVATE_ARG_HAS_EXPR;
+		if ( xte_private_add_arg(hTemplate, &tArg) == XTE_PRIVATE_INVALID_INDEX ) {
+			return 0;
+		}
+	}
+	return 1;
+}
+static int xte_private_compile_ast_list(xtetemplate hTemplate, XTE_PrivateAstList* pList, XTE_NodeSpan* pSpan)
+{
+	uint32 i = 0;
+	uint32 iStart = hTemplate->arrNode.Count;
+	pSpan->iStart = iStart;
+	pSpan->iCount = pList->arrNode.Count;
+	if ( pList->arrNode.Count == 0u ) {
+		return 1;
+	}
+	if ( xrtArrayAppend(&hTemplate->arrNode, pList->arrNode.Count) == 0u ) {
+		return 0;
+	}
+	for ( i = 0; i < pList->arrNode.Count; i++ ) {
+		XTE_PrivateAstNode* pAstNode = xrtArrayGet_Inline(&pList->arrNode, i + 1u);
+		XTE_Node* pNode = xte_private_template_get_node(hTemplate, iStart + i);
+		memset(pNode, 0, sizeof(*pNode));
+		pNode->iType = pAstNode->iType;
+		pNode->iFlags = pAstNode->iFlags;
+		pNode->iPos = pAstNode->iPos;
+		pNode->iSize = pAstNode->iSize;
+		switch ( pAstNode->iType ) {
+			case XTE_NODE_TEXT:
+				pNode->Data.Text.iTextOff = xte_private_pool_add_copy(hTemplate, pAstNode->Data.Text.sText, pAstNode->Data.Text.iTextSize);
+				pNode->Data.Text.iTextSize = pAstNode->Data.Text.iTextSize;
+				if ( pNode->Data.Text.iTextOff == XTE_PRIVATE_INVALID_INDEX ) {
+					return 0;
+				}
+				break;
+			case XTE_NODE_OUTPUT:
+				pNode->Data.Output.iOutputType = pAstNode->Data.Output.iOutputType;
+				pNode->Data.Output.iExprIndex = XTE_PRIVATE_INVALID_INDEX;
+				pNode->Data.Output.iFormatOff = XTE_PRIVATE_INVALID_INDEX;
+				pNode->Data.Output.iNameOff = XTE_PRIVATE_INVALID_INDEX;
+				if ( pAstNode->Data.Output.iOutputType == XTE_OUTPUT_FUNC ) {
+					pNode->Data.Output.iNameOff = xte_private_pool_add_copy(hTemplate, pAstNode->Data.Output.sFuncName, pAstNode->Data.Output.iFuncNameSize);
+					pNode->Data.Output.iNameSize = pAstNode->Data.Output.iFuncNameSize;
+					if ( pNode->Data.Output.iNameOff == XTE_PRIVATE_INVALID_INDEX ) {
+						return 0;
+					}
+					if ( !xte_private_compile_ast_args(hTemplate, &pAstNode->Data.Output.arrArg, &pNode->Data.Output.iArgStart, &pNode->Data.Output.iArgCount) ) {
+						return 0;
+					}
+				} else {
+					if ( !xte_private_compile_expr(hTemplate, pAstNode->Data.Output.sExpr, pAstNode->Data.Output.iExprSize, &pNode->Data.Output.iExprIndex) ) {
+						return 0;
+					}
+					if ( pAstNode->Data.Output.iFormatSize ) {
+						pNode->Data.Output.iFormatOff = xte_private_pool_add_copy(hTemplate, pAstNode->Data.Output.sFormat, pAstNode->Data.Output.iFormatSize);
+						pNode->Data.Output.iFormatSize = pAstNode->Data.Output.iFormatSize;
+						if ( pNode->Data.Output.iFormatOff == XTE_PRIVATE_INVALID_INDEX ) {
+							return 0;
+						}
+					}
+				}
+				break;
+			case XTE_NODE_INLINE_BOOL:
+				if ( !xte_private_compile_expr(hTemplate, pAstNode->Data.InlineBool.sExpr, pAstNode->Data.InlineBool.iExprSize, &pNode->Data.InlineBool.iExprIndex) ) {
+					return 0;
+				}
+				pNode->Data.InlineBool.iTrueOff = xte_private_pool_add_copy(hTemplate, pAstNode->Data.InlineBool.sTrueText, pAstNode->Data.InlineBool.iTrueSize);
+				pNode->Data.InlineBool.iTrueSize = pAstNode->Data.InlineBool.iTrueSize;
+				if ( pNode->Data.InlineBool.iTrueOff == XTE_PRIVATE_INVALID_INDEX ) {
+					return 0;
+				}
+				pNode->Data.InlineBool.iFalseOff = xte_private_pool_add_copy(hTemplate, pAstNode->Data.InlineBool.sFalseText ? pAstNode->Data.InlineBool.sFalseText : "", pAstNode->Data.InlineBool.iFalseSize);
+				pNode->Data.InlineBool.iFalseSize = pAstNode->Data.InlineBool.iFalseSize;
+				if ( pNode->Data.InlineBool.iFalseOff == XTE_PRIVATE_INVALID_INDEX ) {
+					return 0;
+				}
+				break;
+			case XTE_NODE_STATEMENT:
+				pNode->Data.Statement.iStmtNameOff = xte_private_pool_add_copy(hTemplate, pAstNode->Data.Statement.sStmtName, pAstNode->Data.Statement.iStmtNameSize);
+				pNode->Data.Statement.iStmtNameSize = pAstNode->Data.Statement.iStmtNameSize;
+				if ( pNode->Data.Statement.iStmtNameOff == XTE_PRIVATE_INVALID_INDEX ) {
+					return 0;
+				}
+				if ( !xte_private_compile_ast_args(hTemplate, &pAstNode->Data.Statement.arrArg, &pNode->Data.Statement.iArgStart, &pNode->Data.Statement.iArgCount) ) {
+					return 0;
+				}
+				if ( pAstNode->Data.Statement.iRawBodySize ) {
+					pNode->Data.Statement.iRawBodyOff = xte_private_pool_add_copy(hTemplate, pAstNode->Data.Statement.sRawBody, pAstNode->Data.Statement.iRawBodySize);
+					pNode->Data.Statement.iRawBodySize = pAstNode->Data.Statement.iRawBodySize;
+					if ( pNode->Data.Statement.iRawBodyOff == XTE_PRIVATE_INVALID_INDEX ) {
+						return 0;
+					}
+				} else {
+					pNode->Data.Statement.iRawBodyOff = XTE_PRIVATE_INVALID_INDEX;
+				}
+				break;
+		}
+	}
+	for ( i = 0; i < pList->arrNode.Count; i++ ) {
+		XTE_PrivateAstNode* pAstNode = xrtArrayGet_Inline(&pList->arrNode, i + 1u);
+		if ( pAstNode->iType == XTE_NODE_STATEMENT ) {
+			XTE_Node* pNode = xte_private_template_get_node(hTemplate, iStart + i);
+			if ( pAstNode->Data.Statement.tBody.arrNode.Count ) {
+				if ( !xte_private_compile_ast_list(hTemplate, &pAstNode->Data.Statement.tBody, &pNode->Data.Statement.tBody) ) {
+					return 0;
+				}
+			}
+			if ( pAstNode->Data.Statement.pDef && pAstNode->Data.Statement.pDef->procParse ) {
+				if ( !xte_private_bind_statement_node(hTemplate, pNode, pAstNode->Data.Statement.pDef, XTE_ERROR_PARSE, "template statement parse callback failed") ) {
+					return 0;
+				}
+			}
+		}
+	}
+	return 1;
+}
+static int xte_private_value_truthy(xvalue pVal)
+{
+	if ( (pVal == NULL) || (pVal->Type == XVO_DT_NULL) ) {
+		return 0;
+	}
+	switch ( pVal->Type ) {
 		case XVO_DT_BOOL:
-			return val->vBool ? 1 : 0;
+			return xvoGetBool(pVal) ? 1 : 0;
 		case XVO_DT_INT:
-			return val->vInt != 0;
+			return xvoGetInt(pVal) != 0;
 		case XVO_DT_FLOAT:
-			return val->vFloat != 0.0;
+			return xvoGetFloat(pVal) != 0.0;
 		case XVO_DT_TEXT:
-			return val->Size > 0;
-		case XVO_DT_TIME:
-			return val->vTime != 0;
+			return (xvoGetText(pVal) != NULL) && (xvoGetText(pVal)[0] != 0);
 		case XVO_DT_ARRAY:
 		case XVO_DT_LIST:
 		case XVO_DT_TABLE:
-			return 1;	// 集合类型始终为真
+			return xvoGetSize(pVal) != 0;
 		default:
-			return 0;
+			return 1;
 	}
 }
-// 比较两个 xvalue
-static int xte_value_compare(xvalue left, xvalue right, uint32 op)
+static char* xte_private_value_to_text(xvalue pVal)
 {
-	// NULL 处理
-	if ( left == NULL || left->Type == XVO_DT_NULL ) {
-		if ( right == NULL || right->Type == XVO_DT_NULL ) {
-			return (op == XTE_ETK_OP_EQ || op == XTE_ETK_OP_AE) ? 1 : 0;
-		}
-		return (op == XTE_ETK_OP_NE) ? 1 : 0;
+	char sBuf[128] = { 0 };
+	int iLen = 0;
+	if ( (pVal == NULL) || (pVal->Type == XVO_DT_NULL) ) {
+		return xrtCopyStr("", 0);
 	}
-	if ( right == NULL || right->Type == XVO_DT_NULL ) {
-		return (op == XTE_ETK_OP_NE) ? 1 : 0;
+	switch ( pVal->Type ) {
+		case XVO_DT_TEXT:
+			return xrtCopyStr((str)xvoGetText(pVal), xvoGetSize(pVal));
+		case XVO_DT_BOOL:
+			return xrtCopyStr(xvoGetBool(pVal) ? "true" : "false", 0);
+		case XVO_DT_INT:
+			iLen = xrtI64ToStr(xvoGetInt(pVal), sBuf);
+			return xrtCopyStr(sBuf, iLen);
+		case XVO_DT_FLOAT:
+			iLen = xrtNumToStr(xvoGetFloat(pVal), sBuf);
+			return xrtCopyStr(sBuf, iLen);
+		case XVO_DT_TIME:
+			return xrtTimeToStr(xvoGetTime(pVal), 0);
+		default:
+			return xrtCopyStr("", 0);
 	}
-	
-	// 数字比较
-	if ( (left->Type == XVO_DT_INT || left->Type == XVO_DT_FLOAT) &&
-		 (right->Type == XVO_DT_INT || right->Type == XVO_DT_FLOAT) ) {
-		double lv = (left->Type == XVO_DT_INT) ? (double)left->vInt : left->vFloat;
-		double rv = (right->Type == XVO_DT_INT) ? (double)right->vInt : right->vFloat;
-		
-		switch ( op ) {
-			case XTE_ETK_OP_EQ:	return lv == rv;
-			case XTE_ETK_OP_NE:	return lv != rv;
-			case XTE_ETK_OP_AE:	return xrtNumApprox(lv, rv);
-			case XTE_ETK_OP_GT:	return lv > rv;
-			case XTE_ETK_OP_LT:	return lv < rv;
-			case XTE_ETK_OP_GE:	return lv >= rv;
-			case XTE_ETK_OP_LE:	return lv <= rv;
-		}
-	}
-	
-	// 字符串比较
-	if ( left->Type == XVO_DT_TEXT && right->Type == XVO_DT_TEXT ) {
-		const char* ls = left->vText;
-		const char* rs = right->vText;
-		size_t llen = left->Size;
-		size_t rlen = right->Size;
-		
-		switch ( op ) {
-			case XTE_ETK_OP_EQ:
-				return (llen == rlen) && (memcmp(ls, rs, llen) == 0);
-			case XTE_ETK_OP_NE:
-				return (llen != rlen) || (memcmp(ls, rs, llen) != 0);
-			case XTE_ETK_OP_AE:
-				return xrtStrApprox((str)ls, llen, (str)rs, rlen);
-			case XTE_ETK_OP_GT:
-				return strcmp(ls, rs) > 0;
-			case XTE_ETK_OP_LT:
-				return strcmp(ls, rs) < 0;
-			case XTE_ETK_OP_GE:
-				return strcmp(ls, rs) >= 0;
-			case XTE_ETK_OP_LE:
-				return strcmp(ls, rs) <= 0;
-		}
-	}
-	
-	// 时间比较
-	if ( left->Type == XVO_DT_TIME && right->Type == XVO_DT_TIME ) {
-		xtime lt = left->vTime;
-		xtime rt = right->vTime;
-		
-		switch ( op ) {
-			case XTE_ETK_OP_EQ:	return lt == rt;
-			case XTE_ETK_OP_NE:	return lt != rt;
-			case XTE_ETK_OP_AE:	return xrtTimeApprox(lt, rt);
-			case XTE_ETK_OP_GT:	return lt > rt;
-			case XTE_ETK_OP_LT:	return lt < rt;
-			case XTE_ETK_OP_GE:	return lt >= rt;
-			case XTE_ETK_OP_LE:	return lt <= rt;
-		}
-	}
-	
-	// 布尔比较
-	if ( left->Type == XVO_DT_BOOL && right->Type == XVO_DT_BOOL ) {
-		int lb = left->vBool ? 1 : 0;
-		int rb = right->vBool ? 1 : 0;
-		switch ( op ) {
-			case XTE_ETK_OP_EQ:
-			case XTE_ETK_OP_AE:	return lb == rb;
-			case XTE_ETK_OP_NE:	return lb != rb;
-			default:			return 0;
-		}
-	}
-	
-	// 类型不匹配
-	return (op == XTE_ETK_OP_NE) ? 1 : 0;
 }
-// 求值 AST 节点
-xvalue xteExprEval(XTE_ASTNode ast, xvalue tblVal, xvalue tblRoot, xvalue tblENV)
+static xvalue xte_private_eval_expr_value(XTE_RenderCtx* pCtx, uint32 iExprIndex)
 {
-	if ( ast == NULL ) {
-		return xvoCreateBool(0);
+	XTE_ExprNode* pExpr = xte_private_template_get_expr(pCtx->hTemplate, iExprIndex);
+	if ( pExpr == NULL ) {
+		return xvoCreateNull();
 	}
-	
-	switch ( ast->Type ) {
-		case XTE_AST_LITERAL:
-			switch ( ast->Data.Literal.LitType ) {
-				case XTE_LIT_INT:
-					return xvoCreateInt(ast->Data.Literal.Val.IntVal);
-				case XTE_LIT_FLOAT:
-					return xvoCreateFloat(ast->Data.Literal.Val.NumVal);
-				case XTE_LIT_BOOL:
-					return xvoCreateBool(ast->Data.Literal.Val.BoolVal);
-				case XTE_LIT_STRING:
-					return xvoCreateText(ast->Data.Literal.Val.Str.Ptr, ast->Data.Literal.Val.Str.Len, FALSE);
-				default:
-					return xvoCreateBool(0);
-			}
-		
-		case XTE_AST_VARIABLE:
-			{
-				xvalue resolved = xteResolvePath(
-					ast->Data.Variable.Path,
-					ast->Data.Variable.PathLen,
-					tblVal, tblRoot, tblENV
-				);
-				// 返回副本（调用者负责 unref）
-				if ( resolved && resolved->Type != XVO_DT_NULL ) {
-					xvoAddRef(resolved);
-					return resolved;
-				}
+	switch ( pExpr->iType ) {
+		case XTE_EXPR_PATH:
+			return xvoCopy(xteResolvePath(xte_private_pool_ptr(pCtx->hTemplate, pExpr->iTextOff), pExpr->iTextSize, pCtx->pCurrent, pCtx->pRoot, pCtx->pLocal, pCtx->pGlobal));
+		case XTE_EXPR_TEXT:
+			return xvoCreateText((ptr)xte_private_pool_ptr(pCtx->hTemplate, pExpr->iTextOff), pExpr->iTextSize, FALSE);
+		case XTE_EXPR_INT:
+			return xvoCreateInt(pExpr->iIntValue);
+		case XTE_EXPR_BOOL:
+			return xvoCreateBool(pExpr->iBoolValue ? TRUE : FALSE);
+		case XTE_EXPR_BOOL_EXPR: {
+			int bValue = 0;
+			if ( !xte_private_eval_bool_expr(pCtx, xte_private_pool_ptr(pCtx->hTemplate, pExpr->iTextOff), pExpr->iTextSize, &bValue) ) {
 				return xvoCreateNull();
 			}
-		
-		case XTE_AST_UNARY:
-			{
-				xvalue operand = xteExprEval(ast->Data.Unary.Operand, tblVal, tblRoot, tblENV);
-				int boolVal = xte_value_to_bool(operand);
-				xvoUnref(operand);
-				// not 运算
-				if ( ast->Data.Unary.Op == XTE_ETK_OP_NOT ) {
-					return xvoCreateBool(!boolVal);
-				}
-				return xvoCreateBool(0);
-			}
-		
-		case XTE_AST_BINARY:
-			{
-				uint32 op = ast->Data.Binary.Op;
-				
-				// 逻辑运算：短路求值
-				if ( op == XTE_ETK_OP_AND ) {
-					xvalue left = xteExprEval(ast->Data.Binary.Left, tblVal, tblRoot, tblENV);
-					if ( !xte_value_to_bool(left) ) {
-						xvoUnref(left);
-						return xvoCreateBool(0);
-					}
-					xvoUnref(left);
-					xvalue right = xteExprEval(ast->Data.Binary.Right, tblVal, tblRoot, tblENV);
-					int result = xte_value_to_bool(right);
-					xvoUnref(right);
-					return xvoCreateBool(result);
-				}
-				
-				if ( op == XTE_ETK_OP_OR ) {
-					xvalue left = xteExprEval(ast->Data.Binary.Left, tblVal, tblRoot, tblENV);
-					if ( xte_value_to_bool(left) ) {
-						xvoUnref(left);
-						return xvoCreateBool(1);
-					}
-					xvoUnref(left);
-					xvalue right = xteExprEval(ast->Data.Binary.Right, tblVal, tblRoot, tblENV);
-					int result = xte_value_to_bool(right);
-					xvoUnref(right);
-					return xvoCreateBool(result);
-				}
-				
-				// 比较运算
-				xvalue left = xteExprEval(ast->Data.Binary.Left, tblVal, tblRoot, tblENV);
-				xvalue right = xteExprEval(ast->Data.Binary.Right, tblVal, tblRoot, tblENV);
-				int result = xte_value_compare(left, right, op);
-				xvoUnref(left);
-				xvoUnref(right);
-				return xvoCreateBool(result);
-			}
-		
+			return xvoCreateBool(bValue ? TRUE : FALSE);
+		}
 		default:
-			return xvoCreateBool(0);
+			return xvoCreateNull();
 	}
 }
-// 便捷函数：解析并求值表达式，返回布尔结果（带 AST 缓存）
-int xteExprEvalBool(const char* expr, size_t len, xvalue tblVal, xvalue tblRoot, xvalue tblENV)
+static xvalue xte_private_call_output_function(XTE_RenderCtx* pCtx, XTE_Node* pNode)
 {
-	if ( expr == NULL ) {
-		return 0;
+	const char* sName = NULL;
+	const XTE_FunctionDef* pDef = NULL;
+	XTE_ArgList tArgs = { 0 };
+	XTE_FuncCtx tFuncCtx = { 0 };
+	xvalue pRet = NULL;
+	if ( (pCtx == NULL) || (pNode == NULL) || (pNode->Data.Output.iOutputType != XTE_OUTPUT_FUNC) ) {
+		return xvoCreateNull();
 	}
-	if ( len == 0 ) {
-		len = strlen(expr);
+	sName = xte_private_pool_ptr(pCtx->hTemplate, pNode->Data.Output.iNameOff);
+	pDef = xte_private_find_function(pCtx->hEngine, sName, pNode->Data.Output.iNameSize);
+	if ( (pDef == NULL) || (pDef->procCall == NULL) ) {
+		if ( (pCtx->pError != NULL) && (pCtx->pError->iCode == 0) ) {
+			pCtx->pError->iCode = XTE_ERROR_RENDER;
+			pCtx->pError->sDesc = "template function is not registered";
+		}
+		return xvoCreateNull();
 	}
-	
-	XTE_ExprResult result = NULL;
-	
-	// 尝试从缓存获取
-	if ( XTE_EXPR_CACHE ) {
-		result = (XTE_ExprResult)xrtDictGetPtr(XTE_EXPR_CACHE, (str)expr, len);
+	xte_private_fill_arg_list(pCtx->hTemplate, pNode->Data.Output.iArgStart, pNode->Data.Output.iArgCount, &tArgs);
+	tFuncCtx.pRender = pCtx;
+	tFuncCtx.pDef = pDef;
+	tFuncCtx.pArgs = &tArgs;
+	tFuncCtx.pUserData = pDef->pUserData;
+	if ( pDef->procCall(&tFuncCtx, &pRet) == 0 ) {
+		if ( (pCtx->pError != NULL) && (pCtx->pError->iCode == 0) ) {
+			pCtx->pError->iCode = XTE_ERROR_RENDER;
+			pCtx->pError->sDesc = "template function call failed";
+		}
+		return xvoCreateNull();
 	}
-	
-	if ( result == NULL ) {
-		// 缓存未命中，解析表达式
-		result = xteExprParse(expr, len);
-		if ( result == NULL || !result->Success ) {
-			xteExprFree(result);
+	return pRet ? pRet : xvoCreateNull();
+}
+static int xte_private_render_output_node(XTE_RenderCtx* pCtx, XTE_Node* pNode)
+{
+	xvalue pVal = NULL;
+	char* sOut = NULL;
+	int bOk = 1;
+	if ( pNode->Data.Output.iOutputType == XTE_OUTPUT_FUNC ) {
+		pVal = xte_private_call_output_function(pCtx, pNode);
+		if ( (pCtx->pError != NULL) && (pCtx->pError->iCode != 0) ) {
+			xvoUnref(pVal);
 			return 0;
 		}
-		// 存入缓存
-		if ( XTE_EXPR_CACHE ) {
-			XTE_ExprResult oldResult = NULL;
-			xrtDictSetPtr(XTE_EXPR_CACHE, (str)expr, len, result, (ptr*)&oldResult);
-			// 如果有旧值（理论上不会发生），释放它
-			if ( oldResult ) {
-				xteExprFree(oldResult);
+		sOut = xte_private_value_to_text(pVal);
+	} else {
+		pVal = xte_private_eval_expr_value(pCtx, pNode->Data.Output.iExprIndex);
+		if ( pNode->Data.Output.iOutputType == XTE_OUTPUT_TEXT ) {
+			sOut = xte_private_value_to_text(pVal);
+		} else if ( pNode->Data.Output.iOutputType == XTE_OUTPUT_NUM ) {
+			const char* sFormat = (pNode->Data.Output.iFormatSize != 0u) ? xte_private_pool_ptr(pCtx->hTemplate, pNode->Data.Output.iFormatOff) : NULL;
+			if ( sFormat && (pVal->Type == XVO_DT_INT) ) {
+				sOut = xrtIntFormat(xvoGetInt(pVal), (str)sFormat);
+			} else if ( sFormat && ((pVal->Type == XVO_DT_FLOAT) || (pVal->Type == XVO_DT_INT) || (pVal->Type == XVO_DT_TEXT)) ) {
+				double fValue = (pVal->Type == XVO_DT_TEXT) ? xrtStrToNum(xvoGetText(pVal)) : xvoGetFloat(pVal);
+				if ( pVal->Type == XVO_DT_INT ) {
+					fValue = (double)xvoGetInt(pVal);
+				}
+				sOut = xrtNumFormat(fValue, (str)sFormat);
+			} else {
+				sOut = xte_private_value_to_text(pVal);
+			}
+		} else {
+			const char* sFormat = (pNode->Data.Output.iFormatSize != 0u) ? xte_private_pool_ptr(pCtx->hTemplate, pNode->Data.Output.iFormatOff) : "yyyy-mm-dd hh:nn:ss";
+			xtime tValue = 0;
+			if ( pVal->Type == XVO_DT_TIME ) {
+				tValue = xvoGetTime(pVal);
+			} else if ( pVal->Type == XVO_DT_INT ) {
+				tValue = (xtime)xvoGetInt(pVal);
+			}
+			sOut = xrtTimeFormat(tValue, sFormat);
+		}
+	}
+	if ( sOut ) {
+		bOk = xte_private_writer_write(pCtx->pWriter, sOut, strlen(sOut));
+		xrtFree(sOut);
+	} else {
+		bOk = 0;
+	}
+	xvoUnref(pVal);
+	return bOk;
+}
+static XTE_Flow xte_private_render_span(XTE_RenderCtx* pCtx, XTE_NodeSpan tSpan);
+static XTE_Flow xte_private_render_template(XTE_RenderCtx* pCtx, xtetemplate hTemplate, xvalue pCurrent)
+{
+	XTE_RenderCtx tChildCtx = { 0 };
+	if ( (pCtx == NULL) || (hTemplate == NULL) ) {
+		return XTE_FLOW_ERROR;
+	}
+	tChildCtx = *pCtx;
+	tChildCtx.hEngine = hTemplate->hEngine;
+	tChildCtx.hTemplate = hTemplate;
+	tChildCtx.pCurrent = (pCurrent != NULL) ? pCurrent : pCtx->pCurrent;
+	if ( tChildCtx.pRoot == NULL ) {
+		tChildCtx.pRoot = tChildCtx.pCurrent;
+	}
+	return xte_private_render_span(&tChildCtx, hTemplate->tRoot);
+}
+static XTE_Flow xte_private_render_body_with_scope_ex(XTE_StmtRenderCtx* pCtx, xvalue pLocal, xvalue pCurrent)
+{
+	xvalue pOldLocal = NULL;
+	xvalue pOldCurrent = NULL;
+	XTE_Flow iFlow = XTE_FLOW_OK;
+	if ( (pCtx == NULL) || (pCtx->pRender == NULL) || (pCtx->pBody == NULL) ) {
+		return XTE_FLOW_OK;
+	}
+	pOldLocal = pCtx->pRender->pLocal;
+	pOldCurrent = pCtx->pRender->pCurrent;
+	pCtx->pRender->pLocal = pLocal;
+	pCtx->pRender->pCurrent = (pCurrent != NULL) ? pCurrent : pOldCurrent;
+	iFlow = xte_private_render_span(pCtx->pRender, *pCtx->pBody);
+	pCtx->pRender->pLocal = pOldLocal;
+	pCtx->pRender->pCurrent = pOldCurrent;
+	return iFlow;
+}
+static XTE_Flow xte_private_stmt_render_error(XTE_StmtRenderCtx* pCtx, int iCode, const char* sDesc);
+static int xte_private_stmt_parse_define(XTE_StmtParseCtx* pCtx, void** ppData)
+{
+	const XTE_ArgItem* pArg = NULL;
+	XTE_ExprNode* pExpr = NULL;
+	const char* sText = NULL;
+	char* sName = NULL;
+	if ( ppData != NULL ) {
+		ppData[0] = NULL;
+	}
+	if ( (pCtx == NULL) || (pCtx->hTemplate == NULL) || (ppData == NULL) ) {
+		return 0;
+	}
+	pArg = xteFindNamedArg(pCtx->pArgs, "name", 4u);
+	if ( pArg == NULL ) {
+		pArg = xteArgAt(pCtx->pArgs, 0u);
+	}
+	if ( pArg == NULL ) {
+		return xteStmtParseSetError(pCtx, XTE_ERROR_PARSE, "template define name is required");
+	}
+	if ( (xteArgExprType(pCtx->pArgs, pArg) != XTE_EXPR_TEXT) && (xteArgExprType(pCtx->pArgs, pArg) != XTE_EXPR_PATH) ) {
+		return xteStmtParseSetError(pCtx, XTE_ERROR_PARSE, "template define name must be text or path");
+	}
+	pExpr = xte_private_template_get_expr(pCtx->hTemplate, pArg->iExprIndex);
+	if ( (pExpr == NULL) || (pExpr->iTextOff == XTE_PRIVATE_INVALID_INDEX) ) {
+		return xteStmtParseSetError(pCtx, XTE_ERROR_PARSE, "template define expr is invalid");
+	}
+	sText = xte_private_pool_ptr(pCtx->hTemplate, pExpr->iTextOff);
+	sName = xte_private_copy_view(sText, pExpr->iTextSize);
+	if ( (pExpr->iTextSize != 0u) && (sName == NULL) ) {
+		return xteStmtParseSetError(pCtx, XTE_ERROR_MALLOC, "template define name alloc failed");
+	}
+	if ( (sName == NULL) || (sName[0] == 0) ) {
+		xrtFree(sName);
+		return xteStmtParseSetError(pCtx, XTE_ERROR_PARSE, "template define name is empty");
+	}
+	ppData[0] = sName;
+	return 1;
+}
+static XTE_Flow xte_private_stmt_render_define(XTE_StmtRenderCtx* pCtx)
+{
+	(void)pCtx;
+	return XTE_FLOW_OK;
+}
+static XTE_Flow xte_private_stmt_render_script(XTE_StmtRenderCtx* pCtx)
+{
+	if ( pCtx == NULL ) {
+		return XTE_FLOW_ERROR;
+	}
+	if ( (pCtx->sRawBody == NULL) || (pCtx->iRawBodySize == 0u) ) {
+		return XTE_FLOW_OK;
+	}
+	if ( xteStmtWrite(pCtx, pCtx->sRawBody, pCtx->iRawBodySize) ) {
+		return XTE_FLOW_OK;
+	}
+	return xte_private_stmt_render_error(pCtx, XTE_ERROR_RENDER, "template script write failed");
+}
+static XTE_Flow xte_private_stmt_render_if(XTE_StmtRenderCtx* pCtx)
+{
+	int bActive = 0;
+	int bSelected = 0;
+	uint32 i = 0;
+	if ( (pCtx == NULL) || (pCtx->pRender == NULL) ) {
+		return XTE_FLOW_ERROR;
+	}
+	if ( !xteEvalArgBool(pCtx->pRender, xteArgAt(pCtx->pArgs, 0), &bActive) ) {
+		return xte_private_stmt_render_error(pCtx, XTE_ERROR_RENDER, "template if condition eval failed");
+	}
+	bSelected = bActive ? 1 : 0;
+	if ( pCtx->pBody == NULL ) {
+		return XTE_FLOW_OK;
+	}
+	for ( i = 0; i < pCtx->pBody->iCount; i++ ) {
+		XTE_Node* pNode = xte_private_template_get_node(pCtx->pRender->hTemplate, pCtx->pBody->iStart + i);
+		if ( pNode == NULL ) {
+			return xte_private_stmt_render_error(pCtx, XTE_ERROR_RENDER, "template if branch node is invalid");
+		}
+		if ( xte_private_statement_name_eq(pCtx->pRender->hTemplate, pNode, "elseif") ) {
+			XTE_ArgList tArgs = { 0 };
+			if ( bSelected ) {
+				bActive = 0;
+				continue;
+			}
+			xte_private_make_arg_list(pCtx->pRender->hTemplate, pNode, &tArgs);
+			if ( !xteEvalArgBool(pCtx->pRender, xteArgAt(&tArgs, 0), &bActive) ) {
+				return xte_private_stmt_render_error(pCtx, XTE_ERROR_RENDER, "template elseif condition eval failed");
+			}
+			if ( bActive ) {
+				bSelected = 1;
+			}
+			continue;
+		}
+		if ( xte_private_statement_name_eq(pCtx->pRender->hTemplate, pNode, "else") ) {
+			bActive = bSelected ? 0 : 1;
+			if ( bActive ) {
+				bSelected = 1;
+			}
+			continue;
+		}
+		if ( bActive ) {
+			XTE_NodeSpan tNodeSpan = { pCtx->pBody->iStart + i, 1u };
+			XTE_Flow iFlow = xte_private_render_span(pCtx->pRender, tNodeSpan);
+			if ( iFlow != XTE_FLOW_OK ) {
+				return iFlow;
 			}
 		}
 	}
-	
-	// 求值并返回布尔结果
-	xvalue val = xteExprEval(result->Root, tblVal, tblRoot, tblENV);
-	int boolVal = xte_value_to_bool(val);
-	xvoUnref(val);
-	
-	// 如果未缓存，释放 result
-	if ( !XTE_EXPR_CACHE ) {
-		xteExprFree(result);
-	}
-	return boolVal;
+	return XTE_FLOW_OK;
 }
+static XTE_Flow xte_private_stmt_render_else(XTE_StmtRenderCtx* pCtx)
+{
+	return xte_private_stmt_render_error(pCtx, XTE_ERROR_RENDER, "template else must be inside if");
+}
+static XTE_Flow xte_private_stmt_render_elseif(XTE_StmtRenderCtx* pCtx)
+{
+	return xte_private_stmt_render_error(pCtx, XTE_ERROR_RENDER, "template elseif must be inside if");
+}
+static XTE_Flow xte_private_stmt_render_break(XTE_StmtRenderCtx* pCtx)
+{
+	if ( (pCtx == NULL) || (pCtx->pRender == NULL) ) {
+		return XTE_FLOW_ERROR;
+	}
+	if ( pCtx->pRender->iLoopDepth == 0u ) {
+		return xte_private_stmt_render_error(pCtx, XTE_ERROR_RENDER, "template break must be inside loop");
+	}
+	return XTE_FLOW_BREAK;
+}
+static XTE_Flow xte_private_stmt_render_continue(XTE_StmtRenderCtx* pCtx)
+{
+	if ( (pCtx == NULL) || (pCtx->pRender == NULL) ) {
+		return XTE_FLOW_ERROR;
+	}
+	if ( pCtx->pRender->iLoopDepth == 0u ) {
+		return xte_private_stmt_render_error(pCtx, XTE_ERROR_RENDER, "template continue must be inside loop");
+	}
+	return XTE_FLOW_CONTINUE;
+}
+static XTE_Flow xte_private_stmt_render_for(XTE_StmtRenderCtx* pCtx)
+{
+	int64 iStart = 0;
+	int64 iEnd = 0;
+	int64 iStep = 0;
+	int64 iIndex = 0;
+	uint32 iLoopCount = 0;
+	uint32 iPrevLoopDepth = 0;
+	xvalue pLocal = NULL;
+	if ( (pCtx == NULL) || (pCtx->pRender == NULL) ) {
+		return XTE_FLOW_ERROR;
+	}
+	if ( xteArgCount(pCtx->pArgs) < 2u ) {
+		return xte_private_stmt_render_error(pCtx, XTE_ERROR_RENDER, "template for requires at least 2 args");
+	}
+	if ( !xteEvalArgInt(pCtx->pRender, xteArgAt(pCtx->pArgs, 0), &iStart) ) {
+		return xte_private_stmt_render_error(pCtx, XTE_ERROR_RENDER, "template for start eval failed");
+	}
+	if ( !xteEvalArgInt(pCtx->pRender, xteArgAt(pCtx->pArgs, 1), &iEnd) ) {
+		return xte_private_stmt_render_error(pCtx, XTE_ERROR_RENDER, "template for end eval failed");
+	}
+	if ( xteArgCount(pCtx->pArgs) >= 3u ) {
+		if ( !xteEvalArgInt(pCtx->pRender, xteArgAt(pCtx->pArgs, 2), &iStep) ) {
+			return xte_private_stmt_render_error(pCtx, XTE_ERROR_RENDER, "template for step eval failed");
+		}
+	} else {
+		iStep = (iStart <= iEnd) ? 1 : -1;
+	}
+	if ( iStep == 0 ) {
+		return xte_private_stmt_render_error(pCtx, XTE_ERROR_RENDER, "template for step cannot be zero");
+	}
+	pLocal = xvoCreateTable();
+	if ( pLocal == NULL ) {
+		return xte_private_stmt_render_error(pCtx, XTE_ERROR_MALLOC, "template for local alloc failed");
+	}
+	iPrevLoopDepth = pCtx->pRender->iLoopDepth;
+	pCtx->pRender->iLoopDepth = iPrevLoopDepth + 1u;
+	for ( iIndex = iStart;
+		((iStep > 0) && (iIndex <= iEnd)) || ((iStep < 0) && (iIndex >= iEnd));
+		iIndex += iStep ) {
+		XTE_Flow iFlow = XTE_FLOW_OK;
+		iLoopCount++;
+		if ( iLoopCount > XTE_PRIVATE_LOOP_MAX_ITERATIONS ) {
+			pCtx->pRender->iLoopDepth = iPrevLoopDepth;
+			xvoUnref(pLocal);
+			return xte_private_stmt_render_error(pCtx, XTE_ERROR_RENDER, "template for exceeded max iterations");
+		}
+		if ( !xvoTableSetInt(pLocal, "__index__", 0, iIndex) ) {
+			pCtx->pRender->iLoopDepth = iPrevLoopDepth;
+			xvoUnref(pLocal);
+			return xte_private_stmt_render_error(pCtx, XTE_ERROR_RENDER, "template for local set failed");
+		}
+		iFlow = xte_private_render_body_with_scope_ex(pCtx, pLocal, pCtx->pRender->pCurrent);
+		if ( iFlow == XTE_FLOW_BREAK ) {
+			break;
+		}
+		if ( iFlow == XTE_FLOW_CONTINUE ) {
+			continue;
+		}
+		if ( iFlow == XTE_FLOW_ERROR ) {
+			pCtx->pRender->iLoopDepth = iPrevLoopDepth;
+			xvoUnref(pLocal);
+			return iFlow;
+		}
+	}
+	pCtx->pRender->iLoopDepth = iPrevLoopDepth;
+	xvoUnref(pLocal);
+	return XTE_FLOW_OK;
+}
+static XTE_Flow xte_private_stmt_render_foreach(XTE_StmtRenderCtx* pCtx)
+{
+	xvalue pIter = NULL;
+	xvalue pLocal = NULL;
+	uint32 iLoopCount = 0;
+	uint32 iPrevLoopDepth = 0;
+	if ( (pCtx == NULL) || (pCtx->pRender == NULL) ) {
+		return XTE_FLOW_ERROR;
+	}
+	pIter = xteEvalArgValue(pCtx->pRender, xteArgAt(pCtx->pArgs, 0));
+	if ( pIter == NULL ) {
+		return xte_private_stmt_render_error(pCtx, XTE_ERROR_RENDER, "template foreach eval failed");
+	}
+	pLocal = xvoCreateTable();
+	if ( pLocal == NULL ) {
+		xvoUnref(pIter);
+		return xte_private_stmt_render_error(pCtx, XTE_ERROR_MALLOC, "template foreach local alloc failed");
+	}
+	iPrevLoopDepth = pCtx->pRender->iLoopDepth;
+	pCtx->pRender->iLoopDepth = iPrevLoopDepth + 1u;
+	if ( pIter->Type == XVO_DT_ARRAY ) {
+		uint32 i = 0;
+		uint32 iCount = xvoArrayItemCount(pIter);
+		for ( i = 0; i < iCount; i++ ) {
+			XTE_Flow iFlow = XTE_FLOW_OK;
+			xvalue pItem = xvoArrayGetValue(pIter, i);
+			iLoopCount++;
+			if ( iLoopCount > XTE_PRIVATE_LOOP_MAX_ITERATIONS ) {
+				pCtx->pRender->iLoopDepth = iPrevLoopDepth;
+				xvoUnref(pLocal);
+				xvoUnref(pIter);
+				return xte_private_stmt_render_error(pCtx, XTE_ERROR_RENDER, "template foreach exceeded max iterations");
+			}
+			xvoTableClear(pLocal);
+			if ( !xvoTableSetInt(pLocal, "__index__", 0, (int64)i) || !xvoTableSetValue(pLocal, "__value__", 0, pItem, FALSE) ) {
+				pCtx->pRender->iLoopDepth = iPrevLoopDepth;
+				xvoUnref(pLocal);
+				xvoUnref(pIter);
+				return xte_private_stmt_render_error(pCtx, XTE_ERROR_RENDER, "template foreach local set failed");
+			}
+			iFlow = xte_private_render_body_with_scope_ex(pCtx, pLocal, pItem);
+			if ( iFlow == XTE_FLOW_BREAK ) {
+				break;
+			}
+			if ( iFlow == XTE_FLOW_CONTINUE ) {
+				continue;
+			}
+			if ( iFlow == XTE_FLOW_ERROR ) {
+				pCtx->pRender->iLoopDepth = iPrevLoopDepth;
+				xvoUnref(pLocal);
+				xvoUnref(pIter);
+				return iFlow;
+			}
+		}
+	} else if ( pIter->Type == XVO_DT_LIST ) {
+		uint32 i = 0;
+		uint32 iCount = xvoListItemCount(pIter);
+		for ( i = 0; i < iCount; i++ ) {
+			XTE_Flow iFlow = XTE_FLOW_OK;
+			xvalue pItem = xvoListGetValue(pIter, i);
+			iLoopCount++;
+			if ( iLoopCount > XTE_PRIVATE_LOOP_MAX_ITERATIONS ) {
+				pCtx->pRender->iLoopDepth = iPrevLoopDepth;
+				xvoUnref(pLocal);
+				xvoUnref(pIter);
+				return xte_private_stmt_render_error(pCtx, XTE_ERROR_RENDER, "template foreach exceeded max iterations");
+			}
+			xvoTableClear(pLocal);
+			if ( !xvoTableSetInt(pLocal, "__index__", 0, (int64)i) || !xvoTableSetValue(pLocal, "__value__", 0, pItem, FALSE) ) {
+				pCtx->pRender->iLoopDepth = iPrevLoopDepth;
+				xvoUnref(pLocal);
+				xvoUnref(pIter);
+				return xte_private_stmt_render_error(pCtx, XTE_ERROR_RENDER, "template foreach local set failed");
+			}
+			iFlow = xte_private_render_body_with_scope_ex(pCtx, pLocal, pItem);
+			if ( iFlow == XTE_FLOW_BREAK ) {
+				break;
+			}
+			if ( iFlow == XTE_FLOW_CONTINUE ) {
+				continue;
+			}
+			if ( iFlow == XTE_FLOW_ERROR ) {
+				pCtx->pRender->iLoopDepth = iPrevLoopDepth;
+				xvoUnref(pLocal);
+				xvoUnref(pIter);
+				return iFlow;
+			}
+		}
+	} else if ( pIter->Type == XVO_DT_TABLE ) {
+		uint32 iIndex = 0;
+		xdict pDict = xvoGetTable(pIter);
+		xrtDictIterBegin(pDict);
+		while ( 1 ) {
+			Dict_Key* pKey = xrtDictIterNext(pDict);
+			XTE_Flow iFlow = XTE_FLOW_OK;
+			xvalue* ppItem = NULL;
+			if ( pKey == NULL ) {
+				break;
+			}
+			iLoopCount++;
+			if ( iLoopCount > XTE_PRIVATE_LOOP_MAX_ITERATIONS ) {
+				xrtDictIterEnd(pDict);
+				pCtx->pRender->iLoopDepth = iPrevLoopDepth;
+				xvoUnref(pLocal);
+				xvoUnref(pIter);
+				return xte_private_stmt_render_error(pCtx, XTE_ERROR_RENDER, "template foreach exceeded max iterations");
+			}
+			ppItem = (xvalue*)(&pKey[1]);
+			xvoTableClear(pLocal);
+			if ( !xvoTableSetInt(pLocal, "__index__", 0, (int64)iIndex)
+				|| !xvoTableSetText(pLocal, "__key__", 0, pKey->Key, pKey->KeyLen, FALSE)
+				|| !xvoTableSetValue(pLocal, "__value__", 0, ppItem[0], FALSE) ) {
+				xrtDictIterEnd(pDict);
+				pCtx->pRender->iLoopDepth = iPrevLoopDepth;
+				xvoUnref(pLocal);
+				xvoUnref(pIter);
+				return xte_private_stmt_render_error(pCtx, XTE_ERROR_RENDER, "template foreach local set failed");
+			}
+			iFlow = xte_private_render_body_with_scope_ex(pCtx, pLocal, ppItem[0]);
+			if ( iFlow == XTE_FLOW_BREAK ) {
+				break;
+			}
+			if ( iFlow == XTE_FLOW_CONTINUE ) {
+				iIndex++;
+				continue;
+			}
+			if ( iFlow == XTE_FLOW_ERROR ) {
+				xrtDictIterEnd(pDict);
+				pCtx->pRender->iLoopDepth = iPrevLoopDepth;
+				xvoUnref(pLocal);
+				xvoUnref(pIter);
+				return iFlow;
+			}
+			iIndex++;
+		}
+		xrtDictIterEnd(pDict);
+	}
+	pCtx->pRender->iLoopDepth = iPrevLoopDepth;
+	xvoUnref(pLocal);
+	xvoUnref(pIter);
+	return XTE_FLOW_OK;
+}
+static XTE_Flow xte_private_stmt_render_include(XTE_StmtRenderCtx* pCtx)
+{
+	char* sName = NULL;
+	xtetemplate hTemplate = NULL;
+	const XTE_PrivateSubTemplateItem* pSubTemplate = NULL;
+	XTE_Flow iFlow = XTE_FLOW_OK;
+	if ( (pCtx == NULL) || (pCtx->pRender == NULL) ) {
+		return XTE_FLOW_ERROR;
+	}
+	sName = xteEvalArgText(pCtx->pRender, xteArgAt(pCtx->pArgs, 0));
+	if ( sName == NULL ) {
+		return xte_private_stmt_render_error(pCtx, XTE_ERROR_MALLOC, "template include name alloc failed");
+	}
+	pSubTemplate = xte_private_find_subtemplate(pCtx->pRender->hTemplate, sName, 0u);
+	if ( pSubTemplate != NULL ) {
+		iFlow = xte_private_render_span(pCtx->pRender, pSubTemplate->tBody);
+		xrtFree(sName);
+		return iFlow;
+	}
+	if ( pCtx->pRender->pIncludeMap == NULL ) {
+		xrtFree(sName);
+		return xte_private_stmt_render_error(pCtx, XTE_ERROR_RENDER, "template include target not found");
+	}
+	hTemplate = (xtetemplate)xrtDictGetPtr(pCtx->pRender->pIncludeMap, sName, 0);
+	if ( hTemplate == NULL ) {
+		xrtFree(sName);
+		return xte_private_stmt_render_error(pCtx, XTE_ERROR_RENDER, "template include target not found");
+	}
+	iFlow = xte_private_render_template(pCtx->pRender, hTemplate, pCtx->pRender->pCurrent);
+	xrtFree(sName);
+	return iFlow;
+}
+static XTE_Flow xte_private_render_node(XTE_RenderCtx* pCtx, XTE_Node* pNode)
+{
+	if ( pNode == NULL ) {
+		xte_private_fill_error_pos("", 0, 0, pCtx->pError, XTE_ERROR_RENDER, "template node index is invalid");
+		return XTE_FLOW_ERROR;
+	}
+	switch ( pNode->iType ) {
+		case XTE_NODE_TEXT: {
+			const char* sText = xte_private_pool_ptr(pCtx->hTemplate, pNode->Data.Text.iTextOff);
+			if ( !xte_private_writer_write(pCtx->pWriter, sText, pNode->Data.Text.iTextSize) ) {
+				xte_private_fill_error_pos("", 0, 0, pCtx->pError, XTE_ERROR_RENDER, "template writer failed");
+				return XTE_FLOW_ERROR;
+			}
+			return XTE_FLOW_OK;
+		}
+		case XTE_NODE_OUTPUT:
+			if ( !xte_private_render_output_node(pCtx, pNode) ) {
+				if ( (pCtx->pError != NULL) && (pCtx->pError->iCode == 0) ) {
+					xte_private_fill_error_pos("", 0, 0, pCtx->pError, XTE_ERROR_RENDER, "template output render failed");
+				}
+				return XTE_FLOW_ERROR;
+			}
+			return XTE_FLOW_OK;
+		case XTE_NODE_INLINE_BOOL: {
+			xvalue pVal = xte_private_eval_expr_value(pCtx, pNode->Data.InlineBool.iExprIndex);
+			int bTruth = xte_private_value_truthy(pVal);
+			const char* sText = bTruth ? xte_private_pool_ptr(pCtx->hTemplate, pNode->Data.InlineBool.iTrueOff) : xte_private_pool_ptr(pCtx->hTemplate, pNode->Data.InlineBool.iFalseOff);
+			uint32 iSize = bTruth ? pNode->Data.InlineBool.iTrueSize : pNode->Data.InlineBool.iFalseSize;
+			xvoUnref(pVal);
+			if ( iSize && !xte_private_writer_write(pCtx->pWriter, sText, iSize) ) {
+				xte_private_fill_error_pos("", 0, 0, pCtx->pError, XTE_ERROR_RENDER, "template writer failed");
+				return XTE_FLOW_ERROR;
+			}
+			return XTE_FLOW_OK;
+		}
+		case XTE_NODE_STATEMENT: {
+			const char* sName = xte_private_pool_ptr(pCtx->hTemplate, pNode->Data.Statement.iStmtNameOff);
+			const XTE_StatementDef* pDef = xte_private_find_statement(pCtx->hEngine, sName, pNode->Data.Statement.iStmtNameSize);
+			XTE_ArgList tArgs = { 0 };
+			XTE_NodeSpan* pBody = (pNode->Data.Statement.tBody.iCount != 0u) ? &pNode->Data.Statement.tBody : NULL;
+			const char* sRawBody = (pNode->Data.Statement.iRawBodyOff != XTE_PRIVATE_INVALID_INDEX) ? xte_private_pool_ptr(pCtx->hTemplate, pNode->Data.Statement.iRawBodyOff) : NULL;
+			XTE_StmtRenderCtx tStmtCtx = { 0 };
+			XTE_Flow iFlow = XTE_FLOW_OK;
+			if ( pDef == NULL ) {
+				xte_private_fill_error_pos("", 0, 0, pCtx->pError, XTE_ERROR_UNKNOWN_STATEMENT, "template statement is not registered");
+				return XTE_FLOW_ERROR;
+			}
+			xte_private_make_arg_list(pCtx->hTemplate, pNode, &tArgs);
+			tStmtCtx.pRender = pCtx;
+			tStmtCtx.pDef = pDef;
+			tStmtCtx.pArgs = &tArgs;
+			tStmtCtx.pBody = pBody;
+			tStmtCtx.sRawBody = sRawBody;
+			tStmtCtx.iRawBodySize = pNode->Data.Statement.iRawBodySize;
+			tStmtCtx.pData = pNode->Data.Statement.pData;
+			tStmtCtx.pUserData = pDef->pUserData;
+			if ( pDef->procRender ) {
+				iFlow = pDef->procRender(&tStmtCtx);
+			} else if ( pBody ) {
+				iFlow = xte_private_render_span(pCtx, *pBody);
+			}
+			if ( iFlow == XTE_FLOW_ERROR ) {
+				if ( (pCtx->pError != NULL) && (pCtx->pError->iCode == 0) ) {
+					pCtx->pError->iCode = XTE_ERROR_RENDER;
+					pCtx->pError->sDesc = "template statement render failed";
+				}
+			}
+			return iFlow;
+		}
+	}
+	return XTE_FLOW_OK;
+}
+static XTE_Flow xte_private_render_span(XTE_RenderCtx* pCtx, XTE_NodeSpan tSpan)
+{
+	uint32 i = 0;
+	for ( i = 0; i < tSpan.iCount; i++ ) {
+		XTE_Node* pNode = xte_private_template_get_node(pCtx->hTemplate, tSpan.iStart + i);
+		XTE_Flow iFlow = xte_private_render_node(pCtx, pNode);
+		if ( iFlow != XTE_FLOW_OK ) {
+			return iFlow;
+		}
+	}
+	return XTE_FLOW_OK;
+}
+#ifdef XTE_DEBUGMODE
+static int xte_private_console_writer_proc(void* pUserData, const char* sText, size_t iSize)
+{
+	FILE* fp = (FILE*)pUserData;
+	return (fwrite(sText, 1, iSize, fp) == iSize) ? 1 : 0;
+}
+static int xte_private_dump_indent(XTE_Writer* pWriter, uint32 iDepth)
+{
+	uint32 i = 0;
+	for ( i = 0; i < iDepth; i++ ) {
+		if ( !xte_private_writer_write(pWriter, "\t", 1) ) {
+			return 0;
+		}
+	}
+	return 1;
+}
+static const char* xte_private_expr_type_name(uint32 iType)
+{
+	switch ( iType ) {
+		case XTE_EXPR_PATH:
+			return "PATH";
+		case XTE_EXPR_TEXT:
+			return "TEXT";
+		case XTE_EXPR_INT:
+			return "INT";
+		case XTE_EXPR_BOOL:
+			return "BOOL";
+		case XTE_EXPR_BOOL_EXPR:
+			return "BOOL_EXPR";
+		default:
+			return "EXPR";
+	}
+}
+static const char* xte_private_expr_type_name_by_index(xtetemplate hTemplate, uint32 iExprIndex)
+{
+	XTE_ExprNode* pExpr = xte_private_template_get_expr(hTemplate, iExprIndex);
+	return pExpr ? xte_private_expr_type_name(pExpr->iType) : "INVALID";
+}
+static int xte_private_dump_expr_value(XTE_Writer* pWriter, xtetemplate hTemplate, uint32 iExprIndex)
+{
+	XTE_ExprNode* pExpr = xte_private_template_get_expr(hTemplate, iExprIndex);
+	char sBuf[128] = { 0 };
+	if ( pExpr == NULL ) {
+		return xte_private_writer_write(pWriter, "<invalid-expr>", 14);
+	}
+	switch ( pExpr->iType ) {
+		case XTE_EXPR_PATH:
+		case XTE_EXPR_TEXT:
+		case XTE_EXPR_BOOL_EXPR:
+			return xte_private_writer_write(pWriter, xte_private_pool_ptr(hTemplate, pExpr->iTextOff), pExpr->iTextSize);
+		case XTE_EXPR_INT:
+			snprintf(sBuf, sizeof(sBuf), "%lld", (long long)pExpr->iIntValue);
+			return xte_private_writer_write(pWriter, sBuf, strlen(sBuf));
+		case XTE_EXPR_BOOL:
+			return xte_private_writer_write(pWriter, pExpr->iBoolValue ? "true" : "false", pExpr->iBoolValue ? 4 : 5);
+		default:
+			return xte_private_writer_write(pWriter, "<expr>", 6);
+	}
+}
+static int xte_private_dump_expr_typed(XTE_Writer* pWriter, xtetemplate hTemplate, uint32 iExprIndex)
+{
+	XTE_ExprNode* pExpr = xte_private_template_get_expr(hTemplate, iExprIndex);
+	const char* sType = NULL;
+	if ( pExpr == NULL ) {
+		return xte_private_writer_write(pWriter, "INVALID: <invalid-expr>", 23);
+	}
+	sType = xte_private_expr_type_name(pExpr->iType);
+	if ( !xte_private_writer_write(pWriter, sType, strlen(sType)) ) {
+		return 0;
+	}
+	if ( !xte_private_writer_write(pWriter, ": ", 2) ) {
+		return 0;
+	}
+	return xte_private_dump_expr_value(pWriter, hTemplate, iExprIndex);
+}
+static int xte_private_dump_arg_list(xtetemplate hTemplate, XTE_Writer* pWriter, uint32 iArgStart, uint32 iArgCount, uint32 iDepth)
+{
+	uint32 i = 0;
+	for ( i = 0; i < iArgCount; i++ ) {
+		XTE_ArgItem* pArg = xte_private_template_get_arg(hTemplate, iArgStart + i);
+		if ( pArg == NULL ) {
+			return 0;
+		}
+		if ( !xte_private_dump_indent(pWriter, iDepth) ) {
+			return 0;
+		}
+		if ( !xte_private_writer_write(pWriter, "ARG", 3) ) {
+			return 0;
+		}
+		if ( pArg->iNameSize != 0u ) {
+			if ( !xte_private_writer_write(pWriter, " ", 1) ) {
+				return 0;
+			}
+			if ( !xte_private_writer_write(pWriter, xte_private_pool_ptr(hTemplate, pArg->iNameOff), pArg->iNameSize) ) {
+				return 0;
+			}
+		}
+		if ( !xte_private_writer_write(pWriter, ": ", 2) ) {
+			return 0;
+		}
+		if ( pArg->iRawSize != 0u ) {
+			if ( !xte_private_writer_write(pWriter, xte_private_pool_ptr(hTemplate, pArg->iRawOff), pArg->iRawSize) ) {
+				return 0;
+			}
+		}
+		if ( !xte_private_writer_write(pWriter, "\n", 1) ) {
+			return 0;
+		}
+		if ( pArg->iFlags & XTE_PRIVATE_ARG_HAS_EXPR ) {
+			if ( !xte_private_dump_indent(pWriter, iDepth + 1u) ) {
+				return 0;
+			}
+			if ( !xte_private_writer_write(pWriter, "EXPR ", 5) ) {
+				return 0;
+			}
+			if ( !xte_private_dump_expr_typed(pWriter, hTemplate, pArg->iExprIndex) ) {
+				return 0;
+			}
+			if ( !xte_private_writer_write(pWriter, "\n", 1) ) {
+				return 0;
+			}
+		}
+	}
+	return 1;
+}
+static int xte_private_dump_span(xtetemplate hTemplate, XTE_Writer* pWriter, XTE_NodeSpan tSpan, uint32 iDepth)
+{
+	uint32 i = 0;
+	for ( i = 0; i < tSpan.iCount; i++ ) {
+		XTE_Node* pNode = xte_private_template_get_node(hTemplate, tSpan.iStart + i);
+		if ( pNode == NULL ) {
+			return 0;
+		}
+		if ( !xte_private_dump_indent(pWriter, iDepth) ) {
+			return 0;
+		}
+		switch ( pNode->iType ) {
+			case XTE_NODE_TEXT:
+				if ( !xte_private_writer_write(pWriter, "TEXT: ", 6) ) {
+					return 0;
+				}
+				if ( !xte_private_writer_write(pWriter, xte_private_pool_ptr(hTemplate, pNode->Data.Text.iTextOff), pNode->Data.Text.iTextSize) ) {
+					return 0;
+				}
+				if ( !xte_private_writer_write(pWriter, "\n", 1) ) {
+					return 0;
+				}
+				break;
+			case XTE_NODE_OUTPUT:
+				if ( pNode->Data.Output.iOutputType == XTE_OUTPUT_FUNC ) {
+					if ( !xte_private_writer_write(pWriter, "OUTPUT_FUNC: ", 13) ) {
+						return 0;
+					}
+					if ( !xte_private_writer_write(pWriter, xte_private_pool_ptr(hTemplate, pNode->Data.Output.iNameOff), pNode->Data.Output.iNameSize) ) {
+						return 0;
+					}
+					if ( !xte_private_writer_write(pWriter, "\n", 1) ) {
+						return 0;
+					}
+					if ( pNode->Data.Output.iArgCount != 0u ) {
+						if ( !xte_private_dump_arg_list(hTemplate, pWriter, pNode->Data.Output.iArgStart, pNode->Data.Output.iArgCount, iDepth + 1u) ) {
+							return 0;
+						}
+					}
+					break;
+				}
+				if ( !xte_private_writer_write(pWriter, "OUTPUT(", 7) ) {
+					return 0;
+				}
+				if ( !xte_private_writer_write(pWriter, xte_private_expr_type_name_by_index(hTemplate, pNode->Data.Output.iExprIndex), strlen(xte_private_expr_type_name_by_index(hTemplate, pNode->Data.Output.iExprIndex))) ) {
+					return 0;
+				}
+				if ( !xte_private_writer_write(pWriter, "): ", 3) ) {
+					return 0;
+				}
+				if ( !xte_private_dump_expr_value(pWriter, hTemplate, pNode->Data.Output.iExprIndex) ) {
+					return 0;
+				}
+				if ( !xte_private_writer_write(pWriter, "\n", 1) ) {
+					return 0;
+				}
+				break;
+			case XTE_NODE_INLINE_BOOL:
+				if ( !xte_private_writer_write(pWriter, "INLINE_BOOL(", 12) ) {
+					return 0;
+				}
+				if ( !xte_private_writer_write(pWriter, xte_private_expr_type_name_by_index(hTemplate, pNode->Data.InlineBool.iExprIndex), strlen(xte_private_expr_type_name_by_index(hTemplate, pNode->Data.InlineBool.iExprIndex))) ) {
+					return 0;
+				}
+				if ( !xte_private_writer_write(pWriter, "): ", 3) ) {
+					return 0;
+				}
+				if ( !xte_private_dump_expr_value(pWriter, hTemplate, pNode->Data.InlineBool.iExprIndex) ) {
+					return 0;
+				}
+				if ( !xte_private_writer_write(pWriter, "\n", 1) ) {
+					return 0;
+				}
+				break;
+			case XTE_NODE_STATEMENT:
+				if ( !xte_private_writer_write(pWriter, "STATEMENT: ", 11) ) {
+					return 0;
+				}
+				if ( !xte_private_writer_write(pWriter, xte_private_pool_ptr(hTemplate, pNode->Data.Statement.iStmtNameOff), pNode->Data.Statement.iStmtNameSize) ) {
+					return 0;
+				}
+				if ( !xte_private_writer_write(pWriter, "\n", 1) ) {
+					return 0;
+				}
+				if ( pNode->Data.Statement.iArgCount != 0u ) {
+					if ( !xte_private_dump_arg_list(hTemplate, pWriter, pNode->Data.Statement.iArgStart, pNode->Data.Statement.iArgCount, iDepth + 1u) ) {
+						return 0;
+					}
+				}
+				if ( pNode->Data.Statement.tBody.iCount ) {
+					if ( !xte_private_dump_span(hTemplate, pWriter, pNode->Data.Statement.tBody, iDepth + 1u) ) {
+						return 0;
+					}
+				}
+				break;
+		}
+	}
+	return 1;
+}
+#endif
+XXAPI xteengine xteCreateEngine(void)
+{
+	xteengine hEngine = xrtCalloc(1, sizeof(*hEngine));
+	if ( hEngine == NULL ) {
+		return NULL;
+	}
+	xrtArrayInit(&hEngine->arrStatement, sizeof(XTE_PrivateStatementReg), XRT_OBJMODE_LOCAL);
+	xrtArrayInit(&hEngine->arrFunction, sizeof(XTE_PrivateFunctionReg), XRT_OBJMODE_LOCAL);
+	if ( !xteRegisterBuiltinStatements(hEngine) ) {
+		xrtArrayUnit(&hEngine->arrStatement);
+		xrtArrayUnit(&hEngine->arrFunction);
+		xrtFree(hEngine);
+		return NULL;
+	}
+	return hEngine;
+}
+XXAPI void xteDestroyEngine(xteengine hEngine)
+{
+	if ( hEngine == NULL ) {
+		return;
+	}
+	xrtArrayUnit(&hEngine->arrStatement);
+	xrtArrayUnit(&hEngine->arrFunction);
+	xrtFree(hEngine);
+}
+XXAPI int xteRegisterBuiltinStatements(xteengine hEngine)
+{
+	static const XTE_StatementDef tIf = {
+		.sName = "if",
+		.iFlags = XTE_STMT_BLOCK,
+		.iMinArgs = 1,
+		.iMaxArgs = 1,
+		.procRender = xte_private_stmt_render_if
+	};
+	static const XTE_StatementDef tElseIf = {
+		.sName = "elseif",
+		.iFlags = XTE_STMT_INLINE,
+		.iMinArgs = 1,
+		.iMaxArgs = 1,
+		.procRender = xte_private_stmt_render_elseif
+	};
+	static const XTE_StatementDef tElse = {
+		.sName = "else",
+		.iFlags = XTE_STMT_INLINE,
+		.iMinArgs = 0,
+		.iMaxArgs = 0,
+		.procRender = xte_private_stmt_render_else
+	};
+	static const XTE_StatementDef tFor = {
+		.sName = "for",
+		.iFlags = XTE_STMT_BLOCK,
+		.iMinArgs = 2,
+		.iMaxArgs = 3,
+		.procRender = xte_private_stmt_render_for
+	};
+	static const XTE_StatementDef tForeach = {
+		.sName = "foreach",
+		.iFlags = XTE_STMT_BLOCK,
+		.iMinArgs = 1,
+		.iMaxArgs = 1,
+		.procRender = xte_private_stmt_render_foreach
+	};
+	static const XTE_StatementDef tBreak = {
+		.sName = "break",
+		.iFlags = XTE_STMT_INLINE,
+		.iMinArgs = 0,
+		.iMaxArgs = 0,
+		.procRender = xte_private_stmt_render_break
+	};
+	static const XTE_StatementDef tContinue = {
+		.sName = "continue",
+		.iFlags = XTE_STMT_INLINE,
+		.iMinArgs = 0,
+		.iMaxArgs = 0,
+		.procRender = xte_private_stmt_render_continue
+	};
+	static const XTE_StatementDef tDefine = {
+		.sName = "define",
+		.iFlags = XTE_STMT_BLOCK | XTE_STMT_ALLOW_NAMED_ARGS,
+		.iMinArgs = 1,
+		.iMaxArgs = 1,
+		.procParse = xte_private_stmt_parse_define,
+		.procRender = xte_private_stmt_render_define,
+		.procFreeData = xrtFree
+	};
+	static const XTE_StatementDef tScript = {
+		.sName = "script",
+		.iFlags = XTE_STMT_BLOCK | XTE_STMT_RAW_BODY,
+		.iMinArgs = 0,
+		.iMaxArgs = 0,
+		.procRender = xte_private_stmt_render_script
+	};
+	static const XTE_StatementDef tInclude = {
+		.sName = "include",
+		.iFlags = XTE_STMT_INLINE,
+		.iMinArgs = 1,
+		.iMaxArgs = 1,
+		.procRender = xte_private_stmt_render_include
+	};
+	if ( hEngine == NULL ) {
+		return 0;
+	}
+	if ( !xte_private_find_statement(hEngine, "if", 2) && !xteRegisterStatement(hEngine, &tIf) ) {
+		return 0;
+	}
+	if ( !xte_private_find_statement(hEngine, "elseif", 6) && !xteRegisterStatement(hEngine, &tElseIf) ) {
+		return 0;
+	}
+	if ( !xte_private_find_statement(hEngine, "else", 4) && !xteRegisterStatement(hEngine, &tElse) ) {
+		return 0;
+	}
+	if ( !xte_private_find_statement(hEngine, "for", 3) && !xteRegisterStatement(hEngine, &tFor) ) {
+		return 0;
+	}
+	if ( !xte_private_find_statement(hEngine, "foreach", 7) && !xteRegisterStatement(hEngine, &tForeach) ) {
+		return 0;
+	}
+	if ( !xte_private_find_statement(hEngine, "break", 5) && !xteRegisterStatement(hEngine, &tBreak) ) {
+		return 0;
+	}
+	if ( !xte_private_find_statement(hEngine, "continue", 8) && !xteRegisterStatement(hEngine, &tContinue) ) {
+		return 0;
+	}
+	if ( !xte_private_find_statement(hEngine, "define", 6) && !xteRegisterStatement(hEngine, &tDefine) ) {
+		return 0;
+	}
+	if ( !xte_private_find_statement(hEngine, "script", 6) && !xteRegisterStatement(hEngine, &tScript) ) {
+		return 0;
+	}
+	if ( !xte_private_find_statement(hEngine, "include", 7) && !xteRegisterStatement(hEngine, &tInclude) ) {
+		return 0;
+	}
+	return 1;
+}
+XXAPI int xteRegisterStatement(xteengine hEngine, const XTE_StatementDef* pDef)
+{
+	XTE_PrivateStatementReg tReg = { 0 };
+	uint32 iIndex = 0;
+	if ( (hEngine == NULL) || (pDef == NULL) || (pDef->sName == NULL) || (pDef->sName[0] == 0) ) {
+		return 0;
+	}
+	if ( xte_private_find_statement(hEngine, pDef->sName, (uint32)strlen(pDef->sName)) ) {
+		return 0;
+	}
+	tReg.pDef = pDef;
+	iIndex = xrtArrayAppend(&hEngine->arrStatement, 1);
+	if ( iIndex == 0u ) {
+		return 0;
+	}
+	memcpy(xrtArrayGet_Inline(&hEngine->arrStatement, iIndex), &tReg, sizeof(tReg));
+	return 1;
+}
+XXAPI int xteRegisterFunction(xteengine hEngine, const XTE_FunctionDef* pDef)
+{
+	XTE_PrivateFunctionReg tReg = { 0 };
+	uint32 iIndex = 0;
+	if ( (hEngine == NULL) || (pDef == NULL) || (pDef->sName == NULL) || (pDef->sName[0] == 0) || (pDef->procCall == NULL) ) {
+		return 0;
+	}
+	if ( xte_private_find_function(hEngine, pDef->sName, (uint32)strlen(pDef->sName)) ) {
+		return 0;
+	}
+	tReg.pDef = pDef;
+	iIndex = xrtArrayAppend(&hEngine->arrFunction, 1);
+	if ( iIndex == 0u ) {
+		return 0;
+	}
+	memcpy(xrtArrayGet_Inline(&hEngine->arrFunction, iIndex), &tReg, sizeof(tReg));
+	return 1;
+}
+XXAPI xtetemplate xteParseEx(xteengine hEngine, const char* sText, size_t iSize, const XTE_ParseOptions* pOptions, XTE_Error* pError)
+{
+	int bOwnEngine = 0;
+	xtetemplate hTemplate = NULL;
+	XTE_PrivateParser tParser = { 0 };
+	XTE_PrivateAstList tAstRoot = { 0 };
+	int bEndedByEnd = 0;
+	xte_private_clear_error(pError);
+	if ( sText == NULL ) {
+		xte_private_fill_error_pos("", 0, 0, pError, XTE_ERROR_PARSE, "template text is null");
+		return NULL;
+	}
+	if ( iSize == 0u ) {
+		iSize = strlen(sText);
+	}
+	if ( hEngine == NULL ) {
+		hEngine = xteCreateEngine();
+		if ( hEngine == NULL ) {
+			xte_private_fill_error_pos(sText, (uint32)iSize, 0, pError, XTE_ERROR_MALLOC, "template engine alloc failed");
+			return NULL;
+		}
+		xteRegisterBuiltinStatements(hEngine);
+		bOwnEngine = 1;
+	}
+	hTemplate = xte_private_template_create(hEngine, bOwnEngine);
+	if ( hTemplate == NULL ) {
+		if ( bOwnEngine ) {
+			xteDestroyEngine(hEngine);
+		}
+		xte_private_fill_error_pos(sText, (uint32)iSize, 0, pError, XTE_ERROR_MALLOC, "template alloc failed");
+		return NULL;
+	}
+	if ( !xte_private_setup_bracket(pOptions, &tParser.tBracket) ) {
+		xteDestroyTemplate(hTemplate);
+		xte_private_fill_error_pos(sText, (uint32)iSize, 0, pError, XTE_ERROR_PARSE, "template bracket config is invalid");
+		return NULL;
+	}
+	xte_private_ast_list_init(&tAstRoot);
+	tParser.hEngine = hEngine;
+	tParser.sText = sText;
+	tParser.iSize = (uint32)iSize;
+	tParser.iPos = 0u;
+	tParser.iBasePos = 0u;
+	tParser.sRootText = sText;
+	tParser.iRootSize = (uint32)iSize;
+	tParser.pError = &hTemplate->LastError;
+	xte_private_clear_error(&hTemplate->LastError);
+	if ( !xte_private_parse_nodes(&tParser, &tAstRoot, 0, &bEndedByEnd) ) {
+		xte_private_copy_error(pError, &hTemplate->LastError);
+		xte_private_ast_list_unit(&tAstRoot);
+		xteDestroyTemplate(hTemplate);
+		return NULL;
+	}
+	if ( !xte_private_compile_ast_list(hTemplate, &tAstRoot, &hTemplate->tRoot) ) {
+		if ( hTemplate->LastError.iCode == 0 ) {
+			xte_private_fill_error_pos(sText, (uint32)iSize, 0, &hTemplate->LastError, XTE_ERROR_MALLOC, "template compile failed");
+		}
+		xte_private_copy_error(pError, &hTemplate->LastError);
+		xte_private_ast_list_unit(&tAstRoot);
+		xteDestroyTemplate(hTemplate);
+		return NULL;
+	}
+	if ( !xte_private_rebuild_subtemplates(hTemplate, XTE_ERROR_PARSE, "template define compile failed") ) {
+		xte_private_copy_error(pError, &hTemplate->LastError);
+		xte_private_ast_list_unit(&tAstRoot);
+		xteDestroyTemplate(hTemplate);
+		return NULL;
+	}
+	xte_private_ast_list_unit(&tAstRoot);
+	xte_private_copy_error(pError, &hTemplate->LastError);
+	return hTemplate;
+}
+XXAPI xtetemplate xteParse(const char* sText, size_t iSize, const char* sBracket)
+{
+	XTE_ParseOptions tOptions = { 0 };
+	tOptions.sBracket = sBracket;
+	return xteParseEx(NULL, sText, iSize, &tOptions, NULL);
+}
+XXAPI void xteDestroyTemplate(xtetemplate hTemplate)
+{
+	uint32 i = 0;
+	if ( hTemplate == NULL ) {
+		return;
+	}
+	for ( i = 0; i < hTemplate->arrNode.Count; i++ ) {
+		XTE_Node* pNode = xte_private_template_get_node(hTemplate, i);
+		if ( (pNode != NULL) && (pNode->iType == XTE_NODE_STATEMENT) && (pNode->Data.Statement.pData != NULL) && (hTemplate->hEngine != NULL) ) {
+			const char* sName = xte_private_pool_ptr(hTemplate, pNode->Data.Statement.iStmtNameOff);
+			const XTE_StatementDef* pDef = xte_private_find_statement(hTemplate->hEngine, sName, pNode->Data.Statement.iStmtNameSize);
+			if ( pDef && pDef->procFreeData ) {
+				pDef->procFreeData(pNode->Data.Statement.pData);
+			}
+		}
+	}
+	xrtArrayUnit(&hTemplate->arrArg);
+	xrtArrayUnit(&hTemplate->arrExpr);
+	xrtArrayUnit(&hTemplate->arrNode);
+	xrtArrayUnit(&hTemplate->arrSubTemplate);
+	xrtBufferUnit(&hTemplate->tStringPool);
+	if ( hTemplate->bOwnEngine && hTemplate->hEngine ) {
+		xteDestroyEngine(hTemplate->hEngine);
+	}
+	xrtFree(hTemplate);
+}
+XXAPI void xteParseFree(xtetemplate hTemplate)
+{
+	xteDestroyTemplate(hTemplate);
+}
+XXAPI int xteRenderEx(xtetemplate hTemplate, const XTE_RenderOptions* pOptions, XTE_Error* pError)
+{
+	XTE_RenderCtx tCtx = { 0 };
+	XTE_Flow iFlow = XTE_FLOW_OK;
+	xte_private_clear_error(pError);
+	if ( (hTemplate == NULL) || (pOptions == NULL) || (pOptions->pWriter == NULL) || (pOptions->pWriter->procWrite == NULL) ) {
+		xte_private_fill_error_pos("", 0, 0, pError, XTE_ERROR_RENDER, "template render options are invalid");
+		return 0;
+	}
+	tCtx.hEngine = hTemplate->hEngine;
+	tCtx.hTemplate = hTemplate;
+	tCtx.pWriter = pOptions->pWriter;
+	tCtx.pIncludeMap = pOptions->pIncludeMap;
+	tCtx.pCurrent = pOptions->pCurrent ? pOptions->pCurrent : pOptions->pRoot;
+	tCtx.pRoot = pOptions->pRoot ? pOptions->pRoot : pOptions->pCurrent;
+	tCtx.pGlobal = pOptions->pGlobal;
+	tCtx.pError = pError;
+	tCtx.iFlags = pOptions->iFlags;
+	iFlow = xte_private_render_span(&tCtx, hTemplate->tRoot);
+	if ( iFlow == XTE_FLOW_OK ) {
+		return 1;
+	}
+	if ( (iFlow == XTE_FLOW_BREAK) && (pError != NULL) && (pError->iCode == 0) ) {
+		xte_private_fill_error_pos("", 0, 0, pError, XTE_ERROR_RENDER, "template break must be inside loop");
+	}
+	if ( (iFlow == XTE_FLOW_CONTINUE) && (pError != NULL) && (pError->iCode == 0) ) {
+		xte_private_fill_error_pos("", 0, 0, pError, XTE_ERROR_RENDER, "template continue must be inside loop");
+	}
+	return 0;
+}
+XXAPI char* xteMake(xtetemplate hTemplate, xvalue pCurrent, xvalue pGlobal, xdict pIncludeMap, size_t* pRetSize)
+{
+	XTE_RenderOptions tOptions = { 0 };
+	XTE_Writer tWriter = { 0 };
+	xbuffer_struct tBuf = { 0 };
+	char chZero = 0;
+	xrtBufferInit(&tBuf, 0);
+	tWriter.procWrite = xte_private_buffer_writer_proc;
+	tWriter.pUserData = &tBuf;
+	tOptions.pCurrent = pCurrent;
+	tOptions.pRoot = pCurrent;
+	tOptions.pGlobal = pGlobal;
+	tOptions.pIncludeMap = pIncludeMap;
+	tOptions.pWriter = &tWriter;
+	if ( !xteRenderEx(hTemplate, &tOptions, NULL) ) {
+		xrtBufferUnit(&tBuf);
+		if ( pRetSize ) {
+			*pRetSize = 0u;
+		}
+		return NULL;
+	}
+	if ( !xrtBufferAppend(&tBuf, &chZero, 1, XBUF_BINARY) ) {
+		xrtBufferUnit(&tBuf);
+		if ( pRetSize ) {
+			*pRetSize = 0u;
+		}
+		return NULL;
+	}
+	if ( pRetSize ) {
+		*pRetSize = tBuf.Length - 1u;
+	}
+	return tBuf.Buffer;
+}
+XXAPI xvalue xteResolvePath(const char* sPath, size_t iPathSize, xvalue pCurrent, xvalue pRoot, xvalue pLocal, xvalue pGlobal)
+{
+	const char* sText = sPath;
+	uint32 iSize = (uint32)iPathSize;
+	uint32 iPos = 0;
+	uint32 iNameStart = 0;
+	xvalue pVal = &XVO_VALUE_NULL;
+	if ( sText == NULL ) {
+		return &XVO_VALUE_NULL;
+	}
+	if ( iSize == 0u ) {
+		iSize = strlen(sText);
+	}
+	if ( iSize == 0u ) {
+		return &XVO_VALUE_NULL;
+	}
+	iNameStart = iPos;
+	if ( !xte_private_is_ident_start(sText[iNameStart]) ) {
+		return &XVO_VALUE_NULL;
+	}
+	iPos++;
+	while ( (iPos < iSize) && xte_private_is_ident_char(sText[iPos]) ) {
+		iPos++;
+	}
+	pVal = xte_private_lookup_first_value(&sText[iNameStart], iPos - iNameStart, pCurrent, pRoot, pLocal, pGlobal);
+	while ( iPos < iSize ) {
+		if ( sText[iPos] == '.' ) {
+			uint32 iSubStart = ++iPos;
+			if ( (iPos >= iSize) || !xte_private_is_ident_start(sText[iPos]) ) {
+				return &XVO_VALUE_NULL;
+			}
+			while ( (iPos < iSize) && xte_private_is_ident_char(sText[iPos]) ) {
+				iPos++;
+			}
+			if ( (pVal == NULL) || (pVal->Type != XVO_DT_TABLE) ) {
+				return &XVO_VALUE_NULL;
+			}
+			pVal = xvoTableGetValue(pVal, &sText[iSubStart], iPos - iSubStart);
+			continue;
+		}
+		if ( sText[iPos] == '[' ) {
+			uint32 iIndexStart = ++iPos;
+			char* sTemp = NULL;
+			int64 iIndex = 0;
+			while ( (iPos < iSize) && (sText[iPos] != ']') ) {
+				iPos++;
+			}
+			if ( (iPos >= iSize) || (iPos == iIndexStart) ) {
+				return &XVO_VALUE_NULL;
+			}
+			sTemp = xte_private_copy_view(&sText[iIndexStart], iPos - iIndexStart);
+			if ( sTemp == NULL ) {
+				return &XVO_VALUE_NULL;
+			}
+			iIndex = xrtStrToI64(sTemp);
+			xrtFree(sTemp);
+			iPos++;
+			if ( pVal == NULL ) {
+				return &XVO_VALUE_NULL;
+			}
+			if ( pVal->Type == XVO_DT_ARRAY ) {
+				pVal = xvoArrayGetValue(pVal, (uint32)iIndex);
+			} else if ( pVal->Type == XVO_DT_LIST ) {
+				pVal = xvoListGetValue(pVal, iIndex);
+			} else {
+				return &XVO_VALUE_NULL;
+			}
+			continue;
+		}
+		return &XVO_VALUE_NULL;
+	}
+	return pVal ? pVal : &XVO_VALUE_NULL;
+}
+XXAPI uint32 xteTemplateGetNodeCount(xtetemplate hTemplate)
+{
+	return hTemplate ? hTemplate->arrNode.Count : 0u;
+}
+XXAPI uint32 xteTemplateGetExprCount(xtetemplate hTemplate)
+{
+	return hTemplate ? hTemplate->arrExpr.Count : 0u;
+}
+XXAPI uint32 xteTemplateGetArgCount(xtetemplate hTemplate)
+{
+	return hTemplate ? hTemplate->arrArg.Count : 0u;
+}
+XXAPI uint32 xteTemplateGetStringPoolSize(xtetemplate hTemplate)
+{
+	return hTemplate ? hTemplate->tStringPool.Length : 0u;
+}
+XXAPI XTE_NodeSpan xteTemplateGetRootSpan(xtetemplate hTemplate)
+{
+	XTE_NodeSpan tSpan = { 0 };
+	if ( hTemplate ) {
+		tSpan = hTemplate->tRoot;
+	}
+	return tSpan;
+}
+XXAPI const XTE_Node* xteTemplateGetNode(xtetemplate hTemplate, uint32 iIndex)
+{
+	return xte_private_template_get_node(hTemplate, iIndex);
+}
+XXAPI const XTE_ExprNode* xteTemplateGetExpr(xtetemplate hTemplate, uint32 iIndex)
+{
+	return xte_private_template_get_expr(hTemplate, iIndex);
+}
+XXAPI const XTE_ArgItem* xteTemplateGetArg(xtetemplate hTemplate, uint32 iIndex)
+{
+	return xte_private_template_get_arg(hTemplate, iIndex);
+}
+XXAPI const char* xteTemplateGetString(xtetemplate hTemplate, uint32 iOff)
+{
+	return xte_private_pool_ptr(hTemplate, iOff);
+}
+XXAPI uint32 xteArgCount(const XTE_ArgList* pArgs)
+{
+	return pArgs ? pArgs->iCount : 0u;
+}
+XXAPI const XTE_ArgItem* xteArgAt(const XTE_ArgList* pArgs, uint32 iIndex)
+{
+	if ( (pArgs == NULL) || (iIndex >= pArgs->iCount) ) {
+		return NULL;
+	}
+	return &pArgs->pItems[iIndex];
+}
+XXAPI const XTE_ArgItem* xteFindNamedArg(const XTE_ArgList* pArgs, const char* sName, size_t iNameSize)
+{
+	uint32 i = 0;
+	if ( (pArgs == NULL) || (sName == NULL) ) {
+		return NULL;
+	}
+	if ( iNameSize == 0u ) {
+		iNameSize = strlen(sName);
+	}
+	for ( i = 0; i < pArgs->iCount; i++ ) {
+		const XTE_ArgItem* pArg = &pArgs->pItems[i];
+		const char* sArgName = NULL;
+		if ( pArg->iNameSize == 0u ) {
+			continue;
+		}
+		sArgName = xteTemplateGetString(pArgs->hTemplate, pArg->iNameOff);
+		if ( xte_private_str_eq(sArgName, pArg->iNameSize, sName, (uint32)iNameSize) ) {
+			return pArg;
+		}
+	}
+	return NULL;
+}
+XXAPI const char* xteArgNameText(const XTE_ArgList* pArgs, const XTE_ArgItem* pArg)
+{
+	if ( (pArgs == NULL) || (pArg == NULL) || (pArg->iNameSize == 0u) ) {
+		return NULL;
+	}
+	return xteTemplateGetString(pArgs->hTemplate, pArg->iNameOff);
+}
+XXAPI const char* xteArgRawText(const XTE_ArgList* pArgs, const XTE_ArgItem* pArg)
+{
+	if ( (pArgs == NULL) || (pArg == NULL) || (pArg->iRawSize == 0u) ) {
+		return NULL;
+	}
+	return xteTemplateGetString(pArgs->hTemplate, pArg->iRawOff);
+}
+XXAPI uint32 xteArgExprType(const XTE_ArgList* pArgs, const XTE_ArgItem* pArg)
+{
+	const XTE_ExprNode* pExpr = NULL;
+	if ( (pArgs == NULL) || (pArg == NULL) ) {
+		return 0u;
+	}
+	pExpr = xteTemplateGetExpr(pArgs->hTemplate, pArg->iExprIndex);
+	return pExpr ? pExpr->iType : 0u;
+}
+XXAPI xvalue xteEvalArgValue(XTE_RenderCtx* pCtx, const XTE_ArgItem* pArg)
+{
+	if ( (pCtx == NULL) || (pArg == NULL) ) {
+		return xvoCreateNull();
+	}
+	return xte_private_eval_expr_value(pCtx, pArg->iExprIndex);
+}
+XXAPI int xteEvalArgBool(XTE_RenderCtx* pCtx, const XTE_ArgItem* pArg, int* pOut)
+{
+	xvalue pVal = xteEvalArgValue(pCtx, pArg);
+	if ( pOut ) {
+		*pOut = xte_private_value_truthy(pVal);
+	}
+	xvoUnref(pVal);
+	return 1;
+}
+XXAPI int xteEvalArgInt(XTE_RenderCtx* pCtx, const XTE_ArgItem* pArg, int64* pOut)
+{
+	xvalue pVal = xteEvalArgValue(pCtx, pArg);
+	if ( pOut ) {
+		if ( pVal->Type == XVO_DT_TEXT ) {
+			*pOut = xrtStrToI64(xvoGetText(pVal));
+		} else if ( pVal->Type == XVO_DT_FLOAT ) {
+			*pOut = (int64)xvoGetFloat(pVal);
+		} else {
+			*pOut = xvoGetInt(pVal);
+		}
+	}
+	xvoUnref(pVal);
+	return 1;
+}
+XXAPI int xteEvalArgFloat(XTE_RenderCtx* pCtx, const XTE_ArgItem* pArg, double* pOut)
+{
+	xvalue pVal = xteEvalArgValue(pCtx, pArg);
+	if ( pOut ) {
+		if ( pVal->Type == XVO_DT_TEXT ) {
+			*pOut = xrtStrToNum(xvoGetText(pVal));
+		} else if ( pVal->Type == XVO_DT_INT ) {
+			*pOut = (double)xvoGetInt(pVal);
+		} else {
+			*pOut = xvoGetFloat(pVal);
+		}
+	}
+	xvoUnref(pVal);
+	return 1;
+}
+XXAPI char* xteEvalArgText(XTE_RenderCtx* pCtx, const XTE_ArgItem* pArg)
+{
+	xvalue pVal = xteEvalArgValue(pCtx, pArg);
+	char* sRet = xte_private_value_to_text(pVal);
+	xvoUnref(pVal);
+	return sRet;
+}
+static int xte_private_eval_arg_strict_type(XTE_RenderCtx* pCtx, const XTE_ArgItem* pArg, uint32 iType, xvalue* ppVal)
+{
+	xvalue pVal = xteEvalArgValue(pCtx, pArg);
+	if ( (pVal == NULL) || ((uint32)pVal->Type != iType) ) {
+		xvoUnref(pVal);
+		if ( ppVal != NULL ) {
+			ppVal[0] = NULL;
+		}
+		return 0;
+	}
+	if ( ppVal != NULL ) {
+		ppVal[0] = pVal;
+		return 1;
+	}
+	xvoUnref(pVal);
+	return 1;
+}
+XXAPI int xteEvalArgBoolStrict(XTE_RenderCtx* pCtx, const XTE_ArgItem* pArg, int* pOut)
+{
+	xvalue pVal = NULL;
+	if ( !xte_private_eval_arg_strict_type(pCtx, pArg, XVO_DT_BOOL, &pVal) ) {
+		return 0;
+	}
+	if ( pOut != NULL ) {
+		*pOut = xvoGetBool(pVal) ? 1 : 0;
+	}
+	xvoUnref(pVal);
+	return 1;
+}
+XXAPI int xteEvalArgIntStrict(XTE_RenderCtx* pCtx, const XTE_ArgItem* pArg, int64* pOut)
+{
+	xvalue pVal = NULL;
+	if ( !xte_private_eval_arg_strict_type(pCtx, pArg, XVO_DT_INT, &pVal) ) {
+		return 0;
+	}
+	if ( pOut != NULL ) {
+		*pOut = xvoGetInt(pVal);
+	}
+	xvoUnref(pVal);
+	return 1;
+}
+XXAPI int xteEvalArgFloatStrict(XTE_RenderCtx* pCtx, const XTE_ArgItem* pArg, double* pOut)
+{
+	xvalue pVal = NULL;
+	if ( !xte_private_eval_arg_strict_type(pCtx, pArg, XVO_DT_FLOAT, &pVal) ) {
+		return 0;
+	}
+	if ( pOut != NULL ) {
+		*pOut = xvoGetFloat(pVal);
+	}
+	xvoUnref(pVal);
+	return 1;
+}
+XXAPI char* xteEvalArgTextStrict(XTE_RenderCtx* pCtx, const XTE_ArgItem* pArg)
+{
+	xvalue pVal = NULL;
+	char* sRet = NULL;
+	if ( !xte_private_eval_arg_strict_type(pCtx, pArg, XVO_DT_TEXT, &pVal) ) {
+		return NULL;
+	}
+	sRet = (char*)xrtCopyStr(xvoGetText(pVal), pVal->Size);
+	xvoUnref(pVal);
+	return sRet;
+}
+XXAPI const XTE_ArgItem* xteStmtParseRequireArg(XTE_StmtParseCtx* pCtx, uint32 iIndex, const char* sDesc)
+{
+	const XTE_ArgItem* pArg = xteArgAt(pCtx ? pCtx->pArgs : NULL, iIndex);
+	if ( pArg != NULL ) {
+		return pArg;
+	}
+	xteStmtParseSetError(pCtx, XTE_ERROR_PARSE, sDesc ? sDesc : "template argument is required");
+	return NULL;
+}
+XXAPI const XTE_ArgItem* xteStmtParseRequireNamedArg(XTE_StmtParseCtx* pCtx, const char* sName, size_t iNameSize, const char* sDesc)
+{
+	const XTE_ArgItem* pArg = xteFindNamedArg(pCtx ? pCtx->pArgs : NULL, sName, iNameSize);
+	if ( pArg != NULL ) {
+		return pArg;
+	}
+	xteStmtParseSetError(pCtx, XTE_ERROR_PARSE, sDesc ? sDesc : "template named argument is required");
+	return NULL;
+}
+static const char* xte_private_parse_expr_desc(uint32 iExprType, int bNamed)
+{
+	switch ( iExprType ) {
+		case XTE_EXPR_PATH:
+			return bNamed ? "template named argument must be path expression" : "template argument must be path expression";
+		case XTE_EXPR_TEXT:
+			return bNamed ? "template named argument must be text literal" : "template argument must be text literal";
+		case XTE_EXPR_INT:
+			return bNamed ? "template named argument must be int literal" : "template argument must be int literal";
+		case XTE_EXPR_BOOL:
+			return bNamed ? "template named argument must be bool literal" : "template argument must be bool literal";
+		case XTE_EXPR_BOOL_EXPR:
+			return bNamed ? "template named argument must be bool expression" : "template argument must be bool expression";
+		default:
+			return bNamed ? "template named argument expression type mismatch" : "template argument expression type mismatch";
+	}
+}
+XXAPI const XTE_ArgItem* xteStmtParseRequireExprType(XTE_StmtParseCtx* pCtx, uint32 iIndex, uint32 iExprType, const char* sDesc)
+{
+	const XTE_ArgItem* pArg = xteStmtParseRequireArg(pCtx, iIndex, NULL);
+	if ( pArg == NULL ) {
+		return NULL;
+	}
+	if ( xteArgExprType((pCtx != NULL) ? pCtx->pArgs : NULL, pArg) == iExprType ) {
+		return pArg;
+	}
+	xteStmtParseSetError(pCtx, XTE_ERROR_PARSE, sDesc ? sDesc : xte_private_parse_expr_desc(iExprType, 0));
+	return NULL;
+}
+XXAPI const XTE_ArgItem* xteStmtParseRequireNamedExprType(XTE_StmtParseCtx* pCtx, const char* sName, size_t iNameSize, uint32 iExprType, const char* sDesc)
+{
+	const XTE_ArgItem* pArg = xteStmtParseRequireNamedArg(pCtx, sName, iNameSize, NULL);
+	if ( pArg == NULL ) {
+		return NULL;
+	}
+	if ( xteArgExprType((pCtx != NULL) ? pCtx->pArgs : NULL, pArg) == iExprType ) {
+		return pArg;
+	}
+	xteStmtParseSetError(pCtx, XTE_ERROR_PARSE, sDesc ? sDesc : xte_private_parse_expr_desc(iExprType, 1));
+	return NULL;
+}
+XXAPI const XTE_ArgItem* xteStmtRequireArg(XTE_StmtRenderCtx* pCtx, uint32 iIndex, const char* sDesc)
+{
+	const XTE_ArgItem* pArg = xteArgAt((pCtx != NULL) ? pCtx->pArgs : NULL, iIndex);
+	if ( pArg != NULL ) {
+		return pArg;
+	}
+	xteStmtSetError(pCtx, XTE_ERROR_RENDER, sDesc ? sDesc : "template argument is required");
+	return NULL;
+}
+XXAPI const XTE_ArgItem* xteStmtRequireNamedArg(XTE_StmtRenderCtx* pCtx, const char* sName, size_t iNameSize, const char* sDesc)
+{
+	const XTE_ArgItem* pArg = xteFindNamedArg((pCtx != NULL) ? pCtx->pArgs : NULL, sName, iNameSize);
+	if ( pArg != NULL ) {
+		return pArg;
+	}
+	xteStmtSetError(pCtx, XTE_ERROR_RENDER, sDesc ? sDesc : "template named argument is required");
+	return NULL;
+}
+XXAPI int xteStmtRequireBoolStrict(XTE_StmtRenderCtx* pCtx, uint32 iIndex, int* pOut, const char* sDesc)
+{
+	const XTE_ArgItem* pArg = xteStmtRequireArg(pCtx, iIndex, sDesc);
+	if ( pArg == NULL ) {
+		return 0;
+	}
+	if ( xteEvalArgBoolStrict((pCtx != NULL) ? pCtx->pRender : NULL, pArg, pOut) ) {
+		return 1;
+	}
+	return (xteStmtSetError(pCtx, XTE_ERROR_RENDER, sDesc ? sDesc : "template bool argument must stay bool") == XTE_FLOW_ERROR) ? 0 : 1;
+}
+XXAPI int xteStmtRequireNamedBoolStrict(XTE_StmtRenderCtx* pCtx, const char* sName, size_t iNameSize, int* pOut, const char* sDesc)
+{
+	const XTE_ArgItem* pArg = xteStmtRequireNamedArg(pCtx, sName, iNameSize, sDesc);
+	if ( pArg == NULL ) {
+		return 0;
+	}
+	if ( xteEvalArgBoolStrict((pCtx != NULL) ? pCtx->pRender : NULL, pArg, pOut) ) {
+		return 1;
+	}
+	return (xteStmtSetError(pCtx, XTE_ERROR_RENDER, sDesc ? sDesc : "template bool argument must stay bool") == XTE_FLOW_ERROR) ? 0 : 1;
+}
+XXAPI int xteStmtRequireIntStrict(XTE_StmtRenderCtx* pCtx, uint32 iIndex, int64* pOut, const char* sDesc)
+{
+	const XTE_ArgItem* pArg = xteStmtRequireArg(pCtx, iIndex, sDesc);
+	if ( pArg == NULL ) {
+		return 0;
+	}
+	if ( xteEvalArgIntStrict((pCtx != NULL) ? pCtx->pRender : NULL, pArg, pOut) ) {
+		return 1;
+	}
+	return (xteStmtSetError(pCtx, XTE_ERROR_RENDER, sDesc ? sDesc : "template int argument must stay int") == XTE_FLOW_ERROR) ? 0 : 1;
+}
+XXAPI int xteStmtRequireNamedIntStrict(XTE_StmtRenderCtx* pCtx, const char* sName, size_t iNameSize, int64* pOut, const char* sDesc)
+{
+	const XTE_ArgItem* pArg = xteStmtRequireNamedArg(pCtx, sName, iNameSize, sDesc);
+	if ( pArg == NULL ) {
+		return 0;
+	}
+	if ( xteEvalArgIntStrict((pCtx != NULL) ? pCtx->pRender : NULL, pArg, pOut) ) {
+		return 1;
+	}
+	return (xteStmtSetError(pCtx, XTE_ERROR_RENDER, sDesc ? sDesc : "template int argument must stay int") == XTE_FLOW_ERROR) ? 0 : 1;
+}
+XXAPI int xteStmtRequireFloatStrict(XTE_StmtRenderCtx* pCtx, uint32 iIndex, double* pOut, const char* sDesc)
+{
+	const XTE_ArgItem* pArg = xteStmtRequireArg(pCtx, iIndex, sDesc);
+	if ( pArg == NULL ) {
+		return 0;
+	}
+	if ( xteEvalArgFloatStrict((pCtx != NULL) ? pCtx->pRender : NULL, pArg, pOut) ) {
+		return 1;
+	}
+	return (xteStmtSetError(pCtx, XTE_ERROR_RENDER, sDesc ? sDesc : "template float argument must stay float") == XTE_FLOW_ERROR) ? 0 : 1;
+}
+XXAPI int xteStmtRequireNamedFloatStrict(XTE_StmtRenderCtx* pCtx, const char* sName, size_t iNameSize, double* pOut, const char* sDesc)
+{
+	const XTE_ArgItem* pArg = xteStmtRequireNamedArg(pCtx, sName, iNameSize, sDesc);
+	if ( pArg == NULL ) {
+		return 0;
+	}
+	if ( xteEvalArgFloatStrict((pCtx != NULL) ? pCtx->pRender : NULL, pArg, pOut) ) {
+		return 1;
+	}
+	return (xteStmtSetError(pCtx, XTE_ERROR_RENDER, sDesc ? sDesc : "template float argument must stay float") == XTE_FLOW_ERROR) ? 0 : 1;
+}
+XXAPI char* xteStmtRequireTextStrict(XTE_StmtRenderCtx* pCtx, uint32 iIndex, const char* sDesc)
+{
+	const XTE_ArgItem* pArg = xteStmtRequireArg(pCtx, iIndex, sDesc);
+	char* sRet = NULL;
+	if ( pArg == NULL ) {
+		return NULL;
+	}
+	sRet = xteEvalArgTextStrict((pCtx != NULL) ? pCtx->pRender : NULL, pArg);
+	if ( sRet != NULL ) {
+		return sRet;
+	}
+	xteStmtSetError(pCtx, XTE_ERROR_RENDER, sDesc ? sDesc : "template text argument must stay text");
+	return NULL;
+}
+XXAPI char* xteStmtRequireNamedTextStrict(XTE_StmtRenderCtx* pCtx, const char* sName, size_t iNameSize, const char* sDesc)
+{
+	const XTE_ArgItem* pArg = xteStmtRequireNamedArg(pCtx, sName, iNameSize, sDesc);
+	char* sRet = NULL;
+	if ( pArg == NULL ) {
+		return NULL;
+	}
+	sRet = xteEvalArgTextStrict((pCtx != NULL) ? pCtx->pRender : NULL, pArg);
+	if ( sRet != NULL ) {
+		return sRet;
+	}
+	xteStmtSetError(pCtx, XTE_ERROR_RENDER, sDesc ? sDesc : "template text argument must stay text");
+	return NULL;
+}
+XXAPI const XTE_ArgItem* xteFuncRequireArg(XTE_FuncCtx* pCtx, uint32 iIndex, const char* sDesc)
+{
+	const XTE_ArgItem* pArg = xteArgAt((pCtx != NULL) ? pCtx->pArgs : NULL, iIndex);
+	if ( pArg != NULL ) {
+		return pArg;
+	}
+	xteFuncSetError(pCtx, XTE_ERROR_RENDER, sDesc ? sDesc : "template argument is required");
+	return NULL;
+}
+XXAPI const XTE_ArgItem* xteFuncRequireNamedArg(XTE_FuncCtx* pCtx, const char* sName, size_t iNameSize, const char* sDesc)
+{
+	const XTE_ArgItem* pArg = xteFindNamedArg((pCtx != NULL) ? pCtx->pArgs : NULL, sName, iNameSize);
+	if ( pArg != NULL ) {
+		return pArg;
+	}
+	xteFuncSetError(pCtx, XTE_ERROR_RENDER, sDesc ? sDesc : "template named argument is required");
+	return NULL;
+}
+XXAPI int xteFuncRequireBoolStrict(XTE_FuncCtx* pCtx, uint32 iIndex, int* pOut, const char* sDesc)
+{
+	const XTE_ArgItem* pArg = xteFuncRequireArg(pCtx, iIndex, sDesc);
+	if ( pArg == NULL ) {
+		return 0;
+	}
+	if ( xteEvalArgBoolStrict((pCtx != NULL) ? pCtx->pRender : NULL, pArg, pOut) ) {
+		return 1;
+	}
+	return xteFuncSetError(pCtx, XTE_ERROR_RENDER, sDesc ? sDesc : "template bool argument must stay bool");
+}
+XXAPI int xteFuncRequireNamedBoolStrict(XTE_FuncCtx* pCtx, const char* sName, size_t iNameSize, int* pOut, const char* sDesc)
+{
+	const XTE_ArgItem* pArg = xteFuncRequireNamedArg(pCtx, sName, iNameSize, sDesc);
+	if ( pArg == NULL ) {
+		return 0;
+	}
+	if ( xteEvalArgBoolStrict((pCtx != NULL) ? pCtx->pRender : NULL, pArg, pOut) ) {
+		return 1;
+	}
+	return xteFuncSetError(pCtx, XTE_ERROR_RENDER, sDesc ? sDesc : "template bool argument must stay bool");
+}
+XXAPI int xteFuncRequireIntStrict(XTE_FuncCtx* pCtx, uint32 iIndex, int64* pOut, const char* sDesc)
+{
+	const XTE_ArgItem* pArg = xteFuncRequireArg(pCtx, iIndex, sDesc);
+	if ( pArg == NULL ) {
+		return 0;
+	}
+	if ( xteEvalArgIntStrict((pCtx != NULL) ? pCtx->pRender : NULL, pArg, pOut) ) {
+		return 1;
+	}
+	return xteFuncSetError(pCtx, XTE_ERROR_RENDER, sDesc ? sDesc : "template int argument must stay int");
+}
+XXAPI int xteFuncRequireNamedIntStrict(XTE_FuncCtx* pCtx, const char* sName, size_t iNameSize, int64* pOut, const char* sDesc)
+{
+	const XTE_ArgItem* pArg = xteFuncRequireNamedArg(pCtx, sName, iNameSize, sDesc);
+	if ( pArg == NULL ) {
+		return 0;
+	}
+	if ( xteEvalArgIntStrict((pCtx != NULL) ? pCtx->pRender : NULL, pArg, pOut) ) {
+		return 1;
+	}
+	return xteFuncSetError(pCtx, XTE_ERROR_RENDER, sDesc ? sDesc : "template int argument must stay int");
+}
+XXAPI int xteFuncRequireFloatStrict(XTE_FuncCtx* pCtx, uint32 iIndex, double* pOut, const char* sDesc)
+{
+	const XTE_ArgItem* pArg = xteFuncRequireArg(pCtx, iIndex, sDesc);
+	if ( pArg == NULL ) {
+		return 0;
+	}
+	if ( xteEvalArgFloatStrict((pCtx != NULL) ? pCtx->pRender : NULL, pArg, pOut) ) {
+		return 1;
+	}
+	return xteFuncSetError(pCtx, XTE_ERROR_RENDER, sDesc ? sDesc : "template float argument must stay float");
+}
+XXAPI int xteFuncRequireNamedFloatStrict(XTE_FuncCtx* pCtx, const char* sName, size_t iNameSize, double* pOut, const char* sDesc)
+{
+	const XTE_ArgItem* pArg = xteFuncRequireNamedArg(pCtx, sName, iNameSize, sDesc);
+	if ( pArg == NULL ) {
+		return 0;
+	}
+	if ( xteEvalArgFloatStrict((pCtx != NULL) ? pCtx->pRender : NULL, pArg, pOut) ) {
+		return 1;
+	}
+	return xteFuncSetError(pCtx, XTE_ERROR_RENDER, sDesc ? sDesc : "template float argument must stay float");
+}
+XXAPI char* xteFuncRequireTextStrict(XTE_FuncCtx* pCtx, uint32 iIndex, const char* sDesc)
+{
+	const XTE_ArgItem* pArg = xteFuncRequireArg(pCtx, iIndex, sDesc);
+	char* sRet = NULL;
+	if ( pArg == NULL ) {
+		return NULL;
+	}
+	sRet = xteEvalArgTextStrict((pCtx != NULL) ? pCtx->pRender : NULL, pArg);
+	if ( sRet != NULL ) {
+		return sRet;
+	}
+	xteFuncSetError(pCtx, XTE_ERROR_RENDER, sDesc ? sDesc : "template text argument must stay text");
+	return NULL;
+}
+XXAPI char* xteFuncRequireNamedTextStrict(XTE_FuncCtx* pCtx, const char* sName, size_t iNameSize, const char* sDesc)
+{
+	const XTE_ArgItem* pArg = xteFuncRequireNamedArg(pCtx, sName, iNameSize, sDesc);
+	char* sRet = NULL;
+	if ( pArg == NULL ) {
+		return NULL;
+	}
+	sRet = xteEvalArgTextStrict((pCtx != NULL) ? pCtx->pRender : NULL, pArg);
+	if ( sRet != NULL ) {
+		return sRet;
+	}
+	xteFuncSetError(pCtx, XTE_ERROR_RENDER, sDesc ? sDesc : "template text argument must stay text");
+	return NULL;
+}
+XXAPI int xteStmtParseSetError(XTE_StmtParseCtx* pCtx, int iCode, const char* sDesc)
+{
+	if ( (pCtx != NULL) && (pCtx->pError != NULL) && (pCtx->pError->iCode == 0) ) {
+		pCtx->pError->iCode = iCode;
+		pCtx->pError->sDesc = sDesc;
+	}
+	return 0;
+}
+XXAPI XTE_Flow xteStmtSetError(XTE_StmtRenderCtx* pCtx, int iCode, const char* sDesc)
+{
+	if ( (pCtx != NULL) && (pCtx->pRender != NULL) && (pCtx->pRender->pError != NULL) && (pCtx->pRender->pError->iCode == 0) ) {
+		pCtx->pRender->pError->iCode = iCode;
+		pCtx->pRender->pError->sDesc = sDesc;
+	}
+	return XTE_FLOW_ERROR;
+}
+XXAPI int xteFuncSetError(XTE_FuncCtx* pCtx, int iCode, const char* sDesc)
+{
+	if ( (pCtx != NULL) && (pCtx->pRender != NULL) && (pCtx->pRender->pError != NULL) && (pCtx->pRender->pError->iCode == 0) ) {
+		pCtx->pRender->pError->iCode = iCode;
+		pCtx->pRender->pError->sDesc = sDesc;
+	}
+	return 0;
+}
+XXAPI int xteStmtWrite(XTE_StmtRenderCtx* pCtx, const char* sText, size_t iSize)
+{
+	if ( (pCtx == NULL) || (pCtx->pRender == NULL) ) {
+		return 0;
+	}
+	if ( iSize == 0u ) {
+		iSize = strlen(sText);
+	}
+	return xte_private_writer_write(pCtx->pRender->pWriter, sText, iSize);
+}
+XXAPI int xteStmtRenderBody(XTE_StmtRenderCtx* pCtx)
+{
+	if ( (pCtx == NULL) || (pCtx->pRender == NULL) || (pCtx->pBody == NULL) ) {
+		return 1;
+	}
+	return xte_private_render_span(pCtx->pRender, *pCtx->pBody) != XTE_FLOW_ERROR;
+}
+XXAPI int xteStmtRenderBodyWithScope(XTE_StmtRenderCtx* pCtx, xvalue pLocal, xvalue pCurrent)
+{
+	if ( (pCtx == NULL) || (pCtx->pRender == NULL) || (pCtx->pBody == NULL) ) {
+		return 1;
+	}
+	return xte_private_render_body_with_scope_ex(pCtx, pLocal, pCurrent) != XTE_FLOW_ERROR;
+}
+static XTE_Flow xte_private_stmt_render_error(XTE_StmtRenderCtx* pCtx, int iCode, const char* sDesc)
+{
+	return xteStmtSetError(pCtx, iCode, sDesc);
+}
+#ifdef XTE_ENABLE_FILE
+XXAPI int xteTemplateSaveFile(xtetemplate hTemplate, const char* sFilePath, uint32 iFlags, XTE_Error* pError)
+{
+	xbuffer_struct tBuf = { 0 };
+	XTE_PrivateFileHeader tHeader = { 0 };
+	uint32 i = 0;
+	char sMagic[8] = { 'X', 'T', 'E', 'B', 'I', 'N', '1', 0 };
+	(void)iFlags;
+	xte_private_clear_error(pError);
+	if ( (hTemplate == NULL) || (sFilePath == NULL) ) {
+		xte_private_fill_error_pos("", 0, 0, pError, XTE_ERROR_FILE, "template file args are invalid");
+		return 0;
+	}
+	xrtBufferInit(&tBuf, 0);
+	memcpy(tHeader.sMagic, sMagic, sizeof(sMagic));
+	tHeader.iVersion = XTE_PRIVATE_FILE_VERSION;
+	tHeader.iStringPoolSize = hTemplate->tStringPool.Length;
+	tHeader.iNodeCount = hTemplate->arrNode.Count;
+	tHeader.iExprCount = hTemplate->arrExpr.Count;
+	tHeader.iArgCount = hTemplate->arrArg.Count;
+	tHeader.tRoot = hTemplate->tRoot;
+	if ( !xrtBufferAppend(&tBuf, &tHeader, sizeof(tHeader), XBUF_BINARY) ) {
+		xrtBufferUnit(&tBuf);
+		xte_private_fill_error_pos("", 0, 0, pError, XTE_ERROR_FILE, "template file buffer alloc failed");
+		return 0;
+	}
+	if ( tHeader.iStringPoolSize && !xrtBufferAppend(&tBuf, hTemplate->tStringPool.Buffer, tHeader.iStringPoolSize, XBUF_BINARY) ) {
+		xrtBufferUnit(&tBuf);
+		xte_private_fill_error_pos("", 0, 0, pError, XTE_ERROR_FILE, "template file buffer alloc failed");
+		return 0;
+	}
+	if ( tHeader.iExprCount && !xrtBufferAppend(&tBuf, hTemplate->arrExpr.Memory, hTemplate->arrExpr.Count * sizeof(XTE_ExprNode), XBUF_BINARY) ) {
+		xrtBufferUnit(&tBuf);
+		xte_private_fill_error_pos("", 0, 0, pError, XTE_ERROR_FILE, "template file buffer alloc failed");
+		return 0;
+	}
+	if ( tHeader.iArgCount && !xrtBufferAppend(&tBuf, hTemplate->arrArg.Memory, hTemplate->arrArg.Count * sizeof(XTE_ArgItem), XBUF_BINARY) ) {
+		xrtBufferUnit(&tBuf);
+		xte_private_fill_error_pos("", 0, 0, pError, XTE_ERROR_FILE, "template file buffer alloc failed");
+		return 0;
+	}
+	if ( tHeader.iNodeCount ) {
+		for ( i = 0; i < tHeader.iNodeCount; i++ ) {
+			XTE_Node tNode = *xte_private_template_get_node(hTemplate, i);
+			tNode.Data.Statement.pData = NULL;
+			if ( !xrtBufferAppend(&tBuf, &tNode, sizeof(tNode), XBUF_BINARY) ) {
+				xrtBufferUnit(&tBuf);
+				xte_private_fill_error_pos("", 0, 0, pError, XTE_ERROR_FILE, "template file buffer alloc failed");
+				return 0;
+			}
+		}
+	}
+	if ( xrtFilePutAll((str)sFilePath, tBuf.Buffer, tBuf.Length) == 0 ) {
+		xrtBufferUnit(&tBuf);
+		xte_private_fill_error_pos("", 0, 0, pError, XTE_ERROR_FILE, "template file save failed");
+		return 0;
+	}
+	xrtBufferUnit(&tBuf);
+	return 1;
+}
+XXAPI xtetemplate xteTemplateLoadFile(xteengine hEngine, const char* sFilePath, uint32 iFlags, XTE_Error* pError)
+{
+	ptr pMem = NULL;
+	size_t iSize = 0;
+	XTE_PrivateFileHeader* pHeader = NULL;
+	const char sMagic[8] = { 'X', 'T', 'E', 'B', 'I', 'N', '1', 0 };
+	xtetemplate hTemplate = NULL;
+	int bOwnEngine = 0;
+	uint32 iOffset = 0;
+	(void)iFlags;
+	xte_private_clear_error(pError);
+	if ( sFilePath == NULL ) {
+		xte_private_fill_error_pos("", 0, 0, pError, XTE_ERROR_FILE, "template file path is null");
+		return NULL;
+	}
+	pMem = xrtFileGetAll((str)sFilePath, &iSize);
+	if ( (pMem == NULL) || (iSize < sizeof(XTE_PrivateFileHeader)) ) {
+		xrtFree(pMem);
+		xte_private_fill_error_pos("", 0, 0, pError, XTE_ERROR_FILE, "template file read failed");
+		return NULL;
+	}
+	pHeader = (XTE_PrivateFileHeader*)pMem;
+	if ( (memcmp(pHeader->sMagic, sMagic, sizeof(sMagic)) != 0) || (pHeader->iVersion != XTE_PRIVATE_FILE_VERSION) ) {
+		xrtFree(pMem);
+		xte_private_fill_error_pos("", 0, 0, pError, XTE_ERROR_FILE, "template file header is invalid");
+		return NULL;
+	}
+	if ( hEngine == NULL ) {
+		hEngine = xteCreateEngine();
+		if ( hEngine == NULL ) {
+			xrtFree(pMem);
+			xte_private_fill_error_pos("", 0, 0, pError, XTE_ERROR_MALLOC, "template engine alloc failed");
+			return NULL;
+		}
+		xteRegisterBuiltinStatements(hEngine);
+		bOwnEngine = 1;
+	}
+	hTemplate = xte_private_template_create(hEngine, bOwnEngine);
+	if ( hTemplate == NULL ) {
+		if ( bOwnEngine ) {
+			xteDestroyEngine(hEngine);
+		}
+		xrtFree(pMem);
+		xte_private_fill_error_pos("", 0, 0, pError, XTE_ERROR_MALLOC, "template alloc failed");
+		return NULL;
+	}
+	iOffset = sizeof(XTE_PrivateFileHeader);
+	if ( (iOffset + pHeader->iStringPoolSize + (pHeader->iExprCount * sizeof(XTE_ExprNode)) + (pHeader->iArgCount * sizeof(XTE_ArgItem)) + (pHeader->iNodeCount * sizeof(XTE_Node))) > iSize ) {
+		xteDestroyTemplate(hTemplate);
+		xrtFree(pMem);
+		xte_private_fill_error_pos("", 0, 0, pError, XTE_ERROR_FILE, "template file size is invalid");
+		return NULL;
+	}
+	if ( pHeader->iStringPoolSize && !xrtBufferAppend(&hTemplate->tStringPool, (ptr)((char*)pMem + iOffset), pHeader->iStringPoolSize, XBUF_BINARY) ) {
+		xteDestroyTemplate(hTemplate);
+		xrtFree(pMem);
+		xte_private_fill_error_pos("", 0, 0, pError, XTE_ERROR_MALLOC, "template load alloc failed");
+		return NULL;
+	}
+	iOffset += pHeader->iStringPoolSize;
+	if ( pHeader->iExprCount ) {
+		if ( xrtArrayAppend(&hTemplate->arrExpr, pHeader->iExprCount) == 0u ) {
+			xteDestroyTemplate(hTemplate);
+			xrtFree(pMem);
+			xte_private_fill_error_pos("", 0, 0, pError, XTE_ERROR_MALLOC, "template load alloc failed");
+			return NULL;
+		}
+		memcpy(hTemplate->arrExpr.Memory, (char*)pMem + iOffset, pHeader->iExprCount * sizeof(XTE_ExprNode));
+		iOffset += pHeader->iExprCount * sizeof(XTE_ExprNode);
+	}
+	if ( pHeader->iArgCount ) {
+		if ( xrtArrayAppend(&hTemplate->arrArg, pHeader->iArgCount) == 0u ) {
+			xteDestroyTemplate(hTemplate);
+			xrtFree(pMem);
+			xte_private_fill_error_pos("", 0, 0, pError, XTE_ERROR_MALLOC, "template load alloc failed");
+			return NULL;
+		}
+		memcpy(hTemplate->arrArg.Memory, (char*)pMem + iOffset, pHeader->iArgCount * sizeof(XTE_ArgItem));
+		iOffset += pHeader->iArgCount * sizeof(XTE_ArgItem);
+	}
+	if ( pHeader->iNodeCount ) {
+		if ( xrtArrayAppend(&hTemplate->arrNode, pHeader->iNodeCount) == 0u ) {
+			xteDestroyTemplate(hTemplate);
+			xrtFree(pMem);
+			xte_private_fill_error_pos("", 0, 0, pError, XTE_ERROR_MALLOC, "template load alloc failed");
+			return NULL;
+		}
+		memcpy(hTemplate->arrNode.Memory, (char*)pMem + iOffset, pHeader->iNodeCount * sizeof(XTE_Node));
+	}
+	hTemplate->tRoot = pHeader->tRoot;
+	if ( !xte_private_rebuild_statement_data(hTemplate, XTE_ERROR_FILE, "template statement load parse callback failed") ) {
+		xte_private_copy_error(pError, &hTemplate->LastError);
+		xteDestroyTemplate(hTemplate);
+		xrtFree(pMem);
+		return NULL;
+	}
+	if ( !xte_private_rebuild_subtemplates(hTemplate, XTE_ERROR_FILE, "template define load failed") ) {
+		xte_private_copy_error(pError, &hTemplate->LastError);
+		xteDestroyTemplate(hTemplate);
+		xrtFree(pMem);
+		return NULL;
+	}
+	xrtFree(pMem);
+	return hTemplate;
+}
+#endif
+#ifdef XTE_DEBUGMODE
+XXAPI int xteTemplateDump(xtetemplate hTemplate, XTE_Writer* pWriter, uint32 iFlags)
+{
+	(void)iFlags;
+	if ( (hTemplate == NULL) || (pWriter == NULL) || (pWriter->procWrite == NULL) ) {
+		return 0;
+	}
+	return xte_private_dump_span(hTemplate, pWriter, hTemplate->tRoot, 0u);
+}
+XXAPI int xteTemplateDumpConsole(xtetemplate hTemplate, uint32 iFlags)
+{
+	XTE_Writer tWriter = { 0 };
+	tWriter.procWrite = xte_private_console_writer_proc;
+	tWriter.pUserData = stdout;
+	return xteTemplateDump(hTemplate, &tWriter, iFlags);
+}
+#endif
 #endif
 static uint64 __xrtGetCurrentThreadId()
 {
@@ -64225,8 +68421,8 @@ static void __xrtRuntimeFinalizeLocked()
 	}
 	#ifdef XRT_MEM_DEBUG
 		if ( __xrtMemDebugHasLeaks() ) {
-			xrtMemDebugDumpText("xrt_mem_report_auto.txt");
-			xrtMemDebugDumpJson("xrt_mem_report_auto.json");
+			xrtMemDebugDumpText("__xrt_mem_report_auto.txt");
+			xrtMemDebugDumpJson("__xrt_mem_report_auto.json");
 		}
 	#endif
 	#ifndef XRT_NO_TEMPLATE
@@ -64244,6 +68440,7 @@ static void __xrtRuntimeFinalizeLocked()
 	#endif
 	xCore.bInit = FALSE;
 	__xrtRuntimeThreadRefCount = 0;
+	__xrtThreadStateUnitStorage();
 	#if defined(_WIN32) || defined(_WIN64)
 		#if __XRT_RUNTIME_NEED_WSA
 			WSACleanup();
@@ -64267,15 +68464,15 @@ static void __xrtRunThreadCleanup(xrtThreadData* pThreadData)
 }
 XXAPI xrtThreadData* xrtThreadGetCurrent()
 {
-	return __xrtThreadState;
+	return __xrtThreadStateGet();
 }
 XXAPI bool xrtThreadIsAttached()
 {
-	return __xrtThreadState != NULL;
+	return __xrtThreadStateGet() != NULL;
 }
 XXAPI xrtThreadData* xrtThreadAttachCurrent()
 {
-	xrtThreadData* pThreadData = __xrtThreadState;
+	xrtThreadData* pThreadData = __xrtThreadStateGet();
 	if ( pThreadData ) {
 		pThreadData->iAttachDepth++;
 		return pThreadData;
@@ -64285,13 +68482,17 @@ XXAPI xrtThreadData* xrtThreadAttachCurrent()
 		__xrtRuntimeUnlock();
 		return NULL;
 	}
+	if ( !__xrtThreadStateInitStorage() ) {
+		__xrtRuntimeUnlock();
+		return NULL;
+	}
 	pThreadData = __xrtCreateThreadState(NULL);
 	if ( pThreadData == NULL ) {
 		__xrtRuntimeUnlock();
 		return NULL;
 	}
 	__xrtRuntimeThreadRefCount++;
-	__xrtThreadState = pThreadData;
+	__xrtThreadStateSet(pThreadData);
 	__xrtRuntimeUnlock();
 	return pThreadData;
 }
@@ -64310,7 +68511,7 @@ static xrtThreadData* __xrtThreadAttachManaged(struct xthread_struct* pThread)
 }
 XXAPI void xrtThreadDetachCurrent()
 {
-	xrtThreadData* pThreadData = __xrtThreadState;
+	xrtThreadData* pThreadData = __xrtThreadStateGet();
 	void (*procFree)(ptr) = xCore.free ? xCore.free : free;
 	if ( pThreadData == NULL ) {
 		return;
@@ -64326,7 +68527,7 @@ XXAPI void xrtThreadDetachCurrent()
 		__xrtCoroRuntimeUnitThread(pThreadData);
 	#endif
 	__xrtUnitThreadMemState(pThreadData);
-	__xrtThreadState = NULL;
+	__xrtThreadStateSet(NULL);
 	procFree(pThreadData);
 	__xrtRuntimeLock();
 	if ( __xrtRuntimeThreadRefCount > 0 ) {
@@ -64339,7 +68540,7 @@ XXAPI void xrtThreadDetachCurrent()
 }
 XXAPI str xrtGetError()
 {
-	xrtThreadData* pThreadData = __xrtThreadState;
+	xrtThreadData* pThreadData = __xrtThreadStateGet();
 	if ( pThreadData ) {
 		return pThreadData->LastError;
 	}
@@ -64752,7 +68953,7 @@ XXAPI bool xrtMemDebugDumpJson(str sPath)
 #endif
 XXAPI bool xrtThreadPushCleanup(xrtThreadCleanupProc proc, ptr pArg)
 {
-	xrtThreadData* pThreadData = __xrtThreadState;
+	xrtThreadData* pThreadData = __xrtThreadStateGet();
 	xrtThreadCleanup* pCleanup = NULL;
 	ptr (*procMalloc)(size_t) = xCore.malloc ? xCore.malloc : malloc;
 	if ( pThreadData == NULL || proc == NULL ) {
@@ -64770,7 +68971,7 @@ XXAPI bool xrtThreadPushCleanup(xrtThreadCleanupProc proc, ptr pArg)
 }
 XXAPI bool xrtThreadPopCleanup(xrtThreadCleanupProc proc, ptr pArg)
 {
-	xrtThreadData* pThreadData = __xrtThreadState;
+	xrtThreadData* pThreadData = __xrtThreadStateGet();
 	xrtThreadCleanup* pCleanup = NULL;
 	void (*procFree)(ptr) = xCore.free ? xCore.free : free;
 	if ( pThreadData == NULL || pThreadData->pCleanupTop == NULL ) {

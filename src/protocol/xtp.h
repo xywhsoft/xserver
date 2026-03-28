@@ -49,6 +49,7 @@ typedef struct {
 	size_t iRecvCap;
 	int64 iLastActiveMS;
 	volatile bool bClosing;
+	volatile bool bStopRejectRecorded;
 	ptr pTracker;
 } XS_XtpConnContext;
 
@@ -136,202 +137,7 @@ static inline const char* XS_XtpClientLastError(void)
 	return g_sXsXtpClientLastError;
 }
 
-static inline void XS_XtpTouch(XS_XtpConnContext* objCtx)
-{
-	if ( objCtx == NULL ) {
-		return;
-	}
-
-	objCtx->iLastActiveMS = XS_XtpNowMS();
-}
-
-static inline void XS_XtpTrackConn(XS_XtpHandle* objHandle, XS_XtpConnContext* objCtx)
-{
-	XS_XtpConnContext** ppSlot;
-	uint32 iPos;
-
-	if ( objHandle == NULL || objHandle->pConnLock == NULL || objHandle->arrConn == NULL || objCtx == NULL ) {
-		return;
-	}
-
-	xrtMutexLock(objHandle->pConnLock);
-	iPos = xrtArrayAppend(objHandle->arrConn, 1);
-	ppSlot = (XS_XtpConnContext**)xrtArrayGet(objHandle->arrConn, iPos);
-	if ( ppSlot ) {
-		*ppSlot = objCtx;
-	}
-	xrtMutexUnlock(objHandle->pConnLock);
-}
-
-static inline void XS_XtpUntrackConn(XS_XtpHandle* objHandle, XS_XtpConnContext* objCtx)
-{
-	uint32 i;
-
-	if ( objHandle == NULL || objHandle->pConnLock == NULL || objHandle->arrConn == NULL || objCtx == NULL ) {
-		return;
-	}
-
-	xrtMutexLock(objHandle->pConnLock);
-	for ( i = 1; i <= objHandle->arrConn->Count; i++ ) {
-		XS_XtpConnContext** ppItem = (XS_XtpConnContext**)xrtArrayGet(objHandle->arrConn, i);
-
-		if ( ppItem && *ppItem == objCtx ) {
-			xrtArrayRemove(objHandle->arrConn, i, 1);
-			break;
-		}
-	}
-	xrtMutexUnlock(objHandle->pConnLock);
-}
-
-static inline int64 XS_XtpTrackedConnCount(XS_XtpHandle* objHandle)
-{
-	int64 iCount;
-
-	if ( objHandle == NULL || objHandle->pConnLock == NULL || objHandle->arrConn == NULL ) {
-		return 0;
-	}
-
-	xrtMutexLock(objHandle->pConnLock);
-	iCount = (int64)objHandle->arrConn->Count;
-	xrtMutexUnlock(objHandle->pConnLock);
-	return iCount;
-}
-
-static inline int64 XS_XtpCloseTrackedConns(XS_XtpHandle* objHandle)
-{
-	xarray arrClose;
-	int64 iCloseCount;
-	uint32 i;
-
-	if ( objHandle == NULL || objHandle->pConnLock == NULL || objHandle->arrConn == NULL ) {
-		return 0;
-	}
-
-	arrClose = xrtArrayCreate(sizeof(xnetstream*), XRT_OBJMODE_LOCAL);
-	if ( arrClose == NULL ) {
-		return 0;
-	}
-
-	iCloseCount = 0;
-	xrtMutexLock(objHandle->pConnLock);
-	for ( i = 1; i <= objHandle->arrConn->Count; i++ ) {
-		XS_XtpConnContext** ppItem = (XS_XtpConnContext**)xrtArrayGet(objHandle->arrConn, i);
-		XS_XtpConnContext* objCtx = ppItem ? *ppItem : NULL;
-		xnetstream** ppClose;
-		uint32 iPos;
-
-		if ( objCtx == NULL || objCtx->pStream == NULL ) {
-			continue;
-		}
-
-		objCtx->bClosing = TRUE;
-		iPos = xrtArrayAppend(arrClose, 1);
-		ppClose = (xnetstream**)xrtArrayGet(arrClose, iPos);
-		if ( ppClose ) {
-			*ppClose = objCtx->pStream;
-			iCloseCount++;
-		}
-	}
-	xrtMutexUnlock(objHandle->pConnLock);
-
-	for ( i = 1; i <= arrClose->Count; i++ ) {
-		xnetstream** ppClose = (xnetstream**)xrtArrayGet(arrClose, i);
-
-		if ( ppClose && *ppClose ) {
-			xrtNetStreamClose(*ppClose, 0u);
-		}
-	}
-	xrtArrayDestroy(arrClose);
-	return iCloseCount;
-}
-
-static inline int64 XS_XtpWaitTrackedConnDrain(XS_XtpHandle* objHandle, uint32 iTimeoutMS)
-{
-	uint32 iWaitedMS = 0;
-	int64 iRemain = XS_XtpTrackedConnCount(objHandle);
-
-	while ( iRemain > 0 && iWaitedMS < iTimeoutMS ) {
-		XS_XtpSleepMS(20);
-		iWaitedMS += 20;
-		iRemain = XS_XtpTrackedConnCount(objHandle);
-	}
-
-	return iRemain;
-}
-
-static inline void XS_XtpRecordIdleClose(void)
-{
-	g_iXsXtpIdleCloseCount++;
-	g_tXsXtpLastIdleCloseTime = xrtNow();
-}
-
-static inline void XS_XtpRecordConnLimitClose(void)
-{
-	g_iXsXtpConnLimitCloseCount++;
-	g_tXsXtpLastConnLimitCloseTime = xrtNow();
-	XS_XtpRecordRejectEvent("conn_limit");
-}
-
-static inline void XS_XtpRecordRecvLimitClose(void)
-{
-	g_iXsXtpRecvLimitCloseCount++;
-	g_tXsXtpLastRecvLimitCloseTime = xrtNow();
-}
-
-static inline int64 XS_XtpMetricGet(const volatile int64* pValue)
-{
-	return XS_HttpMetricGet(pValue);
-}
-
-static inline int64 XS_XtpMetricAdd(volatile int64* pValue, int64 iValue)
-{
-	return XS_HttpMetricAdd(pValue, iValue);
-}
-
-static inline void XS_XtpMetricUpdateMax(volatile int64* pValue, int64 iValue)
-{
-	XS_HttpMetricUpdateMax(pValue, iValue);
-}
-
-static inline void XS_XtpRecordInvalid(const char* sReason)
-{
-	XS_XtpMetricAdd(&g_iXsXtpInvalidCount, 1);
-	g_tXsXtpLastInvalidTime = xrtNow();
-	if (
-		(sReason && strcmp(sReason, "recv limit exceeded") == 0) ||
-		(sReason && strcmp(sReason, "pack limit exceeded") == 0)
-	) {
-		XS_XtpRecordRecvLimitClose();
-	}
-	XS_XtpRecordRejectEvent(sReason);
-	if ( sReason && sReason[0] ) {
-		strncpy(g_sXsXtpLastInvalidReason, sReason, sizeof(g_sXsXtpLastInvalidReason) - 1);
-		g_sXsXtpLastInvalidReason[sizeof(g_sXsXtpLastInvalidReason) - 1] = '\0';
-	} else {
-		g_sXsXtpLastInvalidReason[0] = '\0';
-	}
-}
-
-static inline void XS_XtpRecordRemote(xnetstream* pStream)
-{
-	const xnetaddr* pAddr;
-	const char* sAddr;
-
-	if ( pStream == NULL ) {
-		return;
-	}
-
-	pAddr = xrtNetStreamRemoteAddr(pStream);
-	sAddr = pAddr ? xrtNetAddrToStr(pAddr) : NULL;
-	if ( sAddr && sAddr[0] ) {
-		strncpy(g_sXsXtpLastRemote, sAddr, sizeof(g_sXsXtpLastRemote) - 1);
-		g_sXsXtpLastRemote[sizeof(g_sXsXtpLastRemote) - 1] = '\0';
-	} else {
-		g_sXsXtpLastRemote[0] = '\0';
-	}
-}
-
-
+#include "../manage/xtp_runtime.h"
 
 static inline void XS_XtpFreeMessage(XTP_Message* pMsg)
 {
@@ -1395,10 +1201,11 @@ static inline bool XS_XtpAppendChain(XS_XtpConnContext* objCtx, xnetchain* pChai
 	if ( objCtx->pServer && objCtx->pServer->RecvLimit > 0u && iNeed > (size_t)objCtx->pServer->RecvLimit ) {
 		XS_XtpRecordInvalid("recv limit exceeded");
 		XS_LogWarn(
-			"xtp recv limit exceeded: server=%s recv_limit=%u need=%u",
+			"xtp recv limit exceeded: server=%s recv_limit=%u need=%u remote=%s",
 			objCtx->pServer->Name ? objCtx->pServer->Name : "(null)",
 			(unsigned)objCtx->pServer->RecvLimit,
-			(unsigned)iNeed
+			(unsigned)iNeed,
+			g_sXsXtpLastRemote[0] ? g_sXsXtpLastRemote : "(none)"
 		);
 		return FALSE;
 	}
@@ -1556,23 +1363,33 @@ static inline bool XS_XtpParseMessage(XS_XtpConnContext* objCtx, XTP_Message* pM
 	if ( memcmp(tHeader.HeadInfo, "xtp\2", 4) != 0 ) {
 		XS_XtpRecordInvalid("invalid header");
 		XS_LogWarn(
-			"xtp invalid header: server=%s stream=%p",
+			"xtp invalid header: server=%s stream=%p remote=%s",
 			objCtx->pServer && objCtx->pServer->Name ? objCtx->pServer->Name : "(null)",
-			(void*)objCtx->pStream
+			(void*)objCtx->pStream,
+			g_sXsXtpLastRemote[0] ? g_sXsXtpLastRemote : "(none)"
 		);
 		return FALSE;
 	}
 	if ( tHeader.PackSize < sizeof(XTP_PackHeader) ) {
 		XS_XtpRecordInvalid("invalid size");
-		XS_LogWarn("xtp invalid size: pack=%u", (unsigned)tHeader.PackSize);
+		XS_LogWarn(
+			"xtp invalid size: server=%s stream=%p pack=%u remote=%s",
+			objCtx->pServer && objCtx->pServer->Name ? objCtx->pServer->Name : "(null)",
+			(void*)objCtx->pStream,
+			(unsigned)tHeader.PackSize,
+			g_sXsXtpLastRemote[0] ? g_sXsXtpLastRemote : "(none)"
+		);
 		return FALSE;
 	}
 	if ( objCtx->pServer && objCtx->pServer->RecvLimit > 0u && tHeader.PackSize > objCtx->pServer->RecvLimit ) {
 		XS_XtpRecordInvalid("pack limit exceeded");
 		XS_LogWarn(
-			"xtp pack limit exceeded: pack=%u recv_limit=%u",
+			"xtp pack limit exceeded: server=%s stream=%p pack=%u recv_limit=%u remote=%s",
+			objCtx->pServer && objCtx->pServer->Name ? objCtx->pServer->Name : "(null)",
+			(void*)objCtx->pStream,
 			(unsigned)tHeader.PackSize,
-			(unsigned)objCtx->pServer->RecvLimit
+			(unsigned)objCtx->pServer->RecvLimit,
+			g_sXsXtpLastRemote[0] ? g_sXsXtpLastRemote : "(none)"
 		);
 		return FALSE;
 	}
@@ -1584,7 +1401,14 @@ static inline bool XS_XtpParseMessage(XS_XtpConnContext* objCtx, XTP_Message* pM
 	}
 	if ( iNeedBytes != (size_t)tHeader.PackSize ) {
 		XS_XtpRecordInvalid("size mismatch");
-		XS_LogWarn("xtp size mismatch: pack=%u need=%u", (unsigned)tHeader.PackSize, (unsigned)iNeedBytes);
+		XS_LogWarn(
+			"xtp size mismatch: server=%s stream=%p pack=%u need=%u remote=%s",
+			objCtx->pServer && objCtx->pServer->Name ? objCtx->pServer->Name : "(null)",
+			(void*)objCtx->pStream,
+			(unsigned)tHeader.PackSize,
+			(unsigned)iNeedBytes,
+			g_sXsXtpLastRemote[0] ? g_sXsXtpLastRemote : "(none)"
+		);
 		return FALSE;
 	}
 	if ( objCtx->iRecvLen < (size_t)tHeader.PackSize ) {
@@ -1617,7 +1441,13 @@ static inline bool XS_XtpParseMessage(XS_XtpConnContext* objCtx, XTP_Message* pM
 		if ( iPos > (size_t)tHeader.PackSize ) {
 			XS_XtpFreeMessage(pMsg);
 			XS_XtpRecordInvalid("param overflow");
-			XS_LogWarn("xtp param overflow: index=%u", (unsigned)i);
+			XS_LogWarn(
+				"xtp param overflow: server=%s stream=%p index=%u remote=%s",
+				objCtx->pServer && objCtx->pServer->Name ? objCtx->pServer->Name : "(null)",
+				(void*)objCtx->pStream,
+				(unsigned)i,
+				g_sXsXtpLastRemote[0] ? g_sXsXtpLastRemote : "(none)"
+			);
 			return FALSE;
 		}
 	}
@@ -1625,7 +1455,12 @@ static inline bool XS_XtpParseMessage(XS_XtpConnContext* objCtx, XTP_Message* pM
 	if ( iPos + (size_t)tHeader.BodySize != (size_t)tHeader.PackSize ) {
 		XS_XtpFreeMessage(pMsg);
 		XS_XtpRecordInvalid("body overflow");
-		XS_LogWarn("xtp body overflow");
+		XS_LogWarn(
+			"xtp body overflow: server=%s stream=%p remote=%s",
+			objCtx->pServer && objCtx->pServer->Name ? objCtx->pServer->Name : "(null)",
+			(void*)objCtx->pStream,
+			g_sXsXtpLastRemote[0] ? g_sXsXtpLastRemote : "(none)"
+		);
 		return FALSE;
 	}
 	
@@ -2868,14 +2703,32 @@ static uint32 XS_XtpAcceptThread(ptr pArg)
 {
 	XS_XtpHandle* objHandle = (XS_XtpHandle*)pArg;
 	
-	while ( objHandle && objHandle->pListener && !objHandle->bStopAccept ) {
+	while ( objHandle && objHandle->pListener && (!objHandle->bStopAccept || objHandle->pListener->bRunning) ) {
 		xnetstream* pStream = NULL;
-		xnet_result iRet = xrtNetListenerAcceptTimeout(objHandle->pListener, 500, &pStream);
+		uint32 iAcceptTimeout = objHandle->bStopAccept ? 50u : 500u;
+		xnet_result iRet = xrtNetListenerAcceptTimeout(objHandle->pListener, iAcceptTimeout, &pStream);
 		
 		if ( iRet == XRT_NET_TIMEOUT ) {
 			continue;
 		}
 		if ( iRet == XRT_NET_OK ) {
+			XS_XtpConnContext* objCtx = pStream ? (XS_XtpConnContext*)xrtNetStreamGetUserData(pStream) : NULL;
+
+			if ( objHandle->bStopAccept ) {
+				if ( objCtx ) {
+					objCtx->bClosing = TRUE;
+					objCtx->bStopRejectRecorded = TRUE;
+				}
+				XS_XtpRecordRemote(pStream);
+				XS_XtpRecordRejectEvent("server_stopping");
+				XS_LogWarn(
+					"xtp accept rejected while stopping: server=%s stream=%p remote=%s",
+					objHandle->pServer && objHandle->pServer->Name ? objHandle->pServer->Name : "(null)",
+					(void*)pStream,
+					g_sXsXtpLastRemote[0] ? g_sXsXtpLastRemote : "(none)"
+				);
+				xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
+			}
 			continue;
 		}
 		if ( objHandle->bStopAccept ) {
@@ -2883,8 +2736,9 @@ static uint32 XS_XtpAcceptThread(ptr pArg)
 		}
 		
 		XS_LogWarn(
-			"xtp accept failed: server=%s code=%d",
+			"xtp accept failed: server=%s addr=%s code=%d",
 			objHandle->pServer && objHandle->pServer->Name ? objHandle->pServer->Name : "(null)",
+			(objHandle && objHandle->pServer && objHandle->pServer->Addr) ? objHandle->pServer->Addr : "(null)",
 			(int)iRet
 		);
 		xrtSleep(50);
@@ -2897,14 +2751,32 @@ static uint32 XS_XtpAcceptThreadTLS(ptr pArg)
 {
 	XS_XtpHandle* objHandle = (XS_XtpHandle*)pArg;
 	
-	while ( objHandle && objHandle->pListenerTLS && !objHandle->bStopAccept ) {
+	while ( objHandle && objHandle->pListenerTLS && (!objHandle->bStopAccept || objHandle->pListenerTLS->bRunning) ) {
 		xnetstream* pStream = NULL;
-		xnet_result iRet = xrtNetListenerAcceptTimeout(objHandle->pListenerTLS, 500, &pStream);
+		uint32 iAcceptTimeout = objHandle->bStopAccept ? 50u : 500u;
+		xnet_result iRet = xrtNetListenerAcceptTimeout(objHandle->pListenerTLS, iAcceptTimeout, &pStream);
 		
 		if ( iRet == XRT_NET_TIMEOUT ) {
 			continue;
 		}
 		if ( iRet == XRT_NET_OK ) {
+			XS_XtpConnContext* objCtx = pStream ? (XS_XtpConnContext*)xrtNetStreamGetUserData(pStream) : NULL;
+
+			if ( objHandle->bStopAccept ) {
+				if ( objCtx ) {
+					objCtx->bClosing = TRUE;
+					objCtx->bStopRejectRecorded = TRUE;
+				}
+				XS_XtpRecordRemote(pStream);
+				XS_XtpRecordRejectEvent("server_stopping");
+				XS_LogWarn(
+					"xtps accept rejected while stopping: server=%s stream=%p remote=%s",
+					objHandle->pServer && objHandle->pServer->Name ? objHandle->pServer->Name : "(null)",
+					(void*)pStream,
+					g_sXsXtpLastRemote[0] ? g_sXsXtpLastRemote : "(none)"
+				);
+				xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
+			}
 			continue;
 		}
 		if ( objHandle->bStopAccept ) {
@@ -2912,8 +2784,9 @@ static uint32 XS_XtpAcceptThreadTLS(ptr pArg)
 		}
 		
 		XS_LogWarn(
-			"xtps accept failed: server=%s code=%d",
+			"xtps accept failed: server=%s addr=%s code=%d",
 			objHandle->pServer && objHandle->pServer->Name ? objHandle->pServer->Name : "(null)",
+			(objHandle && objHandle->pServer && objHandle->pServer->AddrTLS) ? objHandle->pServer->AddrTLS : "(null)",
 			(int)iRet
 		);
 		xrtSleep(50);
@@ -2932,7 +2805,7 @@ static uint32 XS_XtpIdleThread(ptr pArg)
 
 		if ( iIdleTimeout > 0u && objHandle->pConnLock && objHandle->arrConn ) {
 			int64 iNowMS = XS_XtpNowMS();
-			xarray arrClose = xrtArrayCreate(sizeof(xnetstream*), XRT_OBJMODE_LOCAL);
+			xarray arrClose = xrtArrayCreate(sizeof(XS_XtpConnContext*), XRT_OBJMODE_LOCAL);
 			uint32 i;
 
 			xrtMutexLock(objHandle->pConnLock);
@@ -2944,25 +2817,33 @@ static uint32 XS_XtpIdleThread(ptr pArg)
 					continue;
 				}
 				if ( (objCtx->iLastActiveMS > 0) && ((iNowMS - objCtx->iLastActiveMS) >= (int64)iIdleTimeout) ) {
-					xnetstream** ppClose;
+					XS_XtpConnContext** ppClose;
 					uint32 iPos;
 
 					objCtx->bClosing = TRUE;
 					iPos = xrtArrayAppend(arrClose, 1);
-					ppClose = (xnetstream**)xrtArrayGet(arrClose, iPos);
+					ppClose = (XS_XtpConnContext**)xrtArrayGet(arrClose, iPos);
 					if ( ppClose ) {
-						*ppClose = objCtx->pStream;
+						*ppClose = objCtx;
 					}
 				}
 			}
 			xrtMutexUnlock(objHandle->pConnLock);
 
 			for ( i = 1; i <= arrClose->Count; i++ ) {
-				xnetstream** ppClose = (xnetstream**)xrtArrayGet(arrClose, i);
+				XS_XtpConnContext** ppClose = (XS_XtpConnContext**)xrtArrayGet(arrClose, i);
+				XS_XtpConnContext* objCtx = ppClose ? *ppClose : NULL;
 
-				if ( ppClose && *ppClose ) {
+				if ( objCtx && objCtx->pStream ) {
+					XS_XtpRecordRemote(objCtx->pStream);
 					XS_XtpRecordIdleClose();
-					xrtNetStreamClose(*ppClose, 0u);
+					XS_LogInfo(
+						"xtp idle close: server=%s timeout=%u remote=%s",
+						objServer && objServer->Name ? objServer->Name : "(null)",
+						(unsigned)iIdleTimeout,
+						g_sXsXtpLastRemote[0] ? g_sXsXtpLastRemote : "(none)"
+					);
+					xrtNetStreamClose(objCtx->pStream, 0u);
 				}
 			}
 			xrtArrayDestroy(arrClose);
@@ -2981,6 +2862,20 @@ static bool XS_XtpOnAccept(ptr pOwner, xnetlistener* pListener, xnetstream* pStr
 	XS_XtpConnContext* objCtx;
 	
 	(void)pListener;
+
+	objHandle = objServer ? (XS_XtpHandle*)objServer->pHandle : NULL;
+	if ( objHandle && objHandle->bStopAccept ) {
+		XS_XtpRecordRemote(pStream);
+		XS_XtpRecordRejectEvent("server_stopping");
+		XS_LogWarn(
+			"xtp accept rejected while stopping: server=%s stream=%p remote=%s",
+			objServer && objServer->Name ? objServer->Name : "(null)",
+			(void*)pStream,
+			g_sXsXtpLastRemote[0] ? g_sXsXtpLastRemote : "(none)"
+		);
+		xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
+		return FALSE;
+	}
 	
 	objCtx = (XS_XtpConnContext*)xrtCalloc(1, sizeof(XS_XtpConnContext));
 	if ( objCtx == NULL ) {
@@ -2989,12 +2884,18 @@ static bool XS_XtpOnAccept(ptr pOwner, xnetlistener* pListener, xnetstream* pStr
 
 	objCtx->pServer = objServer;
 	objCtx->pStream = pStream;
-	objHandle = objServer ? (XS_XtpHandle*)objServer->pHandle : NULL;
 	objCtx->pTracker = objHandle;
 	XS_XtpTouch(objCtx);
 	xrtNetStreamSetUserData(pStream, objCtx);
 	XS_XtpTrackConn(objHandle, objCtx);
 	XS_XtpMetricUpdateMax(&g_iXsXtpConnPeak, XS_XtpMetricAdd(&g_iXsXtpConnCurrent, 1));
+	XS_XtpRecordRemote(pStream);
+	XS_LogInfo(
+		"xtp accept: server=%s stream=%p remote=%s",
+		objServer && objServer->Name ? objServer->Name : "(null)",
+		(void*)pStream,
+		g_sXsXtpLastRemote[0] ? g_sXsXtpLastRemote : "(none)"
+	);
 	return TRUE;
 }
 
@@ -3002,41 +2903,100 @@ static void XS_XtpOnOpen(ptr pOwner, xnetstream* pStream)
 {
 	XS_XtpConnContext* objCtx = (XS_XtpConnContext*)pOwner;
 	XS_ServerConfig* objServer = objCtx ? objCtx->pServer : NULL;
+	XS_XtpHandle* objHandle = objCtx ? (XS_XtpHandle*)objCtx->pTracker : NULL;
 	(void)pStream;
+
+	if ( objHandle && objHandle->bStopAccept ) {
+		if ( objCtx ) {
+			objCtx->bClosing = TRUE;
+		}
+		XS_XtpRecordRemote(objCtx ? objCtx->pStream : pStream);
+		if ( objCtx == NULL || !objCtx->bStopRejectRecorded ) {
+			XS_XtpRecordRejectEvent("server_stopping");
+			XS_LogWarn(
+				"xtp open rejected while stopping: server=%s stream=%p remote=%s",
+				objServer && objServer->Name ? objServer->Name : "(null)",
+				(void*)(objCtx ? objCtx->pStream : pStream),
+				g_sXsXtpLastRemote[0] ? g_sXsXtpLastRemote : "(none)"
+			);
+		}
+		xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
+		return;
+	}
 	
 	XS_XtpMetricAdd(&g_iXsXtpOpenCount, 1);
 	XS_XtpTouch(objCtx);
 	XS_XtpRecordRemote(objCtx ? objCtx->pStream : pStream);
-	if ( objServer && objServer->ConnLimit > 0u && XS_XtpTrackedConnCount((XS_XtpHandle*)objCtx->pTracker) > (int64)objServer->ConnLimit ) {
+	if ( objServer && objServer->ConnLimit > 0u && XS_XtpTrackedConnCount(objHandle) > (int64)objServer->ConnLimit ) {
 		if ( objCtx ) {
 			objCtx->bClosing = TRUE;
 		}
 		XS_XtpRecordConnLimitClose();
 		XS_LogWarn(
-			"xtp conn limit exceeded: server=%s current=%lld limit=%u",
+			"xtp conn limit exceeded: server=%s current=%lld limit=%u remote=%s",
 			objServer->Name ? objServer->Name : "(null)",
-			(long long)XS_XtpTrackedConnCount((XS_XtpHandle*)objCtx->pTracker),
-			(unsigned)objServer->ConnLimit
+			(long long)XS_XtpTrackedConnCount(objHandle),
+			(unsigned)objServer->ConnLimit,
+			g_sXsXtpLastRemote[0] ? g_sXsXtpLastRemote : "(none)"
 		);
 		xrtNetStreamClose(pStream, 0u);
 		return;
 	}
+	XS_LogInfo(
+		"xtp open: server=%s stream=%p remote=%s",
+		objServer && objServer->Name ? objServer->Name : "(null)",
+		(void*)(objCtx ? objCtx->pStream : pStream),
+		g_sXsXtpLastRemote[0] ? g_sXsXtpLastRemote : "(none)"
+	);
 	if ( objServer && objServer->procStreamOpen ) {
 		objServer->procStreamOpen(objServer, objCtx ? objCtx->pStream : pStream);
 	}
+}
+
+static inline bool XS_XtpIsTransportRecvLimitError(XS_XtpConnContext* objCtx, xnetstream* pStream, int iSysErr)
+{
+	if ( iSysErr != -1 ) {
+		return FALSE;
+	}
+	if ( objCtx == NULL || pStream == NULL ) {
+		return FALSE;
+	}
+	if ( pStream->iRecvLimit == 0u ) {
+		return FALSE;
+	}
+	if ( pStream->bClosing ) {
+		return FALSE;
+	}
+	if ( pStream->pProxyState != NULL ) {
+		return FALSE;
+	}
+	if ( pStream->pTls != NULL && !xrtNetTlsSessionIsReady(pStream->pTls) ) {
+		return FALSE;
+	}
+	if ( objCtx->iRecvLen == 0u && xrtNetChainBytes(&pStream->tRxChain) == 0u ) {
+		return FALSE;
+	}
+	return TRUE;
 }
 
 static void XS_XtpOnRecv(ptr pOwner, xnetstream* pStream, xnetchain* pChain)
 {
 	XS_XtpConnContext* objCtx = (XS_XtpConnContext*)pOwner;
 	XS_ServerConfig* objServer = objCtx ? objCtx->pServer : NULL;
+	char sCmdLog[128];
 	
 	if ( objCtx == NULL || pChain == NULL ) {
 		return;
 	}
 	XS_XtpTouch(objCtx);
 	if ( !XS_XtpAppendChain(objCtx, pChain) ) {
-		XS_LogWarn("xtp recv append failed: server=%s", objServer && objServer->Name ? objServer->Name : "(null)");
+		XS_XtpRecordRemote(pStream);
+		XS_LogWarn(
+			"xtp recv append failed: server=%s stream=%p remote=%s",
+			objServer && objServer->Name ? objServer->Name : "(null)",
+			(void*)pStream,
+			g_sXsXtpLastRemote[0] ? g_sXsXtpLastRemote : "(none)"
+		);
 		objCtx->bClosing = TRUE;
 		xrtNetStreamClose(pStream, XNET_CLOSE_F_ABORT);
 		return;
@@ -3086,19 +3046,24 @@ static void XS_XtpOnRecv(ptr pOwner, xnetstream* pStream, xnetchain* pChain)
 		} else {
 			g_sXsXtpLastCmd[0] = '\0';
 		}
+		if ( g_sXsXtpLastCmd[0] ) {
+			snprintf(sCmdLog, sizeof(sCmdLog), "%s", g_sXsXtpLastCmd);
+		} else {
+			sCmdLog[0] = '\0';
+		}
 		
 		XS_LogInfo(
-			"xtp recv: server=%s stream=%p type=%u msg_id=%llu status=%d cmd=%.*s params=%u body=%u handled=%s",
+			"xtp recv: server=%s stream=%p type=%u msg_id=%llu status=%d cmd=%s params=%u body=%u handled=%s remote=%s",
 			objServer && objServer->Name ? objServer->Name : "(null)",
 			(void*)pStream,
 			(unsigned)tMsg.MsgType,
 			(unsigned long long)tMsg.MsgID,
 			(int)tMsg.Status,
-			(int)tMsg.CmdSize,
-			tMsg.pCmd ? tMsg.pCmd : "",
+			sCmdLog,
 			(unsigned)tMsg.ParamCount,
 			(unsigned)tMsg.BodySize,
-			bHandled ? "true" : "false"
+			bHandled ? "true" : "false",
+			g_sXsXtpLastRemote[0] ? g_sXsXtpLastRemote : "(none)"
 		);
 		
 		if ( !bHandled && XS_XtpNeedReply(&tMsg) ) {
@@ -3127,25 +3092,35 @@ static void XS_XtpOnRecv(ptr pOwner, xnetstream* pStream, xnetchain* pChain)
 static void XS_XtpOnClose(ptr pOwner, xnetstream* pStream, xnet_result iReason)
 {
 	XS_XtpConnContext* objCtx = (XS_XtpConnContext*)pOwner;
+	if ( objCtx == NULL && pStream != NULL ) {
+		objCtx = (XS_XtpConnContext*)xrtNetStreamGetUserData(pStream);
+	}
 	XS_ServerConfig* objServer = objCtx ? objCtx->pServer : NULL;
 	
 	XS_XtpMetricAdd(&g_iXsXtpCloseCount, 1);
 	if ( XS_XtpMetricAdd(&g_iXsXtpConnCurrent, -1) < 0 ) {
 		XS_XtpMetricAdd(&g_iXsXtpConnCurrent, -XS_XtpMetricGet(&g_iXsXtpConnCurrent));
 	}
+	XS_XtpRecordRemote(pStream);
+	XS_LogInfo(
+		"xtp close: server=%s reason=%d remote=%s",
+		objServer && objServer->Name ? objServer->Name : "(null)",
+		(int)iReason,
+		g_sXsXtpLastRemote[0] ? g_sXsXtpLastRemote : "(none)"
+	);
 	if ( objServer && objServer->procStreamClose ) {
 		objServer->procStreamClose(objServer, pStream, (int)iReason);
 	}
-	
-	XS_XtpUntrackConn((XS_XtpHandle*)objCtx->pTracker, objCtx);
-	xrtNetStreamSetUserData(pStream, NULL);
-	XS_XtpDestroyContext(objCtx);
+	if ( objCtx ) {
+		XS_XtpUntrackConn((XS_XtpHandle*)objCtx->pTracker, objCtx);
+		xrtNetStreamSetUserData(pStream, NULL);
+		XS_XtpDestroyContext(objCtx);
+	}
 }
 
 static void XS_XtpOnError(ptr pOwner, xnetstream* pStream, int iSysErr)
 {
 	XS_XtpConnContext* objCtx = (XS_XtpConnContext*)pOwner;
-	uint32 iInternalError = pStream ? xrtNetStreamTakeInternalError(pStream) : XNET_STREAM_INTERNAL_ERROR_NONE;
 	if ( objCtx == NULL && pStream != NULL ) {
 		objCtx = (XS_XtpConnContext*)xrtNetStreamGetUserData(pStream);
 	}
@@ -3154,15 +3129,16 @@ static void XS_XtpOnError(ptr pOwner, xnetstream* pStream, int iSysErr)
 	if ( objCtx == NULL ) {
 		return;
 	}
-	if ( iInternalError == XNET_STREAM_INTERNAL_ERROR_RECV_LIMIT ) {
+	if ( XS_XtpIsTransportRecvLimitError(objCtx, pStream, iSysErr) ) {
 		XS_XtpRecordRemote(pStream);
 		XS_XtpRecordInvalid("recv limit exceeded");
 		objCtx->bClosing = TRUE;
 		XS_LogWarn(
-			"xtp transport recv limit exceeded: server=%s stream=%p limit=%u",
+			"xtp transport recv limit exceeded: server=%s stream=%p limit=%u remote=%s",
 			objServer && objServer->Name ? objServer->Name : "(null)",
 			(void*)pStream,
-			(unsigned)(pStream ? pStream->iRecvLimit : 0u)
+			(unsigned)(pStream ? pStream->iRecvLimit : 0u),
+			g_sXsXtpLastRemote[0] ? g_sXsXtpLastRemote : "(none)"
 		);
 		return;
 	}
@@ -3176,10 +3152,13 @@ static void XS_XtpOnError(ptr pOwner, xnetstream* pStream, int iSysErr)
 	XS_XtpMetricAdd(&g_iXsXtpErrorCount, 1);
 	g_iXsXtpLastErrorCode = (int64)iSysErr;
 	g_tXsXtpLastErrorTime = xrtNow();
+	XS_XtpRecordRemote(pStream);
+	XS_XtpSnapshotErrorRemote();
 	XS_LogWarn(
-		"xtp error: server=%s sys=%d",
+		"xtp error: server=%s sys=%d remote=%s",
 		objServer && objServer->Name ? objServer->Name : "(null)",
-		iSysErr
+		iSysErr,
+		g_sXsXtpLastRemote[0] ? g_sXsXtpLastRemote : "(none)"
 	);
 }
 
@@ -3409,6 +3388,7 @@ static inline void XS_XtpStopServer(XS_ServerConfig* objServer)
 	objHandle = (XS_XtpHandle*)objServer->pHandle;
 	if ( objHandle ) {
 		objHandle->bStopAccept = TRUE;
+		xrtSleep(50);
 		if ( objHandle->pListener ) {
 			xrtNetListenerStop(objHandle->pListener);
 		}
@@ -3432,11 +3412,16 @@ static inline void XS_XtpStopServer(XS_ServerConfig* objServer)
 		}
 		iClosedConn = XS_XtpCloseTrackedConns(objHandle);
 		iRemainConn = XS_XtpWaitTrackedConnDrain(objHandle, 500u);
+		if ( iRemainConn > 0 ) {
+			XS_XtpAbortTrackedConns(objHandle);
+			iRemainConn = XS_XtpWaitTrackedConnDrain(objHandle, 1000u);
+		}
 		if ( iClosedConn > 0 || iRemainConn > 0 ) {
 			XS_XtpRecordStopCleanup(iClosedConn, iRemainConn);
 			XS_LogInfo(
-				"xtp stop cleanup: server=%s closed=%lld remain=%lld",
+				"xtp stop cleanup: server=%s addr=%s closed=%lld remain=%lld",
 				objServer->Name ? objServer->Name : "(null)",
+				objServer->Addr ? objServer->Addr : "(null)",
 				(long long)iClosedConn,
 				(long long)iRemainConn
 			);
@@ -3458,13 +3443,15 @@ static inline void XS_XtpStopServer(XS_ServerConfig* objServer)
 	}
 	
 	XS_LogInfo(
-		"xtp stop: server=%s",
-		objServer->Name ? objServer->Name : "(null)"
+		"xtp stop: server=%s addr=%s",
+		objServer->Name ? objServer->Name : "(null)",
+		objServer->Addr ? objServer->Addr : "(null)"
 	);
 	if ( objServer->EnableTLS ) {
 		XS_LogInfo(
-			"xtps stop: server=%s",
-			objServer->Name ? objServer->Name : "(null)"
+			"xtps stop: server=%s addr=%s",
+			objServer->Name ? objServer->Name : "(null)",
+			objServer->AddrTLS ? objServer->AddrTLS : "(null)"
 		);
 	}
 }

@@ -1,4 +1,4 @@
-# XServer
+﻿# XServer
 
 [English](./README.en.md) | [中文](./README.md)
 
@@ -73,6 +73,11 @@ build_debug.bat
 - `release/xs(.exe)`：发布版
 - `release/xsdbg(.exe)`：调试版
 
+发布前最小检查：
+- Windows：`cmd /c test_stable.bat`
+- Linux：`sh ./test_stable.sh`
+- 说明文档：`docs/稳定API.md`、`docs/legacy对照.md`、`docs/发布检查清单.md`、`docs/运行与稳定补记.md`
+
 发布版命令示例：
 ```bash
 gcc main.c lib/sqlite3.c tcc/libtcc.c \
@@ -112,6 +117,8 @@ gcc main.c lib/sqlite3.c tcc/libtcc.c \
 ### 3. 运行
 
 进入 `release` 目录后直接运行 `xs` 或 `xsdbg`，默认读取 `xs.json`。
+
+如果准备交付 production `xs`，先执行上面的 `test_stable.*`；它会先 build 当前源码，再验证 production `xs` 与 `xsdbg` 的冻结分层是否仍然成立。
 
 ## 配置参考
 
@@ -305,9 +312,28 @@ WebSocket 脚本 API 额外提供：
 - `GET /__xs/status_json`
 - `GET /__xs/health`
 - `GET /__xs/health_json`
+
+当前生产版 `xs` 的稳定内建管理面，先按 `old/legacy` 的“尽量薄宿主”思路冻结在这组核心入口上：
+- `status / status_json`
+- `health / health_json`
+- `reload / reload_json / reload_config / reload_config_json / reload_status / reload_status_json`
+- `check_config / check_config_json`
+
+`dashboard`、`bus`、`http/ws/xtp/udp/custom *_metrics*` 这组扩展管理/观测入口当前视为 `xsdbg` 范围，不作为生产版 `xs` 的稳定 API 承诺。
+下文如果继续列出 `dashboard`、`__xs/bus/*`、`*_metrics*` 这组接口的细节，默认都是源码能力清单或 `xsdbg` 视角，不表示生产版 `xs` 默认开放这些入口。
+
+当前这一轮又继续把 `protocol/http.h` 内部的运行时/治理 helper 拆到 `src/manage/http_runtime.h`；配合前一轮已经抽出的 `src/manage/http_manage.h`，`src/protocol/http.h` 现在主要保留协议入口、静态资源与请求回调 glue，用来把 `protocol` 目录继续收回到更接近旧版 `old/legacy` 的职责边界。最近这轮里，原来散落在 `protocol/http.h` 里的大段管理面 if-chain 也已经收成了单一的 `XS_HttpHandleManageRequest(...)` 入口，协议层只再做一次管理面转发，不再自己展开 `reload / status / health / check / bus / dashboard / metrics` 的分发细节。
+同一轮里，`protocol/ws.h` 和 `protocol/custom.h` 顶部那批连接跟踪、idle thread、reject/invalid/stop-cleanup 统计，也分别继续抽到了 `src/manage/ws_runtime.h` 和 `src/manage/custom_runtime.h`，让 `protocol` 目录进一步回到“协议回调本身”。
+这一轮又把 `protocol/xtp.h` 顶部那批连接跟踪、idle/stop-cleanup、reject/invalid/error remote 快照等运行时治理 helper 继续抽到了 `src/manage/xtp_runtime.h`；`XTP` 的消息结构、同步客户端和高级接口仍然保留在 `protocol/xtp.h`，避免影响你当前最看重的 `XTP` 高层能力。
+这轮又把 `main.c` 里那批运行时状态仓库与状态快照 API 继续拆到 `src/manage/runtime_state.h` 和 `src/manage/runtime_state_api.h`；`main.c` 本体已经明显回落到更接近“启动与调度主流程”的形态，后面继续 freeze `xs` 生产边界时，重心会更多落在 `src/manage`，而不是再回到 `protocol`。
+
+当前管理面也开始按编译变体分层：`build.bat` 产出的 `xs` 默认只保留 `status / health / reload / check_config` 这组最小核心入口；`build_debug.bat` 产出的 `xsdbg` 继续开放 `dashboard`、`bus` 与 `http/ws/xtp/udp/custom` 这组详细管理/观测入口，用于把生产版 `xs` 的运行链路和控制面保持得更简单、更稳定。首页 `index.html` 在 `xs` 下也会自动退回 `status_json + health_json + check_config_json` 这组核心信息；如果命中 `bus api not included in production xs`，Bus 区只显示 `xsdbg` 提示，不再反复请求 `bus/*`。当前页面装载链也已改成先读 `status_json` 再判断是否需要扩展管理面：普通 `xs` 不会再在首页初次加载时先打一个必然 `403` 的 `dashboard_json`。同一轮里，`src/manage/http_manage.h` 也已经继续拆成核心管理面、`src/manage/http_manage_bus.h` 和 `src/manage/http_manage_debug.h` 三层；当前 release 构建还会通过 `#ifdef XRT_MEM_DEBUG` 直接把 `bus / dashboard / *_metrics*` 这批扩展 handler 的 include 与 dispatch 收进 `xsdbg`，让普通 `xs` 的编译链也回到更小的核心面。
+
 - `GET /__xs/http_metrics`
 - `GET /__xs/http_metrics_json`
 - `GET /__xs/http_metrics_clear`
+
+上面这组 `http/ws/xtp/udp/custom *_metrics*` 与后面的 `dashboard*` 说明，当前都属于 `xsdbg` 范围；production `xs` 默认只保留最小核心管理面。
 
 `http` 服务器现在也支持 `idle_timeout` 配置，超时空闲连接会被宿主主动关闭；`__xs/http_metrics`、`__xs/http_metrics_json` 会额外返回 `http_idle_close_count / http_last_idle_close_time / http_last_idle_close_age_ms`，用于区分空闲清理与正常业务请求。
 
@@ -333,6 +359,8 @@ WebSocket 脚本 API 额外提供：
 `custom/tcp` 服务器同样支持 `idle_timeout` 配置；`__xs/custom_metrics`、`__xs/custom_metrics_json` 会额外返回 `custom_idle_close_count / custom_last_idle_close_time / custom_last_idle_close_age_ms`，用于观察空闲清理行为。
 - `GET /__xs/dashboard`
 - `GET /__xs/dashboard_json`
+
+上面这组 `dashboard*` 入口当前同样属于 `xsdbg` 范围，不作为 production `xs` 的稳定 API 承诺。
 - `GET /__xs/check_config`
 - `GET /__xs/check_config_json`
 - `GET /__xs/check_config_clear`
@@ -375,6 +403,8 @@ WebSocket 脚本 API 额外提供：
 - `GET /__xs/bus/remove?all=true`
 - `GET /__xs/bus/remove?namespace=<命名空间>&tag=<标签>&all=true`
 
+上面这组 `__xs/bus/*` 宿主管理接口当前也按 `xsdbg` 范围看待；production `xs` 默认不编入这些入口，首页在命中 `bus api not included in production xs` 时也只保留降级提示。
+
 当前 `reload` 已支持 Host 级脚本热重载；`force` 参数已进入接口语义，但连接排空策略仍会在后续阶段继续完善。
 当前 `reload_config` 已支持最小配置热加载，并在新配置 `build/init/start` 失败时保留旧服务继续可用。
 当前 `reload_config` 已支持按 `server` 定向重载。
@@ -413,15 +443,17 @@ WebSocket 脚本 API 额外提供：
 首页 `index.html` 也已经切到这些正式管理接口，并补上了配置热加载与结果查询入口；bus 区现在支持显式输入 `data_id`，也支持仅通过 `namespace/tag` 来查找、读取、续期 TTL 和删除共享数据。
 `__xs/ws_metrics`、`__xs/ws_metrics_json` 当前还会额外返回 `ws_last_error_code / ws_last_close_reason / ws_last_close_time / ws_last_close_age_ms / ws_idle_close_count / ws_conn_limit_close_count / ws_message_limit_close_count / ws_last_idle_close_time / ws_last_idle_close_age_ms / ws_last_conn_limit_close_time / ws_last_conn_limit_close_age_ms / ws_last_message_limit_close_time / ws_last_message_limit_close_age_ms / ws_last_frame_type / ws_last_remote / ws_last_bytes / ws_last_text / ws_last_time / ws_last_age_ms / ws_last_error_time / ws_last_error_age_ms`，便于直接看到最近一次 WebSocket 文本、二进制或 ping/pong 事件的类型、对端地址、内容摘要、最近一次关闭原因与时间、空闲清理/连接上限/消息上限关闭现场以及最近一次错误现场与时间上下文。
 
-`__xs/status_json`、`__xs/health_json`、`__xs/dashboard` / `__xs/dashboard_json` 当前还会返回运行中的 `bind_ip / bind_port / tls / bind_ip_tls / bind_port_tls / addr_tls / ws_protocol / ws_message_limit / ws_conn_current / ws_conn_peak / ws_open_count / ws_close_count / ws_text_count / ws_binary_count / ws_ping_count / ws_pong_count / ws_error_count / ws_invalid_count / ws_idle_close_count / ws_conn_limit_close_count / ws_message_limit_close_count / ws_last_error_code / ws_last_close_reason / ws_last_frame_type / ws_last_remote / ws_last_bytes / ws_last_text / ws_last_time / ws_last_age_ms / ws_last_error_time / ws_last_error_age_ms / tls_cert_file / tls_key_file / tls_ca_file / current_dir / app_file / app_mtime / app_size / app_path / build / compiler / platform / arch / mem_debug / pid / start_time / uptime_ms / engine_workers / runtime_server_count / manage_api / config_name / config_mtime / config_size / http_req_count / http_2xx_count / http_3xx_count / http_4xx_count / http_5xx_count / http_conn_current / http_conn_peak / http_get_count / http_post_count / http_head_count / http_other_count / http_time_total_ms / http_time_max_ms / http_time_avg_ms / http_last_method / http_last_status / http_last_path / http_last_target / http_last_remote / http_last_time / http_last_age_ms / http_last_app_method / http_last_app_status / http_last_app_path / http_last_app_target / http_last_app_remote / http_last_app_time / http_last_app_age_ms`，便于排障时直接定位当前进程、工作目录、运行目录、监听地址、TLS 监听、WebSocket 子协议、WebSocket 消息上限、WebSocket 连接与消息计数、最近一次 WebSocket 帧上下文、最近一次 WebSocket 对端地址、最近一次 WebSocket 关闭原因、最近一次 WebSocket 错误现场，以及空闲/连接上限/消息上限关闭计数，TLS 证书路径、当前程序文件与配置文件的更新时间和大小、构建变体、编译器、目标平台架构、内存调试状态、持续运行时长、运行中的服务数量、工作线程规模、HTTP 请求规模、方法分布、当前连接、峰值连接、最近一次任意请求，以及最近一次非 `__xs/*` 业务请求的方法、路径、对端地址、状态与处理耗时，以及管理面是否启用。
+`__xs/status_json`、`__xs/health_json`、`__xs/dashboard` / `__xs/dashboard_json` 当前还会返回运行中的 `bind_ip / bind_port / tls / bind_ip_tls / bind_port_tls / addr_tls / ws_protocol / ws_message_limit / ws_conn_current / ws_conn_peak / ws_open_count / ws_close_count / ws_text_count / ws_binary_count / ws_ping_count / ws_pong_count / ws_error_count / ws_invalid_count / ws_idle_close_count / ws_conn_limit_close_count / ws_message_limit_close_count / ws_last_error_code / ws_last_close_reason / ws_last_frame_type / ws_last_remote / ws_last_bytes / ws_last_text / ws_last_time / ws_last_age_ms / ws_last_error_time / ws_last_error_age_ms / ws_last_reject_reason / ws_last_reject_remote / tls_cert_file / tls_key_file / tls_ca_file / current_dir / app_file / app_mtime / app_size / app_path / build / compiler / platform / arch / mem_debug / pid / start_time / uptime_ms / engine_workers / runtime_server_count / manage_api / config_name / config_mtime / config_size / http_req_count / http_2xx_count / http_3xx_count / http_4xx_count / http_5xx_count / http_conn_current / http_conn_peak / http_get_count / http_post_count / http_head_count / http_other_count / http_time_total_ms / http_time_max_ms / http_time_avg_ms / http_last_method / http_last_status / http_last_path / http_last_target / http_last_remote / http_last_time / http_last_age_ms / http_last_reject_reason / http_last_reject_remote / http_last_app_method / http_last_app_status / http_last_app_path / http_last_app_target / http_last_app_remote / http_last_app_time / http_last_app_age_ms`，便于排障时直接定位当前进程、工作目录、运行目录、监听地址、TLS 监听、WebSocket 子协议、WebSocket 消息上限、WebSocket 连接与消息计数、最近一次 WebSocket 帧上下文、最近一次 WebSocket 对端地址、最近一次 WebSocket 关闭原因、最近一次 WebSocket 错误现场、最近一次拒绝现场的原因与对端，以及空闲/连接上限/消息上限关闭计数，TLS 证书路径、当前程序文件与配置文件的更新时间和大小、构建变体、编译器、目标平台架构、内存调试状态、持续运行时长、运行中的服务数量、工作线程规模、HTTP 请求规模、方法分布、当前连接、峰值连接、最近一次任意请求，以及最近一次非 `__xs/*` 业务请求的方法、路径、对端地址、状态与处理耗时，以及管理面是否启用。
 
-`__xs/status_json`、`__xs/dashboard_json` 当前还会额外返回 `xtp_conn_current / xtp_conn_peak / xtp_open_count / xtp_close_count / xtp_error_count / xtp_invalid_count / xtp_msg_count / xtp_req_count / xtp_resp_count / xtp_push_count / xtp_event_count / xtp_send_count / xtp_recv_bytes / xtp_send_bytes / xtp_last_msg_type / xtp_last_status / xtp_last_msg_id / xtp_last_flags / xtp_last_param_count / xtp_last_body_size / xtp_last_remote / xtp_last_bytes / xtp_last_cmd / xtp_last_time / xtp_last_age_ms / xtp_last_invalid_reason / xtp_last_invalid_time / xtp_last_invalid_age_ms / xtp_last_error_code / xtp_last_error_time / xtp_last_error_age_ms / xtp_idle_close_count / xtp_conn_limit_close_count / xtp_recv_limit_close_count / xtp_last_idle_close_time / xtp_last_idle_close_age_ms / xtp_last_conn_limit_close_time / xtp_last_conn_limit_close_age_ms / xtp_last_recv_limit_close_time / xtp_last_recv_limit_close_age_ms`，便于观察 `xtp / xtps` 的连接、坏包数量、消息类型分布、最近一包的 flags、参数数量、body 大小、对端地址、长度与上下文、最近一次坏包原因、最近一次系统错误，以及空闲/连接上限/收包上限关闭计数与收发字节统计。
+`__xs/status_json`、`__xs/dashboard_json` 当前还会额外返回 `xtp_conn_current / xtp_conn_peak / xtp_open_count / xtp_close_count / xtp_error_count / xtp_invalid_count / xtp_msg_count / xtp_req_count / xtp_resp_count / xtp_push_count / xtp_event_count / xtp_send_count / xtp_recv_bytes / xtp_send_bytes / xtp_last_msg_type / xtp_last_status / xtp_last_msg_id / xtp_last_flags / xtp_last_param_count / xtp_last_body_size / xtp_last_remote / xtp_last_bytes / xtp_last_cmd / xtp_last_time / xtp_last_age_ms / xtp_last_invalid_reason / xtp_last_invalid_time / xtp_last_invalid_age_ms / xtp_last_error_code / xtp_last_error_time / xtp_last_error_age_ms / xtp_last_reject_reason / xtp_last_reject_remote / xtp_idle_close_count / xtp_conn_limit_close_count / xtp_recv_limit_close_count / xtp_last_idle_close_time / xtp_last_idle_close_age_ms / xtp_last_conn_limit_close_time / xtp_last_conn_limit_close_age_ms / xtp_last_recv_limit_close_time / xtp_last_recv_limit_close_age_ms`，便于观察 `xtp / xtps` 的连接、坏包数量、消息类型分布、最近一包的 flags、参数数量、body 大小、对端地址、长度与上下文、最近一次坏包原因、最近一次系统错误、最近一次 reject 现场，以及空闲/连接上限/收包上限关闭计数与收发字节统计。
 
 `__xs/status_json`、`__xs/dashboard_json` 当前还会额外返回 `udp_recv_count / udp_send_count / udp_error_count / udp_last_error_code / udp_recv_bytes / udp_send_bytes / udp_last_from / udp_last_text / udp_last_bytes / udp_last_time / udp_last_age_ms / udp_last_error_time / udp_last_error_age_ms`，便于观察 `udp` 的收发包数、字节数、最近一包长度、最近一包上下文以及最近一次错误现场。
 
 `__xs/custom_metrics`、`__xs/custom_metrics_json` 当前还会额外返回 `custom_invalid_count / custom_last_invalid_reason / custom_last_invalid_time / custom_last_invalid_age_ms / custom_last_close_reason / custom_last_error_code / custom_last_error_time / custom_last_error_age_ms / custom_idle_close_count / custom_conn_limit_close_count / custom_recv_limit_close_count / custom_last_idle_close_time / custom_last_idle_close_age_ms / custom_last_conn_limit_close_time / custom_last_conn_limit_close_age_ms / custom_last_recv_limit_close_time / custom_last_recv_limit_close_age_ms`，便于区分脚本层坏包原因、传输层错误、空闲/连接上限/收包上限关闭现场以及最近一次断开上下文。
 
-`__xs/status_json`、`__xs/dashboard_json` 当前还会额外返回 `custom_conn_current / custom_conn_peak / custom_open_count / custom_close_count / custom_error_count / custom_invalid_count / custom_last_invalid_reason / custom_last_invalid_time / custom_last_invalid_age_ms / custom_last_close_reason / custom_last_error_code / custom_last_error_time / custom_last_error_age_ms / custom_recv_count / custom_send_count / custom_recv_bytes / custom_send_bytes / custom_last_remote / custom_last_bytes / custom_last_text / custom_last_time / custom_last_age_ms`，便于观察 `custom / tcp` 的连接、收发、错误、最近一次对端地址、最近一次无效输入原因、最近一次断开原因和最近一次收包上下文。
+`__xs/status_json`、`__xs/dashboard_json` 当前还会额外返回 `custom_conn_current / custom_conn_peak / custom_open_count / custom_close_count / custom_error_count / custom_invalid_count / custom_last_invalid_reason / custom_last_invalid_time / custom_last_invalid_age_ms / custom_last_close_reason / custom_last_error_code / custom_last_error_time / custom_last_error_age_ms / custom_last_reject_reason / custom_last_reject_remote / custom_recv_count / custom_send_count / custom_recv_bytes / custom_send_bytes / custom_last_remote / custom_last_bytes / custom_last_text / custom_last_time / custom_last_age_ms`，便于观察 `custom / tcp` 的连接、收发、错误、最近一次对端地址、最近一次无效输入原因、最近一次断开原因、最近一次 reject 现场和最近一次收包上下文。
+
+`ws / xtp / custom` 当前也会单独暴露 `*_last_invalid_remote / *_last_error_remote`；最近一次坏包或系统错误的对端地址不再继续复用会被后续正常流量覆盖的通用 `last_remote`，首页对应状态卡也已经改成直接显示这组专用 remote。
 
 `__xs/dashboard` 文本版现在也会直接输出 `ws / xtp / udp / custom` 的关键运行态字段，便于终端排障时不切 JSON 也能看到协议侧的连接、收发、最近一包与错误现场。
 
@@ -578,9 +610,12 @@ xserver/
 1. 协议层生产化治理继续收口
 - 当前 `idle_timeout / conn_limit` 已在 `http / ws / xtp / custom` 上完成真实回归。
 - `ws_message_limit / xtp_recv_limit / custom_recv_limit` 的关闭计数、最近时间与首页摘要已补进管理面。
+- `http / ws / xtp / custom` 的 `server_stopping` 拒绝链当前也已经打到真实样本，`reject_count / last_reject_reason=server_stopping / last_reject_remote` 与 warning 已经对齐；相关管理接口现在也会单独暴露 `http_last_reject_remote / ws_last_reject_remote / xtp_last_reject_remote / custom_last_reject_remote`，不再依赖会被后续正常流量覆盖的通用 `last_remote`。
+- `ws / xtp / custom` 的 `invalid / error` 现场当前也已经切到专用 remote 快照；`last_invalid_remote / last_error_remote` 会和 `reason / code / time` 一起保留，不再被后续正常收包或正常请求覆盖。
+- `xtp / custom` 的 accepted stream 现在会在 `accept` 阶段就带上真实 `remote`，不再出现 `accept=(none)`、`open=127.0.0.1` 这类观测断层。
 - 仍需继续补：
 	- 更统一的限流策略
-	- 更系统的异常连接清理
+- 更系统的异常连接清理（`ws / http / xtp / custom` 停服已统一为 `close -> wait -> abort -> wait` 两段式清理；剩余主要是长稳 / 压测 / 边界回归）
 	- 更完整的请求拒绝统计
 	- 各协议更一致的治理规则
 
@@ -659,10 +694,42 @@ xserver/
 
 如有问题和功能请求，请使用 GitHub Issue Tracker。
 
-## Runtime Path Notes
+## 运行与稳定基线说明
 
-Current relative config arguments passed to `xs / xs.exe` are resolved against the executable directory first. For example, running `release/xs.exe xs_manage_test.json` from the project root now correctly loads `release/xs_manage_test.json` instead of depending on the current working directory.
+当前 release 线的核心结论可以直接看下面这组文档，不需要再从长段实现记录里反推：
 
-The same executable-directory-first rule now also applies to runtime config management. `GET /__xs/check_config?file=<path>` and `GET /__xs/check_config_json?file=<path>` normalize relative `file` arguments against `xs / xs.exe`, and `GET /__xs/reload_config` / `GET /__xs/reload_config_json` reuse the already-normalized startup config path. Startup loading, runtime config checking, config reload, and the exposed `config file / config base` view now stay aligned.
+- `docs/稳定API.md`：production `xs` 与 `xsdbg` 的冻结边界
+- `docs/legacy对照.md`：为什么 production `xs` 需要继续保持“薄宿主”
+- `docs/发布检查清单.md`：准备交付时最短的发布检查入口
+- `docs/运行与稳定补记.md`：保留背景信息和历史补记
 
-The bundled TCC runtime resources under `release/tcc` follow the same rule.
+当前稳定验证入口仍然是：
+
+- Windows：`cmd /c test_stable.bat`
+- Linux：`sh ./test_stable.sh`
+
+这套基线会先 build 当前源码，再确认：
+
+- production `xs` 继续保留 `status / health / reload / check_config`
+- production `xs` 继续把 `dashboard / __xs/bus/* / *_metrics* / clear-reset` 维持在 `403`
+- `xsdbg` 继续保留扩展调试面
+- `/json`、动态重载、仓库根目录启动、XTP 高级接口、WS/custom demo 回路都没有回退
+
+另外，当前首页也已经按这套分层自动降级：production `xs` 下保留核心状态展示，但不会把 xsdbg-only 的调试入口继续暴露成可点击链接。
+
+## 运行路径补记（历史补记，已整理到 `docs/运行与稳定补记.md`）
+
+这部分历史补记已经迁移到：
+
+- `docs/运行与稳定补记.md`
+
+主阅读路径仍然以：
+
+- `docs/稳定API.md`
+- `docs/legacy对照.md`
+- `docs/发布检查清单.md`
+- `test_stable.bat`
+- `test_stable.sh`
+
+为准。
+

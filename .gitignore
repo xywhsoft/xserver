@@ -1,3 +1,15 @@
 /release/*.err
 /release/*.out
 /release/*.log
+/release/xrt_mem_report_auto.txt
+/release/__xrt_mem_report_auto.txt
+/release/__xrt_mem_report_auto.json
+/tools/*.exe
+/tools/xtp_smoke_client
+/tools/ws_smoke_client
+/tools/custom_smoke_client
+/tools/.xs_stable_smoke_body.tmp
+/xrt_mem_report_auto.txt
+/__xrt_mem_report_auto.txt
+/__xrt_mem_report_auto.json
+/__codex_tmp_xs_pid.txt
