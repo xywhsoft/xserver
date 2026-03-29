@@ -313,9 +313,54 @@ static inline int XS_ScriptHostDevMode(ptr objHost)
 	return objCfg->DevMode;
 }
 
+#define XS_SCRIPT_REQUEST_MAGIC		0x58535251u
+
+typedef struct {
+	uint32 iMagic;
+	const xhttpdrequest* pReq;
+	const xhttpdconn* pConn;
+	const char* sRemote;
+} XS_ScriptRequestContext;
+
+static inline const xhttpdrequest* XS_ScriptRequestRaw(const void* pReq)
+{
+	const XS_ScriptRequestContext* objCtx = (const XS_ScriptRequestContext*)pReq;
+
+	if ( objCtx && (objCtx->iMagic == XS_SCRIPT_REQUEST_MAGIC) && objCtx->pReq ) {
+		return objCtx->pReq;
+	}
+
+	return (const xhttpdrequest*)pReq;
+}
+
+static inline const char* XS_ScriptRequestRemote(const void* pReq)
+{
+	const XS_ScriptRequestContext* objCtx = (const XS_ScriptRequestContext*)pReq;
+	const xnetaddr* pAddr;
+	const char* sRemote;
+
+	if ( objCtx && (objCtx->iMagic == XS_SCRIPT_REQUEST_MAGIC) ) {
+		sRemote = objCtx->sRemote;
+		if ( sRemote && sRemote[0] ) {
+			return sRemote;
+		}
+		if ( objCtx->pConn && objCtx->pConn->pStream ) {
+			pAddr = xrtNetStreamRemoteAddr(objCtx->pConn->pStream);
+			if ( pAddr ) {
+				sRemote = xrtNetAddrToStr(pAddr);
+				if ( sRemote ) {
+					return sRemote;
+				}
+			}
+		}
+	}
+
+	return "";
+}
+
 static inline const char* XS_ScriptRequestMethod(const void* pReq)
 {
-	const xhttpdrequest* pHttpReq = (const xhttpdrequest*)pReq;
+	const xhttpdrequest* pHttpReq = XS_ScriptRequestRaw(pReq);
 	
 	if ( pHttpReq == NULL ) {
 		return "";
@@ -326,7 +371,7 @@ static inline const char* XS_ScriptRequestMethod(const void* pReq)
 
 static inline const char* XS_ScriptRequestTarget(const void* pReq)
 {
-	const xhttpdrequest* pHttpReq = (const xhttpdrequest*)pReq;
+	const xhttpdrequest* pHttpReq = XS_ScriptRequestRaw(pReq);
 	
 	if ( pHttpReq == NULL ) {
 		return "";
@@ -337,7 +382,7 @@ static inline const char* XS_ScriptRequestTarget(const void* pReq)
 
 static inline const char* XS_ScriptRequestPath(const void* pReq)
 {
-	const xhttpdrequest* pHttpReq = (const xhttpdrequest*)pReq;
+	const xhttpdrequest* pHttpReq = XS_ScriptRequestRaw(pReq);
 	
 	if ( pHttpReq == NULL ) {
 		return "";
@@ -348,7 +393,7 @@ static inline const char* XS_ScriptRequestPath(const void* pReq)
 
 static inline const char* XS_ScriptRequestQuery(const void* pReq)
 {
-	const xhttpdrequest* pHttpReq = (const xhttpdrequest*)pReq;
+	const xhttpdrequest* pHttpReq = XS_ScriptRequestRaw(pReq);
 	
 	if ( pHttpReq == NULL ) {
 		return "";
@@ -359,7 +404,7 @@ static inline const char* XS_ScriptRequestQuery(const void* pReq)
 
 static inline const void* XS_ScriptRequestBody(const void* pReq)
 {
-	const xhttpdrequest* pHttpReq = (const xhttpdrequest*)pReq;
+	const xhttpdrequest* pHttpReq = XS_ScriptRequestRaw(pReq);
 	
 	if ( pHttpReq == NULL ) {
 		return NULL;
@@ -370,7 +415,7 @@ static inline const void* XS_ScriptRequestBody(const void* pReq)
 
 static inline size_t XS_ScriptRequestBodyLen(const void* pReq)
 {
-	const xhttpdrequest* pHttpReq = (const xhttpdrequest*)pReq;
+	const xhttpdrequest* pHttpReq = XS_ScriptRequestRaw(pReq);
 	
 	if ( pHttpReq == NULL ) {
 		return 0;
@@ -381,7 +426,7 @@ static inline size_t XS_ScriptRequestBodyLen(const void* pReq)
 
 static inline const char* XS_ScriptRequestHeader(const void* pReq, const char* sName)
 {
-	return xrtHttpdRequestHeader((const xhttpdrequest*)pReq, sName);
+	return xrtHttpdRequestHeader(XS_ScriptRequestRaw(pReq), sName);
 }
 
 static inline int XS_ScriptHttpStatus(void* pResp, uint32 iStatus, const char* sReason)

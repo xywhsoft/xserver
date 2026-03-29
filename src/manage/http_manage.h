@@ -644,17 +644,33 @@ static inline bool XS_HttpServeStatic(const XS_HostConfig* objHost, const xhttpd
 	return TRUE;
 }
 
-static inline bool XS_HttpHandleScriptHost(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
+static inline bool XS_HttpHandleScriptHost(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp, xhttpdconn* pConn)
 {
 	bool bHandled;
 	XS_ScriptHttpRequestProc procRequest;
+	XS_ScriptRequestContext objReqCtx;
+	const xnetaddr* pAddr;
 	
 	procRequest = XS_GetHostHttpRequestProc((XS_HostConfig*)objHost);
 	if ( procRequest == NULL ) {
 		return FALSE;
 	}
 	
-	bHandled = procRequest(objServer, (void*)objHost, pReq, pResp);
+	memset(&objReqCtx, 0, sizeof(objReqCtx));
+	objReqCtx.iMagic = XS_SCRIPT_REQUEST_MAGIC;
+	objReqCtx.pReq = pReq;
+	objReqCtx.pConn = pConn;
+	if ( pConn && pConn->pStream ) {
+		pAddr = xrtNetStreamRemoteAddr(pConn->pStream);
+		if ( pAddr ) {
+			objReqCtx.sRemote = xrtNetAddrToStr(pAddr);
+		}
+	}
+	if ( objReqCtx.sRemote == NULL ) {
+		objReqCtx.sRemote = "";
+	}
+
+	bHandled = procRequest(objServer, (void*)objHost, &objReqCtx, pResp);
 	if ( bHandled ) {
 		return TRUE;
 	}

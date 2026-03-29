@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>XServer Demo</title>
+	<link rel="stylesheet" type="text/css" href="/res/layui/css/layui.css">
+	<style>
+		body {
+			margin: 0;
+			padding: 24px;
+			background: #f5f8fc;
+			color: #1f2d3d;
+		}
+		.page {
+			max-width: 1120px;
+			margin: 0 auto;
+		}
+		.hero,
+		.table-card {
+			background: #fff;
+			border-radius: 18px;
+			box-shadow: 0 16px 36px rgba(31, 56, 88, 0.10);
+		}
+		.hero {
+			padding: 24px;
+			margin-bottom: 16px;
+		}
+		.hero h1 {
+			margin: 0 0 12px;
+			font-size: 32px;
+			line-height: 1.2;
+		}
+		.hero p {
+			margin: 0;
+			color: #60768c;
+			line-height: 1.8;
+		}
+		.link-grid {
+			display: grid;
+			grid-template-columns: repeat(4, minmax(0, 1fr));
+			gap: 12px;
+			margin-top: 18px;
+		}
+		.link-card {
+			display: block;
+			padding: 14px 16px;
+			border-radius: 14px;
+			background: #f6f9fc;
+			text-decoration: none;
+			color: #1f2d3d;
+		}
+		.link-card:hover {
+			background: #edf4fb;
+		}
+		.link-title {
+			font-size: 15px;
+			font-weight: 700;
+		}
+		.link-desc {
+			margin-top: 4px;
+			font-size: 13px;
+			line-height: 1.7;
+			color: #60768c;
+		}
+		.table-card {
+			padding: 20px;
+		}
+		.toolbar-title {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 12px;
+			margin-bottom: 12px;
+		}
+		.toolbar-title h2 {
+			margin: 0;
+			font-size: 22px;
+		}
+		.toolbar-sub {
+			margin: 0 0 16px;
+			color: #60768c;
+			line-height: 1.7;
+		}
+		.summary {
+			display: inline-flex;
+			align-items: center;
+			gap: 8px;
+			padding: 8px 12px;
+			border-radius: 999px;
+			background: #edf4fb;
+			color: #31506f;
+			font-weight: 700;
+		}
+		.layui-table-cell {
+			text-align: center;
+			height: 32px;
+			line-height: 32px;
+			padding: 0;
+		}
+		@media (max-width: 900px) {
+			.link-grid {
+				grid-template-columns: repeat(2, minmax(0, 1fr));
+			}
+		}
+		@media (max-width: 640px) {
+			body {
+				padding: 16px;
+			}
+			.hero h1 {
+				font-size: 26px;
+			}
+			.link-grid {
+				grid-template-columns: 1fr;
+			}
+			.toolbar-title {
+				flex-direction: column;
+				align-items: flex-start;
+			}
+		}
+	</style>
+</head>
+<body>
+	<div class="page">
+		<section class="hero">
+			<h1>XServer 演示项目</h1>
+			<p>
+				这个页面只保留旧版 demo 的核心演示能力：SQLite CRUD、模板页、图表页和基础测试接口。
+				它不再附带管理面、Bus、看板和调试治理入口。
+			</p>
+			<div class="link-grid">
+				<a class="link-card" href="/add.html" target="_blank">
+					<div class="link-title">新增数据</div>
+					<div class="link-desc">打开独立表单页，向 SQLite 表写入一条记录。</div>
+				</a>
+				<a class="link-card" href="/template" target="_blank">
+					<div class="link-title">模板页</div>
+					<div class="link-desc">验证当前模板引擎对 page.html 的实际渲染结果。</div>
+				</a>
+				<a class="link-card" href="/chart.html" target="_blank">
+					<div class="link-title">图表页</div>
+					<div class="link-desc">读取 /chart/get 返回的 JSON，并交给 ECharts 渲染。</div>
+				</a>
+				<a class="link-card" href="/test" target="_blank">
+					<div class="link-title">测试接口</div>
+					<div class="link-desc">最小 HTTP 路由示例，返回 page load success 文本。</div>
+				</a>
+			</div>
+		</section>
+
+		<section class="table-card">
+			<div class="toolbar-title">
+				<div>
+					<h2>数据列表</h2>
+					<p class="toolbar-sub">表格支持刷新、新增、批量删除和行内编辑，行为与旧版 demo 保持一致。</p>
+				</div>
+				<div class="summary">当前记录数：<span id="DataCount">0</span></div>
+			</div>
+
+			<table id="DataList" lay-filter="DataList"></table>
+		</section>
+	</div>
+
+	<script type="text/html" id="DeviceToolbar">
+		<div class="layui-btn-container">
+			<button class="layui-btn layui-btn-sm layui-bg-blue" lay-event="AddRow">新增数据</button>
+			<button class="layui-btn layui-btn-sm layui-btn-danger" lay-event="DelRow">删除选中</button>
+			<button class="layui-btn layui-btn-sm" lay-event="RefreshList">刷新列表</button>
+		</div>
+	</script>
+
+	<script src="/res/layui/layui.js"></script>
+	<script>
+		layui.use(['table', 'layer'], function()
+		{
+			var table = layui.table;
+			var layer = layui.layer;
+
+			var procMessage = function(tblData)
+			{
+				if ( !tblData ) {
+					return '';
+				}
+				return tblData.msg || tblData.message || '';
+			};
+
+			var procSetCount = function(iCount)
+			{
+				var objCount = document.getElementById('DataCount');
+				if ( objCount ) {
+					objCount.textContent = String(iCount || 0);
+				}
+			};
+
+			table.render({
+				elem: '#DataList',
+				url: '/app/list',
+				toolbar: '#DeviceToolbar',
+				height: 520,
+				cellMinWidth: 60,
+				totalRow: false,
+				page: true,
+				parseData: function(tblRet)
+				{
+					procSetCount(tblRet.count || 0);
+					return {
+						code: tblRet.code || 0,
+						msg: procMessage(tblRet),
+						count: tblRet.count || 0,
+						data: tblRet.data || []
+					};
+				},
+				cols: [[
+					{type: 'checkbox', fixed: 'left'},
+					{field: 'id', fixed: 'left', width: 70, title: 'ID', sort: true, unresize: true},
+					{field: 'name', width: 140, title: '姓名', sort: true, edit: 'text'},
+					{field: 'age', width: 90, title: '年龄', sort: true, edit: 'text'},
+					{field: 'mail', width: 260, title: '邮箱', sort: true, edit: 'text'},
+					{field: 'desc', minWidth: 180, title: '备注', sort: true, edit: 'text'}
+				]],
+				done: function(tblRet)
+				{
+					procSetCount(tblRet.count || 0);
+				}
+			});
+
+			table.on('toolbar(DataList)', function(objEvent)
+			{
+				var tblChecked = table.checkStatus(objEvent.config.id);
+
+				switch ( objEvent.event ) {
+					case 'AddRow':
+						layer.open({
+							title: '新增数据',
+							type: 2,
+							shadeClose: true,
+							area: ['640px', '420px'],
+							content: '/add.html',
+							end: function()
+							{
+								table.reloadData('DataList', {
+									scrollPos: 'fixed'
+								});
+							}
+						});
+						break;
+
+					case 'DelRow':
+						if ( !tblChecked.data || tblChecked.data.length === 0 ) {
+							layer.msg('请先选择要删除的数据。', {icon: 2});
+							return;
+						}
+
+						fetch('/app/del', {
+							method: 'POST',
+							headers: {
+								'Content-Type': 'application/json'
+							},
+							body: JSON.stringify(tblChecked.data.map(function(tblRow)
+							{
+								return tblRow.id;
+							}))
+						})
+						.then(function(objResp)
+						{
+							return objResp.json();
+						})
+						.then(function(tblRet)
+						{
+							if ( tblRet.result ) {
+								table.reloadData('DataList', {
+									scrollPos: 'fixed'
+								});
+								layer.msg(procMessage(tblRet), {icon: 1});
+							} else {
+								layer.msg('请求服务报错：' + procMessage(tblRet), {icon: 2});
+							}
+						})
+						.catch(function(objErr)
+						{
+							layer.msg('请求出错，请查看开发者工具检查原因。', {icon: 2});
+							console.error(objErr);
+						});
+						break;
+
+					case 'RefreshList':
+						table.reloadData('DataList', {
+							scrollPos: 'fixed'
+						});
+						break;
+				}
+			});
+
+			table.on('edit(DataList)', function(objEvent)
+			{
+				var sField = objEvent.field;
+				var sOldValue = objEvent.oldValue;
+				var tblPayload = {
+					id: objEvent.data.id,
+					field: sField,
+					value: objEvent.value
+				};
+
+				fetch('/app/edit', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json'
+					},
+					body: JSON.stringify(tblPayload)
+				})
+				.then(function(objResp)
+				{
+					return objResp.json();
+				})
+				.then(function(tblRet)
+				{
+					if ( tblRet.result ) {
+						layer.msg(procMessage(tblRet), {icon: 1});
+						table.reloadData('DataList', {
+							scrollPos: 'fixed'
+						});
+					} else {
+						var tblRollback = {};
+						tblRollback[sField] = sOldValue;
+						objEvent.update(tblRollback, true);
+						layer.msg('请求服务报错：' + procMessage(tblRet), {icon: 2});
+					}
+				})
+				.catch(function(objErr)
+				{
+					var tblRollback = {};
+					tblRollback[sField] = sOldValue;
+					objEvent.update(tblRollback, true);
+					layer.msg('请求出错，请查看开发者工具检查原因。', {icon: 2});
+					console.error(objErr);
+				});
+			});
+		});
+	</script>
+</body>
+</html>

@@ -447,7 +447,7 @@ static bool XS_HttpOnRequest(ptr pOwner, xhttpdserver* pServer, xhttpdconn* pCon
 	
 	if ( objHost->DevMode == XS_DEV_SCRIPT_C ) {
 		if ( objHost->procHttpRequest ) {
-			if ( XS_HttpHandleScriptHost(objServer, objHost, pReq, pResp) ) {
+			if ( XS_HttpHandleScriptHost(objServer, objHost, pReq, pResp, pConn) ) {
 				bRet = TRUE;
 				goto end;
 			}

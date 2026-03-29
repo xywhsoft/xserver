@@ -33,6 +33,7 @@ const char* xsReqPath(XS_RequestObject objReq);
 const char* xsReqQuery(XS_RequestObject objReq);
 const void* xsReqBody(XS_RequestObject objReq);
 size_t xsReqBodyLen(XS_RequestObject objReq);
+const char* xsReqRemote(XS_RequestObject objReq);
 const char* xsReqHeader(XS_RequestObject objReq, const char* sName);
 int xsHttpStatus(XS_ResponseObject objResp, unsigned iStatus, const char* sReason);
 int xsHttpHeader(XS_ResponseObject objResp, const char* sName, const char* sValue);

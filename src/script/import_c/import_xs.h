@@ -33,6 +33,7 @@ static inline void XS_ImportXSSymbols(TCCState* s)
 	tcc_add_symbol(s, "xsReqQuery", XS_ScriptRequestQuery);
 	tcc_add_symbol(s, "xsReqBody", XS_ScriptRequestBody);
 	tcc_add_symbol(s, "xsReqBodyLen", XS_ScriptRequestBodyLen);
+	tcc_add_symbol(s, "xsReqRemote", XS_ScriptRequestRemote);
 	tcc_add_symbol(s, "xsReqHeader", XS_ScriptRequestHeader);
 
 	/* response */

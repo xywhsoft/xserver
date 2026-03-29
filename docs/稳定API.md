@@ -165,6 +165,7 @@
 - 发布检查：`docs/发布检查清单.md`
 - legacy 对照：`docs/legacy对照.md`
 - 运行补记：`docs/运行与稳定补记.md`
+- 验证入口：`test_stable.bat`、`test_stable.sh`
 
 ## 10. 追加冻结项
 
