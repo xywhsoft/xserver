@@ -536,7 +536,6 @@ static inline bool XS_HttpValidateRequest(XS_ServerConfig* objServer, const xhtt
 
 static inline bool XS_HttpStaticPathSensitive(const char* sRelPath)
 {
-	const char* sExt;
 	const char* pSeg;
 
 	if ( sRelPath == NULL || sRelPath[0] == '\0' ) {
@@ -552,72 +551,143 @@ static inline bool XS_HttpStaticPathSensitive(const char* sRelPath)
 		}
 	}
 
-	sExt = strrchr(sRelPath, '.');
-	if ( sExt == NULL ) {
+	return FALSE;
+}
+
+typedef enum {
+	XS_HTTP_STATIC_RESOLVE_OK = 0,
+	XS_HTTP_STATIC_RESOLVE_DENIED = 1,
+	XS_HTTP_STATIC_RESOLVE_NORMALIZE_FAILED = 2,
+	XS_HTTP_STATIC_RESOLVE_NO_DEFAULT_PAGE = 3,
+	XS_HTTP_STATIC_RESOLVE_NO_HOST_PATH = 4,
+	XS_HTTP_STATIC_RESOLVE_JOIN_FAILED = 5
+} XS_HttpStaticResolveResult;
+
+static inline bool XS_HttpStaticMethodAllowed(const xhttpdrequest* pReq)
+{
+	if ( pReq == NULL || pReq->sMethod == NULL ) {
 		return FALSE;
 	}
 
-	if ( _stricmp(sExt, ".c") == 0 ) return TRUE;
-	if ( _stricmp(sExt, ".h") == 0 ) return TRUE;
-	if ( _stricmp(sExt, ".json") == 0 ) return TRUE;
-	if ( _stricmp(sExt, ".db") == 0 ) return TRUE;
-	if ( _stricmp(sExt, ".sqlite") == 0 ) return TRUE;
-	if ( _stricmp(sExt, ".sqlite3") == 0 ) return TRUE;
-	if ( _stricmp(sExt, ".pem") == 0 ) return TRUE;
-	if ( _stricmp(sExt, ".key") == 0 ) return TRUE;
-	if ( _stricmp(sExt, ".log") == 0 ) return TRUE;
-	if ( _stricmp(sExt, ".bak") == 0 ) return TRUE;
+	return _stricmp(pReq->sMethod, "GET") == 0 || _stricmp(pReq->sMethod, "HEAD") == 0;
+}
 
-	return FALSE;
+static inline XS_HttpStaticResolveResult XS_HttpResolveStaticFilePath(const XS_HostConfig* objHost, const xhttpdrequest* pReq, char** psFilePath)
+{
+	const char* sReqPath;
+	const char* sRelPath;
+	char* sDecodedPath = NULL;
+	char* sNormPath = NULL;
+	size_t iReqLen;
+	size_t iDecodedLen = 0;
+	size_t iNormCap;
+	XS_HttpStaticResolveResult iRet = XS_HTTP_STATIC_RESOLVE_DENIED;
+
+	if ( psFilePath ) {
+		*psFilePath = NULL;
+	}
+	if ( objHost == NULL || pReq == NULL || psFilePath == NULL ) {
+		return XS_HTTP_STATIC_RESOLVE_DENIED;
+	}
+
+	sReqPath = (pReq->sPath && pReq->sPath[0]) ? pReq->sPath : "/";
+	iReqLen = strlen(sReqPath);
+
+	sDecodedPath = (char*)xrtCalloc(1, iReqLen + 2);
+	if ( sDecodedPath == NULL ) {
+		return XS_HTTP_STATIC_RESOLVE_NORMALIZE_FAILED;
+	}
+	if ( !xrtPercentDecodeTo(sReqPath, iReqLen, sDecodedPath, iReqLen + 1, &iDecodedLen, FALSE) ) {
+		goto denied;
+	}
+	sDecodedPath[iDecodedLen] = '\0';
+
+	iNormCap = iDecodedLen + 4;
+	sNormPath = (char*)xrtCalloc(1, iNormCap);
+	if ( sNormPath == NULL ) {
+		iRet = XS_HTTP_STATIC_RESOLVE_NORMALIZE_FAILED;
+		goto end;
+	}
+	if ( !xrtUrlNormalizePathTo(sDecodedPath, iDecodedLen, sNormPath, iNormCap, NULL) ) {
+		goto denied;
+	}
+	if ( sNormPath[0] == '\0' ) {
+		strcpy(sNormPath, "/");
+	}
+	if ( sNormPath[0] != '/' ) {
+		goto denied;
+	}
+
+	if ( strcmp(sNormPath, "/") == 0 ) {
+		*psFilePath = XS_HttpResolveDefaultPagePath(objHost);
+		if ( *psFilePath == NULL ) {
+			iRet = XS_HTTP_STATIC_RESOLVE_NO_DEFAULT_PAGE;
+			goto end;
+		}
+		iRet = XS_HTTP_STATIC_RESOLVE_OK;
+		goto end;
+	}
+
+	sRelPath = sNormPath + 1;
+	if ( XS_HttpStaticPathSensitive(sRelPath) ) {
+		goto denied;
+	}
+	if ( objHost->Path == NULL || objHost->Path[0] == '\0' ) {
+		iRet = XS_HTTP_STATIC_RESOLVE_NO_HOST_PATH;
+		goto end;
+	}
+
+	*psFilePath = xrtPathJoin(2, objHost->Path, sRelPath);
+	if ( *psFilePath == NULL ) {
+		iRet = XS_HTTP_STATIC_RESOLVE_JOIN_FAILED;
+		goto end;
+	}
+
+	iRet = XS_HTTP_STATIC_RESOLVE_OK;
+	goto end;
+
+denied:
+	iRet = XS_HTTP_STATIC_RESOLVE_DENIED;
+
+end:
+	if ( sNormPath ) xrtFree(sNormPath);
+	if ( sDecodedPath ) xrtFree(sDecodedPath);
+	return iRet;
 }
 
 static inline bool XS_HttpServeStatic(const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
-	const char* sReqPath;
-	const char* sRelPath;
 	char sLength[32];
-	char* sFilePath;
+	char* sFilePath = NULL;
 	ptr pFileData;
 	size_t iFileSize;
 	const char* sMime;
+	XS_HttpStaticResolveResult iResolve;
 	
 	if ( objHost == NULL || pReq == NULL || pResp == NULL ) {
 		return FALSE;
 	}
 
-	if ( _stricmp(pReq->sMethod, "GET") != 0 && _stricmp(pReq->sMethod, "HEAD") != 0 ) {
+	if ( !XS_HttpStaticMethodAllowed(pReq) ) {
 		xrtHttpdResponseSetHeader(pResp, "Allow", "GET, HEAD");
 		return XS_HttpRetErrorEx(NULL, objHost, pReq, pResp, NULL, 405, "Method Not Allowed", "static host only supports GET or HEAD", NULL);
 	}
-	
-	sReqPath = pReq->sPath[0] ? pReq->sPath : "/";
-	if ( strstr(sReqPath, "..") != NULL ) {
-		return XS_HttpRet403Ex(NULL, objHost, pReq, pResp, NULL, "forbidden", NULL);
-	}
-	
-	if ( strcmp(sReqPath, "/") == 0 ) {
-		sFilePath = XS_HttpResolveDefaultPagePath(objHost);
-		if ( sFilePath == NULL ) {
-			return XS_HttpRet500Ex(NULL, objHost, pReq, pResp, NULL, "default page path not configured", NULL);
-		}
-	} else if ( sReqPath[0] == '/' ) {
-		sRelPath = sReqPath + 1;
-	} else {
-		sRelPath = sReqPath;
-	}
 
-	if ( strcmp(sReqPath, "/") != 0 ) {
-		if ( XS_HttpStaticPathSensitive(sRelPath) ) {
-			return XS_HttpRet403Ex(NULL, objHost, pReq, pResp, NULL, "static path denied", NULL);
-		}
-		if ( objHost->Path == NULL || objHost->Path[0] == '\0' ) {
-			return XS_HttpRet500Ex(NULL, objHost, pReq, pResp, NULL, "static host path not configured", NULL);
-		}
-		
-		sFilePath = xrtPathJoin(2, objHost->Path, sRelPath);
-		if ( sFilePath == NULL ) {
-			return XS_HttpRet500Ex(NULL, objHost, pReq, pResp, NULL, "path join failed", NULL);
-		}
+	iResolve = XS_HttpResolveStaticFilePath(objHost, pReq, &sFilePath);
+	if ( iResolve == XS_HTTP_STATIC_RESOLVE_DENIED ) {
+		return XS_HttpRet403Ex(NULL, objHost, pReq, pResp, NULL, "static path denied", NULL);
+	}
+	if ( iResolve == XS_HTTP_STATIC_RESOLVE_NORMALIZE_FAILED ) {
+		return XS_HttpRet500Ex(NULL, objHost, pReq, pResp, NULL, "path normalize failed", NULL);
+	}
+	if ( iResolve == XS_HTTP_STATIC_RESOLVE_NO_DEFAULT_PAGE ) {
+		return XS_HttpRet500Ex(NULL, objHost, pReq, pResp, NULL, "default page path not configured", NULL);
+	}
+	if ( iResolve == XS_HTTP_STATIC_RESOLVE_NO_HOST_PATH ) {
+		return XS_HttpRet500Ex(NULL, objHost, pReq, pResp, NULL, "static host path not configured", NULL);
+	}
+	if ( iResolve == XS_HTTP_STATIC_RESOLVE_JOIN_FAILED ) {
+		return XS_HttpRet500Ex(NULL, objHost, pReq, pResp, NULL, "path join failed", NULL);
 	}
 	
 	if ( !xrtFileExists(sFilePath) ) {
@@ -660,9 +730,6 @@ static inline bool XS_HttpHandleScriptHost(XS_ServerConfig* objServer, const XS_
 	const xnetaddr* pAddr;
 	
 	procRequest = XS_GetHostHttpRequestProc((XS_HostConfig*)objHost);
-	if ( procRequest == NULL ) {
-		return FALSE;
-	}
 	
 	memset(&objReqCtx, 0, sizeof(objReqCtx));
 	objReqCtx.iMagic = XS_SCRIPT_REQUEST_MAGIC;
@@ -678,12 +745,20 @@ static inline bool XS_HttpHandleScriptHost(XS_ServerConfig* objServer, const XS_
 		objReqCtx.sRemote = "";
 	}
 
+	if ( procRequest == NULL ) {
+		if ( objHost->Path && objHost->Path[0] ) {
+			return XS_HttpServeStatic(objHost, pReq, pResp);
+		}
+
+		return FALSE;
+	}
+
 	bHandled = procRequest(objServer, (void*)objHost, &objReqCtx, pResp);
 	if ( bHandled ) {
 		return TRUE;
 	}
 	
-	if ( objHost->Path && objHost->Path[0] ) {
+	if ( XS_HttpStaticMethodAllowed(pReq) && objHost->Path && objHost->Path[0] ) {
 		XS_LogInfo(
 			"http fallback static: server=%s host=%s path=%s remote=%s",
 			objServer && objServer->Name ? objServer->Name : "(null)",

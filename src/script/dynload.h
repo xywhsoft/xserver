@@ -47,7 +47,6 @@ static inline bool XS_BuildServerScriptState(XS_ServerConfig* objServer, TCCStat
 {
 	TCCState* s;
 	char* sWorkPath;
-	char* sCode;
 	
 	if ( ppState == NULL ) {
 		return FALSE;
@@ -77,23 +76,13 @@ static inline bool XS_BuildServerScriptState(XS_ServerConfig* objServer, TCCStat
 		tcc_add_library_path(s, sWorkPath);
 	}
 	
-	sCode = xrtFileReadAll(objServer->DevFile, XRT_CP_BINARY, NULL);
-	if ( sCode == NULL ) {
-		if ( sWorkPath ) xrtFree(sWorkPath);
-		XS_DestroyTCC(s);
-		XS_ReportError("server script load failed: read error: %s", objServer->DevFile);
-		return FALSE;
-	}
-	
-	if ( tcc_compile_string(s, sCode) == -1 ) {
-		xrtFree(sCode);
+	if ( tcc_add_file(s, objServer->DevFile) == -1 ) {
 		if ( sWorkPath ) xrtFree(sWorkPath);
 		XS_DestroyTCC(s);
 		XS_ReportError("server script load failed: compile error: %s", objServer->DevFile);
 		return FALSE;
 	}
 	
-	xrtFree(sCode);
 	if ( sWorkPath ) {
 		xrtFree(sWorkPath);
 	}
@@ -179,7 +168,6 @@ static inline bool XS_BuildHostScriptState(XS_ServerConfig* objServer, XS_HostCo
 {
 	TCCState* s;
 	char* sWorkPath;
-	char* sCode;
 	
 	if ( ppState == NULL ) {
 		return FALSE;
@@ -223,19 +211,7 @@ static inline bool XS_BuildHostScriptState(XS_ServerConfig* objServer, XS_HostCo
 		tcc_add_library_path(s, sWorkPath);
 	}
 	
-	sCode = xrtFileReadAll(objHost->DevFile, XRT_CP_BINARY, NULL);
-	if ( sCode == NULL ) {
-		if ( sWorkPath ) xrtFree(sWorkPath);
-		XS_DestroyTCC(s);
-		XS_ReportError(
-			"script host load failed: read error: %s",
-			objHost->DevFile
-		);
-		return FALSE;
-	}
-	
-	if ( tcc_compile_string(s, sCode) == -1 ) {
-		xrtFree(sCode);
+	if ( tcc_add_file(s, objHost->DevFile) == -1 ) {
 		if ( sWorkPath ) xrtFree(sWorkPath);
 		XS_DestroyTCC(s);
 		XS_ReportError(
@@ -244,8 +220,6 @@ static inline bool XS_BuildHostScriptState(XS_ServerConfig* objServer, XS_HostCo
 		);
 		return FALSE;
 	}
-	
-	xrtFree(sCode);
 	
 	if ( sWorkPath ) {
 		xrtFree(sWorkPath);

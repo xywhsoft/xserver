@@ -592,6 +592,49 @@ proc_run_static_homepage_audit() {
 	return "$i_case_exit"
 }
 
+proc_run_static_path_guard_case() {
+	s_exe_name="$1"
+	s_exe_path="$RELEASE_DIR/$s_exe_name"
+	s_static_port=8082
+	s_base_url="http://127.0.0.1:$s_static_port"
+	i_case_exit=0
+
+	if [ ! -f "$s_exe_path" ]; then
+		echo "FAIL $s_exe_name static_path_guard : executable not found"
+		return 1
+	fi
+
+	(
+		cd "$RELEASE_DIR"
+		PORT="$s_static_port"
+		proc_cleanup_servers
+		"$s_exe_path" xs_static_test.json >/dev/null 2>&1 &
+		i_pid=$!
+		trap 'proc_stop_server "$i_pid"' EXIT INT TERM
+
+		if ! proc_wait_ready; then
+			echo "FAIL $s_exe_name static_ready : timeout"
+			return 1
+		fi
+
+		i_status=$(proc_fetch_status "$s_base_url/static_access.json")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name static_json" "$i_status" "200" "$s_body" 'xserver static json smoke' || i_case_exit=1
+		s_body=$(proc_fetch_cached_header "Content-Type")
+		proc_check "$s_exe_name static_json type" "200" "200" "$s_body" 'application/json' || i_case_exit=1
+
+		i_status=$(proc_fetch_status "$s_base_url/.gitignore")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name static_dotfile" "$i_status" "403" "$s_body" || i_case_exit=1
+
+		i_status=$(proc_fetch_status "$s_base_url/res%5Clayui%5Ccss%5Clayui.css")
+		s_body=$(proc_fetch_body)
+		proc_check "$s_exe_name static_backslash" "$i_status" "403" "$s_body" || i_case_exit=1
+
+		return "$i_case_exit"
+	)
+}
+
 proc_run_case() {
 	s_exe_name="$1"
 	b_debug="$2"
@@ -3193,6 +3236,9 @@ proc_cleanup_generated_files
 echo "[static-homepage]"
 proc_run_static_homepage_audit || i_exit=1
 
+echo "[xs-static]"
+proc_run_static_path_guard_case "$XS_BIN" || i_exit=1
+
 echo "[xs]"
 proc_run_case "$XS_BIN" "false" || i_exit=1
 
@@ -3210,6 +3256,9 @@ proc_run_custom_case "$XS_BIN" || i_exit=1
 
 echo "[xsdbg]"
 proc_run_case "$XSDBG_BIN" "true" || i_exit=1
+
+echo "[xsdbg-static]"
+proc_run_static_path_guard_case "$XSDBG_BIN" || i_exit=1
 
 echo "[xsdbg-root]"
 proc_run_repo_root_case "$XSDBG_BIN" "true" || i_exit=1

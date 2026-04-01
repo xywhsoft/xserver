@@ -61,6 +61,10 @@ static inline TCCState* XS_CreateTCC(const char* sWorkPath, void (*procImportAll
 	}
 	
 	tcc_set_error_func(s, stderr, XS_CreateTCC_ErrorHandler);
+
+	#ifdef XRT_MEM_DEBUG
+		tcc_define_symbol(s, "XRT_MEM_DEBUG", "1");
+	#endif
 	
 	#if defined(_WIN32) || defined(_WIN64)
 		XS_TCCAddIncludePathEx(s, sAppPath, "tcc/include_win/winapi");

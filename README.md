@@ -297,7 +297,7 @@ void ServiceUnit(XS_ServerObject objServer, XS_HostObject objHost)
 | 函数 | 说明 |
 |------|------|
 | `ServiceInit / ServiceStart / ServiceStop / ServiceUnit` | Host 或 Service 脚本生命周期 |
-| `RequestProc` | HTTP 请求处理器 |
+| `RequestProc` | HTTP 请求处理器；返回 `true` 表示已处理完成，返回 `false` 时仅 `GET / HEAD` 会继续回退 `host.path` 静态资源，其他方法默认返回 `404` |
 | `MessageProc` | 宿主总线消息处理器 |
 | `WsOpenProc / WsTextProc / WsBinaryProc / WsPingProc / WsPongProc / WsCloseProc` | WebSocket Host 回调 |
 | `EventOpenProc / EventDataProc / EventCloseProc` | TCP / Custom / XTP 的流式回调 |
@@ -390,7 +390,8 @@ WebSocket 脚本 API 额外提供：
 - `header_limit` 用于限制 HTTP 请求头数量，且不能超过 `xrt` 当前的固定上限
 - `body_limit` 用于限制 HTTP 请求体大小，且必须小于等于 `recv_limit`
 - `static` Host 默认只允许 `GET / HEAD`，其他方法返回 `405`
-- `static` Host 默认拒绝点文件、反斜杠路径，以及 `.c/.h/.json/.db/.sqlite/.pem/.key/.log/.bak` 等敏感文件扩展名
+- `static` Host 默认拒绝点文件和反斜杠路径
+- `script-c` Host 未导出 `RequestProc` 时会直接按 `host.path` 走静态资源；导出后若返回 `false`，仅 `GET / HEAD` 会继续静态回退，路径规范化、防目录穿越和 MIME 推断统一由 `xs` 处理
 - HTTP 响应默认附带 `X-Content-Type-Options: nosniff`，`/__xs/*` 管理接口默认附带 `Cache-Control: no-store`
 
 ## 项目结构
