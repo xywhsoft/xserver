@@ -76,6 +76,12 @@ build_debug.bat
 发布前最小检查：
 - Windows：`cmd /c test_stable.bat`
 - Linux：`sh ./test_stable.sh`
+- 压测基线（Windows）：`cmd /c test_pressure.bat`
+- 压测基线（Linux）：`sh ./test_pressure.sh`
+- 长稳窗口（Windows）：`cmd /c test_soak.bat`
+- 长稳窗口（Linux）：`sh ./test_soak.sh`
+- 内存调试（Windows）：`cmd /c test_memdebug.bat`
+- 内存调试（Linux）：`sh ./test_memdebug.sh`
 - 说明文档：`docs/稳定API.md`、`docs/legacy对照.md`、`docs/发布检查清单.md`、`docs/运行与稳定补记.md`
 
 发布版命令示例：
@@ -164,6 +170,7 @@ XServer vNext 使用 TCC 在运行时编译 C 脚本。
 - `release/tcc/inc_xs/xs_vnext.h`：最小宿主 API
 - `release/tcc/inc_xs/xs_vnext_full.h`：迁移期全量头，额外带入 `xrt / libtcc / sqlite3` 的宿主可用头环境
 - 示例脚本：`release/script_vnext/main.c`
+- 已迁移的 legacy demo：`release/script/main.c`，可用 `cmd /c test_script_demo.bat` 或 `sh ./test_script_demo.sh` 做最小 smoke
 - TCC 宿主当前会优先按 `xs/xs.exe` 所在目录查找 `release/tcc` 运行时资源，因此像 `release/xs_manage_test.json` 这类使用相对 `devfile` 的配置，从项目根目录启动或从 `release` 目录启动都能稳定加载脚本，不再依赖当前工作目录
 
 最小脚本示例：
@@ -442,7 +449,7 @@ xserver/
 
 ## 未完成任务
 
-以下事项截至 `2026-03-22` 仍未最终完成，后续应优先按此清单继续：
+以下事项截至 `2026-04-01` 仍未最终完成，后续应优先按此清单继续：
 
 1. 协议层生产化治理继续收口
 - 当前 `idle_timeout / conn_limit` 已在 `http / ws / xtp / custom` 上完成真实回归。
@@ -450,10 +457,10 @@ xserver/
 - `http / ws / xtp / custom` 的 `server_stopping` 拒绝链当前也已经打到真实样本，`reject_count / last_reject_reason=server_stopping / last_reject_remote` 与 warning 已经对齐；相关管理接口现在也会单独暴露 `http_last_reject_remote / ws_last_reject_remote / xtp_last_reject_remote / custom_last_reject_remote`，不再依赖会被后续正常流量覆盖的通用 `last_remote`。
 - `ws / xtp / custom` 的 `invalid / error` 现场当前也已经切到专用 remote 快照；`last_invalid_remote / last_error_remote` 会和 `reason / code / time` 一起保留，不再被后续正常收包或正常请求覆盖。
 - `xtp / custom` 的 accepted stream 现在会在 `accept` 阶段就带上真实 `remote`，不再出现 `accept=(none)`、`open=127.0.0.1` 这类观测断层。
+- `ws / xtp / custom` 的拒绝统计当前也已经按 `server_stopping / conn_limit / message_limit|recv_limit / invalid / other` 拆分到专属 metrics、`*_clear` 与 dashboard 摘要，回归脚本也已覆盖这些字段。
 - 仍需继续补：
 	- 更统一的限流策略
 - 更系统的异常连接清理（`ws / http / xtp / custom` 停服已统一为 `close -> wait -> abort -> wait` 两段式清理；剩余主要是长稳 / 压测 / 边界回归）
-	- 更完整的请求拒绝统计
 	- 各协议更一致的治理规则
 
 2. 配置热加载做最终差异化重建
@@ -471,9 +478,9 @@ xserver/
 	- `data_limit / queue_limit / namespace_limit / namespace_data_limit`
 	- `sweep / cleanup / sweep_interval_ms`
 	- `readonly_namespaces / disabled_namespaces / ttl_required_namespaces / tag_required_namespaces`
+	- `limits -> register/set -> limits/namespaces` 这条新增治理规则跨接口 smoke 回归
 	- `health / dashboard / index.html` 的 bus 治理摘要与在线编辑入口
 - 仍需继续补：
-	- 对新增治理规则做最后一轮跨接口回归归档
 	- 与最终文档、压测、长稳结论做统一收口
 
 4. XTP 高层 API 最终定版
@@ -490,13 +497,16 @@ xserver/
 
 5. 旧业务脚本迁移继续推进
 - `release/script_vnext` 的 demo 主线已较完整。
-- 旧 `release/script` 那批业务脚本还未系统迁完。
+- 仓库内 `release/script` 这批 legacy demo 已迁到 vNext 宿主，并补了 `test_script_demo.bat/sh` smoke。
+- 剩余迁移工作主要落在真实业务项目或未入库旧脚本，不再是仓库内这份 demo。
 
 6. 长稳 / 压测 / 内存调试验证
-- 仍未系统完成：
-	- 压测基线
-	- 长时间稳定性验证
-	- `xsdbg` 下的内存调试闭环
+- 当前已完成：
+	- 压测基线：`tools/xs_pressure_baseline.ps1/.sh` 与 `test_pressure.bat/sh`
+	- 长稳窗口：`tools/xs_soak_check.ps1/.sh` 与 `test_soak.bat/sh`
+	- Windows `SIGBREAK` 停服链路已经接到 `main.c`，`CTRL_BREAK` 现在会进入正常停服与 `xrtUnit()`，不再直接把 `xsdbg` 截断在自动报告之前
+	- `tools/xs_memdebug_check.ps1/.sh` 与 `test_memdebug.bat/sh` 已补齐“临时目录运行 + 自动报告 + 不写脏仓库跟踪 mem report”的收口脚本
+	- `test_memdebug.*` 的 accepted threshold 已按当前脚本 workload 定版：HTTP `foreign_live_count<=900`、WS `<=840`、XTP `<=840`、Custom `<=840`，并已在 Windows 入口下完成实测
 
 7. 文档最终发布版整理
 - README 和设计稿已持续同步。
@@ -509,7 +519,7 @@ xserver/
 1. 协议层生产化治理
 2. XTP 接口定版
 3. 配置热加载差异化重建
-4. 长稳 / 压测 / 内存调试
+4. 旧业务脚本迁移
 5. 文档最终整理
 6. Bus 新治理规则最终回归归档
 
@@ -551,6 +561,33 @@ xserver/
 - production `xs` 继续把 `dashboard / __xs/bus/* / *_metrics* / clear-reset` 维持在 `403`
 - `xsdbg` 继续保留扩展调试面
 - `/json`、动态重载、仓库根目录启动、XTP 高级接口、WS/custom demo 回路都没有回退
+
+另外，当前也已经补了单独的压测基线入口：
+
+- Windows：`cmd /c test_pressure.bat`
+- Linux：`sh ./test_pressure.sh`
+
+这套基线会用 `xsdbg` 顺序拉起 HTTP、WS、XTP、Custom demo，清零 `*_metrics` 后发送固定轮次请求，并输出每类协议的请求数、耗时、RPS 与宿主计数器摘要，便于后续做窗口化压测对比。
+
+另外，当前也已经补了长稳窗口入口：
+
+- Windows：`cmd /c test_soak.bat`
+- Linux：`sh ./test_soak.sh`
+
+这套基线会在单次运行里顺序拉起 HTTP、WS、XTP、Custom demo，并对每类协议执行多轮固定批次请求，验证窗口内服务存活、计数器增长和连接回收。
+
+`xsdbg` 的内存调试入口也已经补到：
+
+- Windows：`cmd /c test_memdebug.bat`
+- Linux：`sh ./test_memdebug.sh`
+
+当前这套脚本会把 `xsdbg` 放到临时工作目录运行，避免把仓库根目录或 `release/` 下跟踪的 `xrt_mem_report_auto.*` 写脏；Windows 路径还通过 `SIGBREAK` + `CTRL_BREAK` helper 进入正常停服链路，确保自动 mem report 能在停服后真实落盘。
+当前 accepted threshold 也已经按这套脚本的真实 workload 冻结在：
+
+- HTTP：`foreign_live_count <= 900`
+- WS：`foreign_live_count <= 840`
+- XTP：`foreign_live_count <= 840`
+- Custom：`foreign_live_count <= 840`
 
 另外，当前首页也已经按这套分层自动降级：production `xs` 下保留核心状态展示，但不会把 xsdbg-only 的调试入口继续暴露成可点击链接。
 

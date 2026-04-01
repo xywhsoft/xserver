@@ -110,24 +110,47 @@ function procFetch([string]$sUrl)
 
 function procFetchEx([string]$sMethod, [string]$sUrl)
 {
+	$iStatus = 0
+	$sBody = ""
+	$sHeaders = ""
+	$sBodyFile = [System.IO.Path]::GetTempFileName()
+	$sHeaderFile = [System.IO.Path]::GetTempFileName()
+	$arrArgs = @("-s", "--max-time", "2", "-D", $sHeaderFile, "-o", $sBodyFile, "-w", "%{http_code}")
+
+	if ( $sMethod -eq "HEAD" ) {
+		$arrArgs += "-I"
+	} else {
+		$arrArgs += @("-X", $sMethod)
+	}
+
+	$arrArgs += $sUrl
+
 	try {
-		$objResp = Invoke-WebRequest -UseBasicParsing $sUrl -Method $sMethod -TimeoutSec 2 -ErrorAction Stop
-		return @{
-			status = [int]$objResp.StatusCode
-			body = [string]$objResp.Content
+		$sStatus = (& curl.exe @arrArgs 2>$null) -join ""
+
+		if ( Test-Path $sBodyFile ) {
+			$sBody = [string](Get-Content -Raw -Path $sBodyFile -Encoding UTF8)
 		}
-	} catch {
-		if ( $_.Exception.Response ) {
-			$objStream = $_.Exception.Response.GetResponseStream()
-			$objReader = New-Object System.IO.StreamReader($objStream)
-			$sBody = $objReader.ReadToEnd()
-			$objReader.Dispose()
-			return @{
-				status = [int]$_.Exception.Response.StatusCode
-				body = $sBody
-			}
+		if ( Test-Path $sHeaderFile ) {
+			$sHeaders = [string](Get-Content -Raw -Path $sHeaderFile -Encoding UTF8)
 		}
-		throw
+
+		if ( ![int]::TryParse($sStatus.Trim(), [ref]$iStatus) ) {
+			$iStatus = 0
+		}
+	} finally {
+		if ( Test-Path $sBodyFile ) {
+			Remove-Item $sBodyFile -Force -ErrorAction SilentlyContinue
+		}
+		if ( Test-Path $sHeaderFile ) {
+			Remove-Item $sHeaderFile -Force -ErrorAction SilentlyContinue
+		}
+	}
+
+	return @{
+		status = $iStatus
+		body = $sBody
+		headers = $sHeaders
 	}
 }
 
@@ -149,6 +172,20 @@ function procFetchStatusMethod([string]$sMethod, [string]$sUrl)
 function procFetchAllowMethod([string]$sMethod, [string]$sUrl)
 {
 	return procFetchHeaderMethod $sMethod $sUrl "Allow"
+}
+
+function procHeaderValueFromText([string]$sHeaderText, [string]$sHeaderName)
+{
+	$arrLines = $sHeaderText -split "`r?`n"
+	$sLine = ""
+
+	foreach ( $sLine in $arrLines ) {
+		if ( $sLine -match ('^(?i)' + [Regex]::Escape($sHeaderName) + ':\s*(.+)$') ) {
+			return $Matches[1].Trim()
+		}
+	}
+
+	return ""
 }
 
 function procFetchHeaderMethod([string]$sMethod, [string]$sUrl, [string]$sHeaderName)
@@ -204,17 +241,25 @@ function procCheckSecurityHeaders([System.Collections.Generic.List[string]]$arrR
 	procCheckBodyContains $arrResults "$sName nosniff" (procFetchHeaderMethod $sMethod $sUrl "X-Content-Type-Options") 'nosniff'
 }
 
+function procCheckSecurityHeadersFromText([System.Collections.Generic.List[string]]$arrResults, [string]$sName, [string]$sHeaderText)
+{
+	procCheckBodyContains $arrResults "$sName cache" (procHeaderValueFromText $sHeaderText "Cache-Control") 'no-store'
+	procCheckBodyContains $arrResults "$sName frame" (procHeaderValueFromText $sHeaderText "X-Frame-Options") 'DENY'
+	procCheckBodyContains $arrResults "$sName referrer" (procHeaderValueFromText $sHeaderText "Referrer-Policy") 'no-referrer'
+	procCheckBodyContains $arrResults "$sName nosniff" (procHeaderValueFromText $sHeaderText "X-Content-Type-Options") 'nosniff'
+}
+
 function procCheckDisabledEndpoint([System.Collections.Generic.List[string]]$arrResults, [string]$sExeName, [string]$sName, [string]$sMethod, [string]$sPath, [int]$iExpectStatus, [string]$sContentType, [string]$sBodyText)
 {
 	$sUrl = "http://127.0.0.1:$iPort$sPath"
-	$iStatus = procFetchStatusMethod $sMethod $sUrl
+	$objResp = procFetchEx $sMethod $sUrl
 
-	procCheck $arrResults "$sExeName $sName" $iStatus $iExpectStatus ""
+	procCheck $arrResults "$sExeName $sName" $objResp.status $iExpectStatus $objResp.body
 	if ( -not [string]::IsNullOrEmpty($sBodyText) ) {
-		procCheckBodyContains $arrResults "$sExeName $sName body" (procFetchBodyMethod $sMethod $sUrl) $sBodyText
+		procCheckBodyContains $arrResults "$sExeName $sName body" $objResp.body $sBodyText
 	}
-	procCheckBodyContains $arrResults "$sExeName $sName type" (procFetchHeaderMethod $sMethod $sUrl "Content-Type") $sContentType
-	procCheckSecurityHeaders $arrResults "$sExeName $sName" $sMethod $sUrl
+	procCheckBodyContains $arrResults "$sExeName $sName type" (procHeaderValueFromText $objResp.headers "Content-Type") $sContentType
+	procCheckSecurityHeadersFromText $arrResults "$sExeName $sName" $objResp.headers
 }
 
 function procCheckMethodReject([System.Collections.Generic.List[string]]$arrResults, [string]$sExeName, [string]$sName, [string]$sMethod, [string]$sPath, [int]$iExpectStatus, [string]$sAllow, [string]$sContentType)
@@ -299,6 +344,82 @@ function procWaitBodyContains([string]$sUrl, [string]$sExpectText)
 	return $null
 }
 
+function procJsonStringField([string]$sJson, [string]$sField)
+{
+	$objMatch = [Regex]::Match($sJson, '"' + [Regex]::Escape($sField) + '":"([^"]*)"')
+	if ( $objMatch.Success ) {
+		return $objMatch.Groups[1].Value
+	}
+
+	return ""
+}
+
+function procRunTargetedConfigReloadChecks([System.Collections.Generic.List[string]]$arrResults, [string]$sExeName, [int]$iPort)
+{
+	$objResp = procFetch "http://127.0.0.1:$iPort/__xs/status_json"
+	if ( $objResp.status -ne 200 ) {
+		$arrResults.Add("FAIL $sExeName targeted_reload status_json : $($objResp.status)")
+		return
+	}
+
+	$sServerName = procJsonStringField $objResp.body "server"
+	if ( [string]::IsNullOrEmpty($sServerName) ) {
+		$arrResults.Add("FAIL $sExeName targeted_reload server_name : missing")
+		return
+	}
+
+	$sServerQuery = [Uri]::EscapeDataString($sServerName)
+	$sHostQuery = "%E9%BB%98%E8%AE%A4%E4%B8%BB%E6%9C%BA"
+
+	if ( -not (procWaitReloadIdle) ) {
+		$arrResults.Add("FAIL $sExeName targeted_server_reload_idle_wait : timeout")
+		return
+	}
+
+	$objResp = procFetch ("http://127.0.0.1:$iPort/__xs/reload_config_json?server=" + $sServerQuery)
+	procCheck $arrResults "$sExeName targeted_server_reload_config_json" $objResp.status 200 $objResp.body '"result":true'
+	procCheckBodyContains $arrResults "$sExeName targeted_server_reload_config_json body" $objResp.body 'config reload queued'
+	procCheckSecurityHeadersFromText $arrResults "$sExeName targeted_server_reload_config_json" $objResp.headers
+
+	if ( -not (procWaitReloadIdle) ) {
+		$arrResults.Add("FAIL $sExeName targeted_server_reload_idle_after : timeout")
+		return
+	}
+
+	$objResp = procWaitBodyContains "http://127.0.0.1:$iPort/__xs/reload_status_json" '"message":"target server unchanged"'
+	if ( $null -eq $objResp ) {
+		$arrResults.Add("FAIL $sExeName targeted_server_reload_status : missing text '""message"":""target server unchanged""'")
+		return
+	}
+
+	procCheck $arrResults "$sExeName targeted_server_reload_status" $objResp.status 200 $objResp.body '"message":"target server unchanged"'
+	procCheckSecurityHeadersFromText $arrResults "$sExeName targeted_server_reload_status" $objResp.headers
+
+	if ( -not (procWaitReloadIdle) ) {
+		$arrResults.Add("FAIL $sExeName targeted_host_reload_idle_wait : timeout")
+		return
+	}
+
+	$objResp = procFetch ("http://127.0.0.1:$iPort/__xs/reload_config_json?server=" + $sServerQuery + "&host=" + $sHostQuery)
+	procCheck $arrResults "$sExeName targeted_host_reload_config_json" $objResp.status 200 $objResp.body '"result":true'
+	procCheckBodyContains $arrResults "$sExeName targeted_host_reload_config_json body" $objResp.body 'config reload queued'
+	procCheckSecurityHeadersFromText $arrResults "$sExeName targeted_host_reload_config_json" $objResp.headers
+
+	if ( -not (procWaitReloadIdle) ) {
+		$arrResults.Add("FAIL $sExeName targeted_host_reload_idle_after : timeout")
+		return
+	}
+
+	$objResp = procWaitBodyContains "http://127.0.0.1:$iPort/__xs/reload_status_json" '"message":"target host unchanged"'
+	if ( $null -eq $objResp ) {
+		$arrResults.Add("FAIL $sExeName targeted_host_reload_status : missing text '""message"":""target host unchanged""'")
+		return
+	}
+
+	procCheck $arrResults "$sExeName targeted_host_reload_status" $objResp.status 200 $objResp.body '"message":"target host unchanged"'
+	procCheckSecurityHeadersFromText $arrResults "$sExeName targeted_host_reload_status" $objResp.headers
+}
+
 function procBuildXtpSmokeClient()
 {
 	if ( $script:sXtpClientExe -and (Test-Path $script:sXtpClientExe) ) {
@@ -380,6 +501,106 @@ function procAppendLines([System.Collections.Generic.List[string]]$arrTarget, $a
 	}
 }
 
+function procRunBusGovernanceScenario([System.Collections.Generic.List[string]]$arrResults, [string]$sExeName, [int]$iPort, [string]$sNamePrefix = "")
+{
+	$sCasePrefix = $sExeName
+	$sBaseUrl = "http://127.0.0.1:$iPort"
+	$sReadonlyNamespace = "stable.readonly.$sRunTag"
+	$sDisabledNamespace = "stable.disabled.$sRunTag"
+	$sTTLNamespace = "stable.ttl.$sRunTag"
+	$sTagNamespace = "stable.tag.$sRunTag"
+	$sDataTag = "item1"
+	$sTagDataTag = "item2"
+	$objResp = $null
+
+	if ( -not [string]::IsNullOrEmpty($sNamePrefix) ) {
+		$sCasePrefix = "$sExeName $sNamePrefix"
+	}
+
+	$objResp = procFetch "$sBaseUrl/__xs/bus/remove?all=true"
+	procCheck $arrResults "$sCasePrefix bus_policy_remove_all_pre" $objResp.status 200 $objResp.body '"result":true'
+
+	$objResp = procFetch "$sBaseUrl/__xs/bus/reset"
+	procCheck $arrResults "$sCasePrefix bus_policy_reset_pre" $objResp.status 200 $objResp.body '"sweep_count"'
+
+	$objResp = procFetch "$sBaseUrl/__xs/bus/limits?readonly_namespaces=&disabled_namespaces=&ttl_required_namespaces=&tag_required_namespaces=&data_limit=0&queue_limit=0&namespace_limit=0&namespace_data_limit=0"
+	procCheck $arrResults "$sCasePrefix bus_policy_limits_clear_pre" $objResp.status 200 $objResp.body '"updated":true'
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_clear_pre readonly" $objResp.body '"readonly_namespaces":""'
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_clear_pre disabled" $objResp.body '"disabled_namespaces":""'
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_clear_pre ttl" $objResp.body '"ttl_required_namespaces":""'
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_clear_pre tag" $objResp.body '"tag_required_namespaces":""'
+
+	$objResp = procFetch "$sBaseUrl/__xs/bus/register?namespace=$sReadonlyNamespace&tag=$sDataTag"
+	procCheck $arrResults "$sCasePrefix bus_policy_seed_register" $objResp.status 200 $objResp.body '"result":true'
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_seed_register namespace" $objResp.body ('"namespace":"' + $sReadonlyNamespace + '"')
+
+	$objResp = procFetch "$sBaseUrl/__xs/bus/limits?readonly_namespaces=$sReadonlyNamespace&disabled_namespaces=$sDisabledNamespace&ttl_required_namespaces=$sTTLNamespace&tag_required_namespaces=$sTagNamespace"
+	procCheck $arrResults "$sCasePrefix bus_policy_limits_set" $objResp.status 200 $objResp.body '"updated":true'
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_set readonly" $objResp.body ('"readonly_namespaces":"' + $sReadonlyNamespace + '"')
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_set disabled" $objResp.body ('"disabled_namespaces":"' + $sDisabledNamespace + '"')
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_set ttl" $objResp.body ('"ttl_required_namespaces":"' + $sTTLNamespace + '"')
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_set tag" $objResp.body ('"tag_required_namespaces":"' + $sTagNamespace + '"')
+
+	$objResp = procFetch "$sBaseUrl/__xs/bus/set?namespace=$sReadonlyNamespace&tag=$sDataTag&text=hello"
+	procCheck $arrResults "$sCasePrefix bus_policy_readonly_set" $objResp.status 409 $objResp.body
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_readonly_set body" $objResp.body '"bus_error":"namespace readonly"'
+
+	$objResp = procFetch "$sBaseUrl/__xs/bus/register?namespace=$sDisabledNamespace&tag=$sDataTag"
+	procCheck $arrResults "$sCasePrefix bus_policy_disabled_register" $objResp.status 409 $objResp.body
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_disabled_register body" $objResp.body '"bus_error":"namespace disabled"'
+
+	$objResp = procFetch "$sBaseUrl/__xs/bus/register?namespace=$sTTLNamespace&tag=$sDataTag"
+	procCheck $arrResults "$sCasePrefix bus_policy_ttl_missing" $objResp.status 409 $objResp.body
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_ttl_missing body" $objResp.body '"bus_error":"namespace ttl required"'
+
+	$objResp = procFetch "$sBaseUrl/__xs/bus/register?namespace=$sTTLNamespace&tag=$sDataTag&ttl=60"
+	procCheck $arrResults "$sCasePrefix bus_policy_ttl_register" $objResp.status 200 $objResp.body '"result":true'
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_ttl_register ttl" $objResp.body '"ttl":60'
+
+	$objResp = procFetch "$sBaseUrl/__xs/bus/register?namespace=$sTagNamespace"
+	procCheck $arrResults "$sCasePrefix bus_policy_tag_missing" $objResp.status 409 $objResp.body
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_tag_missing body" $objResp.body '"bus_error":"namespace tag required"'
+
+	$objResp = procFetch "$sBaseUrl/__xs/bus/register?namespace=$sTagNamespace&tag=$sTagDataTag"
+	procCheck $arrResults "$sCasePrefix bus_policy_tag_register" $objResp.status 200 $objResp.body '"result":true'
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_tag_register tag" $objResp.body ('"tag":"' + $sTagDataTag + '"')
+
+	$objResp = procFetch "$sBaseUrl/__xs/bus/limits"
+	procCheck $arrResults "$sCasePrefix bus_policy_limits_verify" $objResp.status 200 $objResp.body
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_verify readonly_count" $objResp.body '"readonly_namespace_reject_count":1'
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_verify readonly_namespace" $objResp.body ('"last_readonly_namespace":"' + $sReadonlyNamespace + '"')
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_verify readonly_action" $objResp.body '"last_readonly_namespace_action":"set"'
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_verify disabled_count" $objResp.body '"disabled_namespace_reject_count":1'
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_verify disabled_namespace" $objResp.body ('"last_disabled_namespace":"' + $sDisabledNamespace + '"')
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_verify ttl_count" $objResp.body '"ttl_required_namespace_reject_count":1'
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_verify ttl_namespace" $objResp.body ('"last_ttl_required_namespace":"' + $sTTLNamespace + '"')
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_verify tag_count" $objResp.body '"tag_required_namespace_reject_count":1'
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_verify tag_namespace" $objResp.body ('"last_tag_required_namespace":"' + $sTagNamespace + '"')
+
+	$objResp = procFetch "$sBaseUrl/__xs/bus/namespaces"
+	procCheck $arrResults "$sCasePrefix bus_policy_namespaces_verify" $objResp.status 200 $objResp.body
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_namespaces_verify readonly_namespace" $objResp.body ('"namespace":"' + $sReadonlyNamespace + '"')
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_namespaces_verify readonly_state" $objResp.body '"policy_state":"readonly"'
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_namespaces_verify readonly_action" $objResp.body '"last_policy_reject_action":"set"'
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_namespaces_verify ttl_state" $objResp.body '"policy_state":"ttl_required"'
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_namespaces_verify tag_state" $objResp.body '"policy_state":"tag_required"'
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_namespaces_verify tag_persistent" $objResp.body '"persistent_count":1'
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_namespaces_verify disabled_state" $objResp.body '"policy_state":"disabled"'
+
+	$objResp = procFetch "$sBaseUrl/__xs/bus/remove?all=true"
+	procCheck $arrResults "$sCasePrefix bus_policy_remove_all_post" $objResp.status 200 $objResp.body '"result":true'
+
+	$objResp = procFetch "$sBaseUrl/__xs/bus/limits?readonly_namespaces=&disabled_namespaces=&ttl_required_namespaces=&tag_required_namespaces=&data_limit=0&queue_limit=0&namespace_limit=0&namespace_data_limit=0"
+	procCheck $arrResults "$sCasePrefix bus_policy_limits_clear_post" $objResp.status 200 $objResp.body '"updated":true'
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_clear_post readonly" $objResp.body '"readonly_namespaces":""'
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_clear_post disabled" $objResp.body '"disabled_namespaces":""'
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_clear_post ttl" $objResp.body '"ttl_required_namespaces":""'
+	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_clear_post tag" $objResp.body '"tag_required_namespaces":""'
+
+	$objResp = procFetch "$sBaseUrl/__xs/bus/reset"
+	procCheck $arrResults "$sCasePrefix bus_policy_reset_post" $objResp.status 200 $objResp.body '"sweep_count"'
+}
+
 function procRunStaticHomepageAudit()
 {
 	$arrResults = New-Object 'System.Collections.Generic.List[string]'
@@ -457,10 +678,10 @@ function procRunCase([string]$sExeName, [bool]$bDebug)
 	)
 	$arrMetricsClearText = @(
 		@{ name = 'http_metrics_clear'; path = '/__xs/http_metrics_clear'; token = 'http_req_count=' },
-		@{ name = 'ws_metrics_clear'; path = '/__xs/ws_metrics_clear'; token = 'ws_open_count=' },
-		@{ name = 'xtp_metrics_clear'; path = '/__xs/xtp_metrics_clear'; token = 'xtp_open_count=' },
+		@{ name = 'ws_metrics_clear'; path = '/__xs/ws_metrics_clear'; token = 'ws_server_stopping_reject_count=0' },
+		@{ name = 'xtp_metrics_clear'; path = '/__xs/xtp_metrics_clear'; token = 'xtp_recv_limit_reject_count=0' },
 		@{ name = 'udp_metrics_clear'; path = '/__xs/udp_metrics_clear'; token = 'udp_recv_count=' },
-		@{ name = 'custom_metrics_clear'; path = '/__xs/custom_metrics_clear'; token = 'custom_open_count=' }
+		@{ name = 'custom_metrics_clear'; path = '/__xs/custom_metrics_clear'; token = 'custom_recv_limit_reject_count=0' }
 	)
 	$arrDebugDisabledText = @(
 		@{ name = 'dashboard'; path = '/__xs/dashboard'; prod = 'dashboard api only available in xsdbg' },
@@ -597,11 +818,11 @@ function procRunCase([string]$sExeName, [bool]$bDebug)
 
 		$objResp = procFetchEx "POST" "http://127.0.0.1:$iPort/__xs/reload"
 		procCheck $arrResults "$sExeName post_reload" $objResp.status 200 $objResp.body 'result=true'
-		procCheckBodyContains $arrResults "$sExeName post_reload type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/reload" "Content-Type") 'text/plain'
-		procCheckBodyContains $arrResults "$sExeName post_reload cache" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/reload" "Cache-Control") 'no-store'
-		procCheckBodyContains $arrResults "$sExeName post_reload frame" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/reload" "X-Frame-Options") 'DENY'
-		procCheckBodyContains $arrResults "$sExeName post_reload referrer" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/reload" "Referrer-Policy") 'no-referrer'
-		procCheckBodyContains $arrResults "$sExeName post_reload nosniff" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/reload" "X-Content-Type-Options") 'nosniff'
+		procCheckBodyContains $arrResults "$sExeName post_reload type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+		procCheckBodyContains $arrResults "$sExeName post_reload cache" (procHeaderValueFromText $objResp.headers "Cache-Control") 'no-store'
+		procCheckBodyContains $arrResults "$sExeName post_reload frame" (procHeaderValueFromText $objResp.headers "X-Frame-Options") 'DENY'
+		procCheckBodyContains $arrResults "$sExeName post_reload referrer" (procHeaderValueFromText $objResp.headers "Referrer-Policy") 'no-referrer'
+		procCheckBodyContains $arrResults "$sExeName post_reload nosniff" (procHeaderValueFromText $objResp.headers "X-Content-Type-Options") 'nosniff'
 
 		if ( -not (procWaitReloadIdle) ) {
 			$arrResults.Add("FAIL $sExeName reload_idle_after_text_post : timeout")
@@ -610,11 +831,11 @@ function procRunCase([string]$sExeName, [bool]$bDebug)
 		$objResp = procFetch "http://127.0.0.1:$iPort/__xs/reload_config"
 		procCheck $arrResults "$sExeName reload_config" $objResp.status 200 $objResp.body 'result=true'
 		procCheckBodyContains $arrResults "$sExeName reload_config body" $objResp.body 'config reload queued'
-		procCheckBodyContains $arrResults "$sExeName reload_config type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/reload_config" "Content-Type") 'text/plain'
-		procCheckBodyContains $arrResults "$sExeName reload_config cache" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/reload_config" "Cache-Control") 'no-store'
-		procCheckBodyContains $arrResults "$sExeName reload_config frame" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/reload_config" "X-Frame-Options") 'DENY'
-		procCheckBodyContains $arrResults "$sExeName reload_config referrer" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/reload_config" "Referrer-Policy") 'no-referrer'
-		procCheckBodyContains $arrResults "$sExeName reload_config nosniff" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/reload_config" "X-Content-Type-Options") 'nosniff'
+		procCheckBodyContains $arrResults "$sExeName reload_config type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+		procCheckBodyContains $arrResults "$sExeName reload_config cache" (procHeaderValueFromText $objResp.headers "Cache-Control") 'no-store'
+		procCheckBodyContains $arrResults "$sExeName reload_config frame" (procHeaderValueFromText $objResp.headers "X-Frame-Options") 'DENY'
+		procCheckBodyContains $arrResults "$sExeName reload_config referrer" (procHeaderValueFromText $objResp.headers "Referrer-Policy") 'no-referrer'
+		procCheckBodyContains $arrResults "$sExeName reload_config nosniff" (procHeaderValueFromText $objResp.headers "X-Content-Type-Options") 'nosniff'
 
 		if ( -not (procWaitReloadIdle) ) {
 			$arrResults.Add("FAIL $sExeName reload_config_idle_after_text : timeout")
@@ -630,15 +851,15 @@ function procRunCase([string]$sExeName, [bool]$bDebug)
 				if ( $objResp.status -eq 200 ) {
 					procCheck $arrResults "$sExeName post_reload_config" $objResp.status 200 $objResp.body 'result=true'
 					procCheckBodyContains $arrResults "$sExeName post_reload_config body" $objResp.body 'config reload queued'
-					procCheckBodyContains $arrResults "$sExeName post_reload_config type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/reload_config" "Content-Type") 'text/plain'
-					procCheckBodyContains $arrResults "$sExeName post_reload_config cache" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/reload_config" "Cache-Control") 'no-store'
-					procCheckBodyContains $arrResults "$sExeName post_reload_config frame" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/reload_config" "X-Frame-Options") 'DENY'
-					procCheckBodyContains $arrResults "$sExeName post_reload_config referrer" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/reload_config" "Referrer-Policy") 'no-referrer'
-					procCheckBodyContains $arrResults "$sExeName post_reload_config nosniff" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/reload_config" "X-Content-Type-Options") 'nosniff'
+					procCheckBodyContains $arrResults "$sExeName post_reload_config type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+					procCheckBodyContains $arrResults "$sExeName post_reload_config cache" (procHeaderValueFromText $objResp.headers "Cache-Control") 'no-store'
+					procCheckBodyContains $arrResults "$sExeName post_reload_config frame" (procHeaderValueFromText $objResp.headers "X-Frame-Options") 'DENY'
+					procCheckBodyContains $arrResults "$sExeName post_reload_config referrer" (procHeaderValueFromText $objResp.headers "Referrer-Policy") 'no-referrer'
+					procCheckBodyContains $arrResults "$sExeName post_reload_config nosniff" (procHeaderValueFromText $objResp.headers "X-Content-Type-Options") 'nosniff'
 					$bReloadConfigTextOK = $true
 					break
 				}
-				if ( $objResp.status -ne 409 ) {
+				if ( $objResp.status -ne 409 -and $objResp.status -ne 0 ) {
 					procCheck $arrResults "$sExeName post_reload_config" $objResp.status 200 $objResp.body
 					break
 				}
@@ -657,19 +878,19 @@ function procRunCase([string]$sExeName, [bool]$bDebug)
 
 		$objResp = procFetch "http://127.0.0.1:$iPort/__xs/check_config_json"
 		procCheck $arrResults "$sExeName check_config_json" $objResp.status 200 $objResp.body '"check_total_count":'
-		procCheckBodyContains $arrResults "$sExeName check_config_json type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/check_config_json" "Content-Type") 'application/json'
-		procCheckBodyContains $arrResults "$sExeName check_config_json cache" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/check_config_json" "Cache-Control") 'no-store'
-		procCheckBodyContains $arrResults "$sExeName check_config_json frame" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/check_config_json" "X-Frame-Options") 'DENY'
-		procCheckBodyContains $arrResults "$sExeName check_config_json referrer" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/check_config_json" "Referrer-Policy") 'no-referrer'
-		procCheckBodyContains $arrResults "$sExeName check_config_json nosniff" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/check_config_json" "X-Content-Type-Options") 'nosniff'
+		procCheckBodyContains $arrResults "$sExeName check_config_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'application/json'
+		procCheckBodyContains $arrResults "$sExeName check_config_json cache" (procHeaderValueFromText $objResp.headers "Cache-Control") 'no-store'
+		procCheckBodyContains $arrResults "$sExeName check_config_json frame" (procHeaderValueFromText $objResp.headers "X-Frame-Options") 'DENY'
+		procCheckBodyContains $arrResults "$sExeName check_config_json referrer" (procHeaderValueFromText $objResp.headers "Referrer-Policy") 'no-referrer'
+		procCheckBodyContains $arrResults "$sExeName check_config_json nosniff" (procHeaderValueFromText $objResp.headers "X-Content-Type-Options") 'nosniff'
 
 		$objResp = procFetch "http://127.0.0.1:$iPort/__xs/check_config"
 		procCheck $arrResults "$sExeName check_config" $objResp.status 200 $objResp.body 'check_total_count='
-		procCheckBodyContains $arrResults "$sExeName check_config type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/check_config" "Content-Type") 'text/plain'
-		procCheckBodyContains $arrResults "$sExeName check_config cache" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/check_config" "Cache-Control") 'no-store'
-		procCheckBodyContains $arrResults "$sExeName check_config frame" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/check_config" "X-Frame-Options") 'DENY'
-		procCheckBodyContains $arrResults "$sExeName check_config referrer" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/check_config" "Referrer-Policy") 'no-referrer'
-		procCheckBodyContains $arrResults "$sExeName check_config nosniff" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/check_config" "X-Content-Type-Options") 'nosniff'
+		procCheckBodyContains $arrResults "$sExeName check_config type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+		procCheckBodyContains $arrResults "$sExeName check_config cache" (procHeaderValueFromText $objResp.headers "Cache-Control") 'no-store'
+		procCheckBodyContains $arrResults "$sExeName check_config frame" (procHeaderValueFromText $objResp.headers "X-Frame-Options") 'DENY'
+		procCheckBodyContains $arrResults "$sExeName check_config referrer" (procHeaderValueFromText $objResp.headers "Referrer-Policy") 'no-referrer'
+		procCheckBodyContains $arrResults "$sExeName check_config nosniff" (procHeaderValueFromText $objResp.headers "X-Content-Type-Options") 'nosniff'
 
 		$objResp = procFetchEx "POST" "http://127.0.0.1:$iPort/__xs/status_json"
 		procCheck $arrResults "$sExeName post_status_json" $objResp.status 405 $objResp.body
@@ -826,7 +1047,7 @@ function procRunCase([string]$sExeName, [bool]$bDebug)
 					$bReloadOK = $true
 					break
 				}
-				if ( $objResp.status -ne 409 ) {
+				if ( $objResp.status -ne 409 -and $objResp.status -ne 0 ) {
 					procCheck $arrResults "$sExeName reload_json" $objResp.status 200 $objResp.body
 					break
 				}
@@ -848,10 +1069,15 @@ function procRunCase([string]$sExeName, [bool]$bDebug)
 				$objResp = procFetchEx "POST" "http://127.0.0.1:$iPort/__xs/reload_json"
 				if ( $objResp.status -eq 200 ) {
 					procCheck $arrResults "$sExeName post_reload_json" $objResp.status 200 $objResp.body '"result":true'
+					procCheckBodyContains $arrResults "$sExeName post_reload_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'application/json'
+					procCheckBodyContains $arrResults "$sExeName post_reload_json cache" (procHeaderValueFromText $objResp.headers "Cache-Control") 'no-store'
+					procCheckBodyContains $arrResults "$sExeName post_reload_json frame" (procHeaderValueFromText $objResp.headers "X-Frame-Options") 'DENY'
+					procCheckBodyContains $arrResults "$sExeName post_reload_json referrer" (procHeaderValueFromText $objResp.headers "Referrer-Policy") 'no-referrer'
+					procCheckBodyContains $arrResults "$sExeName post_reload_json nosniff" (procHeaderValueFromText $objResp.headers "X-Content-Type-Options") 'nosniff'
 					$bReloadOK = $true
 					break
 				}
-				if ( $objResp.status -ne 409 ) {
+				if ( $objResp.status -ne 409 -and $objResp.status -ne 0 ) {
 					procCheck $arrResults "$sExeName post_reload_json" $objResp.status 200 $objResp.body
 					break
 				}
@@ -896,7 +1122,7 @@ function procRunCase([string]$sExeName, [bool]$bDebug)
 					$bReloadConfigOK = $true
 					break
 				}
-				if ( $objResp.status -ne 409 ) {
+				if ( $objResp.status -ne 409 -and $objResp.status -ne 0 ) {
 					procCheck $arrResults "$sExeName reload_config_json" $objResp.status 200 $objResp.body
 					break
 				}
@@ -919,10 +1145,15 @@ function procRunCase([string]$sExeName, [bool]$bDebug)
 				if ( $objResp.status -eq 200 ) {
 					procCheck $arrResults "$sExeName post_reload_config_json" $objResp.status 200 $objResp.body '"result":true'
 					procCheckBodyContains $arrResults "$sExeName post_reload_config_json body" $objResp.body 'config reload queued'
+					procCheckBodyContains $arrResults "$sExeName post_reload_config_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'application/json'
+					procCheckBodyContains $arrResults "$sExeName post_reload_config_json cache" (procHeaderValueFromText $objResp.headers "Cache-Control") 'no-store'
+					procCheckBodyContains $arrResults "$sExeName post_reload_config_json frame" (procHeaderValueFromText $objResp.headers "X-Frame-Options") 'DENY'
+					procCheckBodyContains $arrResults "$sExeName post_reload_config_json referrer" (procHeaderValueFromText $objResp.headers "Referrer-Policy") 'no-referrer'
+					procCheckBodyContains $arrResults "$sExeName post_reload_config_json nosniff" (procHeaderValueFromText $objResp.headers "X-Content-Type-Options") 'nosniff'
 					$bReloadConfigOK = $true
 					break
 				}
-				if ( $objResp.status -ne 409 ) {
+				if ( $objResp.status -ne 409 -and $objResp.status -ne 0 ) {
 					procCheck $arrResults "$sExeName post_reload_config_json" $objResp.status 200 $objResp.body
 					break
 				}
@@ -948,32 +1179,30 @@ function procRunCase([string]$sExeName, [bool]$bDebug)
 
 		$objResp = procFetch "http://127.0.0.1:$iPort/json"
 		procCheck $arrResults "$sExeName json_route_after_config_reload" $objResp.status 200 $objResp.body '"path":"/json"'
+		procRunTargetedConfigReloadChecks $arrResults $sExeName $iPort
 
 		if ( $bDebug ) {
 			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/dashboard"
 			procCheck $arrResults "$sExeName dashboard" $objResp.status 200 $objResp.body
 			procCheckBodyContains $arrResults "$sExeName dashboard body" $objResp.body 'http_req_count='
-			procCheckBodyContains $arrResults "$sExeName dashboard type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/dashboard" "Content-Type") 'text/plain'
-			procCheckSecurityHeaders $arrResults "$sExeName dashboard" "GET" "http://127.0.0.1:$iPort/__xs/dashboard"
+			procCheckBodyContains $arrResults "$sExeName dashboard type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+			procCheckSecurityHeadersFromText $arrResults "$sExeName dashboard" $objResp.headers
 
-			$iStatus = procFetchStatusMethod "HEAD" "http://127.0.0.1:$iPort/__xs/dashboard"
-			procCheck $arrResults "$sExeName head_dashboard" $iStatus 200 ""
-			procCheckBodyContains $arrResults "$sExeName head_dashboard type" (procFetchHeaderMethod "HEAD" "http://127.0.0.1:$iPort/__xs/dashboard" "Content-Type") 'text/plain'
-			procCheckSecurityHeaders $arrResults "$sExeName head_dashboard" "HEAD" "http://127.0.0.1:$iPort/__xs/dashboard"
+			$objResp = procFetchEx "HEAD" "http://127.0.0.1:$iPort/__xs/dashboard"
+			procCheck $arrResults "$sExeName head_dashboard" $objResp.status 200 ""
+			procCheckBodyContains $arrResults "$sExeName head_dashboard type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+			procCheckSecurityHeadersFromText $arrResults "$sExeName head_dashboard" $objResp.headers
 
 			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/dashboard_json"
 			procCheck $arrResults "$sExeName dashboard_json" $objResp.status 200 $objResp.body
 			procCheckBodyContains $arrResults "$sExeName dashboard_json body" $objResp.body '"status"'
-			procCheckBodyContains $arrResults "$sExeName dashboard_json type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/dashboard_json" "Content-Type") 'application/json'
-			procCheckBodyContains $arrResults "$sExeName dashboard_json cache" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/dashboard_json" "Cache-Control") 'no-store'
-			procCheckBodyContains $arrResults "$sExeName dashboard_json frame" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/dashboard_json" "X-Frame-Options") 'DENY'
-			procCheckBodyContains $arrResults "$sExeName dashboard_json referrer" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/dashboard_json" "Referrer-Policy") 'no-referrer'
-			procCheckBodyContains $arrResults "$sExeName dashboard_json nosniff" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/dashboard_json" "X-Content-Type-Options") 'nosniff'
+			procCheckBodyContains $arrResults "$sExeName dashboard_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'application/json'
+			procCheckSecurityHeadersFromText $arrResults "$sExeName dashboard_json" $objResp.headers
 
-			$iStatus = procFetchStatusMethod "HEAD" "http://127.0.0.1:$iPort/__xs/dashboard_json"
-			procCheck $arrResults "$sExeName head_dashboard_json" $iStatus 200 ""
-			procCheckBodyContains $arrResults "$sExeName head_dashboard_json type" (procFetchHeaderMethod "HEAD" "http://127.0.0.1:$iPort/__xs/dashboard_json" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName head_dashboard_json" "HEAD" "http://127.0.0.1:$iPort/__xs/dashboard_json"
+			$objResp = procFetchEx "HEAD" "http://127.0.0.1:$iPort/__xs/dashboard_json"
+			procCheck $arrResults "$sExeName head_dashboard_json" $objResp.status 200 ""
+			procCheckBodyContains $arrResults "$sExeName head_dashboard_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'application/json'
+			procCheckSecurityHeadersFromText $arrResults "$sExeName head_dashboard_json" $objResp.headers
 
 			procCheckDisabledEndpoint $arrResults $sExeName "bus_root" "GET" "/__xs/bus" 404 'application/json' 'manage api not found'
 			procCheckDisabledEndpoint $arrResults $sExeName "head_bus_root" "HEAD" "/__xs/bus" 404 'application/json' $null
@@ -1089,6 +1318,7 @@ function procRunCase([string]$sExeName, [bool]$bDebug)
 			procCheckBodyContains $arrResults "$sExeName post_bus_reset allow" (procFetchAllowMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/reset") 'GET'
 			procCheckBodyContains $arrResults "$sExeName post_bus_reset type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/reset" "Content-Type") 'application/json'
 			procCheckSecurityHeaders $arrResults "$sExeName post_bus_reset" "POST" "http://127.0.0.1:$iPort/__xs/bus/reset"
+			procRunBusGovernanceScenario $arrResults $sExeName $iPort
 
 			for ( $i = 0; $i -lt $arrMetricsClearText.Length; $i++ ) {
 				$tblMetric = $arrMetricsClearText[$i]
@@ -1175,21 +1405,15 @@ function procRunCase([string]$sExeName, [bool]$bDebug)
 		} else {
 			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/dashboard"
 			procCheck $arrResults "$sExeName dashboard" $objResp.status 403 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName dashboard body" (procFetchBodyMethod "GET" "http://127.0.0.1:$iPort/__xs/dashboard") 'dashboard api only available in xsdbg'
-			procCheckBodyContains $arrResults "$sExeName dashboard type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/dashboard" "Content-Type") 'text/plain'
-			procCheckBodyContains $arrResults "$sExeName dashboard cache" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/dashboard" "Cache-Control") 'no-store'
-			procCheckBodyContains $arrResults "$sExeName dashboard frame" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/dashboard" "X-Frame-Options") 'DENY'
-			procCheckBodyContains $arrResults "$sExeName dashboard referrer" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/dashboard" "Referrer-Policy") 'no-referrer'
-			procCheckBodyContains $arrResults "$sExeName dashboard nosniff" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/dashboard" "X-Content-Type-Options") 'nosniff'
+			procCheckBodyContains $arrResults "$sExeName dashboard body" $objResp.body 'dashboard api only available in xsdbg'
+			procCheckBodyContains $arrResults "$sExeName dashboard type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+			procCheckSecurityHeadersFromText $arrResults "$sExeName dashboard" $objResp.headers
 
 			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/dashboard_json"
 			procCheck $arrResults "$sExeName dashboard_json" $objResp.status 403 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName dashboard_json body" (procFetchBodyMethod "GET" "http://127.0.0.1:$iPort/__xs/dashboard_json") 'dashboard json api only available in xsdbg'
-			procCheckBodyContains $arrResults "$sExeName dashboard_json type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/dashboard_json" "Content-Type") 'application/json'
-			procCheckBodyContains $arrResults "$sExeName dashboard_json cache" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/dashboard_json" "Cache-Control") 'no-store'
-			procCheckBodyContains $arrResults "$sExeName dashboard_json frame" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/dashboard_json" "X-Frame-Options") 'DENY'
-			procCheckBodyContains $arrResults "$sExeName dashboard_json referrer" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/dashboard_json" "Referrer-Policy") 'no-referrer'
-			procCheckBodyContains $arrResults "$sExeName dashboard_json nosniff" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/dashboard_json" "X-Content-Type-Options") 'nosniff'
+			procCheckBodyContains $arrResults "$sExeName dashboard_json body" $objResp.body 'dashboard json api only available in xsdbg'
+			procCheckBodyContains $arrResults "$sExeName dashboard_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'application/json'
+			procCheckSecurityHeadersFromText $arrResults "$sExeName dashboard_json" $objResp.headers
 
 			procCheckDisabledEndpoint $arrResults $sExeName "bus_root" "GET" "/__xs/bus" 403 'application/json' 'bus api not included in production xs'
 			procCheckDisabledEndpoint $arrResults $sExeName "head_bus_root_disabled" "HEAD" "/__xs/bus" 403 'application/json' $null
@@ -1510,8 +1734,11 @@ function procRunRepoRootCase([string]$sExeName, [bool]$bDebug)
 		} else {
 			$objResp = procFetchEx "POST" "http://127.0.0.1:$iPort/__xs/reload"
 			procCheck $arrResults "$sExeName repo_root post_reload" $objResp.status 200 $objResp.body 'result=true'
-			procCheckBodyContains $arrResults "$sExeName repo_root post_reload type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/reload" "Content-Type") 'text/plain'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root post_reload" "POST" "http://127.0.0.1:$iPort/__xs/reload"
+			procCheckBodyContains $arrResults "$sExeName repo_root post_reload type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+			procCheckBodyContains $arrResults "$sExeName repo_root post_reload cache" (procHeaderValueFromText $objResp.headers "Cache-Control") 'no-store'
+			procCheckBodyContains $arrResults "$sExeName repo_root post_reload frame" (procHeaderValueFromText $objResp.headers "X-Frame-Options") 'DENY'
+			procCheckBodyContains $arrResults "$sExeName repo_root post_reload referrer" (procHeaderValueFromText $objResp.headers "Referrer-Policy") 'no-referrer'
+			procCheckBodyContains $arrResults "$sExeName repo_root post_reload nosniff" (procHeaderValueFromText $objResp.headers "X-Content-Type-Options") 'nosniff'
 		}
 
 		if ( -not (procWaitReloadIdle) ) {
@@ -1536,8 +1763,11 @@ function procRunRepoRootCase([string]$sExeName, [bool]$bDebug)
 				$objResp = procFetchEx "POST" "http://127.0.0.1:$iPort/__xs/reload_json"
 				if ( $objResp.status -eq 200 ) {
 					procCheck $arrResults "$sExeName repo_root post_reload_json" $objResp.status 200 $objResp.body '"result":true'
-					procCheckBodyContains $arrResults "$sExeName repo_root post_reload_json type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/reload_json" "Content-Type") 'application/json'
-					procCheckSecurityHeaders $arrResults "$sExeName repo_root post_reload_json" "POST" "http://127.0.0.1:$iPort/__xs/reload_json"
+					procCheckBodyContains $arrResults "$sExeName repo_root post_reload_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'application/json'
+					procCheckBodyContains $arrResults "$sExeName repo_root post_reload_json cache" (procHeaderValueFromText $objResp.headers "Cache-Control") 'no-store'
+					procCheckBodyContains $arrResults "$sExeName repo_root post_reload_json frame" (procHeaderValueFromText $objResp.headers "X-Frame-Options") 'DENY'
+					procCheckBodyContains $arrResults "$sExeName repo_root post_reload_json referrer" (procHeaderValueFromText $objResp.headers "Referrer-Policy") 'no-referrer'
+					procCheckBodyContains $arrResults "$sExeName repo_root post_reload_json nosniff" (procHeaderValueFromText $objResp.headers "X-Content-Type-Options") 'nosniff'
 					$bReloadOK = $true
 					break
 				}
@@ -1629,12 +1859,15 @@ function procRunRepoRootCase([string]$sExeName, [bool]$bDebug)
 				if ( $objResp.status -eq 200 ) {
 					procCheck $arrResults "$sExeName repo_root reload_config" $objResp.status 200 $objResp.body 'result=true'
 					procCheckBodyContains $arrResults "$sExeName repo_root reload_config body" $objResp.body 'config reload queued'
-					procCheckBodyContains $arrResults "$sExeName repo_root reload_config type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/reload_config" "Content-Type") 'text/plain'
-					procCheckSecurityHeaders $arrResults "$sExeName repo_root reload_config" "GET" "http://127.0.0.1:$iPort/__xs/reload_config"
+					procCheckBodyContains $arrResults "$sExeName repo_root reload_config type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+					procCheckBodyContains $arrResults "$sExeName repo_root reload_config cache" (procHeaderValueFromText $objResp.headers "Cache-Control") 'no-store'
+					procCheckBodyContains $arrResults "$sExeName repo_root reload_config frame" (procHeaderValueFromText $objResp.headers "X-Frame-Options") 'DENY'
+					procCheckBodyContains $arrResults "$sExeName repo_root reload_config referrer" (procHeaderValueFromText $objResp.headers "Referrer-Policy") 'no-referrer'
+					procCheckBodyContains $arrResults "$sExeName repo_root reload_config nosniff" (procHeaderValueFromText $objResp.headers "X-Content-Type-Options") 'nosniff'
 					$bReloadConfigTextOK = $true
 					break
 				}
-				if ( $objResp.status -ne 409 ) {
+				if ( $objResp.status -ne 409 -and $objResp.status -ne 0 ) {
 					procCheck $arrResults "$sExeName repo_root reload_config" $objResp.status 200 $objResp.body
 					break
 				}
@@ -1657,12 +1890,15 @@ function procRunRepoRootCase([string]$sExeName, [bool]$bDebug)
 				if ( $objResp.status -eq 200 ) {
 					procCheck $arrResults "$sExeName repo_root reload_config_json" $objResp.status 200 $objResp.body '"result":true'
 					procCheckBodyContains $arrResults "$sExeName repo_root reload_config_json body" $objResp.body 'config reload queued'
-					procCheckBodyContains $arrResults "$sExeName repo_root reload_config_json type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/reload_config_json" "Content-Type") 'application/json'
-					procCheckSecurityHeaders $arrResults "$sExeName repo_root reload_config_json" "GET" "http://127.0.0.1:$iPort/__xs/reload_config_json"
+					procCheckBodyContains $arrResults "$sExeName repo_root reload_config_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'application/json'
+					procCheckBodyContains $arrResults "$sExeName repo_root reload_config_json cache" (procHeaderValueFromText $objResp.headers "Cache-Control") 'no-store'
+					procCheckBodyContains $arrResults "$sExeName repo_root reload_config_json frame" (procHeaderValueFromText $objResp.headers "X-Frame-Options") 'DENY'
+					procCheckBodyContains $arrResults "$sExeName repo_root reload_config_json referrer" (procHeaderValueFromText $objResp.headers "Referrer-Policy") 'no-referrer'
+					procCheckBodyContains $arrResults "$sExeName repo_root reload_config_json nosniff" (procHeaderValueFromText $objResp.headers "X-Content-Type-Options") 'nosniff'
 					$bReloadConfigOK = $true
 					break
 				}
-				if ( $objResp.status -ne 409 ) {
+				if ( $objResp.status -ne 409 -and $objResp.status -ne 0 ) {
 					procCheck $arrResults "$sExeName repo_root reload_config_json" $objResp.status 200 $objResp.body
 					break
 				}
@@ -1685,12 +1921,15 @@ function procRunRepoRootCase([string]$sExeName, [bool]$bDebug)
 				if ( $objResp.status -eq 200 ) {
 					procCheck $arrResults "$sExeName repo_root post_reload_config" $objResp.status 200 $objResp.body 'result=true'
 					procCheckBodyContains $arrResults "$sExeName repo_root post_reload_config body" $objResp.body 'config reload queued'
-					procCheckBodyContains $arrResults "$sExeName repo_root post_reload_config type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/reload_config" "Content-Type") 'text/plain'
-					procCheckSecurityHeaders $arrResults "$sExeName repo_root post_reload_config" "POST" "http://127.0.0.1:$iPort/__xs/reload_config"
+					procCheckBodyContains $arrResults "$sExeName repo_root post_reload_config type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+					procCheckBodyContains $arrResults "$sExeName repo_root post_reload_config cache" (procHeaderValueFromText $objResp.headers "Cache-Control") 'no-store'
+					procCheckBodyContains $arrResults "$sExeName repo_root post_reload_config frame" (procHeaderValueFromText $objResp.headers "X-Frame-Options") 'DENY'
+					procCheckBodyContains $arrResults "$sExeName repo_root post_reload_config referrer" (procHeaderValueFromText $objResp.headers "Referrer-Policy") 'no-referrer'
+					procCheckBodyContains $arrResults "$sExeName repo_root post_reload_config nosniff" (procHeaderValueFromText $objResp.headers "X-Content-Type-Options") 'nosniff'
 					$bReloadConfigTextOK = $true
 					break
 				}
-				if ( $objResp.status -ne 409 ) {
+				if ( $objResp.status -ne 409 -and $objResp.status -ne 0 ) {
 					procCheck $arrResults "$sExeName repo_root post_reload_config" $objResp.status 200 $objResp.body
 					break
 				}
@@ -1713,12 +1952,15 @@ function procRunRepoRootCase([string]$sExeName, [bool]$bDebug)
 				if ( $objResp.status -eq 200 ) {
 					procCheck $arrResults "$sExeName repo_root post_reload_config_json" $objResp.status 200 $objResp.body '"result":true'
 					procCheckBodyContains $arrResults "$sExeName repo_root post_reload_config_json body" $objResp.body 'config reload queued'
-					procCheckBodyContains $arrResults "$sExeName repo_root post_reload_config_json type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/reload_config_json" "Content-Type") 'application/json'
-					procCheckSecurityHeaders $arrResults "$sExeName repo_root post_reload_config_json" "POST" "http://127.0.0.1:$iPort/__xs/reload_config_json"
+					procCheckBodyContains $arrResults "$sExeName repo_root post_reload_config_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'application/json'
+					procCheckBodyContains $arrResults "$sExeName repo_root post_reload_config_json cache" (procHeaderValueFromText $objResp.headers "Cache-Control") 'no-store'
+					procCheckBodyContains $arrResults "$sExeName repo_root post_reload_config_json frame" (procHeaderValueFromText $objResp.headers "X-Frame-Options") 'DENY'
+					procCheckBodyContains $arrResults "$sExeName repo_root post_reload_config_json referrer" (procHeaderValueFromText $objResp.headers "Referrer-Policy") 'no-referrer'
+					procCheckBodyContains $arrResults "$sExeName repo_root post_reload_config_json nosniff" (procHeaderValueFromText $objResp.headers "X-Content-Type-Options") 'nosniff'
 					$bReloadConfigOK = $true
 					break
 				}
-				if ( $objResp.status -ne 409 ) {
+				if ( $objResp.status -ne 409 -and $objResp.status -ne 0 ) {
 					procCheck $arrResults "$sExeName repo_root post_reload_config_json" $objResp.status 200 $objResp.body
 					break
 				}
@@ -1746,13 +1988,13 @@ function procRunRepoRootCase([string]$sExeName, [bool]$bDebug)
 			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/dashboard"
 			procCheck $arrResults "$sExeName repo_root dashboard" $objResp.status 200 $objResp.body
 			procCheckBodyContains $arrResults "$sExeName repo_root dashboard body" $objResp.body 'http_req_count='
-			procCheckBodyContains $arrResults "$sExeName repo_root dashboard type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/dashboard" "Content-Type") 'text/plain'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root dashboard" "GET" "http://127.0.0.1:$iPort/__xs/dashboard"
+			procCheckBodyContains $arrResults "$sExeName repo_root dashboard type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+			procCheckSecurityHeadersFromText $arrResults "$sExeName repo_root dashboard" $objResp.headers
 
-			$iStatus = procFetchStatusMethod "HEAD" "http://127.0.0.1:$iPort/__xs/dashboard"
-			procCheck $arrResults "$sExeName repo_root head_dashboard" $iStatus 200 ""
-			procCheckBodyContains $arrResults "$sExeName repo_root head_dashboard type" (procFetchHeaderMethod "HEAD" "http://127.0.0.1:$iPort/__xs/dashboard" "Content-Type") 'text/plain'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root head_dashboard" "HEAD" "http://127.0.0.1:$iPort/__xs/dashboard"
+			$objResp = procFetchEx "HEAD" "http://127.0.0.1:$iPort/__xs/dashboard"
+			procCheck $arrResults "$sExeName repo_root head_dashboard" $objResp.status 200 ""
+			procCheckBodyContains $arrResults "$sExeName repo_root head_dashboard type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+			procCheckSecurityHeadersFromText $arrResults "$sExeName repo_root head_dashboard" $objResp.headers
 
 			$iStatus = procFetchStatusMethod "POST" "http://127.0.0.1:$iPort/__xs/dashboard"
 			procCheck $arrResults "$sExeName repo_root post_dashboard" $iStatus 405 ""
@@ -1763,13 +2005,13 @@ function procRunRepoRootCase([string]$sExeName, [bool]$bDebug)
 			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/dashboard_json"
 			procCheck $arrResults "$sExeName repo_root dashboard_json" $objResp.status 200 $objResp.body
 			procCheckBodyContains $arrResults "$sExeName repo_root dashboard_json body" $objResp.body '"status"'
-			procCheckBodyContains $arrResults "$sExeName repo_root dashboard_json type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/dashboard_json" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root dashboard_json" "GET" "http://127.0.0.1:$iPort/__xs/dashboard_json"
+			procCheckBodyContains $arrResults "$sExeName repo_root dashboard_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'application/json'
+			procCheckSecurityHeadersFromText $arrResults "$sExeName repo_root dashboard_json" $objResp.headers
 
-			$iStatus = procFetchStatusMethod "HEAD" "http://127.0.0.1:$iPort/__xs/dashboard_json"
-			procCheck $arrResults "$sExeName repo_root head_dashboard_json" $iStatus 200 ""
-			procCheckBodyContains $arrResults "$sExeName repo_root head_dashboard_json type" (procFetchHeaderMethod "HEAD" "http://127.0.0.1:$iPort/__xs/dashboard_json" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root head_dashboard_json" "HEAD" "http://127.0.0.1:$iPort/__xs/dashboard_json"
+			$objResp = procFetchEx "HEAD" "http://127.0.0.1:$iPort/__xs/dashboard_json"
+			procCheck $arrResults "$sExeName repo_root head_dashboard_json" $objResp.status 200 ""
+			procCheckBodyContains $arrResults "$sExeName repo_root head_dashboard_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'application/json'
+			procCheckSecurityHeadersFromText $arrResults "$sExeName repo_root head_dashboard_json" $objResp.headers
 
 			$iStatus = procFetchStatusMethod "POST" "http://127.0.0.1:$iPort/__xs/dashboard_json"
 			procCheck $arrResults "$sExeName repo_root post_dashboard_json" $iStatus 405 ""
@@ -1814,6 +2056,7 @@ function procRunRepoRootCase([string]$sExeName, [bool]$bDebug)
 			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/ws_metrics"
 			procCheck $arrResults "$sExeName repo_root ws_metrics" $objResp.status 200 $objResp.body
 			procCheckBodyContains $arrResults "$sExeName repo_root ws_metrics body" $objResp.body 'ws_open_count='
+			procCheckBodyContains $arrResults "$sExeName repo_root ws_metrics reject body" $objResp.body 'ws_server_stopping_reject_count='
 			procCheckBodyContains $arrResults "$sExeName repo_root ws_metrics type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/ws_metrics" "Content-Type") 'text/plain'
 			procCheckSecurityHeaders $arrResults "$sExeName repo_root ws_metrics" "GET" "http://127.0.0.1:$iPort/__xs/ws_metrics"
 
@@ -1831,6 +2074,7 @@ function procRunRepoRootCase([string]$sExeName, [bool]$bDebug)
 			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/ws_metrics_json"
 			procCheck $arrResults "$sExeName repo_root ws_metrics_json" $objResp.status 200 $objResp.body
 			procCheckBodyContains $arrResults "$sExeName repo_root ws_metrics_json body" $objResp.body '"ws_open_count"'
+			procCheckBodyContains $arrResults "$sExeName repo_root ws_metrics_json reject body" $objResp.body '"ws_server_stopping_reject_count"'
 			procCheckBodyContains $arrResults "$sExeName repo_root ws_metrics_json type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/ws_metrics_json" "Content-Type") 'application/json'
 			procCheckSecurityHeaders $arrResults "$sExeName repo_root ws_metrics_json" "GET" "http://127.0.0.1:$iPort/__xs/ws_metrics_json"
 
@@ -1848,6 +2092,7 @@ function procRunRepoRootCase([string]$sExeName, [bool]$bDebug)
 			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/xtp_metrics"
 			procCheck $arrResults "$sExeName repo_root xtp_metrics" $objResp.status 200 $objResp.body
 			procCheckBodyContains $arrResults "$sExeName repo_root xtp_metrics body" $objResp.body 'xtp_open_count='
+			procCheckBodyContains $arrResults "$sExeName repo_root xtp_metrics reject body" $objResp.body 'xtp_recv_limit_reject_count='
 			procCheckBodyContains $arrResults "$sExeName repo_root xtp_metrics type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/xtp_metrics" "Content-Type") 'text/plain'
 			procCheckSecurityHeaders $arrResults "$sExeName repo_root xtp_metrics" "GET" "http://127.0.0.1:$iPort/__xs/xtp_metrics"
 
@@ -1865,6 +2110,7 @@ function procRunRepoRootCase([string]$sExeName, [bool]$bDebug)
 			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/xtp_metrics_json"
 			procCheck $arrResults "$sExeName repo_root xtp_metrics_json" $objResp.status 200 $objResp.body
 			procCheckBodyContains $arrResults "$sExeName repo_root xtp_metrics_json body" $objResp.body '"xtp_open_count"'
+			procCheckBodyContains $arrResults "$sExeName repo_root xtp_metrics_json reject body" $objResp.body '"xtp_recv_limit_reject_count"'
 			procCheckBodyContains $arrResults "$sExeName repo_root xtp_metrics_json type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/xtp_metrics_json" "Content-Type") 'application/json'
 			procCheckSecurityHeaders $arrResults "$sExeName repo_root xtp_metrics_json" "GET" "http://127.0.0.1:$iPort/__xs/xtp_metrics_json"
 
@@ -1916,6 +2162,7 @@ function procRunRepoRootCase([string]$sExeName, [bool]$bDebug)
 			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/custom_metrics"
 			procCheck $arrResults "$sExeName repo_root custom_metrics" $objResp.status 200 $objResp.body
 			procCheckBodyContains $arrResults "$sExeName repo_root custom_metrics body" $objResp.body 'custom_open_count='
+			procCheckBodyContains $arrResults "$sExeName repo_root custom_metrics reject body" $objResp.body 'custom_recv_limit_reject_count='
 			procCheckBodyContains $arrResults "$sExeName repo_root custom_metrics type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/custom_metrics" "Content-Type") 'text/plain'
 			procCheckSecurityHeaders $arrResults "$sExeName repo_root custom_metrics" "GET" "http://127.0.0.1:$iPort/__xs/custom_metrics"
 
@@ -1933,6 +2180,7 @@ function procRunRepoRootCase([string]$sExeName, [bool]$bDebug)
 			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/custom_metrics_json"
 			procCheck $arrResults "$sExeName repo_root custom_metrics_json" $objResp.status 200 $objResp.body
 			procCheckBodyContains $arrResults "$sExeName repo_root custom_metrics_json body" $objResp.body '"custom_open_count"'
+			procCheckBodyContains $arrResults "$sExeName repo_root custom_metrics_json reject body" $objResp.body '"custom_recv_limit_reject_count"'
 			procCheckBodyContains $arrResults "$sExeName repo_root custom_metrics_json type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/custom_metrics_json" "Content-Type") 'application/json'
 			procCheckSecurityHeaders $arrResults "$sExeName repo_root custom_metrics_json" "GET" "http://127.0.0.1:$iPort/__xs/custom_metrics_json"
 
@@ -2129,6 +2377,7 @@ function procRunRepoRootCase([string]$sExeName, [bool]$bDebug)
 			procCheckBodyContains $arrResults "$sExeName repo_root post_bus_reset allow" (procFetchAllowMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/reset") 'GET'
 			procCheckBodyContains $arrResults "$sExeName repo_root post_bus_reset type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/reset" "Content-Type") 'application/json'
 			procCheckSecurityHeaders $arrResults "$sExeName repo_root post_bus_reset" "POST" "http://127.0.0.1:$iPort/__xs/bus/reset"
+			procRunBusGovernanceScenario $arrResults $sExeName $iPort "repo_root"
 		} else {
 			procCheckDisabledEndpoint $arrResults $sExeName "repo_root bus_root" "GET" "/__xs/bus" 403 'application/json' 'bus api not included in production xs'
 			procCheckDisabledEndpoint $arrResults $sExeName "repo_root head_bus_root_disabled" "HEAD" "/__xs/bus" 403 'application/json' $null

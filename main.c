@@ -73,6 +73,250 @@ static void XS_SignalHandler(int iSignal)
 	g_iXsStopFlag = iSignal;
 }
 
+static bool XS_TextEquals(const char* sLeft, const char* sRight)
+{
+	if ( sLeft == sRight ) {
+		return TRUE;
+	}
+	if ( sLeft == NULL || sRight == NULL ) {
+		return FALSE;
+	}
+
+	return strcmp(sLeft, sRight) == 0;
+}
+
+static bool XS_TlsConfigEquals(const xtlsconfig* pLeft, const xtlsconfig* pRight)
+{
+	if ( pLeft == pRight ) {
+		return TRUE;
+	}
+	if ( pLeft == NULL || pRight == NULL ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(pLeft->sCertFile, pRight->sCertFile) ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(pLeft->sKeyFile, pRight->sKeyFile) ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(pLeft->sCaFile, pRight->sCaFile) ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(pLeft->sHostName, pRight->sHostName) ) {
+		return FALSE;
+	}
+	if ( pLeft->bVerifyPeer != pRight->bVerifyPeer ) {
+		return FALSE;
+	}
+	if ( pLeft->bAllowTLS12Ed25519 != pRight->bAllowTLS12Ed25519 ) {
+		return FALSE;
+	}
+	if ( pLeft->iMaxVersion != pRight->iMaxVersion ) {
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+static bool XS_HttpPageConfigEquals(const XS_HttpPageConfig* objLeft, const XS_HttpPageConfig* objRight)
+{
+	if ( objLeft == objRight ) {
+		return TRUE;
+	}
+	if ( objLeft == NULL || objRight == NULL ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(objLeft->DefaultPage, objRight->DefaultPage) ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(objLeft->Page404, objRight->Page404) ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(objLeft->Page403, objRight->Page403) ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(objLeft->Page500, objRight->Page500) ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(objLeft->ErrorPage, objRight->ErrorPage) ) {
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+static bool XS_HostConfigReloadEquals(const XS_HostConfig* objLeft, const XS_HostConfig* objRight)
+{
+	if ( objLeft == objRight ) {
+		return TRUE;
+	}
+	if ( objLeft == NULL || objRight == NULL ) {
+		return FALSE;
+	}
+	if ( objLeft->Enabled != objRight->Enabled ) {
+		return FALSE;
+	}
+	if ( objLeft->Debug != objRight->Debug ) {
+		return FALSE;
+	}
+	if ( objLeft->DevMode != objRight->DevMode ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(objLeft->Name, objRight->Name) ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(objLeft->Desc, objRight->Desc) ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(objLeft->Host, objRight->Host) ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(objLeft->Param, objRight->Param) ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(objLeft->Path, objRight->Path) ) {
+		return FALSE;
+	}
+	if ( !XS_HttpPageConfigEquals(&objLeft->Pages, &objRight->Pages) ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(objLeft->DevFile, objRight->DevFile) ) {
+		return FALSE;
+	}
+	if ( !XS_TlsConfigEquals(&objLeft->TlsConfig, &objRight->TlsConfig) ) {
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+static bool XS_HostArrayReloadEquals(xarray arrLeft, xarray arrRight)
+{
+	uint32 i;
+	uint32 iCountLeft = arrLeft ? arrLeft->Count : 0;
+	uint32 iCountRight = arrRight ? arrRight->Count : 0;
+
+	if ( iCountLeft != iCountRight ) {
+		return FALSE;
+	}
+
+	for ( i = 1; i <= iCountLeft; i++ ) {
+		XS_HostConfig* objHostLeft = xrtArrayGet_Inline(arrLeft, i);
+		XS_HostConfig* objHostRight = xrtArrayGet_Inline(arrRight, i);
+
+		if ( !XS_HostConfigReloadEquals(objHostLeft, objHostRight) ) {
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
+static bool XS_ServerConfigReloadEquals(const XS_ServerConfig* objLeft, const XS_ServerConfig* objRight)
+{
+	if ( objLeft == objRight ) {
+		return TRUE;
+	}
+	if ( objLeft == NULL || objRight == NULL ) {
+		return FALSE;
+	}
+	if ( objLeft->Enabled != objRight->Enabled ) {
+		return FALSE;
+	}
+	if ( objLeft->Class != objRight->Class ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(objLeft->Name, objRight->Name) ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(objLeft->Desc, objRight->Desc) ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(objLeft->Param, objRight->Param) ) {
+		return FALSE;
+	}
+	if ( objLeft->Backlog != objRight->Backlog ) {
+		return FALSE;
+	}
+	if ( objLeft->ConnLimit != objRight->ConnLimit ) {
+		return FALSE;
+	}
+	if ( objLeft->RecvLimit != objRight->RecvLimit ) {
+		return FALSE;
+	}
+	if ( objLeft->IdleTimeout != objRight->IdleTimeout ) {
+		return FALSE;
+	}
+	if ( objLeft->WsMessageLimit != objRight->WsMessageLimit ) {
+		return FALSE;
+	}
+	if ( objLeft->PathLimit != objRight->PathLimit ) {
+		return FALSE;
+	}
+	if ( objLeft->HeaderLimit != objRight->HeaderLimit ) {
+		return FALSE;
+	}
+	if ( objLeft->BodyLimit != objRight->BodyLimit ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(objLeft->BindIP, objRight->BindIP) ) {
+		return FALSE;
+	}
+	if ( objLeft->BindPort != objRight->BindPort ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(objLeft->Addr, objRight->Addr) ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(objLeft->WsProtocol, objRight->WsProtocol) ) {
+		return FALSE;
+	}
+	if ( objLeft->EnableTLS != objRight->EnableTLS ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(objLeft->BindIPTLS, objRight->BindIPTLS) ) {
+		return FALSE;
+	}
+	if ( objLeft->BindPortTLS != objRight->BindPortTLS ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(objLeft->AddrTLS, objRight->AddrTLS) ) {
+		return FALSE;
+	}
+	if ( !XS_TlsConfigEquals(&objLeft->TlsConfig, &objRight->TlsConfig) ) {
+		return FALSE;
+	}
+	if ( objLeft->Debug != objRight->Debug ) {
+		return FALSE;
+	}
+	if ( !XS_HttpPageConfigEquals(&objLeft->Pages, &objRight->Pages) ) {
+		return FALSE;
+	}
+	if ( objLeft->HostAware != objRight->HostAware ) {
+		return FALSE;
+	}
+	if ( objLeft->EnableDefaultHost != objRight->EnableDefaultHost ) {
+		return FALSE;
+	}
+	if ( objLeft->EnableDefaultHost && !XS_HostConfigReloadEquals(&objLeft->DefaultHost, &objRight->DefaultHost) ) {
+		return FALSE;
+	}
+	if ( !XS_HostArrayReloadEquals(objLeft->Hosts, objRight->Hosts) ) {
+		return FALSE;
+	}
+	if ( objLeft->DevMode != objRight->DevMode ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(objLeft->Path, objRight->Path) ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(objLeft->DevFile, objRight->DevFile) ) {
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
 static bool XS_ConfigReloadValidateTarget(XS_Config* objCfgNew, const XS_ConfigReloadRequest* pReq, XS_ServerConfig** ppServerNew)
 {
 	XS_ServerConfig* objServerNew;
@@ -172,6 +416,15 @@ static bool XS_PerformTargetHostReload(XS_ServerConfig* objServerOld, XS_ServerC
 	if ( !XS_PrepareHostReload(objServerOld, objServerNew, pReq, &objHostOld, &objHostNewSrc) ) {
 		XS_SetConfigReloadStatus(FALSE, pReq, "target host validation failed");
 		return FALSE;
+	}
+	if ( !pReq->Force && XS_HostConfigReloadEquals(objHostOld, objHostNewSrc) ) {
+		XS_LogInfo(
+			"config reload skipped: target host unchanged: server=%s host=%s",
+			pReq->sServerName,
+			pReq->sHostName
+		);
+		XS_SetConfigReloadStatus(TRUE, pReq, "target host unchanged");
+		return TRUE;
 	}
 	
 	memset(&objHostBackup, 0, sizeof(objHostBackup));
@@ -299,6 +552,14 @@ static bool XS_PerformTargetServerReload(XS_Config* objCfg, XS_Runtime* objRunti
 	}
 	if ( pReq->sHostName[0] != '\0' ) {
 		return XS_PerformTargetHostReload(objServerOld, objServerNewSrc, pReq);
+	}
+	if ( !pReq->Force && XS_ServerConfigReloadEquals(objServerOld, objServerNewSrc) ) {
+		XS_LogInfo(
+			"config reload skipped: target server unchanged: %s",
+			pReq->sServerName
+		);
+		XS_SetConfigReloadStatus(TRUE, pReq, "target server unchanged");
+		return TRUE;
 	}
 	
 	memset(&objServerBackup, 0, sizeof(objServerBackup));
@@ -545,6 +806,9 @@ int main(int argc, char** argv)
 	
 	signal(SIGINT, XS_SignalHandler);
 	signal(SIGTERM, XS_SignalHandler);
+	#if defined(_WIN32) || defined(_WIN64)
+		signal(SIGBREAK, XS_SignalHandler);
+	#endif
 	
 	XS_LogInfo("stage complete : runtime entered serving loop");
 	XS_LogInfo("press Ctrl+C to stop");

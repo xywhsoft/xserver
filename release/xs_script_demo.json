@@ -1,0 +1,21 @@
+{
+	"services": [
+		{
+			"enabled": true,
+			"class": "http",
+			"name": "xs root script demo",
+			"desc": "vnext migrated root script demo",
+			"ip": "127.0.0.1",
+			"port": 18081,
+			"tls": false,
+			"host_default": {
+				"enabled": true,
+				"name": "root script host",
+				"path": "wwwroot",
+				"devlang": "c",
+				"devfile": "script/main.c"
+			},
+			"hosts": []
+		}
+	]
+}

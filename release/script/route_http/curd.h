@@ -1,163 +1,263 @@
-
-
-
-// 获取数据列表
-void Request_List(XS_ServerObject objServer, XS_HostObject objHost, xnetconn* pConn, xhttpdreq* pReq)
+bool Request_List(XS_ServerObject objServer, XS_HostObject objHost, XS_RequestObject objReq, XS_ResponseObject objResp)
 {
-	// 查询数据库
-	XDO_Recordset rs = xdoSelect(G_DB, "SELECT * FROM test;");
-	if ( rs == NULL ) {
-		xrtHttpReplyFmt(pConn, 200, "Content-Type: application/json\r\n", "{\"result\": false, \"msg\": \"%s\"}", xCore->LastError);
-		return;
-	}
-	// 构建返回值
-	xvalue tblRet = xvoCreateTable();
+	sqlite3_stmt* pStmt = NULL;
+	xvalue objRet = xvoCreateTable();
 	xvalue arrList = xvoCreateArray();
-	while ( xrsNext(rs) ) {
-		xvalue tblRow = xvoCreateTable();
-		xvoTableSetText(tblRow, "id", 2, xrsGetValue(rs, 0), 0, FALSE);
-		xvoTableSetText(tblRow, "name", 4, xrsGetValue(rs, 1), 0, FALSE);
-		xvoTableSetText(tblRow, "age", 3, xrsGetValue(rs, 2), 0, FALSE);
-		xvoTableSetText(tblRow, "mail", 4, xrsGetValue(rs, 3), 0, FALSE);
-		xvoTableSetText(tblRow, "desc", 4, xrsGetValue(rs, 4), 0, FALSE);
-		xvoArrayAppendValue(arrList, tblRow, TRUE);
+	bool bRet;
+	int iStep;
+	int iCount = 0;
+
+	(void)objServer;
+	(void)objHost;
+	(void)objReq;
+
+	if ( !DemoSQLitePrepare(&pStmt, "SELECT id, name, age, mail, \"desc\" FROM test;") ) {
+		xvoUnref(arrList);
+		xvoUnref(objRet);
+		return DemoHttpReplyDBError(objResp, "query failed");
 	}
-	xvoTableSetInt(tblRet, "count", 5, xrsGetRecordCount(rs));
-	xvoTableSetInt(tblRet, "code", 4, 0);
-	xvoTableSetText(tblRet, "msg", 3, "平台列表查询成功！", 0, FALSE);
-	xvoTableSetValue(tblRet, "data", 4, arrList, TRUE);
-	// 释放记录集
-	xrsFree(rs);
-	// 生成 JSON
-	size_t iRetSize = 0;
-	char* sRet = xrtStringifyJSON(tblRet, FALSE, &iRetSize);
-	xrtHttpReplyJSON(pConn, 200, sRet);
-	// 释放内存
-	xrtFree(sRet);
-	xvoUnref(tblRet);
+
+	while ( (iStep = sqlite3_step(pStmt)) == SQLITE_ROW ) {
+		xvalue objRow = xvoCreateTable();
+		const char* sID = (const char*)sqlite3_column_text(pStmt, 0);
+		const char* sName = (const char*)sqlite3_column_text(pStmt, 1);
+		const char* sAge = (const char*)sqlite3_column_text(pStmt, 2);
+		const char* sMail = (const char*)sqlite3_column_text(pStmt, 3);
+		const char* sDesc = (const char*)sqlite3_column_text(pStmt, 4);
+
+		xvoTableSetText(objRow, "id", 2, sID ? sID : "", 0, FALSE);
+		xvoTableSetText(objRow, "name", 4, sName ? sName : "", 0, FALSE);
+		xvoTableSetText(objRow, "age", 3, sAge ? sAge : "", 0, FALSE);
+		xvoTableSetText(objRow, "mail", 4, sMail ? sMail : "", 0, FALSE);
+		xvoTableSetText(objRow, "desc", 4, sDesc ? sDesc : "", 0, FALSE);
+		xvoArrayAppendValue(arrList, objRow, TRUE);
+		iCount++;
+	}
+
+	if ( iStep != SQLITE_DONE ) {
+		sqlite3_finalize(pStmt);
+		xvoUnref(arrList);
+		xvoUnref(objRet);
+		return DemoHttpReplyDBError(objResp, "query failed");
+	}
+
+	sqlite3_finalize(pStmt);
+
+	xvoTableSetInt(objRet, "count", 5, iCount);
+	xvoTableSetInt(objRet, "code", 4, 0);
+	xvoTableSetText(objRet, "msg", 3, "platform list query success", 0, FALSE);
+	xvoTableSetValue(objRet, "data", 4, arrList, TRUE);
+
+	bRet = DemoHttpReplyJSONValue(objResp, 200, "OK", objRet);
+	xvoUnref(objRet);
+	return bRet;
 }
 
 
 
-// 添加数据
-void Request_Add(XS_ServerObject objServer, XS_HostObject objHost, xnetconn* pConn, xhttpdreq* pReq)
+bool Request_Add(XS_ServerObject objServer, XS_HostObject objHost, XS_RequestObject objReq, XS_ResponseObject objResp)
 {
-	// 解析 body 域
-	if ( pReq->iBodyLen == 0 ) {
-		xrtHttpReplyJSON(pConn, 200, "{\"result\": false, \"msg\": \"Body 域不能为空！\"}");
-		return;
+	sqlite3_stmt* pStmt = NULL;
+	xvalue objBody = NULL;
+	const char* sName;
+	const char* sMail;
+	const char* sDesc;
+	int iAge;
+	int iResult;
+	const void* pBody;
+	size_t iBodyLen;
+
+	(void)objServer;
+	(void)objHost;
+
+	pBody = xsReqBody(objReq);
+	iBodyLen = xsReqBodyLen(objReq);
+	if ( pBody == NULL || iBodyLen == 0 ) {
+		return DemoHttpReplyResult(objResp, FALSE, "body required");
 	}
-	xvalue objBody = xrtParseJSON(pReq->pBody, pReq->iBodyLen);
-	if ( objBody->Type != XVO_DT_TABLE ) {
-		xrtHttpReplyJSON(pConn, 200, "{\"result\": false, \"msg\": \"Body 域必须传递为 JSON 对象！\"}");
+
+	objBody = xrtParseJSON(pBody, iBodyLen);
+	if ( objBody == NULL || objBody->Type != XVO_DT_TABLE ) {
+		if ( objBody ) {
+			xvoUnref(objBody);
+		}
+		return DemoHttpReplyResult(objResp, FALSE, "body must be json object");
+	}
+
+	sName = xvoTableGetText(objBody, "name", 4);
+	if ( sName == NULL || sName[0] == '\0' ) {
 		xvoUnref(objBody);
-		return;
+		return DemoHttpReplyResult(objResp, FALSE, "name required");
 	}
-	// 检查 name 属性是否正确
-	str sName = xvoTableGetText(objBody, "name", 4);
-	if ( (sName == NULL) || (sName[0] == 0) ) {
-		xrtHttpReplyJSON(pConn, 200, "{\"result\": false, \"msg\": \"参数 name 不能为空！\"}");
+
+	iAge = xvoTableGetInt(objBody, "age", 3);
+	sMail = xvoTableGetText(objBody, "mail", 4);
+	sDesc = xvoTableGetText(objBody, "desc", 4);
+
+	if ( !DemoSQLitePrepare(&pStmt, "INSERT INTO test (name, age, mail, \"desc\") VALUES (?, ?, ?, ?);") ) {
 		xvoUnref(objBody);
-		return;
+		return DemoHttpReplyDBError(objResp, "prepare insert failed");
 	}
-	// 写入数据库（使用转义防止 SQL 注入）
-	int iAge = xvoTableGetInt(objBody, "age", 3);
-	str sMail = xvoTableGetText(objBody, "mail", 4);
-	str sdesc = xvoTableGetText(objBody, "desc", 4);
-	str sNameEsc = sql_escape(sName, 0);
-	str sMailEsc = sql_escape(sMail, 0);
-	str sdescEsc = sql_escape(sdesc, 0);
-	str sSQL = xrtFormat("INSERT INTO test (name, age, mail, desc) VALUES ('%s', %d, '%s', '%s')", sNameEsc, iAge, sMailEsc, sdescEsc);
-	xdoExecute(G_DB, sSQL);
-	xrtFree(sSQL);
-	xrtFree(sNameEsc);
-	xrtFree(sMailEsc);
-	xrtFree(sdescEsc);
+
+	DemoSQLiteBindTextOrEmpty(pStmt, 1, sName);
+	sqlite3_bind_int64(pStmt, 2, iAge);
+	DemoSQLiteBindTextOrEmpty(pStmt, 3, sMail);
+	DemoSQLiteBindTextOrEmpty(pStmt, 4, sDesc);
+
+	iResult = sqlite3_step(pStmt);
+	sqlite3_finalize(pStmt);
 	xvoUnref(objBody);
-	// 返回消息
-	xrtHttpReplyJSON(pConn, 200, "{\"result\": true, \"msg\": \"添加数据成功！\"}");
+	if ( iResult != SQLITE_DONE ) {
+		return DemoHttpReplyDBError(objResp, "insert failed");
+	}
+
+	return DemoHttpReplyResult(objResp, TRUE, "add success");
 }
 
 
 
-// 删除数据
-void Request_Del(XS_ServerObject objServer, XS_HostObject objHost, xnetconn* pConn, xhttpdreq* pReq)
+bool Request_Del(XS_ServerObject objServer, XS_HostObject objHost, XS_RequestObject objReq, XS_ResponseObject objResp)
 {
-	// 解析 body 域
-	if ( pReq->iBodyLen == 0 ) {
-		xrtHttpReplyJSON(pConn, 200, "{\"result\": false, \"msg\": \"Body 域不能为空！\"}");
-		return;
+	sqlite3_stmt* pStmt = NULL;
+	xvalue objBody = NULL;
+	int iCount;
+	int i;
+	const void* pBody;
+	size_t iBodyLen;
+
+	(void)objServer;
+	(void)objHost;
+
+	pBody = xsReqBody(objReq);
+	iBodyLen = xsReqBodyLen(objReq);
+	if ( pBody == NULL || iBodyLen == 0 ) {
+		return DemoHttpReplyResult(objResp, FALSE, "body required");
 	}
-	xvalue objBody = xrtParseJSON(pReq->pBody, pReq->iBodyLen);
-	if ( objBody->Type != XVO_DT_ARRAY ) {
-		xrtHttpReplyJSON(pConn, 200, "{\"result\": false, \"msg\": \"Body 域必须传递为 JSON 数组！\"}");
+
+	objBody = xrtParseJSON(pBody, iBodyLen);
+	if ( objBody == NULL || objBody->Type != XVO_DT_ARRAY ) {
+		if ( objBody ) {
+			xvoUnref(objBody);
+		}
+		return DemoHttpReplyResult(objResp, FALSE, "body must be json array");
+	}
+
+	if ( !DemoSQLitePrepare(&pStmt, "DELETE FROM test WHERE id = ?;") ) {
 		xvoUnref(objBody);
-		return;
+		return DemoHttpReplyDBError(objResp, "prepare delete failed");
 	}
-	// 遍历数组删除数据
-	int iCount = xvoArrayItemCount(objBody);
-	for ( int i = 0; i < iCount; i++ ) {
-		str id = xvoArrayGetText(objBody, i);
-		str idEsc = sql_escape(id, 0);
-		str sSQL = xrtFormat("DELETE FROM test WHERE id = '%s'", idEsc);
-		xdoExecute(G_DB, sSQL);
-		xrtFree(sSQL);
-		xrtFree(idEsc);
+
+	iCount = xvoArrayItemCount(objBody);
+	for ( i = 0; i < iCount; i++ ) {
+		const char* sID = xvoArrayGetText(objBody, i);
+		char* sIDText = NULL;
+		int64 iID = 0;
+
+		if ( sID == NULL || sID[0] == '\0' ) {
+			iID = xvoArrayGetInt(objBody, i);
+			if ( iID > 0 ) {
+				sIDText = xrtFormat("%lld", (long long)iID);
+				sID = sIDText;
+			}
+		}
+		if ( sID == NULL || sID[0] == '\0' ) {
+			if ( sIDText ) {
+				xrtFree(sIDText);
+			}
+			continue;
+		}
+
+		DemoSQLiteBindTextOrEmpty(pStmt, 1, sID);
+		if ( sqlite3_step(pStmt) != SQLITE_DONE ) {
+			sqlite3_finalize(pStmt);
+			xvoUnref(objBody);
+			if ( sIDText ) {
+				xrtFree(sIDText);
+			}
+			return DemoHttpReplyDBError(objResp, "delete failed");
+		}
+		sqlite3_reset(pStmt);
+		sqlite3_clear_bindings(pStmt);
+		if ( sIDText ) {
+			xrtFree(sIDText);
+		}
 	}
+
+	sqlite3_finalize(pStmt);
 	xvoUnref(objBody);
-	// 返回消息
-	xrtHttpReplyJSON(pConn, 200, "{\"result\": true, \"msg\": \"数据删除成功！\"}");
+	return DemoHttpReplyResult(objResp, TRUE, "delete success");
 }
 
 
 
-// 编辑数据
-void Request_Edit(XS_ServerObject objServer, XS_HostObject objHost, xnetconn* pConn, xhttpdreq* pReq)
+bool Request_Edit(XS_ServerObject objServer, XS_HostObject objHost, XS_RequestObject objReq, XS_ResponseObject objResp)
 {
-	// 解析 body 域
-	if ( pReq->iBodyLen == 0 ) {
-		xrtHttpReplyJSON(pConn, 200, "{\"result\": false, \"msg\": \"Body 域不能为空！\"}");
-		return;
+	sqlite3_stmt* pStmt = NULL;
+	xvalue objBody = NULL;
+	const char* sID;
+	const char* sField;
+	const char* sValue;
+	const char* sSQL = NULL;
+	int iResult;
+	const void* pBody;
+	size_t iBodyLen;
+
+	(void)objServer;
+	(void)objHost;
+
+	pBody = xsReqBody(objReq);
+	iBodyLen = xsReqBodyLen(objReq);
+	if ( pBody == NULL || iBodyLen == 0 ) {
+		return DemoHttpReplyResult(objResp, FALSE, "body required");
 	}
-	xvalue objBody = xrtParseJSON(pReq->pBody, pReq->iBodyLen);
-	if ( objBody->Type != XVO_DT_TABLE ) {
-		xrtHttpReplyJSON(pConn, 200, "{\"result\": false, \"msg\": \"Body 域必须传递为 JSON 对象！\"}");
+
+	objBody = xrtParseJSON(pBody, iBodyLen);
+	if ( objBody == NULL || objBody->Type != XVO_DT_TABLE ) {
+		if ( objBody ) {
+			xvoUnref(objBody);
+		}
+		return DemoHttpReplyResult(objResp, FALSE, "body must be json object");
+	}
+
+	sID = xvoTableGetText(objBody, "id", 2);
+	sField = xvoTableGetText(objBody, "field", 5);
+	sValue = xvoTableGetText(objBody, "value", 5);
+
+	if ( sID == NULL || sID[0] == '\0' ) {
 		xvoUnref(objBody);
-		return;
+		return DemoHttpReplyResult(objResp, FALSE, "id required");
 	}
-	// 检查 id 属性是否正确
-	str sID = xvoTableGetText(objBody, "id", 2);
-	if ( (sID == NULL) || (sID[0] == 0) ) {
-		xrtHttpReplyJSON(pConn, 200, "{\"result\": false, \"msg\": \"参数 id 不能为空！\"}");
+	if ( sField == NULL || sField[0] == '\0' ) {
 		xvoUnref(objBody);
-		return;
+		return DemoHttpReplyResult(objResp, FALSE, "field required");
 	}
-	// 检查 field 属性是否正确（只允许特定字段名防止注入）
-	str sField = xvoTableGetText(objBody, "field", 5);
-	if ( (sField == NULL) || (sField[0] == 0) ) {
-		xrtHttpReplyJSON(pConn, 200, "{\"result\": false, \"msg\": \"参数 field 不能为空！\"}");
+
+	if ( strcmp(sField, "name") == 0 ) {
+		sSQL = "UPDATE test SET name = ? WHERE id = ?;";
+	} else if ( strcmp(sField, "age") == 0 ) {
+		sSQL = "UPDATE test SET age = ? WHERE id = ?;";
+	} else if ( strcmp(sField, "mail") == 0 ) {
+		sSQL = "UPDATE test SET mail = ? WHERE id = ?;";
+	} else if ( strcmp(sField, "desc") == 0 ) {
+		sSQL = "UPDATE test SET \"desc\" = ? WHERE id = ?;";
+	} else {
 		xvoUnref(objBody);
-		return;
+		return DemoHttpReplyResult(objResp, FALSE, "invalid field");
 	}
-	// 白名单验证字段名（防止字段名注入）
-	if ( strcmp(sField, "name") != 0 && strcmp(sField, "age") != 0 && 
-	     strcmp(sField, "mail") != 0 && strcmp(sField, "desc") != 0 ) {
-		xrtHttpReplyJSON(pConn, 200, "{\"result\": false, \"msg\": \"无效的字段名！\"}");
+
+	if ( !DemoSQLitePrepare(&pStmt, sSQL) ) {
 		xvoUnref(objBody);
-		return;
+		return DemoHttpReplyDBError(objResp, "prepare update failed");
 	}
-	// 修改属性（使用转义防止 SQL 注入）
-	str sValue = xvoTableGetText(objBody, "value", 5);
-	str sValueEsc = sql_escape(sValue, 0);
-	str sIDEsc = sql_escape(sID, 0);
-	str sSQL = xrtFormat("UPDATE test SET %s = '%s' WHERE id = '%s'", sField, sValueEsc, sIDEsc);
-	xdoExecute(G_DB, sSQL);
-	xrtFree(sSQL);
-	xrtFree(sValueEsc);
-	xrtFree(sIDEsc);
+
+	DemoSQLiteBindTextOrEmpty(pStmt, 1, sValue);
+	DemoSQLiteBindTextOrEmpty(pStmt, 2, sID);
+	iResult = sqlite3_step(pStmt);
+	sqlite3_finalize(pStmt);
 	xvoUnref(objBody);
-	// 返回消息
-	xrtHttpReplyJSON(pConn, 200, "{\"result\": true, \"msg\": \"数据编辑成功！\"}");
+	if ( iResult != SQLITE_DONE ) {
+		return DemoHttpReplyDBError(objResp, "update failed");
+	}
+
+	return DemoHttpReplyResult(objResp, TRUE, "edit success");
 }
-
-

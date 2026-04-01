@@ -151,7 +151,9 @@ Run `xs` or `xsdbg` inside `release`; both use `xs.json` by default.
 
 ## Dynamic Script Development
 
-XServer vNext currently uses `release/tcc/inc_xs/xs_vnext.h` as its minimal script host header, and `release/script_vnext/main.c` as the demo script.
+XServer vNext currently uses `release/tcc/inc_xs/xs_vnext.h` as its minimal script host header, and `release/script_vnext/main.c` as the main demo script.
+
+The migrated legacy demo also lives in `release/script/main.c`, and can be smoke-tested with `cmd /c test_script_demo.bat` or `sh ./test_script_demo.sh`.
 
 Minimal script example:
 
