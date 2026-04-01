@@ -42,6 +42,14 @@ static inline void XS_ImportXSSymbols(TCCState* s)
 	tcc_add_symbol(s, "xsHttpText", XS_ScriptHttpText);
 	tcc_add_symbol(s, "xsHttpBody", XS_ScriptHttpBody);
 	tcc_add_symbol(s, "xsHttpJson", XS_ScriptHttpJson);
+	tcc_add_symbol(s, "xsRet403", XS_ScriptRet403);
+	tcc_add_symbol(s, "xsRet404", XS_ScriptRet404);
+	tcc_add_symbol(s, "xsRet500", XS_ScriptRet500);
+	tcc_add_symbol(s, "xsRetError", XS_ScriptRetError);
+	tcc_add_symbol(s, "Ret403", XS_ScriptRet403);
+	tcc_add_symbol(s, "Ret404", XS_ScriptRet404);
+	tcc_add_symbol(s, "Ret500", XS_ScriptRet500);
+	tcc_add_symbol(s, "RetError", XS_ScriptRetError);
 
 	/* websocket */
 	tcc_add_symbol(s, "xsWsIsOpen", XS_ScriptWsIsOpen);

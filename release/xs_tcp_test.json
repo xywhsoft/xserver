@@ -1,4 +1,5 @@
-[
+{
+	"services": [
 	{
 		"enabled": true,
 		"class": "tcp",
@@ -10,4 +11,5 @@
 		"debug": true,
 		"devlang": "protocol"
 	}
-]
+	]
+}

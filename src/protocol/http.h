@@ -347,8 +347,10 @@ static void XS_HttpOnOpen(ptr pOwner, xhttpdserver* pServer, xhttpdconn* pConn)
 		return;
 	}
 
-	XS_HttpOnOpenMetrics();
-	if ( objServer && objServer->ConnLimit > 0u && XS_HttpTrackedConnCount(objHandle) > (int64)objServer->ConnLimit ) {
+	if ( XS_RuntimeStatsEnabled() ) {
+		XS_HttpOnOpenMetrics();
+	}
+	if ( XS_RuntimeGovernEnabled() && objServer && objServer->ConnLimit > 0u && XS_HttpTrackedConnCount(objHandle) > (int64)objServer->ConnLimit ) {
 		if ( objCtx ) {
 			objCtx->bClosing = TRUE;
 		}
@@ -398,7 +400,9 @@ static bool XS_HttpOnRequest(ptr pOwner, xhttpdserver* pServer, xhttpdconn* pCon
 	objHandle = objServer ? (XS_HttpHandle*)objServer->pHandle : NULL;
 	objCtx = XS_HttpGetConnContext(objHandle, pConn);
 	XS_HttpTouch(objCtx);
-	XS_HttpRecordMethodMetrics(pReq);
+	if ( XS_RuntimeStatsEnabled() ) {
+		XS_HttpRecordMethodMetrics(pReq);
+	}
 
 	XS_HttpApplyDefaultHeaders(pReq, pResp);
 
@@ -418,7 +422,17 @@ static bool XS_HttpOnRequest(ptr pOwner, xhttpdserver* pServer, xhttpdconn* pCon
 		if ( XS_HttpPathExpectsJSONError(pReq->sPath) ) {
 			bRet = XS_HttpRespondJsonResult(pResp, 503, "Service Unavailable", FALSE, "server stopping");
 		} else {
-			bRet = XS_HttpRespondText(pResp, 503, "Service Unavailable", "server stopping");
+			bRet = XS_HttpRetErrorEx(
+				objServer,
+				NULL,
+				pReq,
+				pResp,
+				XS_HttpLastRemote()[0] ? XS_HttpLastRemote() : NULL,
+				503,
+				"Service Unavailable",
+				"server stopping",
+				NULL
+			);
 		}
 		goto end;
 	}
@@ -428,7 +442,7 @@ static bool XS_HttpOnRequest(ptr pOwner, xhttpdserver* pServer, xhttpdconn* pCon
 		if ( XS_HttpPathExpectsJSONError(pReq->sPath) ) {
 			bRet = XS_HttpRespondJsonResult(pResp, 404, "Not Found", FALSE, "host not found");
 		} else {
-			bRet = XS_HttpRespondText(pResp, 404, "Not Found", "host not found");
+			bRet = XS_HttpRet404Ex(objServer, NULL, pReq, pResp, NULL, "host not found", NULL);
 		}
 		goto end;
 	}
@@ -461,7 +475,7 @@ static bool XS_HttpOnRequest(ptr pOwner, xhttpdserver* pServer, xhttpdconn* pCon
 			objHost->Name ? objHost->Name : "(default)",
 			pReq->sPath
 		);
-		bRet = XS_HttpRespondText(pResp, 404, "Not Found", sBody);
+		bRet = XS_HttpRet404Ex(objServer, objHost, pReq, pResp, XS_HttpLastRemote()[0] ? XS_HttpLastRemote() : NULL, sBody, NULL);
 		goto end;
 	}
 	
@@ -482,8 +496,10 @@ end:
 		fElapsed = 0.0;
 	}
 	iElapsedMS = (int64)(fElapsed * 1000.0);
-	XS_HttpRecordTimeMetrics(pReq, iElapsedMS);
-	XS_HttpRecordResponseMetrics(pConn, pReq, pResp);
+	if ( XS_RuntimeStatsEnabled() ) {
+		XS_HttpRecordTimeMetrics(pReq, iElapsedMS);
+		XS_HttpRecordResponseMetrics(pConn, pReq, pResp);
+	}
 	return bRet;
 }
 
@@ -494,7 +510,9 @@ static void XS_HttpOnClose(ptr pOwner, xhttpdserver* pServer, xhttpdconn* pConn,
 	XS_HttpConnContext* objCtx = XS_HttpGetConnContext(objHandle, pConn);
 	(void)pServer;
 
-	XS_HttpOnCloseMetrics();
+	if ( XS_RuntimeStatsEnabled() ) {
+		XS_HttpOnCloseMetrics();
+	}
 	XS_HttpRecordRemoteByConn(pConn);
 
 	if ( objCtx ) {
@@ -709,7 +727,7 @@ static inline bool XS_HttpStartServer(XS_ServerConfig* objServer)
 		XS_ReportError("http start failed: xrtHttpdStart returned error");
 		return FALSE;
 	}
-	if ( objHandle && objServer->IdleTimeout > 0 ) {
+	if ( objHandle && XS_RuntimeGovernEnabled() && objServer->IdleTimeout > 0 ) {
 		objHandle->bStopping = FALSE;
 		objHandle->bStopThread = FALSE;
 		objHandle->hIdleThread = xrtThreadCreate(XS_HttpIdleThread, objHandle, 0);

@@ -87,6 +87,10 @@ static inline void XS_WarnUnknownFields(xvalue objTable, const XS_FieldRule* arr
 
 static inline bool XS_RequireFieldType(xvalue objTable, const char* sKey, int iKeyLen, int iType, const char* sScope, bool bRequired)
 {
+	if ( iKeyLen <= 0 && sKey ) {
+		iKeyLen = (int)strlen(sKey);
+	}
+
 	xvalue objVal = xvoTableGetValue(objTable, (char*)sKey, iKeyLen);
 	
 	if ( objVal == NULL || objVal->Type == XVO_DT_NULL ) {
@@ -102,6 +106,70 @@ static inline bool XS_RequireFieldType(xvalue objTable, const char* sKey, int iK
 		return FALSE;
 	}
 	
+	return TRUE;
+}
+
+static inline xvalue XS_GetFieldValueAlias(xvalue objTable, const char* sKey, const char* sAlias)
+{
+	xvalue objVal;
+
+	if ( objTable == NULL || objTable->Type != XVO_DT_TABLE ) {
+		return NULL;
+	}
+
+	objVal = xvoTableGetValue(objTable, (char*)sKey, 0);
+	if ( objVal != NULL && objVal->Type != XVO_DT_NULL ) {
+		return objVal;
+	}
+	if ( sAlias && sAlias[0] ) {
+		objVal = xvoTableGetValue(objTable, (char*)sAlias, 0);
+		if ( objVal != NULL && objVal->Type != XVO_DT_NULL ) {
+			return objVal;
+		}
+	}
+
+	return &XVO_VALUE_NULL;
+}
+
+static inline const char* XS_GetFieldTextAlias(xvalue objTable, const char* sKey, const char* sAlias)
+{
+	xvalue objVal = XS_GetFieldValueAlias(objTable, sKey, sAlias);
+
+	if ( objVal == NULL || objVal->Type == XVO_DT_NULL ) {
+		return NULL;
+	}
+
+	return xvoGetText(objVal);
+}
+
+static inline bool XS_RequireFieldTypeAlias(xvalue objTable, const char* sKey, const char* sAlias, int iType, const char* sScope, bool bRequired)
+{
+	if ( !XS_RequireFieldType(objTable, sKey, 0, iType, sScope, bRequired) ) {
+		return FALSE;
+	}
+	if ( sAlias && sAlias[0] ) {
+		if ( !XS_RequireFieldType(objTable, sAlias, 0, iType, sScope, FALSE) ) {
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
+static inline bool XS_SetTableParent(xvalue objTable, xvalue objParent, const char* sScope)
+{
+	if ( objTable == NULL || objParent == NULL || objTable == objParent ) {
+		return TRUE;
+	}
+	if ( objTable->Type != XVO_DT_TABLE || objParent->Type != XVO_DT_TABLE ) {
+		XS_ReportError("%s parent table invalid", sScope ? sScope : "config");
+		return FALSE;
+	}
+	if ( !xvoTableSetParent(objTable, objParent) ) {
+		XS_ReportError("%s parent table bind failed", sScope ? sScope : "config");
+		return FALSE;
+	}
+
 	return TRUE;
 }
 
@@ -160,7 +228,67 @@ static inline bool XS_LoadTlsConfig(xvalue objTable, const char* sBaseDir, xtlsc
 	return TRUE;
 }
 
-static inline bool XS_LoadHostConfig(xvalue objTable, const char* sBaseDir, XS_HostConfig* objHost, const char* sScope)
+static inline char* XS_LoadOptionalPath(const char* sBaseDir, const char* sPath)
+{
+	if ( sPath == NULL || sPath[0] == '\0' ) {
+		return NULL;
+	}
+
+	return XS_NormalizePath(sBaseDir, sPath);
+}
+
+static inline bool XS_LoadHttpPageConfig(xvalue objTable, const char* sBaseDir, XS_HttpPageConfig* objPages)
+{
+	const char* sPageBaseDir;
+
+	if ( objPages == NULL ) {
+		return FALSE;
+	}
+
+	sPageBaseDir = sBaseDir;
+	if ( sPageBaseDir == NULL || sPageBaseDir[0] == '\0' ) {
+		sPageBaseDir = ".";
+	}
+
+	objPages->DefaultPage = XS_LoadOptionalPath(sPageBaseDir, XS_GetFieldTextAlias(objTable, "default_page", "默认页"));
+	objPages->Page404 = XS_LoadOptionalPath(sPageBaseDir, XS_GetFieldTextAlias(objTable, "page_404", "404页面"));
+	objPages->Page403 = XS_LoadOptionalPath(sPageBaseDir, XS_GetFieldTextAlias(objTable, "page_403", "403页面"));
+	objPages->Page500 = XS_LoadOptionalPath(sPageBaseDir, XS_GetFieldTextAlias(objTable, "page_500", "500页面"));
+	objPages->ErrorPage = XS_LoadOptionalPath(sPageBaseDir, XS_GetFieldTextAlias(objTable, "error_page", "自定义错误页面"));
+	return TRUE;
+}
+
+static inline bool XS_InheritHttpPageConfig(XS_HttpPageConfig* objPages, const XS_HttpPageConfig* objParentPages)
+{
+	if ( objPages == NULL || objParentPages == NULL ) {
+		return FALSE;
+	}
+
+	if ( objPages->DefaultPage == NULL && objParentPages->DefaultPage ) {
+		objPages->DefaultPage = xrtCopyStr(objParentPages->DefaultPage, 0);
+		if ( objPages->DefaultPage == NULL ) return FALSE;
+	}
+	if ( objPages->Page404 == NULL && objParentPages->Page404 ) {
+		objPages->Page404 = xrtCopyStr(objParentPages->Page404, 0);
+		if ( objPages->Page404 == NULL ) return FALSE;
+	}
+	if ( objPages->Page403 == NULL && objParentPages->Page403 ) {
+		objPages->Page403 = xrtCopyStr(objParentPages->Page403, 0);
+		if ( objPages->Page403 == NULL ) return FALSE;
+	}
+	if ( objPages->Page500 == NULL && objParentPages->Page500 ) {
+		objPages->Page500 = xrtCopyStr(objParentPages->Page500, 0);
+		if ( objPages->Page500 == NULL ) return FALSE;
+	}
+	if ( objPages->ErrorPage == NULL && objParentPages->ErrorPage ) {
+		objPages->ErrorPage = xrtCopyStr(objParentPages->ErrorPage, 0);
+		if ( objPages->ErrorPage == NULL ) return FALSE;
+	}
+
+	return TRUE;
+}
+
+static inline bool XS_LoadHostConfig(xvalue objTable, const char* sBaseDir, const XS_HttpPageConfig* objParentPages, XS_HostConfig* objHost, const char* sScope)
 {
 	static const XS_FieldRule arrRule[] = {
 		{"enabled", XVO_DT_BOOL, FALSE},
@@ -170,6 +298,16 @@ static inline bool XS_LoadHostConfig(xvalue objTable, const char* sBaseDir, XS_H
 		{"param", XVO_DT_TEXT, FALSE},
 		{"debug", XVO_DT_BOOL, FALSE},
 		{"path", XVO_DT_TEXT, FALSE},
+		{"default_page", XVO_DT_TEXT, FALSE},
+		{"page_404", XVO_DT_TEXT, FALSE},
+		{"page_403", XVO_DT_TEXT, FALSE},
+		{"page_500", XVO_DT_TEXT, FALSE},
+		{"error_page", XVO_DT_TEXT, FALSE},
+		{"默认页", XVO_DT_TEXT, FALSE},
+		{"404页面", XVO_DT_TEXT, FALSE},
+		{"403页面", XVO_DT_TEXT, FALSE},
+		{"500页面", XVO_DT_TEXT, FALSE},
+		{"自定义错误页面", XVO_DT_TEXT, FALSE},
 		{"devlang", XVO_DT_TEXT, FALSE},
 		{"devfile", XVO_DT_TEXT, FALSE},
 		{"tls_ca", XVO_DT_TEXT, FALSE},
@@ -195,6 +333,11 @@ static inline bool XS_LoadHostConfig(xvalue objTable, const char* sBaseDir, XS_H
 	if ( !XS_RequireFieldType(objTable, "param", 5, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "debug", 5, XVO_DT_BOOL, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "path", 4, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldTypeAlias(objTable, "default_page", "默认页", XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldTypeAlias(objTable, "page_404", "404页面", XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldTypeAlias(objTable, "page_403", "403页面", XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldTypeAlias(objTable, "page_500", "500页面", XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldTypeAlias(objTable, "error_page", "自定义错误页面", XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "devlang", 7, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "devfile", 7, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "tls_ca", 6, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
@@ -214,6 +357,10 @@ static inline bool XS_LoadHostConfig(xvalue objTable, const char* sBaseDir, XS_H
 	
 	objHost->DevMode = XS_ParseDevMode(sDevLang, XS_DEV_STATIC);
 	objHost->Path = XS_NormalizePath(sBaseDir, sPath);
+	XS_LoadHttpPageConfig(objTable, objHost->Path ? objHost->Path : sBaseDir, &objHost->Pages);
+	if ( objParentPages && !XS_InheritHttpPageConfig(&objHost->Pages, objParentPages) ) {
+		return FALSE;
+	}
 	
 	if ( sDevFile && sDevFile[0] != '\0' ) {
 		objHost->DevFile = XS_NormalizePath(sBaseDir, sDevFile);
@@ -309,7 +456,7 @@ static inline bool XS_LoadBindConfig(
 	return TRUE;
 }
 
-static inline bool XS_LoadServerConfig(xvalue objTable, const char* sBaseDir, XS_ServerConfig* objServer, int iIndex)
+static inline bool XS_LoadServerConfig(xvalue objTable, const char* sBaseDir, const XS_HttpPageConfig* objParentPages, XS_ServerConfig* objServer, int iIndex)
 {
 	static const XS_FieldRule arrRule[] = {
 		{"enabled", XVO_DT_BOOL, FALSE},
@@ -333,6 +480,16 @@ static inline bool XS_LoadServerConfig(xvalue objTable, const char* sBaseDir, XS
 		{"port_tls", XVO_DT_INT, FALSE},
 		{"debug", XVO_DT_BOOL, FALSE},
 		{"path", XVO_DT_TEXT, FALSE},
+		{"default_page", XVO_DT_TEXT, FALSE},
+		{"page_404", XVO_DT_TEXT, FALSE},
+		{"page_403", XVO_DT_TEXT, FALSE},
+		{"page_500", XVO_DT_TEXT, FALSE},
+		{"error_page", XVO_DT_TEXT, FALSE},
+		{"默认页", XVO_DT_TEXT, FALSE},
+		{"404页面", XVO_DT_TEXT, FALSE},
+		{"403页面", XVO_DT_TEXT, FALSE},
+		{"500页面", XVO_DT_TEXT, FALSE},
+		{"自定义错误页面", XVO_DT_TEXT, FALSE},
 		{"devlang", XVO_DT_TEXT, FALSE},
 		{"devfile", XVO_DT_TEXT, FALSE},
 		{"tls_ca", XVO_DT_TEXT, FALSE},
@@ -379,6 +536,11 @@ static inline bool XS_LoadServerConfig(xvalue objTable, const char* sBaseDir, XS
 	if ( !XS_RequireFieldType(objTable, "port_tls", 8, XVO_DT_INT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "debug", 5, XVO_DT_BOOL, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "path", 4, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldTypeAlias(objTable, "default_page", "默认页", XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldTypeAlias(objTable, "page_404", "404页面", XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldTypeAlias(objTable, "page_403", "403页面", XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldTypeAlias(objTable, "page_500", "500页面", XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldTypeAlias(objTable, "error_page", "自定义错误页面", XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "devlang", 7, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "devfile", 7, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "tls_ca", 6, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
@@ -446,6 +608,10 @@ static inline bool XS_LoadServerConfig(xvalue objTable, const char* sBaseDir, XS
 	objServer->Path = XS_NormalizePath(sBaseDir, xvoTableGetText(objTable, "path", 4));
 	objServer->DevMode = XS_ParseDevMode(xvoTableGetText(objTable, "devlang", 7), XS_DEV_PROTOCOL);
 	objServer->DevFile = XS_NormalizePath(sBaseDir, xvoTableGetText(objTable, "devfile", 7));
+	XS_LoadHttpPageConfig(objTable, objServer->Path ? objServer->Path : sBaseDir, &objServer->Pages);
+	if ( objParentPages && !XS_InheritHttpPageConfig(&objServer->Pages, objParentPages) ) {
+		return FALSE;
+	}
 	XS_LoadTlsConfig(objTable, sBaseDir, &objServer->TlsConfig);
 	
 	if ( objServer->Class == XS_SVC_NONE ) {
@@ -519,7 +685,7 @@ static inline bool XS_LoadServerConfig(xvalue objTable, const char* sBaseDir, XS
 		
 		if ( objHostDef && objHostDef->Type == XVO_DT_TABLE ) {
 			objServer->EnableDefaultHost = TRUE;
-			if ( !XS_LoadHostConfig(objHostDef, sBaseDir, &objServer->DefaultHost, "server.host_default") ) {
+			if ( !XS_LoadHostConfig(objHostDef, sBaseDir, &objServer->Pages, &objServer->DefaultHost, "server.host_default") ) {
 				return FALSE;
 			}
 		}
@@ -532,7 +698,7 @@ static inline bool XS_LoadServerConfig(xvalue objTable, const char* sBaseDir, XS
 				char sHostScope[64];
 				
 				sprintf(sHostScope, "server[%d].hosts[%u]", iIndex, i);
-				if ( !XS_LoadHostConfig(objItem, sBaseDir, objHost, sHostScope) ) {
+				if ( !XS_LoadHostConfig(objItem, sBaseDir, &objServer->Pages, objHost, sHostScope) ) {
 					return FALSE;
 				}
 			}
@@ -548,7 +714,21 @@ static inline bool XS_LoadServerConfig(xvalue objTable, const char* sBaseDir, XS
 
 static inline bool XS_LoadConfig(XS_Config* objCfg, const char* sFilePath)
 {
+	static const XS_FieldRule arrRootRule[] = {
+		{"services", XVO_DT_ARRAY, TRUE},
+		{"default_page", XVO_DT_TEXT, FALSE},
+		{"page_404", XVO_DT_TEXT, FALSE},
+		{"page_403", XVO_DT_TEXT, FALSE},
+		{"page_500", XVO_DT_TEXT, FALSE},
+		{"error_page", XVO_DT_TEXT, FALSE},
+		{"默认页", XVO_DT_TEXT, FALSE},
+		{"404页面", XVO_DT_TEXT, FALSE},
+		{"403页面", XVO_DT_TEXT, FALSE},
+		{"500页面", XVO_DT_TEXT, FALSE},
+		{"自定义错误页面", XVO_DT_TEXT, FALSE}
+	};
 	xvalue objRoot;
+	xvalue arrServices;
 	uint32 i;
 	int iErrorCountBase;
 	
@@ -563,28 +743,48 @@ static inline bool XS_LoadConfig(XS_Config* objCfg, const char* sFilePath)
 		XS_ReportError("cannot parse config file: %s", sFilePath);
 		return FALSE;
 	}
-	
-	if ( objRoot->Type == XVO_DT_TABLE ) {
-		uint32 idx = xrtArrayAppend(objCfg->Servers, 1);
-		XS_ServerConfig* objServer = xrtArrayGet_Inline(objCfg->Servers, idx);
-		
-		if ( !XS_LoadServerConfig(objRoot, objCfg->BaseDir, objServer, 0) ) {
+
+	if ( objRoot->Type != XVO_DT_TABLE ) {
+		XS_ReportError("config root must be object and contain services array");
+		return FALSE;
+	}
+
+	if ( !XS_RequireFieldType(objRoot, "services", 8, XVO_DT_ARRAY, "config", TRUE) ) {
+		return FALSE;
+	}
+	if ( !XS_RequireFieldTypeAlias(objRoot, "default_page", "默认页", XVO_DT_TEXT, "config", FALSE) ) return FALSE;
+	if ( !XS_RequireFieldTypeAlias(objRoot, "page_404", "404页面", XVO_DT_TEXT, "config", FALSE) ) return FALSE;
+	if ( !XS_RequireFieldTypeAlias(objRoot, "page_403", "403页面", XVO_DT_TEXT, "config", FALSE) ) return FALSE;
+	if ( !XS_RequireFieldTypeAlias(objRoot, "page_500", "500页面", XVO_DT_TEXT, "config", FALSE) ) return FALSE;
+	if ( !XS_RequireFieldTypeAlias(objRoot, "error_page", "自定义错误页面", XVO_DT_TEXT, "config", FALSE) ) return FALSE;
+	XS_WarnUnknownFields(objRoot, arrRootRule, sizeof(arrRootRule) / sizeof(arrRootRule[0]), "config");
+
+	{
+		XS_HttpPageConfig objRootPages;
+
+		arrServices = xvoTableGetValue(objRoot, "services", 8);
+		XS_InitHttpPageConfig(&objRootPages);
+		if ( !XS_LoadHttpPageConfig(objRoot, objCfg->BaseDir, &objRootPages) ) {
+			XS_FreeHttpPageConfig(&objRootPages);
 			return FALSE;
 		}
-	} else if ( objRoot->Type == XVO_DT_ARRAY ) {
-		for ( i = 0; i < xvoArrayItemCount(objRoot); i++ ) {
+
+		for ( i = 0; i < xvoArrayItemCount(arrServices); i++ ) {
+			xvalue objItem = xvoArrayGetValue(arrServices, i);
 			uint32 idx;
 			XS_ServerConfig* objServer;
-			
+			char sScope[64];
+
+			sprintf(sScope, "server[%u]", i);
 			idx = xrtArrayAppend(objCfg->Servers, 1);
 			objServer = xrtArrayGet_Inline(objCfg->Servers, idx);
-			if ( !XS_LoadServerConfig(xvoArrayGetValue(objRoot, i), objCfg->BaseDir, objServer, i) ) {
+			if ( !XS_LoadServerConfig(objItem, objCfg->BaseDir, &objRootPages, objServer, i) ) {
+				XS_FreeHttpPageConfig(&objRootPages);
 				return FALSE;
 			}
 		}
-	} else {
-		XS_ReportError("config root must be object or array");
-		return FALSE;
+
+		XS_FreeHttpPageConfig(&objRootPages);
 	}
 	
 	return g_objXsErrorState.ErrorCount == iErrorCountBase;

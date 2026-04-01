@@ -1,4 +1,5 @@
-[
+{
+	"services": [
 	{
 		"enabled": true,
 		"class": "http",
@@ -46,4 +47,5 @@
 		},
 		"hosts": []
 	}
-]
+	]
+}

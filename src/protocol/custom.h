@@ -23,6 +23,9 @@ typedef struct {
 
 static inline bool XS_CustomIsTransportRecvLimitError(XS_CustomConnContext* objCtx, xnetstream* pStream, int iSysErr)
 {
+	if ( !XS_RuntimeGovernEnabled() ) {
+		return FALSE;
+	}
 	if ( iSysErr != -1 ) {
 		return FALSE;
 	}
@@ -161,14 +164,16 @@ static void XS_CustomOnOpen(ptr pOwner, xnetstream* pStream)
 		return;
 	}
 	
-	g_iXsCustomOpenCount++;
-	g_iXsCustomConnCurrent++;
-	if ( g_iXsCustomConnCurrent > g_iXsCustomConnPeak ) {
-		g_iXsCustomConnPeak = g_iXsCustomConnCurrent;
+	if ( XS_RuntimeStatsEnabled() ) {
+		g_iXsCustomOpenCount++;
+		g_iXsCustomConnCurrent++;
+		if ( g_iXsCustomConnCurrent > g_iXsCustomConnPeak ) {
+			g_iXsCustomConnPeak = g_iXsCustomConnCurrent;
+		}
 	}
 	XS_CustomTouch(objCtx);
 	XS_CustomRecordRemote(pStream);
-	if ( objServer && objServer->ConnLimit > 0u && XS_CustomTrackedConnCount(objHandle) > (int64)objServer->ConnLimit ) {
+	if ( XS_RuntimeGovernEnabled() && objServer && objServer->ConnLimit > 0u && XS_CustomTrackedConnCount(objHandle) > (int64)objServer->ConnLimit ) {
 		if ( objCtx ) {
 			objCtx->bClosing = TRUE;
 		}
@@ -221,7 +226,7 @@ static void XS_CustomOnRecv(ptr pOwner, xnetstream* pStream, xnetchain* pChain)
 		return;
 	}
 
-	if ( (objServer) && (objServer->RecvLimit > 0) && ((uint32)iLen > objServer->RecvLimit) ) {
+	if ( XS_RuntimeGovernEnabled() && (objServer) && (objServer->RecvLimit > 0) && ((uint32)iLen > objServer->RecvLimit) ) {
 		XS_CustomRecordRemote(pStream);
 		XS_CustomRecordInvalid("recv limit exceeded");
 		XS_LogWarn(
@@ -266,12 +271,14 @@ static void XS_CustomOnRecv(ptr pOwner, xnetstream* pStream, xnetchain* pChain)
 	
 	(void)xrtNetChainPeek(pChain, pBuf, iLen);
 	xrtNetChainConsume(pChain, iLen);
-	g_iXsCustomRecvCount++;
-	g_iXsCustomRecvBytes += (int64)iLen;
-	g_iXsCustomLastBytes = (int64)iLen;
-	g_tXsCustomLastTime = xrtNow();
+	if ( XS_RuntimeStatsEnabled() ) {
+		g_iXsCustomRecvCount++;
+		g_iXsCustomRecvBytes += (int64)iLen;
+		g_iXsCustomLastBytes = (int64)iLen;
+		g_tXsCustomLastTime = xrtNow();
+	}
 	XS_CustomTouch(objCtx);
-	if ( iLen > 0 ) {
+	if ( XS_RuntimeStatsEnabled() && iLen > 0 ) {
 		size_t iCopy = iLen;
 		if ( iCopy >= sizeof(g_sXsCustomLastText) ) {
 			iCopy = sizeof(g_sXsCustomLastText) - 1;
@@ -295,8 +302,10 @@ static void XS_CustomOnRecv(ptr pOwner, xnetstream* pStream, xnetchain* pChain)
 			g_sXsCustomLastRemote[0] ? g_sXsCustomLastRemote : "(none)"
 		);
 		(void)xrtNetStreamSend(pStream, pBuf, iLen);
-		g_iXsCustomSendCount++;
-		g_iXsCustomSendBytes += (int64)iLen;
+		if ( XS_RuntimeStatsEnabled() ) {
+			g_iXsCustomSendCount++;
+			g_iXsCustomSendBytes += (int64)iLen;
+		}
 	} else {
 		XS_LogInfo(
 			"custom recv handled by script: server=%s stream=%p bytes=%u remote=%s",
@@ -319,12 +328,14 @@ static void XS_CustomOnClose(ptr pOwner, xnetstream* pStream, xnet_result iReaso
 	XS_ServerConfig* objServer = objCtx ? objCtx->pServer : NULL;
 	XS_CustomHandle* objHandle = objServer ? (XS_CustomHandle*)objServer->pHandle : NULL;
 	
-	g_iXsCustomCloseCount++;
-	g_iXsCustomLastCloseReason = (int64)iReason;
-	g_tXsCustomLastCloseTime = xrtNow();
-	g_iXsCustomConnCurrent--;
-	if ( g_iXsCustomConnCurrent < 0 ) {
-		g_iXsCustomConnCurrent = 0;
+	if ( XS_RuntimeStatsEnabled() ) {
+		g_iXsCustomCloseCount++;
+		g_iXsCustomLastCloseReason = (int64)iReason;
+		g_tXsCustomLastCloseTime = xrtNow();
+		g_iXsCustomConnCurrent--;
+		if ( g_iXsCustomConnCurrent < 0 ) {
+			g_iXsCustomConnCurrent = 0;
+		}
 	}
 	XS_CustomRecordRemote(pStream);
 	XS_LogInfo(
@@ -373,9 +384,11 @@ static void XS_CustomOnError(ptr pOwner, xnetstream* pStream, int iSysErr)
 		return;
 	}
 	
-	g_iXsCustomErrorCount++;
-	g_iXsCustomLastErrorCode = (int64)iSysErr;
-	g_tXsCustomLastErrorTime = xrtNow();
+	if ( XS_RuntimeStatsEnabled() ) {
+		g_iXsCustomErrorCount++;
+		g_iXsCustomLastErrorCode = (int64)iSysErr;
+		g_tXsCustomLastErrorTime = xrtNow();
+	}
 	XS_CustomRecordRemote(pStream);
 	XS_CustomSnapshotErrorRemote();
 	XS_LogWarn(
@@ -433,7 +446,7 @@ static inline bool XS_CustomInitServer(xnetengine* pEngine, XS_ServerConfig* obj
 		return FALSE;
 	}
 	tCfg.iBacklog = objServer->Backlog;
-	tCfg.iRecvLimit = objServer->RecvLimit;
+	tCfg.iRecvLimit = XS_RuntimeGovernEnabled() ? objServer->RecvLimit : 0u;
 	
 	objHandle->pListener = xrtNetListenerCreate(pEngine, &tCfg, XS_CustomListenerEvents(), XS_CustomStreamEvents(), objServer);
 	if ( objHandle->pListener == NULL ) {
@@ -492,15 +505,17 @@ static inline bool XS_CustomStartServer(XS_ServerConfig* objServer)
 		xrtNetListenerStop(objHandle->pListener);
 		return FALSE;
 	}
-	objHandle->hIdleThread = xrtThreadCreate(XS_CustomIdleThread, objHandle, 0);
-	if ( objHandle->hIdleThread == NULL ) {
-		XS_ReportError("custom start failed: create idle thread error");
-		objHandle->bStopAccept = TRUE;
-		xrtThreadWait(objHandle->hAcceptThread);
-		xrtThreadDestroy(objHandle->hAcceptThread);
-		objHandle->hAcceptThread = NULL;
-		xrtNetListenerStop(objHandle->pListener);
-		return FALSE;
+	if ( XS_RuntimeGovernEnabled() ) {
+		objHandle->hIdleThread = xrtThreadCreate(XS_CustomIdleThread, objHandle, 0);
+		if ( objHandle->hIdleThread == NULL ) {
+			XS_ReportError("custom start failed: create idle thread error");
+			objHandle->bStopAccept = TRUE;
+			xrtThreadWait(objHandle->hAcceptThread);
+			xrtThreadDestroy(objHandle->hAcceptThread);
+			objHandle->hAcceptThread = NULL;
+			xrtNetListenerStop(objHandle->pListener);
+			return FALSE;
+		}
 	}
 	
 	XS_LogInfo(

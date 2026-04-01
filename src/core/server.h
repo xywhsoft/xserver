@@ -42,6 +42,7 @@ typedef struct XS_ServerConfig {
 	char* AddrTLS;
 	xtlsconfig TlsConfig;
 	bool Debug;
+	XS_HttpPageConfig Pages;
 	bool HostAware;
 	bool EnableDefaultHost;
 	XS_HostConfig DefaultHost;
@@ -110,6 +111,7 @@ static inline void XS_InitServerConfig(XS_ServerConfig* objServer)
 	objServer->DevMode = XS_DEV_PROTOCOL;
 	objServer->pScriptState = NULL;
 	objServer->pHandle = NULL;
+	XS_InitHttpPageConfig(&objServer->Pages);
 	XS_InitHostConfig(&objServer->DefaultHost);
 }
 
@@ -134,6 +136,7 @@ static inline void XS_FreeServerConfig(XS_ServerConfig* objServer)
 	if ( objServer->TlsConfig.sCertFile ) xrtFree((void*)objServer->TlsConfig.sCertFile);
 	if ( objServer->TlsConfig.sKeyFile ) xrtFree((void*)objServer->TlsConfig.sKeyFile);
 	if ( objServer->Path ) xrtFree(objServer->Path);
+	XS_FreeHttpPageConfig(&objServer->Pages);
 	if ( objServer->DevFile ) xrtFree(objServer->DevFile);
 	
 	XS_FreeHostConfig(&objServer->DefaultHost);

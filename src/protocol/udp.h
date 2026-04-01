@@ -8,11 +8,17 @@ typedef struct {
 
 static inline int64 XS_UdpMetricGet(const volatile int64* pValue)
 {
+	if ( !XS_RuntimeStatsEnabled() ) {
+		return 0;
+	}
 	return XS_HttpMetricGet(pValue);
 }
 
 static inline int64 XS_UdpMetricAdd(volatile int64* pValue, int64 iValue)
 {
+	if ( !XS_RuntimeStatsEnabled() ) {
+		return 0;
+	}
 	return XS_HttpMetricAdd(pValue, iValue);
 }
 
@@ -41,26 +47,28 @@ static void XS_UdpOnRecv(ptr pOwner, xdgramsock* pSock, const xnetaddr* pFrom, x
 	
 	(void)xrtNetChainPeek(pChain, pBuf, iLen);
 	xrtNetChainConsume(pChain, iLen);
-	XS_UdpMetricAdd(&g_iXsUdpRecvCount, 1);
-	XS_UdpMetricAdd(&g_iXsUdpRecvBytes, (int64)iLen);
-	g_iXsUdpLastBytes = (int64)iLen;
-	g_tXsUdpLastTime = xrtNow();
 	sFrom = pFrom ? xrtNetAddrToStr(pFrom) : NULL;
-	if ( sFrom ) {
-		strncpy(g_sXsUdpLastFrom, sFrom, sizeof(g_sXsUdpLastFrom) - 1);
-		g_sXsUdpLastFrom[sizeof(g_sXsUdpLastFrom) - 1] = '\0';
-	} else {
-		g_sXsUdpLastFrom[0] = '\0';
-	}
-	if ( iLen > 0 ) {
-		size_t iCopy = iLen;
-		if ( iCopy >= sizeof(g_sXsUdpLastText) ) {
-			iCopy = sizeof(g_sXsUdpLastText) - 1;
+	if ( XS_RuntimeStatsEnabled() ) {
+		XS_UdpMetricAdd(&g_iXsUdpRecvCount, 1);
+		XS_UdpMetricAdd(&g_iXsUdpRecvBytes, (int64)iLen);
+		g_iXsUdpLastBytes = (int64)iLen;
+		g_tXsUdpLastTime = xrtNow();
+		if ( sFrom ) {
+			strncpy(g_sXsUdpLastFrom, sFrom, sizeof(g_sXsUdpLastFrom) - 1);
+			g_sXsUdpLastFrom[sizeof(g_sXsUdpLastFrom) - 1] = '\0';
+		} else {
+			g_sXsUdpLastFrom[0] = '\0';
 		}
-		memcpy(g_sXsUdpLastText, pBuf, iCopy);
-		g_sXsUdpLastText[iCopy] = '\0';
-	} else {
-		g_sXsUdpLastText[0] = '\0';
+		if ( iLen > 0 ) {
+			size_t iCopy = iLen;
+			if ( iCopy >= sizeof(g_sXsUdpLastText) ) {
+				iCopy = sizeof(g_sXsUdpLastText) - 1;
+			}
+			memcpy(g_sXsUdpLastText, pBuf, iCopy);
+			g_sXsUdpLastText[iCopy] = '\0';
+		} else {
+			g_sXsUdpLastText[0] = '\0';
+		}
 	}
 	
 	XS_LogInfo(
@@ -89,9 +97,11 @@ static void XS_UdpOnError(ptr pOwner, xdgramsock* pSock, int iSysErr)
 	XS_ServerConfig* objServer = (XS_ServerConfig*)pOwner;
 	(void)pSock;
 	
-	XS_UdpMetricAdd(&g_iXsUdpErrorCount, 1);
-	g_iXsUdpLastErrorCode = (int64)iSysErr;
-	g_tXsUdpLastErrorTime = xrtNow();
+	if ( XS_RuntimeStatsEnabled() ) {
+		XS_UdpMetricAdd(&g_iXsUdpErrorCount, 1);
+		g_iXsUdpLastErrorCode = (int64)iSysErr;
+		g_tXsUdpLastErrorTime = xrtNow();
+	}
 	XS_LogWarn(
 		"udp error: server=%s sys=%d",
 		objServer && objServer->Name ? objServer->Name : "(null)",

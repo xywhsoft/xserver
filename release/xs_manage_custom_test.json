@@ -1,4 +1,5 @@
-[
+{
+	"services": [
 	{
 		"enabled": true,
 		"class": "http",
@@ -38,4 +39,5 @@
 		"devlang": "c",
 		"devfile": "script_vnext/custom_main.c"
 	}
-]
+	]
+}

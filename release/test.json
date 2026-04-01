@@ -1,129 +1,62 @@
-[
-	{
-		"enabled": true,
-		"class": "http",
-		"name": "xywhsoft http server",
-		"desc": "服务器描述",
-		"param": "启动参数",
-		"ip": "0.0.0.0",
-		"port": 80,
-		"tls": true,
-		"ip_tls": "0.0.0.0",
-		"port_tls": 443,
-		"host_default": {
+{
+	"services": [
+		{
 			"enabled": true,
-			"name": "默认主机",
-			"desc": "主机描述",
-			"param": "启动参数",
-			"path": "wwwroot",
-			"tls_ca": null,
-			"tls_cert": "tls/cert.pem",
-			"tls_key": "tls/key.pem",
-			"devlang": "c",
-			"devfile": "test/main.c",
-			"session": "www$"
-		},
-		"hosts": [
-			{
+			"class": "http",
+			"name": "xywhsoft http server",
+			"desc": "HTTP 多主机场景示例",
+			"param": "demo-http",
+			"ip": "0.0.0.0",
+			"port": 80,
+			"tls": true,
+			"ip_tls": "0.0.0.0",
+			"port_tls": 443,
+			"host_default": {
 				"enabled": true,
-				"name": "主机1",
+				"name": "默认主机",
 				"desc": "主机描述",
-				"param": "启动参数",
-				"host": "test.com",
-				"path": "test",
-				"tls_ca": "tls/test/ca.pem",
-				"tls_cert": "tls/test/cert.pem",
-				"tls_key": "tls/test/key.pem",
+				"param": "http-default",
+				"path": "wwwroot",
+				"tls_ca": null,
+				"tls_cert": "tls/cert.pem",
+				"tls_key": "tls/key.pem",
 				"devlang": "c",
-				"devfile": "test/main.c",
-				"session": "test$"
+				"devfile": "script_vnext/main.c"
 			},
-			{
-				"enabled": true,
-				"name": "主机2",
-				"desc": "主机描述",
-				"param": "启动参数",
-				"host": "test.cn",
-				"path": "test_cn",
-				"tls_ca": "tls/test_cn/ca.pem",
-				"tls_cert": "tls/test_cn/cert.pem",
-				"tls_key": "tls/test_cn/key.pem",
-				"devlang": "static",
-				"session": "test$"
-			}
-		]
-	},
-	{
-		"enabled": true,
-		"class": "mqtt",
-		"name": "xywhsoft mqtt server",
-		"desc": "服务器描述",
-		"param": "启动参数",
-		"ip": "0.0.0.0",
-		"port": 1883,
-		"tls": true,
-		"ip_tls": "0.0.0.0",
-		"port_tls": 8883,
-		"host_default": {
-			"enabled": true,
-			"name": "默认主机",
-			"desc": "主机描述",
-			"param": "启动参数",
-			"path": "wwwroot",
-			"tls_ca": null,
-			"tls_cert": "tls/cert.pem",
-			"tls_key": "tls/key.pem",
-			"devlang": "static",
-			"session": "www$"
+			"hosts": []
 		},
-		"hosts": [
-			{
-				"enabled": true,
-				"name": "主机1",
-				"desc": "主机描述",
-				"param": "启动参数",
-				"host": "test.com",
-				"path": "test",
-				"tls_ca": "tls/test/ca.pem",
-				"tls_cert": "tls/test/cert.pem",
-				"tls_key": "tls/test/key.pem",
-				"devlang": "static",
-				"session": "test$"
-			},
-			{
-				"enabled": true,
-				"name": "主机2",
-				"desc": "主机描述",
-				"param": "启动参数",
-				"host": "test.cn",
-				"path": "test_cn",
-				"tls_ca": "tls/test_cn/ca.pem",
-				"tls_cert": "tls/test_cn/cert.pem",
-				"tls_key": "tls/test_cn/key.pem",
-				"devlang": "static",
-				"session": "test$"
-			}
-		]
-	},
-	{
-		"enabled": true,
-		"class": "custom",
-		"name": "自定义服务",
-		"desc": "用于启动 MQTT 客户端监听主题消息处理",
-		"param": "启动参数",
-		"ip": "0.0.0.0",
-		"port": 9001,
-		"tls": false,
-		"host_default": {
+		{
 			"enabled": true,
-			"name": "默认主机",
-			"desc": "主机描述",
-			"param": "启动参数",
-			"path": "wwwroot",
+			"class": "ws",
+			"name": "xywhsoft ws server",
+			"desc": "WebSocket 示例",
+			"param": "demo-ws",
+			"ip": "0.0.0.0",
+			"port": 8081,
+			"tls": false,
+			"host_default": {
+				"enabled": true,
+				"name": "默认主机",
+				"desc": "WS 默认主机",
+				"param": "ws-default",
+				"path": "wwwroot",
+				"devlang": "c",
+				"devfile": "script_vnext/ws_main.c"
+			},
+			"hosts": []
+		},
+		{
+			"enabled": true,
+			"class": "custom",
+			"name": "自定义服务",
+			"desc": "自定义流协议示例",
+			"param": "demo-custom",
+			"ip": "0.0.0.0",
+			"port": 9001,
+			"tls": false,
+			"path": "script_vnext",
 			"devlang": "c",
-			"devfile": "test/main.c",
-			"session": "www$",
-		},
-		"hosts": []
-	}
-]
+			"devfile": "script_vnext/custom_main.c"
+		}
+	]
+}

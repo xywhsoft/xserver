@@ -1,4 +1,5 @@
-[
+{
+	"services": [
 	{
 		"enabled": true,
 		"class": "http",
@@ -36,4 +37,5 @@
 		"devlang": "c",
 		"devfile": "script_vnext/udp_main.c"
 	}
-]
+	]
+}

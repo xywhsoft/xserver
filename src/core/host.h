@@ -18,6 +18,38 @@ typedef enum {
 	XS_DEV_PROTOCOL = 2
 } XS_DevMode;
 
+typedef struct XS_HttpPageConfig {
+	char* DefaultPage;
+	char* Page404;
+	char* Page403;
+	char* Page500;
+	char* ErrorPage;
+} XS_HttpPageConfig;
+
+static inline void XS_InitHttpPageConfig(XS_HttpPageConfig* objPages)
+{
+	if ( objPages == NULL ) {
+		return;
+	}
+
+	memset(objPages, 0, sizeof(XS_HttpPageConfig));
+}
+
+static inline void XS_FreeHttpPageConfig(XS_HttpPageConfig* objPages)
+{
+	if ( objPages == NULL ) {
+		return;
+	}
+
+	if ( objPages->DefaultPage ) xrtFree(objPages->DefaultPage);
+	if ( objPages->Page404 ) xrtFree(objPages->Page404);
+	if ( objPages->Page403 ) xrtFree(objPages->Page403);
+	if ( objPages->Page500 ) xrtFree(objPages->Page500);
+	if ( objPages->ErrorPage ) xrtFree(objPages->ErrorPage);
+
+	memset(objPages, 0, sizeof(XS_HttpPageConfig));
+}
+
 typedef struct XS_HostConfig {
 	bool Enabled;
 	char* Name;
@@ -26,6 +58,7 @@ typedef struct XS_HostConfig {
 	char* Param;
 	bool Debug;
 	char* Path;
+	XS_HttpPageConfig Pages;
 	XS_DevMode DevMode;
 	char* DevFile;
 	xtlsconfig TlsConfig;
@@ -51,6 +84,7 @@ static inline void XS_InitHostConfig(XS_HostConfig* objHost)
 	memset(objHost, 0, sizeof(XS_HostConfig));
 	objHost->Enabled = TRUE;
 	objHost->DevMode = XS_DEV_STATIC;
+	XS_InitHttpPageConfig(&objHost->Pages);
 }
 
 static inline void XS_FreeHostConfig(XS_HostConfig* objHost)
@@ -64,6 +98,7 @@ static inline void XS_FreeHostConfig(XS_HostConfig* objHost)
 	if ( objHost->Host ) xrtFree(objHost->Host);
 	if ( objHost->Param ) xrtFree(objHost->Param);
 	if ( objHost->Path ) xrtFree(objHost->Path);
+	XS_FreeHttpPageConfig(&objHost->Pages);
 	if ( objHost->DevFile ) xrtFree(objHost->DevFile);
 	if ( objHost->TlsConfig.sCaFile ) xrtFree((void*)objHost->TlsConfig.sCaFile);
 	if ( objHost->TlsConfig.sCertFile ) xrtFree((void*)objHost->TlsConfig.sCertFile);

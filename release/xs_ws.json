@@ -1,4 +1,5 @@
-[
+{
+	"services": [
 	{
 		"enabled": true,
 		"class": "ws",
@@ -22,4 +23,5 @@
 		},
 		"hosts": []
 	}
-]
+	]
+}

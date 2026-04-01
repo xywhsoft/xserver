@@ -87,25 +87,27 @@ gcc main.c lib/sqlite3.c tcc/libtcc.c \
 Edit `release/xs.json`:
 
 ```json
-[
-  {
-    "enabled": true,
-    "class": "http",
-    "name": "My HTTP Server",
-    "desc": "Main web server",
-    "ip": "0.0.0.0",
-    "port": 80,
-    "tls": false,
-    "host_default": {
-      "enabled": true,
-      "name": "Default Host",
-      "path": "wwwroot",
-      "devlang": "c",
-      "devfile": "script_vnext/main.c"
-    },
-    "hosts": []
-  }
-]
+{
+	"services": [
+		{
+			"enabled": true,
+			"class": "http",
+			"name": "My HTTP Server",
+			"desc": "Main web server",
+			"ip": "0.0.0.0",
+			"port": 80,
+			"tls": false,
+			"host_default": {
+				"enabled": true,
+				"name": "Default Host",
+				"path": "wwwroot",
+				"devlang": "c",
+				"devfile": "script_vnext/main.c"
+			},
+			"hosts": []
+		}
+	]
+}
 ```
 
 ### 3. Run
@@ -122,9 +124,14 @@ Run `xs` or `xsdbg` inside `release`; both use `xs.json` by default.
 | class | string | Server type: `http`, `ws`, `tcp`, `udp`, `xtp`, `custom` |
 | name | string | Server name |
 | desc | string | Server description |
-| addr | string | Bind address (e.g., `http://0.0.0.0:80`) |
+| ip | string | Bind IP address |
+| port | integer | Bind port |
 | tls | boolean | Enable TLS encryption |
-| addr_tls | string | TLS bind address |
+| ip_tls | string | TLS bind IP address |
+| port_tls | integer | TLS bind port |
+| path | string | Service-level root path for XTP/TCP/UDP/Custom scripts or assets |
+| devlang | string | Service-level development mode: `protocol`, `c`, `script-c` |
+| devfile | string | Service-level script entry file |
 | host_default | object | Default virtual host configuration |
 | hosts | array | Additional virtual hosts |
 
@@ -136,7 +143,7 @@ Run `xs` or `xsdbg` inside `release`; both use `xs.json` by default.
 | name | string | Host name |
 | host | string | Domain binding (semicolon-separated) |
 | path | string | Root directory (relative or absolute) |
-| devlang | string | Development mode: `static`, `c`, `script-c`, `protocol` |
+| devlang | string | Host development mode: `static`, `c`, `script-c` |
 | devfile | string | Script entry file |
 | tls_ca | string | TLS CA certificate path |
 | tls_cert | string | TLS certificate path |
@@ -172,22 +179,37 @@ void ServiceUnit(XS_ServerObject objServer, XS_HostObject objHost)
 
 | Function | Description |
 |----------|-------------|
-| `ServiceInit` | Called before service starts |
-| `ServiceStart` | Called before traffic starts |
-| `ServiceStop` | Called when traffic is stopping |
-| `ServiceUnit` | Called before final destruction |
+| `ServiceInit / ServiceStart / ServiceStop / ServiceUnit` | Host or service script lifecycle |
 | `RequestProc` | HTTP request handler |
-| `EventProc` | Network event handler (custom protocols) |
+| `MessageProc` | Host bus message handler |
+| `WsOpenProc / WsTextProc / WsBinaryProc / WsPingProc / WsPongProc / WsCloseProc` | WebSocket host callbacks |
+| `EventOpenProc / EventDataProc / EventCloseProc` | Stream callbacks for TCP / Custom / XTP |
+| `EventDgramProc` | UDP datagram callback |
+| `EventXtpProc` | XTP message callback |
 
 ## Debug Endpoints
 
 When `server.debug` or `host.debug` is `true`, HTTP hosts expose minimal debug endpoints:
 
 - `GET /__xs/status`
+- `GET /__xs/status_json`
+- `GET /__xs/health`
+- `GET /__xs/health_json`
 - `GET /__xs/reload`
+- `GET /__xs/reload_json`
+- `GET /__xs/reload_status`
+- `GET /__xs/reload_status_json`
+- `GET /__xs/check_config`
+- `GET /__xs/check_config_json`
 - `GET /__xs/reload?host=<host-name>&force=true`
 
-Host-level script hot reload is already available. The `force` connection-drain policy is part of the API contract and will be completed further in later stages.
+Host-level script hot reload is available through `xsReloadCurrentHost` and `xsReloadHostByName` in `script-c` hosts.
+
+## Build Variant Surfaces
+
+- `xs` keeps the core manage surface only: `status*`, `health*`, `reload*`, `reload_status*`, `check_config*`
+- `xsdbg` additionally enables `dashboard*`, `__xs/bus/*`, `http/ws/xtp/udp/custom *_metrics*`, and the related `*_clear / reload_clear / reload_reset / check_config_clear` helpers
+- Runtime counters such as `http_req_count`, `ws_open_count`, `xtp_conn_current`, `udp_recv_count`, `custom_conn_current`, and `bus_queue_count` are retained in `xsdbg`, not in production `xs`
 
 ## Project Structure
 

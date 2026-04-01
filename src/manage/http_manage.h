@@ -581,46 +581,54 @@ static inline bool XS_HttpServeStatic(const XS_HostConfig* objHost, const xhttpd
 	size_t iFileSize;
 	const char* sMime;
 	
-	if ( objHost == NULL || pReq == NULL || pResp == NULL || objHost->Path == NULL ) {
+	if ( objHost == NULL || pReq == NULL || pResp == NULL ) {
 		return FALSE;
 	}
 
 	if ( _stricmp(pReq->sMethod, "GET") != 0 && _stricmp(pReq->sMethod, "HEAD") != 0 ) {
 		xrtHttpdResponseSetHeader(pResp, "Allow", "GET, HEAD");
-		return XS_HttpRespondText(pResp, 405, "Method Not Allowed", "static host only supports GET or HEAD");
+		return XS_HttpRetErrorEx(NULL, objHost, pReq, pResp, NULL, 405, "Method Not Allowed", "static host only supports GET or HEAD", NULL);
 	}
 	
 	sReqPath = pReq->sPath[0] ? pReq->sPath : "/";
 	if ( strstr(sReqPath, "..") != NULL ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "forbidden");
+		return XS_HttpRet403Ex(NULL, objHost, pReq, pResp, NULL, "forbidden", NULL);
 	}
 	
 	if ( strcmp(sReqPath, "/") == 0 ) {
-		sRelPath = "index.html";
+		sFilePath = XS_HttpResolveDefaultPagePath(objHost);
+		if ( sFilePath == NULL ) {
+			return XS_HttpRet500Ex(NULL, objHost, pReq, pResp, NULL, "default page path not configured", NULL);
+		}
 	} else if ( sReqPath[0] == '/' ) {
 		sRelPath = sReqPath + 1;
 	} else {
 		sRelPath = sReqPath;
 	}
 
-	if ( XS_HttpStaticPathSensitive(sRelPath) ) {
-		return XS_HttpRespondText(pResp, 403, "Forbidden", "static path denied");
-	}
-	
-	sFilePath = xrtPathJoin(2, objHost->Path, sRelPath);
-	if ( sFilePath == NULL ) {
-		return XS_HttpRespondText(pResp, 500, "Internal Server Error", "path join failed");
+	if ( strcmp(sReqPath, "/") != 0 ) {
+		if ( XS_HttpStaticPathSensitive(sRelPath) ) {
+			return XS_HttpRet403Ex(NULL, objHost, pReq, pResp, NULL, "static path denied", NULL);
+		}
+		if ( objHost->Path == NULL || objHost->Path[0] == '\0' ) {
+			return XS_HttpRet500Ex(NULL, objHost, pReq, pResp, NULL, "static host path not configured", NULL);
+		}
+		
+		sFilePath = xrtPathJoin(2, objHost->Path, sRelPath);
+		if ( sFilePath == NULL ) {
+			return XS_HttpRet500Ex(NULL, objHost, pReq, pResp, NULL, "path join failed", NULL);
+		}
 	}
 	
 	if ( !xrtFileExists(sFilePath) ) {
 		xrtFree(sFilePath);
-		return XS_HttpRespondText(pResp, 404, "Not Found", "file not found");
+		return XS_HttpRet404Ex(NULL, objHost, pReq, pResp, NULL, "file not found", NULL);
 	}
 	
 	pFileData = xrtFileGetAll(sFilePath, &iFileSize);
 	if ( pFileData == NULL ) {
 		xrtFree(sFilePath);
-		return XS_HttpRespondText(pResp, 500, "Internal Server Error", "file read failed");
+		return XS_HttpRet500Ex(NULL, objHost, pReq, pResp, NULL, "file read failed", NULL);
 	}
 	
 	sMime = XS_HttpMimeTypeByPath(sFilePath);
@@ -1371,6 +1379,64 @@ static inline bool XS_HttpHandleConfigReloadReset(XS_ServerConfig* objServer, co
 
 static inline bool XS_HttpHandleStatus(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
+#ifndef XRT_MEM_DEBUG
+	char sBody[4096];
+	bool bScriptLoaded;
+
+	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
+		return FALSE;
+	}
+	if ( strcmp(pReq->sPath, "/__xs/status") != 0 ) {
+		return FALSE;
+	}
+	if ( !(objServer->Debug || objHost->Debug) ) {
+		return XS_HttpRespondText(pResp, 403, "Forbidden", "status api disabled");
+	}
+
+	bScriptLoaded = FALSE;
+	if ( objServer->EnableDefaultHost && objServer->DefaultHost.DevMode == XS_DEV_SCRIPT_C && objServer->DefaultHost.pScriptState ) {
+		bScriptLoaded = TRUE;
+	}
+	if ( !bScriptLoaded && objHost->DevMode == XS_DEV_SCRIPT_C && objHost->pScriptState ) {
+		bScriptLoaded = TRUE;
+	}
+
+	snprintf(
+		sBody,
+		sizeof(sBody),
+		"server=%s\nclass=%s\naddr=%s\nbind_ip=%s\nbind_port=%u\ntls=%s\nbind_ip_tls=%s\nbind_port_tls=%u\naddr_tls=%s\nws_protocol=%s\nbacklog=%u\npath_limit=%u\nheader_limit=%u\nbody_limit=%u\nrecv_limit=%u\nidle_timeout=%u\nconn_limit=%u\nws_message_limit=%u\ncompiler=%s\nplatform=%s\narch=%s\nbuild=%s\nmanage_api=%s\nmem_debug=%s\ndebug=%s\nhost_aware=%s\ndefault_host=%s\nscript_loaded=%s\nhost_count=%u\n",
+		objServer->Name ? objServer->Name : "(null)",
+		XS_ServerClassName(objServer->Class),
+		objServer->Addr ? objServer->Addr : "(null)",
+		objServer->BindIP ? objServer->BindIP : "(null)",
+		(unsigned int)objServer->BindPort,
+		objServer->EnableTLS ? "true" : "false",
+		objServer->BindIPTLS ? objServer->BindIPTLS : "(null)",
+		(unsigned int)objServer->BindPortTLS,
+		objServer->AddrTLS ? objServer->AddrTLS : "(null)",
+		objServer->WsProtocol ? objServer->WsProtocol : "(none)",
+		(unsigned int)objServer->Backlog,
+		(unsigned int)objServer->PathLimit,
+		(unsigned int)objServer->HeaderLimit,
+		(unsigned int)objServer->BodyLimit,
+		(unsigned int)objServer->RecvLimit,
+		(unsigned int)objServer->IdleTimeout,
+		(unsigned int)objServer->ConnLimit,
+		(unsigned int)objServer->WsMessageLimit,
+		XS_CompilerName(),
+		XS_PlatformName(),
+		XS_ArchName(),
+		XS_BuildVariant(),
+		XS_ManageAPIEnabled(objServer, objHost) ? "true" : "false",
+		XS_MemDebugEnabled() ? "true" : "false",
+		objServer->Debug ? "true" : "false",
+		objServer->HostAware ? "true" : "false",
+		objServer->EnableDefaultHost ? "true" : "false",
+		bScriptLoaded ? "true" : "false",
+		(unsigned int)(objServer->Hosts ? objServer->Hosts->Count : 0)
+	);
+	return XS_HttpRespondText(pResp, 200, "OK", sBody);
+#else
 	char sBody[24576];
 	char* sHttpLastTime;
 	char* sHttpLastAppTime;
@@ -2083,10 +2149,78 @@ static inline bool XS_HttpHandleStatus(XS_ServerConfig* objServer, const XS_Host
 	}
 
 	return XS_HttpRespondText(pResp, 200, "OK", sBody);
+#endif
 }
 
 static inline bool XS_HttpHandleStatusJson(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
+#ifndef XRT_MEM_DEBUG
+	xvalue objRet;
+	char* sJson;
+	bool bScriptLoaded;
+
+	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
+		return FALSE;
+	}
+	if ( strcmp(pReq->sPath, "/__xs/status_json") != 0 ) {
+		return FALSE;
+	}
+	if ( !XS_ManageAPIEnabled(objServer, objHost) ) {
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "status json api disabled");
+	}
+
+	bScriptLoaded = FALSE;
+	if ( objServer->EnableDefaultHost && objServer->DefaultHost.DevMode == XS_DEV_SCRIPT_C && objServer->DefaultHost.pScriptState ) {
+		bScriptLoaded = TRUE;
+	}
+	if ( !bScriptLoaded && objHost->DevMode == XS_DEV_SCRIPT_C && objHost->pScriptState ) {
+		bScriptLoaded = TRUE;
+	}
+
+	objRet = xvoCreateTable();
+	xvoTableSetText(objRet, "server", 6, objServer->Name ? objServer->Name : "", 0, FALSE);
+	xvoTableSetText(objRet, "class", 5, (ptr)XS_ServerClassName(objServer->Class), 0, FALSE);
+	xvoTableSetText(objRet, "addr", 4, objServer->Addr ? objServer->Addr : "", 0, FALSE);
+	xvoTableSetText(objRet, "bind_ip", 7, objServer->BindIP ? objServer->BindIP : "", 0, FALSE);
+	xvoTableSetInt(objRet, "bind_port", 9, objServer->BindPort);
+	xvoTableSetBool(objRet, "tls", 3, objServer->EnableTLS);
+	xvoTableSetText(objRet, "bind_ip_tls", 11, objServer->BindIPTLS ? objServer->BindIPTLS : "", 0, FALSE);
+	xvoTableSetInt(objRet, "bind_port_tls", 13, objServer->BindPortTLS);
+	xvoTableSetText(objRet, "addr_tls", 8, objServer->AddrTLS ? objServer->AddrTLS : "", 0, FALSE);
+	xvoTableSetText(objRet, "ws_protocol", 11, objServer->WsProtocol ? objServer->WsProtocol : "", 0, FALSE);
+	xvoTableSetInt(objRet, "backlog", 7, objServer->Backlog);
+	xvoTableSetInt(objRet, "path_limit", 10, objServer->PathLimit);
+	xvoTableSetInt(objRet, "header_limit", 12, objServer->HeaderLimit);
+	xvoTableSetInt(objRet, "body_limit", 10, objServer->BodyLimit);
+	xvoTableSetInt(objRet, "recv_limit", 10, objServer->RecvLimit);
+	xvoTableSetInt(objRet, "idle_timeout", 12, objServer->IdleTimeout);
+	xvoTableSetInt(objRet, "conn_limit", 10, objServer->ConnLimit);
+	xvoTableSetInt(objRet, "ws_message_limit", 16, objServer->WsMessageLimit);
+	xvoTableSetText(objRet, "compiler", 8, (ptr)XS_CompilerName(), 0, FALSE);
+	xvoTableSetText(objRet, "platform", 8, (ptr)XS_PlatformName(), 0, FALSE);
+	xvoTableSetText(objRet, "arch", 4, (ptr)XS_ArchName(), 0, FALSE);
+	xvoTableSetText(objRet, "build", 5, (ptr)XS_BuildVariant(), 0, FALSE);
+	xvoTableSetBool(objRet, "manage_api", 10, XS_ManageAPIEnabled(objServer, objHost));
+	xvoTableSetBool(objRet, "mem_debug", 9, XS_MemDebugEnabled());
+	xvoTableSetBool(objRet, "debug", 5, objServer->Debug);
+	xvoTableSetBool(objRet, "host_aware", 10, objServer->HostAware);
+	xvoTableSetBool(objRet, "default_host", 12, objServer->EnableDefaultHost);
+	xvoTableSetBool(objRet, "script_loaded", 13, bScriptLoaded);
+	xvoTableSetInt(objRet, "host_count", 10, objServer->Hosts ? objServer->Hosts->Count : 0);
+
+	sJson = xrtStringifyJSON(objRet, FALSE, NULL);
+	xvoUnref(objRet);
+	if ( sJson == NULL ) {
+		return XS_HttpRespondJsonResult(pResp, 500, "Internal Server Error", FALSE, "status json build failed");
+	}
+	xrtHttpdResponseSetStatus(pResp, 200, "OK");
+	if ( !xrtHttpdResponseSetBodyCopy(pResp, sJson, strlen(sJson), "application/json; charset=utf-8") ) {
+		xrtFree(sJson);
+		return FALSE;
+	}
+	xrtFree(sJson);
+	return TRUE;
+#else
 	xvalue objRet;
 	xvalue objHosts;
 	char* sHttpLastTime;
@@ -2498,6 +2632,7 @@ static inline bool XS_HttpHandleStatusJson(XS_ServerConfig* objServer, const XS_
 	}
 	xrtFree(sJson);
 	return TRUE;
+#endif
 }
 
 static inline bool XS_HttpServerHealthy(const XS_ServerConfig* objServer, const XS_HostConfig* objHost)
@@ -2518,6 +2653,70 @@ static inline bool XS_HttpServerHealthy(const XS_ServerConfig* objServer, const 
 
 static inline bool XS_HttpHandleHealthJson(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
+#ifndef XRT_MEM_DEBUG
+	XS_ReloadStatusSnapshot tReloadStatus;
+	XS_CheckConfigStatusSnapshot tCheckStatus;
+	xvalue objRet;
+	char* sJson;
+	bool bScriptLoaded;
+	bool bOk;
+
+	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
+		return FALSE;
+	}
+	if ( strcmp(pReq->sPath, "/__xs/health_json") != 0 ) {
+		return FALSE;
+	}
+	if ( !(objServer->Debug || objHost->Debug) ) {
+		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "health json api disabled");
+	}
+
+	XS_ConfigReloadStatusSnapshot(&tReloadStatus);
+	XS_ConfigCheckStatusSnapshot(&tCheckStatus);
+	bScriptLoaded = FALSE;
+	if ( objServer->EnableDefaultHost && objServer->DefaultHost.pScriptState ) {
+		bScriptLoaded = TRUE;
+	}
+	if ( !bScriptLoaded && objHost->pScriptState ) {
+		bScriptLoaded = TRUE;
+	}
+	bOk = XS_HttpServerHealthy(objServer, objHost);
+
+	objRet = xvoCreateTable();
+	xvoTableSetBool(objRet, "ok", 2, bOk);
+	xvoTableSetText(objRet, "server", 6, objServer->Name ? objServer->Name : "", 0, FALSE);
+	xvoTableSetText(objRet, "class", 5, (ptr)XS_ServerClassName(objServer->Class), 0, FALSE);
+	xvoTableSetText(objRet, "addr", 4, objServer->Addr ? objServer->Addr : "", 0, FALSE);
+	xvoTableSetBool(objRet, "debug", 5, objServer->Debug);
+	xvoTableSetBool(objRet, "host_aware", 10, objServer->HostAware);
+	xvoTableSetBool(objRet, "script_loaded", 13, bScriptLoaded);
+	xvoTableSetInt(objRet, "host_count", 10, objServer->Hosts ? objServer->Hosts->Count : 0);
+	xvoTableSetBool(objRet, "reload_busy", 11, tReloadStatus.Busy);
+	xvoTableSetBool(objRet, "reload_has_result", 17, tReloadStatus.HasResult);
+	xvoTableSetBool(objRet, "reload_success", 14, tReloadStatus.Success);
+	xvoTableSetText(objRet, "reload_server", 13, (ptr)(tReloadStatus.sServerName[0] ? tReloadStatus.sServerName : "(all)"), 0, FALSE);
+	xvoTableSetText(objRet, "reload_host", 11, (ptr)(tReloadStatus.sHostName[0] ? tReloadStatus.sHostName : "(all)"), 0, FALSE);
+	xvoTableSetText(objRet, "reload_message", 14, (ptr)(tReloadStatus.sMessage[0] ? tReloadStatus.sMessage : "(none)"), 0, FALSE);
+	xvoTableSetBool(objRet, "check_has_result", 16, tCheckStatus.HasResult);
+	xvoTableSetBool(objRet, "check_result", 12, tCheckStatus.LastResult);
+	xvoTableSetText(objRet, "check_file", 10, (ptr)(tCheckStatus.sLastFile[0] ? tCheckStatus.sLastFile : ""), 0, FALSE);
+	xvoTableSetText(objRet, "check_base", 10, (ptr)(tCheckStatus.sLastBase[0] ? tCheckStatus.sLastBase : ""), 0, FALSE);
+	xvoTableSetInt(objRet, "check_server_count", 18, tCheckStatus.iLastServerCount);
+	xvoTableSetText(objRet, "check_message", 13, (ptr)(tCheckStatus.sLastMessage[0] ? tCheckStatus.sLastMessage : "(none)"), 0, FALSE);
+
+	sJson = xrtStringifyJSON(objRet, FALSE, NULL);
+	xvoUnref(objRet);
+	if ( sJson == NULL ) {
+		return XS_HttpRespondJsonResult(pResp, 500, "Internal Server Error", FALSE, "health json build failed");
+	}
+	xrtHttpdResponseSetStatus(pResp, bOk ? 200 : 503, bOk ? "OK" : "Service Unavailable");
+	if ( !xrtHttpdResponseSetBodyCopy(pResp, sJson, strlen(sJson), "application/json; charset=utf-8") ) {
+		xrtFree(sJson);
+		return FALSE;
+	}
+	xrtFree(sJson);
+	return TRUE;
+#else
 	XS_ReloadStatusSnapshot tReloadStatus;
 	XS_CheckConfigStatusSnapshot tCheckStatus;
 	xvalue objRet;
@@ -2870,10 +3069,65 @@ static inline bool XS_HttpHandleHealthJson(XS_ServerConfig* objServer, const XS_
 	}
 	xrtFree(sJson);
 	return TRUE;
+#endif
 }
 
 static inline bool XS_HttpHandleHealth(XS_ServerConfig* objServer, const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
+#ifndef XRT_MEM_DEBUG
+	XS_ReloadStatusSnapshot tReloadStatus;
+	XS_CheckConfigStatusSnapshot tCheckStatus;
+	char sBody[2048];
+	bool bOk;
+	bool bScriptLoaded;
+
+	if ( pReq == NULL || pResp == NULL || objServer == NULL || objHost == NULL ) {
+		return FALSE;
+	}
+	if ( strcmp(pReq->sPath, "/__xs/health") != 0 ) {
+		return FALSE;
+	}
+	if ( !(objServer->Debug || objHost->Debug) ) {
+		return XS_HttpRespondText(pResp, 403, "Forbidden", "health api disabled");
+	}
+
+	bOk = XS_HttpServerHealthy(objServer, objHost);
+	bScriptLoaded = FALSE;
+	if ( objServer->EnableDefaultHost && objServer->DefaultHost.pScriptState ) {
+		bScriptLoaded = TRUE;
+	}
+	if ( !bScriptLoaded && objHost->pScriptState ) {
+		bScriptLoaded = TRUE;
+	}
+	XS_ConfigReloadStatusSnapshot(&tReloadStatus);
+	XS_ConfigCheckStatusSnapshot(&tCheckStatus);
+	snprintf(
+		sBody,
+		sizeof(sBody),
+		"ok=%s\nserver=%s\nclass=%s\naddr=%s\ndebug=%s\nhost_aware=%s\nscript_loaded=%s\nhost_count=%u\nreload_busy=%s\nreload_has_result=%s\nreload_success=%s\nreload_server=%s\nreload_host=%s\nreload_message=%s\ncheck_has_result=%s\ncheck_result=%s\ncheck_file=%s\ncheck_base=%s\ncheck_server_count=%lld\ncheck_message=%s\n",
+		bOk ? "true" : "false",
+		objServer->Name ? objServer->Name : "(null)",
+		XS_ServerClassName(objServer->Class),
+		objServer->Addr ? objServer->Addr : "(null)",
+		objServer->Debug ? "true" : "false",
+		objServer->HostAware ? "true" : "false",
+		bScriptLoaded ? "true" : "false",
+		(unsigned int)(objServer->Hosts ? objServer->Hosts->Count : 0),
+		tReloadStatus.Busy ? "true" : "false",
+		tReloadStatus.HasResult ? "true" : "false",
+		tReloadStatus.Success ? "true" : "false",
+		tReloadStatus.sServerName[0] ? tReloadStatus.sServerName : "(all)",
+		tReloadStatus.sHostName[0] ? tReloadStatus.sHostName : "(all)",
+		tReloadStatus.sMessage[0] ? tReloadStatus.sMessage : "(none)",
+		tCheckStatus.HasResult ? "true" : "false",
+		tCheckStatus.HasResult ? (tCheckStatus.LastResult ? "true" : "false") : "(none)",
+		tCheckStatus.sLastFile[0] ? tCheckStatus.sLastFile : "(none)",
+		tCheckStatus.sLastBase[0] ? tCheckStatus.sLastBase : "(none)",
+		(long long)tCheckStatus.iLastServerCount,
+		tCheckStatus.sLastMessage[0] ? tCheckStatus.sLastMessage : "(none)"
+	);
+	return XS_HttpRespondText(pResp, bOk ? 200 : 503, bOk ? "OK" : "Service Unavailable", sBody);
+#else
 	XS_ReloadStatusSnapshot tReloadStatus;
 	XS_CheckConfigStatusSnapshot tCheckStatus;
 	char sBody[16384];
@@ -3499,6 +3753,7 @@ static inline bool XS_HttpHandleHealth(XS_ServerConfig* objServer, const XS_Host
 		xrtFree(sBusLastCleanupTime);
 	}
 	return XS_HttpRespondText(pResp, bOk ? 200 : 503, bOk ? "OK" : "Service Unavailable", sBody);
+#endif
 }
 
 

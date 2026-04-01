@@ -1,4 +1,5 @@
-[
+{
+	"services": [
 	{
 		"enabled": true,
 		"class": "xtp",
@@ -17,4 +18,5 @@
 		"devlang": "c",
 		"devfile": "script_vnext/xtp_main.c"
 	}
-]
+	]
+}

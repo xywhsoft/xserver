@@ -1198,7 +1198,7 @@ static inline bool XS_XtpAppendChain(XS_XtpConnContext* objCtx, xnetchain* pChai
 		return TRUE;
 	}
 	iNeed = objCtx->iRecvLen + iBytes;
-	if ( objCtx->pServer && objCtx->pServer->RecvLimit > 0u && iNeed > (size_t)objCtx->pServer->RecvLimit ) {
+	if ( XS_RuntimeGovernEnabled() && objCtx->pServer && objCtx->pServer->RecvLimit > 0u && iNeed > (size_t)objCtx->pServer->RecvLimit ) {
 		XS_XtpRecordInvalid("recv limit exceeded");
 		XS_LogWarn(
 			"xtp recv limit exceeded: server=%s recv_limit=%u need=%u remote=%s",
@@ -1216,7 +1216,9 @@ static inline bool XS_XtpAppendChain(XS_XtpConnContext* objCtx, xnetchain* pChai
 	(void)xrtNetChainPeek(pChain, objCtx->pRecvBuf + objCtx->iRecvLen, iBytes);
 	xrtNetChainConsume(pChain, iBytes);
 	objCtx->iRecvLen += iBytes;
-	XS_XtpMetricAdd(&g_iXsXtpRecvBytes, (int64)iBytes);
+	if ( XS_RuntimeStatsEnabled() ) {
+		XS_XtpMetricAdd(&g_iXsXtpRecvBytes, (int64)iBytes);
+	}
 	return TRUE;
 }
 
@@ -1239,7 +1241,7 @@ static inline bool XS_XtpPacketHeaderInvalid(const XS_XtpConnContext* objCtx)
 	if ( tHeader.PackSize < sizeof(XTP_PackHeader) ) {
 		return TRUE;
 	}
-	iRecvLimit = (objCtx->pServer && objCtx->pServer->RecvLimit > 0u) ? objCtx->pServer->RecvLimit : 0u;
+	iRecvLimit = (XS_RuntimeGovernEnabled() && objCtx->pServer && objCtx->pServer->RecvLimit > 0u) ? objCtx->pServer->RecvLimit : 0u;
 	if ( iRecvLimit > 0u && tHeader.PackSize > iRecvLimit ) {
 		return TRUE;
 	}
@@ -1381,7 +1383,7 @@ static inline bool XS_XtpParseMessage(XS_XtpConnContext* objCtx, XTP_Message* pM
 		);
 		return FALSE;
 	}
-	if ( objCtx->pServer && objCtx->pServer->RecvLimit > 0u && tHeader.PackSize > objCtx->pServer->RecvLimit ) {
+	if ( XS_RuntimeGovernEnabled() && objCtx->pServer && objCtx->pServer->RecvLimit > 0u && tHeader.PackSize > objCtx->pServer->RecvLimit ) {
 		XS_XtpRecordInvalid("pack limit exceeded");
 		XS_LogWarn(
 			"xtp pack limit exceeded: server=%s stream=%p pack=%u recv_limit=%u remote=%s",
@@ -2888,7 +2890,9 @@ static bool XS_XtpOnAccept(ptr pOwner, xnetlistener* pListener, xnetstream* pStr
 	XS_XtpTouch(objCtx);
 	xrtNetStreamSetUserData(pStream, objCtx);
 	XS_XtpTrackConn(objHandle, objCtx);
-	XS_XtpMetricUpdateMax(&g_iXsXtpConnPeak, XS_XtpMetricAdd(&g_iXsXtpConnCurrent, 1));
+	if ( XS_RuntimeStatsEnabled() ) {
+		XS_XtpMetricUpdateMax(&g_iXsXtpConnPeak, XS_XtpMetricAdd(&g_iXsXtpConnCurrent, 1));
+	}
 	XS_XtpRecordRemote(pStream);
 	XS_LogInfo(
 		"xtp accept: server=%s stream=%p remote=%s",
@@ -2924,10 +2928,12 @@ static void XS_XtpOnOpen(ptr pOwner, xnetstream* pStream)
 		return;
 	}
 	
-	XS_XtpMetricAdd(&g_iXsXtpOpenCount, 1);
+	if ( XS_RuntimeStatsEnabled() ) {
+		XS_XtpMetricAdd(&g_iXsXtpOpenCount, 1);
+	}
 	XS_XtpTouch(objCtx);
 	XS_XtpRecordRemote(objCtx ? objCtx->pStream : pStream);
-	if ( objServer && objServer->ConnLimit > 0u && XS_XtpTrackedConnCount(objHandle) > (int64)objServer->ConnLimit ) {
+	if ( XS_RuntimeGovernEnabled() && objServer && objServer->ConnLimit > 0u && XS_XtpTrackedConnCount(objHandle) > (int64)objServer->ConnLimit ) {
 		if ( objCtx ) {
 			objCtx->bClosing = TRUE;
 		}
@@ -2955,6 +2961,9 @@ static void XS_XtpOnOpen(ptr pOwner, xnetstream* pStream)
 
 static inline bool XS_XtpIsTransportRecvLimitError(XS_XtpConnContext* objCtx, xnetstream* pStream, int iSysErr)
 {
+	if ( !XS_RuntimeGovernEnabled() ) {
+		return FALSE;
+	}
 	if ( iSysErr != -1 ) {
 		return FALSE;
 	}
@@ -3019,32 +3028,34 @@ static void XS_XtpOnRecv(ptr pOwner, xnetstream* pStream, xnetchain* pChain)
 		if ( objServer && objServer->procXtpMessage ) {
 			bHandled = objServer->procXtpMessage(objServer, pStream, &tMsg);
 		}
-		XS_XtpMetricAdd(&g_iXsXtpMsgCount, 1);
-		g_iXsXtpLastMsgType = (int64)tMsg.MsgType;
-		g_iXsXtpLastStatus = (int64)tMsg.Status;
-		g_iXsXtpLastMsgID = (int64)tMsg.MsgID;
-		g_iXsXtpLastFlags = (int64)tMsg.Flags;
-		g_iXsXtpLastParamCount = (int64)tMsg.ParamCount;
-		g_iXsXtpLastBodySize = (int64)tMsg.BodySize;
-		g_tXsXtpLastTime = xrtNow();
-		if ( tMsg.MsgType == XTP_MSG_REQUEST ) {
-			XS_XtpMetricAdd(&g_iXsXtpReqCount, 1);
-		} else if ( tMsg.MsgType == XTP_MSG_RESPONSE ) {
-			XS_XtpMetricAdd(&g_iXsXtpRespCount, 1);
-		} else if ( tMsg.MsgType == XTP_MSG_PUSH ) {
-			XS_XtpMetricAdd(&g_iXsXtpPushCount, 1);
-		} else if ( tMsg.MsgType == XTP_MSG_EVENT ) {
-			XS_XtpMetricAdd(&g_iXsXtpEventCount, 1);
-		}
-		if ( tMsg.pCmd && tMsg.CmdSize > 0 ) {
-			size_t iCmdCopy = (size_t)tMsg.CmdSize;
-			if ( iCmdCopy >= sizeof(g_sXsXtpLastCmd) ) {
-				iCmdCopy = sizeof(g_sXsXtpLastCmd) - 1;
+		if ( XS_RuntimeStatsEnabled() ) {
+			XS_XtpMetricAdd(&g_iXsXtpMsgCount, 1);
+			g_iXsXtpLastMsgType = (int64)tMsg.MsgType;
+			g_iXsXtpLastStatus = (int64)tMsg.Status;
+			g_iXsXtpLastMsgID = (int64)tMsg.MsgID;
+			g_iXsXtpLastFlags = (int64)tMsg.Flags;
+			g_iXsXtpLastParamCount = (int64)tMsg.ParamCount;
+			g_iXsXtpLastBodySize = (int64)tMsg.BodySize;
+			g_tXsXtpLastTime = xrtNow();
+			if ( tMsg.MsgType == XTP_MSG_REQUEST ) {
+				XS_XtpMetricAdd(&g_iXsXtpReqCount, 1);
+			} else if ( tMsg.MsgType == XTP_MSG_RESPONSE ) {
+				XS_XtpMetricAdd(&g_iXsXtpRespCount, 1);
+			} else if ( tMsg.MsgType == XTP_MSG_PUSH ) {
+				XS_XtpMetricAdd(&g_iXsXtpPushCount, 1);
+			} else if ( tMsg.MsgType == XTP_MSG_EVENT ) {
+				XS_XtpMetricAdd(&g_iXsXtpEventCount, 1);
 			}
-			memcpy(g_sXsXtpLastCmd, tMsg.pCmd, iCmdCopy);
-			g_sXsXtpLastCmd[iCmdCopy] = '\0';
-		} else {
-			g_sXsXtpLastCmd[0] = '\0';
+			if ( tMsg.pCmd && tMsg.CmdSize > 0 ) {
+				size_t iCmdCopy = (size_t)tMsg.CmdSize;
+				if ( iCmdCopy >= sizeof(g_sXsXtpLastCmd) ) {
+					iCmdCopy = sizeof(g_sXsXtpLastCmd) - 1;
+				}
+				memcpy(g_sXsXtpLastCmd, tMsg.pCmd, iCmdCopy);
+				g_sXsXtpLastCmd[iCmdCopy] = '\0';
+			} else {
+				g_sXsXtpLastCmd[0] = '\0';
+			}
 		}
 		if ( g_sXsXtpLastCmd[0] ) {
 			snprintf(sCmdLog, sizeof(sCmdLog), "%s", g_sXsXtpLastCmd);
@@ -3097,9 +3108,11 @@ static void XS_XtpOnClose(ptr pOwner, xnetstream* pStream, xnet_result iReason)
 	}
 	XS_ServerConfig* objServer = objCtx ? objCtx->pServer : NULL;
 	
-	XS_XtpMetricAdd(&g_iXsXtpCloseCount, 1);
-	if ( XS_XtpMetricAdd(&g_iXsXtpConnCurrent, -1) < 0 ) {
-		XS_XtpMetricAdd(&g_iXsXtpConnCurrent, -XS_XtpMetricGet(&g_iXsXtpConnCurrent));
+	if ( XS_RuntimeStatsEnabled() ) {
+		XS_XtpMetricAdd(&g_iXsXtpCloseCount, 1);
+		if ( XS_XtpMetricAdd(&g_iXsXtpConnCurrent, -1) < 0 ) {
+			XS_XtpMetricAdd(&g_iXsXtpConnCurrent, -XS_XtpMetricGet(&g_iXsXtpConnCurrent));
+		}
 	}
 	XS_XtpRecordRemote(pStream);
 	XS_LogInfo(
@@ -3149,9 +3162,11 @@ static void XS_XtpOnError(ptr pOwner, xnetstream* pStream, int iSysErr)
 		return;
 	}
 	
-	XS_XtpMetricAdd(&g_iXsXtpErrorCount, 1);
-	g_iXsXtpLastErrorCode = (int64)iSysErr;
-	g_tXsXtpLastErrorTime = xrtNow();
+	if ( XS_RuntimeStatsEnabled() ) {
+		XS_XtpMetricAdd(&g_iXsXtpErrorCount, 1);
+		g_iXsXtpLastErrorCode = (int64)iSysErr;
+		g_tXsXtpLastErrorTime = xrtNow();
+	}
 	XS_XtpRecordRemote(pStream);
 	XS_XtpSnapshotErrorRemote();
 	XS_LogWarn(
@@ -3209,7 +3224,7 @@ static inline bool XS_XtpInitServer(xnetengine* pEngine, XS_ServerConfig* objSer
 		return FALSE;
 	}
 	tCfg.iBacklog = objServer->Backlog;
-	tCfg.iRecvLimit = objServer->RecvLimit;
+	tCfg.iRecvLimit = XS_RuntimeGovernEnabled() ? objServer->RecvLimit : 0u;
 	
 	objHandle->pListener = xrtNetListenerCreate(pEngine, &tCfg, XS_XtpListenerEvents(), XS_XtpStreamEvents(), objServer);
 	if ( objHandle->pListener == NULL ) {
@@ -3266,7 +3281,7 @@ static inline bool XS_XtpInitServer(xnetengine* pEngine, XS_ServerConfig* objSer
 			return FALSE;
 		}
 		tCfg.iBacklog = objServer->Backlog;
-		tCfg.iRecvLimit = objServer->RecvLimit;
+		tCfg.iRecvLimit = XS_RuntimeGovernEnabled() ? objServer->RecvLimit : 0u;
 		tCfg.pTlsConfig = &objServer->TlsConfig;
 		objHandle->pListenerTLS = xrtNetListenerCreate(pEngine, &tCfg, XS_XtpListenerEvents(), XS_XtpStreamEvents(), objServer);
 		if ( objHandle->pListenerTLS == NULL ) {
@@ -3321,15 +3336,17 @@ static inline bool XS_XtpStartServer(XS_ServerConfig* objServer)
 		xrtNetListenerStop(objHandle->pListener);
 		return FALSE;
 	}
-	objHandle->hIdleThread = xrtThreadCreate(XS_XtpIdleThread, objHandle, 0);
-	if ( objHandle->hIdleThread == NULL ) {
-		XS_ReportError("xtp start failed: create idle thread error");
-		objHandle->bStopAccept = TRUE;
-		xrtThreadWait(objHandle->hAcceptThread);
-		xrtThreadDestroy(objHandle->hAcceptThread);
-		objHandle->hAcceptThread = NULL;
-		xrtNetListenerStop(objHandle->pListener);
-		return FALSE;
+	if ( XS_RuntimeGovernEnabled() ) {
+		objHandle->hIdleThread = xrtThreadCreate(XS_XtpIdleThread, objHandle, 0);
+		if ( objHandle->hIdleThread == NULL ) {
+			XS_ReportError("xtp start failed: create idle thread error");
+			objHandle->bStopAccept = TRUE;
+			xrtThreadWait(objHandle->hAcceptThread);
+			xrtThreadDestroy(objHandle->hAcceptThread);
+			objHandle->hAcceptThread = NULL;
+			xrtNetListenerStop(objHandle->pListener);
+			return FALSE;
+		}
 	}
 	if ( objHandle->pListenerTLS ) {
 		if ( xrtNetListenerStart(objHandle->pListenerTLS) != XRT_NET_OK ) {

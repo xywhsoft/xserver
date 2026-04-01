@@ -63,10 +63,12 @@ static void XS_WsOnOpen(ptr pOwner, xwsserver* pServer, xwsconn* pConn)
 			XS_WsTrackConn(objHandle, objCtx);
 		}
 	}
-	XS_WsMetricAdd(&g_iXsWsOpenCount, 1);
-	XS_WsMetricUpdateMax(&g_iXsWsConnPeak, XS_WsMetricAdd(&g_iXsWsConnCurrent, 1));
+	if ( XS_RuntimeStatsEnabled() ) {
+		XS_WsMetricAdd(&g_iXsWsOpenCount, 1);
+		XS_WsMetricUpdateMax(&g_iXsWsConnPeak, XS_WsMetricAdd(&g_iXsWsConnCurrent, 1));
+	}
 	XS_WsRecordRemoteOpenConn(pConn);
-	if ( objServer && objServer->ConnLimit > 0u && XS_WsTrackedConnCount(objHandle) > (int64)objServer->ConnLimit ) {
+	if ( XS_RuntimeGovernEnabled() && objServer && objServer->ConnLimit > 0u && XS_WsTrackedConnCount(objHandle) > (int64)objServer->ConnLimit ) {
 		if ( objCtx ) {
 			objCtx->bClosing = TRUE;
 		}
@@ -104,7 +106,9 @@ static void XS_WsOnText(ptr pOwner, xwsserver* pServer, xwsconn* pConn, const ch
 	bool bHandled = FALSE;
 	(void)pServer;
 
-	XS_WsMetricAdd(&g_iXsWsTextCount, 1);
+	if ( XS_RuntimeStatsEnabled() ) {
+		XS_WsMetricAdd(&g_iXsWsTextCount, 1);
+	}
 	XS_WsTouch(objCtx);
 	XS_WsRecordRemoteContext(objCtx);
 	XS_WsRecordLastFrame(1, pData, iLen);
@@ -126,7 +130,9 @@ static void XS_WsOnBinary(ptr pOwner, xwsserver* pServer, xwsconn* pConn, const 
 	bool bHandled = FALSE;
 	(void)pServer;
 
-	XS_WsMetricAdd(&g_iXsWsBinaryCount, 1);
+	if ( XS_RuntimeStatsEnabled() ) {
+		XS_WsMetricAdd(&g_iXsWsBinaryCount, 1);
+	}
 	XS_WsTouch(objCtx);
 	XS_WsRecordRemoteContext(objCtx);
 	XS_WsRecordLastFrame(2, pData, iLen);
@@ -147,7 +153,9 @@ static void XS_WsOnPing(ptr pOwner, xwsserver* pServer, xwsconn* pConn, const vo
 	XS_WsConnContext* objCtx = XS_WsGetConnContext(objServer, pConn);
 	(void)pServer;
 
-	XS_WsMetricAdd(&g_iXsWsPingCount, 1);
+	if ( XS_RuntimeStatsEnabled() ) {
+		XS_WsMetricAdd(&g_iXsWsPingCount, 1);
+	}
 	XS_WsTouch(objCtx);
 	XS_WsRecordRemoteContext(objCtx);
 	XS_WsRecordLastFrame(3, pData, iLen);
@@ -172,7 +180,9 @@ static void XS_WsOnPong(ptr pOwner, xwsserver* pServer, xwsconn* pConn, const vo
 	XS_WsConnContext* objCtx = XS_WsGetConnContext(objServer, pConn);
 	(void)pServer;
 
-	XS_WsMetricAdd(&g_iXsWsPongCount, 1);
+	if ( XS_RuntimeStatsEnabled() ) {
+		XS_WsMetricAdd(&g_iXsWsPongCount, 1);
+	}
 	XS_WsTouch(objCtx);
 	XS_WsRecordRemoteContext(objCtx);
 	XS_WsRecordLastFrame(4, pData, iLen);
@@ -290,9 +300,11 @@ static void XS_WsOnError(ptr pOwner, xwsserver* pServer, xwsconn* pConn, int iSy
 	if ( iSysErr == -1 ) {
 		return;
 	}
-	XS_WsMetricAdd(&g_iXsWsErrorCount, 1);
-	g_iXsWsLastErrorCode = (int64)iSysErr;
-	g_tXsWsLastErrorTime = xrtNow();
+	if ( XS_RuntimeStatsEnabled() ) {
+		XS_WsMetricAdd(&g_iXsWsErrorCount, 1);
+		g_iXsWsLastErrorCode = (int64)iSysErr;
+		g_tXsWsLastErrorTime = xrtNow();
+	}
 	XS_WsRecordRemoteContext(objCtx);
 	XS_WsSnapshotErrorRemote();
 	
@@ -330,7 +342,7 @@ static inline bool XS_WsInitServer(xnetengine* pEngine, XS_ServerConfig* objServ
 		return FALSE;
 	}
 	tConfig.iBacklog = objServer->Backlog;
-	tConfig.iRecvLimit = objServer->WsMessageLimit ? objServer->WsMessageLimit : objServer->RecvLimit;
+	tConfig.iRecvLimit = XS_RuntimeGovernEnabled() ? (objServer->WsMessageLimit ? objServer->WsMessageLimit : objServer->RecvLimit) : 0u;
 	if ( objServer->EnableTLS ) {
 		tConfig.pTlsConfig = &objServer->TlsConfig;
 	}
@@ -410,11 +422,13 @@ static inline bool XS_WsStartServer(XS_ServerConfig* objServer)
 		return FALSE;
 	}
 	objHandle->bStopThread = FALSE;
-	objHandle->hIdleThread = xrtThreadCreate(XS_WsIdleThread, objHandle, 0);
-	if ( objHandle->hIdleThread == NULL ) {
-		xrtWsServerStop(pServer);
-		XS_ReportError("ws start failed: idle thread create failed");
-		return FALSE;
+	if ( XS_RuntimeGovernEnabled() ) {
+		objHandle->hIdleThread = xrtThreadCreate(XS_WsIdleThread, objHandle, 0);
+		if ( objHandle->hIdleThread == NULL ) {
+			xrtWsServerStop(pServer);
+			XS_ReportError("ws start failed: idle thread create failed");
+			return FALSE;
+		}
 	}
 	
 	XS_LogInfo(

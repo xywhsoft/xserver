@@ -497,6 +497,69 @@ static inline int XS_ScriptHttpJson(void* pResp, uint32 iStatus, const char* sRe
 	) ? 1 : 0;
 }
 
+static inline int XS_ScriptRet403(void* pServer, void* pHost, const void* pReq, void* pResp, const char* sMessage, xvalue objData)
+{
+	return XS_HttpRet403Ex(
+		(XS_ServerConfig*)pServer,
+		(const XS_HostConfig*)pHost,
+		XS_ScriptRequestRaw(pReq),
+		(xhttpdresponse*)pResp,
+		XS_ScriptRequestRemote(pReq),
+		sMessage,
+		objData
+	) ? 1 : 0;
+}
+
+static inline int XS_ScriptRet404(void* pServer, void* pHost, const void* pReq, void* pResp, const char* sMessage, xvalue objData)
+{
+	return XS_HttpRet404Ex(
+		(XS_ServerConfig*)pServer,
+		(const XS_HostConfig*)pHost,
+		XS_ScriptRequestRaw(pReq),
+		(xhttpdresponse*)pResp,
+		XS_ScriptRequestRemote(pReq),
+		sMessage,
+		objData
+	) ? 1 : 0;
+}
+
+static inline int XS_ScriptRet500(void* pServer, void* pHost, const void* pReq, void* pResp, const char* sMessage, xvalue objData)
+{
+	return XS_HttpRet500Ex(
+		(XS_ServerConfig*)pServer,
+		(const XS_HostConfig*)pHost,
+		XS_ScriptRequestRaw(pReq),
+		(xhttpdresponse*)pResp,
+		XS_ScriptRequestRemote(pReq),
+		sMessage,
+		objData
+	) ? 1 : 0;
+}
+
+static inline int XS_ScriptRetError(
+	void* pServer,
+	void* pHost,
+	const void* pReq,
+	void* pResp,
+	uint32 iStatus,
+	const char* sReason,
+	const char* sMessage,
+	xvalue objData
+)
+{
+	return XS_HttpRetErrorEx(
+		(XS_ServerConfig*)pServer,
+		(const XS_HostConfig*)pHost,
+		XS_ScriptRequestRaw(pReq),
+		(xhttpdresponse*)pResp,
+		XS_ScriptRequestRemote(pReq),
+		iStatus,
+		sReason ? sReason : "Error",
+		sMessage,
+		objData
+	) ? 1 : 0;
+}
+
 static inline int XS_ScriptWsIsOpen(void* pConn)
 {
 	return xrtWsConnIsOpen((xwsconn*)pConn) ? 1 : 0;

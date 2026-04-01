@@ -19,6 +19,7 @@
 #include "src/core/config.h"
 #include "src/core/bus.h"
 #include "src/manage/runtime_state.h"
+#include "src/manage/http_page.h"
 
 static inline bool XS_RequestConfigReloadEx(const char* sServerName, const char* sHostName, bool bForce);
 static inline XS_HostConfig* XS_FindServerHostByName(XS_ServerConfig* objServer, const char* sHostName);

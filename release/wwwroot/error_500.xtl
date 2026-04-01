@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>{$status} {$reason}</title>
+</head>
+<body>
+	<h1>500 TEMPLATE PAGE</h1>
+	<p>status={$status}</p>
+	<p>path={$path}</p>
+	<p>message={$message}</p>
+</body>
+</html>

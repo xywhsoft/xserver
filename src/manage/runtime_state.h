@@ -6,6 +6,25 @@ static xtime g_tXsStartTime = 0;
 static double g_fXsStartTick = 0.0;
 static uint32 g_iXsEngineWorkers = 0;
 static uint32 g_iXsRuntimeServerCount = 0;
+
+static inline bool XS_RuntimeStatsEnabled(void)
+{
+#ifdef XRT_MEM_DEBUG
+	return TRUE;
+#else
+	return FALSE;
+#endif
+}
+
+static inline bool XS_RuntimeGovernEnabled(void)
+{
+#ifdef XRT_MEM_DEBUG
+	return TRUE;
+#else
+	return FALSE;
+#endif
+}
+
 static volatile int64 g_iXsHttpReqCount = 0;
 static volatile int64 g_iXsHttpManageReqCount = 0;
 static volatile int64 g_iXsHttpAppReqCount = 0;
