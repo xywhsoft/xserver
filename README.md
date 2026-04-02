@@ -1,4 +1,4 @@
-﻿# XServer
+# XServer
 
 [English](./README.en.md) | [中文](./README.md)
 
@@ -358,7 +358,7 @@ WebSocket 脚本 API 额外提供：
 
 核心 reload / check 行为当前是：
 
-- `reload` 支持 Host 级脚本热重载，`reload_config` 支持最小配置热加载与按 `server` 定向重载
+- `reload` 支持 Host 级脚本热重载，`reload_config` 支持最小配置热加载、按 `server` 定向重载，以及在 listener 关键字段不变时对 `http / ws / tcp / udp / xtp / custom` 做 targeted soft reload
 - `reload` / `reload_json` / `reload_config` / `reload_config_json` 在命中同一目标的并发窗口时，会返回 `409 + reload busy`
 - `reload` / `reload_json` / `reload_config` / `reload_config_json` 的 `force` 参数已改成严格布尔校验，非法值直接返回 `400`
 - JSON 风格接口在 `disabled / not found / build failed / bad request / method not allowed` 这类直接错误分支里，仍保持 `application/json`
@@ -468,8 +468,10 @@ xserver/
 	- 全量 reload
 	- 按 `server` reload
 	- `http / ws` 的 host 原位 reload
+	- listener 关键字段不变时，对 `http / ws / tcp / udp / xtp / custom` 做 targeted server soft reload
 	- 失败回滚
-- 仍需继续补 listener / object 级别的最小替换策略，减少不必要重建。
+- 当前 `udp` 已经把 `recv_limit / backlog` 这类非 socket 关键参数从整服务重建里剥掉，改成对象级同步。
+- 仍需继续补更细粒度的 listener / object 级别最小替换，尤其是 host 拓扑变更、listener 增删和 TLS listener 差异化重建。
 
 3. Bus / 全局共享数据机制做最终收口
 - 当前已完成：

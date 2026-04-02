@@ -212,6 +212,31 @@ static bool XS_HostArrayReloadEquals(xarray arrLeft, xarray arrRight)
 	return TRUE;
 }
 
+static bool XS_HostArrayReloadIdentityEquals(xarray arrLeft, xarray arrRight)
+{
+	uint32 i;
+	uint32 iCountLeft = arrLeft ? arrLeft->Count : 0;
+	uint32 iCountRight = arrRight ? arrRight->Count : 0;
+
+	if ( iCountLeft != iCountRight ) {
+		return FALSE;
+	}
+
+	for ( i = 1; i <= iCountLeft; i++ ) {
+		XS_HostConfig* objHostLeft = xrtArrayGet_Inline(arrLeft, i);
+		XS_HostConfig* objHostRight = xrtArrayGet_Inline(arrRight, i);
+
+		if ( objHostLeft == NULL || objHostRight == NULL ) {
+			return FALSE;
+		}
+		if ( !XS_TextEquals(objHostLeft->Name, objHostRight->Name) ) {
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
 static bool XS_ServerConfigReloadEquals(const XS_ServerConfig* objLeft, const XS_ServerConfig* objRight)
 {
 	if ( objLeft == objRight ) {
@@ -315,6 +340,382 @@ static bool XS_ServerConfigReloadEquals(const XS_ServerConfig* objLeft, const XS
 	}
 
 	return TRUE;
+}
+
+static bool XS_ServerHostTopologyEquals(const XS_ServerConfig* objLeft, const XS_ServerConfig* objRight)
+{
+	if ( objLeft == objRight ) {
+		return TRUE;
+	}
+	if ( objLeft == NULL || objRight == NULL ) {
+		return FALSE;
+	}
+	if ( objLeft->EnableDefaultHost != objRight->EnableDefaultHost ) {
+		return FALSE;
+	}
+	if ( !XS_HostArrayReloadIdentityEquals(objLeft->Hosts, objRight->Hosts) ) {
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+static bool XS_ServerListenerCriticalEquals(const XS_ServerConfig* objLeft, const XS_ServerConfig* objRight)
+{
+	if ( objLeft == objRight ) {
+		return TRUE;
+	}
+	if ( objLeft == NULL || objRight == NULL ) {
+		return FALSE;
+	}
+	if ( objLeft->Enabled != objRight->Enabled ) {
+		return FALSE;
+	}
+	if ( objLeft->Class != objRight->Class ) {
+		return FALSE;
+	}
+	if ( objLeft->HostAware != objRight->HostAware ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(objLeft->BindIP, objRight->BindIP) ) {
+		return FALSE;
+	}
+	if ( objLeft->BindPort != objRight->BindPort ) {
+		return FALSE;
+	}
+	if ( !XS_TextEquals(objLeft->Addr, objRight->Addr) ) {
+		return FALSE;
+	}
+	if ( objLeft->HostAware && !XS_ServerHostTopologyEquals(objLeft, objRight) ) {
+		return FALSE;
+	}
+
+	switch ( objLeft->Class ) {
+		case XS_SVC_HTTP:
+			if ( objLeft->Backlog != objRight->Backlog ) {
+				return FALSE;
+			}
+			if ( objLeft->RecvLimit != objRight->RecvLimit ) {
+				return FALSE;
+			}
+			return TRUE;
+
+		case XS_SVC_WS:
+			if ( objLeft->Backlog != objRight->Backlog ) {
+				return FALSE;
+			}
+			if ( objLeft->RecvLimit != objRight->RecvLimit ) {
+				return FALSE;
+			}
+			if ( objLeft->WsMessageLimit != objRight->WsMessageLimit ) {
+				return FALSE;
+			}
+			if ( !XS_TextEquals(objLeft->WsProtocol, objRight->WsProtocol) ) {
+				return FALSE;
+			}
+			if ( objLeft->EnableTLS != objRight->EnableTLS ) {
+				return FALSE;
+			}
+			if ( !XS_TextEquals(objLeft->BindIPTLS, objRight->BindIPTLS) ) {
+				return FALSE;
+			}
+			if ( objLeft->BindPortTLS != objRight->BindPortTLS ) {
+				return FALSE;
+			}
+			if ( !XS_TextEquals(objLeft->AddrTLS, objRight->AddrTLS) ) {
+				return FALSE;
+			}
+			if ( !XS_TlsConfigEquals(&objLeft->TlsConfig, &objRight->TlsConfig) ) {
+				return FALSE;
+			}
+			return TRUE;
+
+		case XS_SVC_TCP:
+		case XS_SVC_CUSTOM:
+			if ( objLeft->Backlog != objRight->Backlog ) {
+				return FALSE;
+			}
+			if ( objLeft->RecvLimit != objRight->RecvLimit ) {
+				return FALSE;
+			}
+			return TRUE;
+
+		case XS_SVC_UDP:
+			return TRUE;
+
+		case XS_SVC_XTP:
+			if ( objLeft->Backlog != objRight->Backlog ) {
+				return FALSE;
+			}
+			if ( objLeft->RecvLimit != objRight->RecvLimit ) {
+				return FALSE;
+			}
+			if ( objLeft->EnableTLS != objRight->EnableTLS ) {
+				return FALSE;
+			}
+			if ( !XS_TextEquals(objLeft->BindIPTLS, objRight->BindIPTLS) ) {
+				return FALSE;
+			}
+			if ( objLeft->BindPortTLS != objRight->BindPortTLS ) {
+				return FALSE;
+			}
+			if ( !XS_TextEquals(objLeft->AddrTLS, objRight->AddrTLS) ) {
+				return FALSE;
+			}
+			if ( !XS_TlsConfigEquals(&objLeft->TlsConfig, &objRight->TlsConfig) ) {
+				return FALSE;
+			}
+			return TRUE;
+
+		default:
+			return FALSE;
+	}
+}
+
+static bool XS_ServerConfigCanSoftReload(const XS_ServerConfig* objLeft, const XS_ServerConfig* objRight)
+{
+	if ( objLeft == NULL || objRight == NULL ) {
+		return FALSE;
+	}
+	if ( !XS_ServerListenerCriticalEquals(objLeft, objRight) ) {
+		return FALSE;
+	}
+
+	switch ( objLeft->Class ) {
+		case XS_SVC_HTTP:
+		case XS_SVC_WS:
+			return objLeft->HostAware && objRight->HostAware;
+		case XS_SVC_TCP:
+		case XS_SVC_UDP:
+		case XS_SVC_XTP:
+		case XS_SVC_CUSTOM:
+			return !objLeft->HostAware && !objRight->HostAware;
+		default:
+			return FALSE;
+	}
+}
+
+static bool XS_HttpSoftReloadSyncRuntime(XS_ServerConfig* objServer)
+{
+	XS_HttpHandle* objHandle;
+
+	if ( objServer == NULL ) {
+		return FALSE;
+	}
+
+	objHandle = (XS_HttpHandle*)objServer->pHandle;
+	if ( objHandle == NULL ) {
+		return TRUE;
+	}
+
+	if ( !XS_RuntimeGovernEnabled() || objServer->IdleTimeout == 0u ) {
+		if ( objHandle->hIdleThread ) {
+			objHandle->bStopThread = TRUE;
+			xrtThreadWait(objHandle->hIdleThread);
+			xrtThreadDestroy(objHandle->hIdleThread);
+			objHandle->hIdleThread = NULL;
+			objHandle->bStopThread = FALSE;
+		}
+		objHandle->bStopping = FALSE;
+		return TRUE;
+	}
+
+	objHandle->bStopping = FALSE;
+	if ( objHandle->hIdleThread == NULL ) {
+		objHandle->bStopThread = FALSE;
+		objHandle->hIdleThread = xrtThreadCreate(XS_HttpIdleThread, objHandle, 0);
+		if ( objHandle->hIdleThread == NULL ) {
+			XS_LogError(
+				"config reload failed: http idle thread create error: server=%s",
+				objServer->Name ? objServer->Name : "(null)"
+			);
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
+static bool XS_WsSoftReloadSyncRuntime(XS_ServerConfig* objServer)
+{
+	XS_WsHandle* objHandle;
+
+	if ( objServer == NULL ) {
+		return FALSE;
+	}
+
+	objHandle = (XS_WsHandle*)objServer->pHandle;
+	if ( objHandle == NULL ) {
+		return TRUE;
+	}
+
+	if ( !XS_RuntimeGovernEnabled() || objServer->IdleTimeout == 0u ) {
+		if ( objHandle->hIdleThread ) {
+			objHandle->bStopThread = TRUE;
+			xrtThreadWait(objHandle->hIdleThread);
+			xrtThreadDestroy(objHandle->hIdleThread);
+			objHandle->hIdleThread = NULL;
+			objHandle->bStopThread = FALSE;
+		}
+		objHandle->bStopping = FALSE;
+		return TRUE;
+	}
+
+	objHandle->bStopping = FALSE;
+	if ( objHandle->hIdleThread == NULL ) {
+		objHandle->bStopThread = FALSE;
+		objHandle->hIdleThread = xrtThreadCreate(XS_WsIdleThread, objHandle, 0);
+		if ( objHandle->hIdleThread == NULL ) {
+			XS_LogError(
+				"config reload failed: ws idle thread create error: server=%s",
+				objServer->Name ? objServer->Name : "(null)"
+			);
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
+static bool XS_CustomSoftReloadSyncRuntime(XS_ServerConfig* objServer)
+{
+	XS_CustomHandle* objHandle;
+
+	if ( objServer == NULL ) {
+		return FALSE;
+	}
+
+	objHandle = (XS_CustomHandle*)objServer->pHandle;
+	if ( objHandle == NULL ) {
+		return TRUE;
+	}
+
+	objHandle->pServer = objServer;
+	objHandle->bStopAccept = FALSE;
+
+	if ( objHandle->hAcceptThread == NULL ) {
+		objHandle->hAcceptThread = xrtThreadCreate(XS_CustomAcceptThread, objHandle, 0);
+		if ( objHandle->hAcceptThread == NULL ) {
+			XS_LogError(
+				"config reload failed: custom accept thread create error: server=%s",
+				objServer->Name ? objServer->Name : "(null)"
+			);
+			return FALSE;
+		}
+	}
+
+	if ( !XS_RuntimeGovernEnabled() || objServer->IdleTimeout == 0u ) {
+		return TRUE;
+	}
+
+	if ( objHandle->hIdleThread == NULL ) {
+		objHandle->hIdleThread = xrtThreadCreate(XS_CustomIdleThread, objHandle, 0);
+		if ( objHandle->hIdleThread == NULL ) {
+			XS_LogError(
+				"config reload failed: custom idle thread create error: server=%s",
+				objServer->Name ? objServer->Name : "(null)"
+			);
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
+static bool XS_UdpSoftReloadSyncRuntime(XS_ServerConfig* objServer)
+{
+	XS_UdpHandle* objHandle;
+
+	if ( objServer == NULL ) {
+		return FALSE;
+	}
+
+	objHandle = (XS_UdpHandle*)objServer->pHandle;
+	if ( objHandle == NULL ) {
+		return TRUE;
+	}
+
+	objHandle->pServer = objServer;
+	return TRUE;
+}
+
+static bool XS_XtpSoftReloadSyncRuntime(XS_ServerConfig* objServer)
+{
+	XS_XtpHandle* objHandle;
+
+	if ( objServer == NULL ) {
+		return FALSE;
+	}
+
+	objHandle = (XS_XtpHandle*)objServer->pHandle;
+	if ( objHandle == NULL ) {
+		return TRUE;
+	}
+
+	objHandle->pServer = objServer;
+	objHandle->bStopAccept = FALSE;
+
+	if ( objHandle->hAcceptThread == NULL ) {
+		objHandle->hAcceptThread = xrtThreadCreate(XS_XtpAcceptThread, objHandle, 0);
+		if ( objHandle->hAcceptThread == NULL ) {
+			XS_LogError(
+				"config reload failed: xtp accept thread create error: server=%s",
+				objServer->Name ? objServer->Name : "(null)"
+			);
+			return FALSE;
+		}
+	}
+
+	if ( objHandle->pListenerTLS && objHandle->hAcceptThreadTLS == NULL ) {
+		objHandle->hAcceptThreadTLS = xrtThreadCreate(XS_XtpAcceptThreadTLS, objHandle, 0);
+		if ( objHandle->hAcceptThreadTLS == NULL ) {
+			XS_LogError(
+				"config reload failed: xtps accept thread create error: server=%s",
+				objServer->Name ? objServer->Name : "(null)"
+			);
+			return FALSE;
+		}
+	}
+
+	if ( !XS_RuntimeGovernEnabled() || objServer->IdleTimeout == 0u ) {
+		return TRUE;
+	}
+
+	if ( objHandle->hIdleThread == NULL ) {
+		objHandle->hIdleThread = xrtThreadCreate(XS_XtpIdleThread, objHandle, 0);
+		if ( objHandle->hIdleThread == NULL ) {
+			XS_LogError(
+				"config reload failed: xtp idle thread create error: server=%s",
+				objServer->Name ? objServer->Name : "(null)"
+			);
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
+static bool XS_ServerSoftReloadSyncRuntime(XS_ServerConfig* objServer)
+{
+	if ( objServer == NULL ) {
+		return FALSE;
+	}
+
+	switch ( objServer->Class ) {
+		case XS_SVC_HTTP:
+			return XS_HttpSoftReloadSyncRuntime(objServer);
+		case XS_SVC_WS:
+			return XS_WsSoftReloadSyncRuntime(objServer);
+		case XS_SVC_TCP:
+		case XS_SVC_CUSTOM:
+			return XS_CustomSoftReloadSyncRuntime(objServer);
+		case XS_SVC_UDP:
+			return XS_UdpSoftReloadSyncRuntime(objServer);
+		case XS_SVC_XTP:
+			return XS_XtpSoftReloadSyncRuntime(objServer);
+		default:
+			return FALSE;
+	}
 }
 
 static bool XS_ConfigReloadValidateTarget(XS_Config* objCfgNew, const XS_ConfigReloadRequest* pReq, XS_ServerConfig** ppServerNew)
@@ -509,6 +910,105 @@ static bool XS_PerformTargetHostReload(XS_ServerConfig* objServerOld, XS_ServerC
 	return TRUE;
 }
 
+static bool XS_PerformTargetServerSoftReload(XS_ServerConfig* objServerOld, XS_ServerConfig* objServerNewSrc, const XS_ConfigReloadRequest* pReq)
+{
+	XS_ServerConfig objServerBackup;
+	bool bBackupValid;
+	bool bOldScriptsStopped;
+	bool bNewScriptsStarted;
+	ptr pHandleKeep;
+
+	if ( objServerOld == NULL || objServerNewSrc == NULL || pReq == NULL ) {
+		XS_SetConfigReloadStatus(FALSE, pReq, "invalid target");
+		return FALSE;
+	}
+
+	memset(&objServerBackup, 0, sizeof(objServerBackup));
+	memcpy(&objServerBackup, objServerOld, sizeof(XS_ServerConfig));
+	bBackupValid = TRUE;
+	bOldScriptsStopped = FALSE;
+	bNewScriptsStarted = FALSE;
+
+	if ( !XS_LoadServerScripts(objServerNewSrc) ) {
+		XS_LogError("config reload failed: target server soft reload script load error");
+		XS_SetConfigReloadStatus(FALSE, pReq, "target server soft reload script load error");
+		return FALSE;
+	}
+
+	XS_StopServerScripts(objServerOld);
+	bOldScriptsStopped = TRUE;
+	pHandleKeep = objServerOld->pHandle;
+
+	memcpy(objServerOld, objServerNewSrc, sizeof(XS_ServerConfig));
+	memset(objServerNewSrc, 0, sizeof(XS_ServerConfig));
+	objServerOld->pHandle = pHandleKeep;
+
+	if ( !XS_InitServerScripts(objServerOld) ) {
+		XS_LogError("config reload failed: target server soft reload init error");
+		XS_SetConfigReloadStatus(FALSE, pReq, "target server soft reload init error");
+		goto rollback;
+	}
+	if ( !XS_StartServerScripts(objServerOld) ) {
+		XS_LogError("config reload failed: target server soft reload start error");
+		XS_SetConfigReloadStatus(FALSE, pReq, "target server soft reload start error");
+		goto rollback;
+	}
+	bNewScriptsStarted = TRUE;
+
+	if ( !XS_ServerSoftReloadSyncRuntime(objServerOld) ) {
+		XS_LogError("config reload failed: target server soft reload runtime sync error");
+		XS_SetConfigReloadStatus(FALSE, pReq, "target server soft reload runtime sync error");
+		goto rollback;
+	}
+
+	if ( bBackupValid ) {
+		XS_UnloadServerScripts(&objServerBackup);
+		XS_FreeServerConfig(&objServerBackup);
+	}
+
+	XS_LogInfo(
+		"config reload success: target server=%s target_host=%s mode=soft",
+		pReq->sServerName[0] ? pReq->sServerName : "(null)",
+		pReq->sHostName[0] ? pReq->sHostName : "(all)"
+	);
+	XS_SetConfigReloadStatus(TRUE, pReq, "target server soft reload success");
+	return TRUE;
+
+rollback:
+	if ( bNewScriptsStarted ) {
+		XS_StopServerScripts(objServerOld);
+	}
+	XS_UnloadServerScripts(objServerOld);
+	XS_FreeServerConfig(objServerOld);
+	memset(objServerOld, 0, sizeof(XS_ServerConfig));
+	memcpy(objServerOld, &objServerBackup, sizeof(XS_ServerConfig));
+	memset(&objServerBackup, 0, sizeof(XS_ServerConfig));
+	bBackupValid = FALSE;
+
+	if ( bOldScriptsStopped ) {
+		if ( XS_StartServerScripts(objServerOld) ) {
+			if ( !XS_ServerSoftReloadSyncRuntime(objServerOld) ) {
+				XS_LogError(
+					"config reload rollback failed: old target server runtime sync error: %s",
+					objServerOld->Name ? objServerOld->Name : "(null)"
+				);
+			} else {
+				XS_LogWarn(
+					"config reload rollback: old target server restored: %s",
+					objServerOld->Name ? objServerOld->Name : "(null)"
+				);
+			}
+		} else {
+			XS_LogError(
+				"config reload rollback failed: old target server restart error: %s",
+				objServerOld->Name ? objServerOld->Name : "(null)"
+			);
+		}
+	}
+
+	return FALSE;
+}
+
 static bool XS_PerformTargetServerReload(XS_Config* objCfg, XS_Runtime* objRuntime, XS_Config* objCfgNew, const XS_ConfigReloadRequest* pReq)
 {
 	XS_ServerConfig* objServerOld;
@@ -560,6 +1060,9 @@ static bool XS_PerformTargetServerReload(XS_Config* objCfg, XS_Runtime* objRunti
 		);
 		XS_SetConfigReloadStatus(TRUE, pReq, "target server unchanged");
 		return TRUE;
+	}
+	if ( !pReq->Force && XS_ServerConfigCanSoftReload(objServerOld, objServerNewSrc) ) {
+		return XS_PerformTargetServerSoftReload(objServerOld, objServerNewSrc, pReq);
 	}
 	
 	memset(&objServerBackup, 0, sizeof(objServerBackup));

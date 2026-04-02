@@ -15,12 +15,14 @@ $sRunTag = [string]$PID
 $script:sXtpClientExe = $null
 $script:sWsClientExe = $null
 $script:sCustomClientExe = $null
+$script:sUdpClientExe = $null
 
 function procCleanupGeneratedFiles()
 {
 	foreach ( $sPattern in @(
 		"xtp_smoke_client*.exe",
 		"ws_smoke_client*.exe",
+		"udp_smoke_client*.exe",
 		"custom_smoke_client*.exe",
 		".xs_stable_smoke_body.tmp"
 	) ) {
@@ -32,11 +34,25 @@ function procCleanupGeneratedFiles()
 
 function procGetFileHashText([string]$sPath)
 {
+	$objStream = $null
+	$objSha = $null
+
 	if ( -not (Test-Path $sPath) ) {
 		return "(missing)"
 	}
 
-	return (Get-FileHash -Algorithm SHA256 $sPath).Hash
+	try {
+		$objSha = [System.Security.Cryptography.SHA256]::Create()
+		$objStream = [System.IO.File]::OpenRead($sPath)
+		return ([System.BitConverter]::ToString($objSha.ComputeHash($objStream))).Replace("-", "")
+	} finally {
+		if ( $null -ne $objStream ) {
+			$objStream.Dispose()
+		}
+		if ( $null -ne $objSha ) {
+			$objSha.Dispose()
+		}
+	}
 }
 
 function procAppendArtifactCleanupCheck(
@@ -68,6 +84,7 @@ function procAppendArtifactCleanupCheck(
 	foreach ( $sPattern in @(
 		"xtp_smoke_client*.exe",
 		"ws_smoke_client*.exe",
+		"udp_smoke_client*.exe",
 		"custom_smoke_client*.exe",
 		".xs_stable_smoke_body.tmp"
 	) ) {
@@ -354,6 +371,16 @@ function procJsonStringField([string]$sJson, [string]$sField)
 	return ""
 }
 
+function procJsonIntField([string]$sJson, [string]$sField)
+{
+	$objMatch = [Regex]::Match($sJson, '"' + [Regex]::Escape($sField) + '":(-?[0-9]+)')
+	if ( $objMatch.Success ) {
+		return [int]$objMatch.Groups[1].Value
+	}
+
+	return -1
+}
+
 function procRunTargetedConfigReloadChecks([System.Collections.Generic.List[string]]$arrResults, [string]$sExeName, [int]$iPort)
 {
 	$objResp = procFetch "http://127.0.0.1:$iPort/__xs/status_json"
@@ -418,6 +445,292 @@ function procRunTargetedConfigReloadChecks([System.Collections.Generic.List[stri
 
 	procCheck $arrResults "$sExeName targeted_host_reload_status" $objResp.status 200 $objResp.body '"message":"target host unchanged"'
 	procCheckSecurityHeadersFromText $arrResults "$sExeName targeted_host_reload_status" $objResp.headers
+
+	$sConfigPath = Join-Path $sReleaseDir $sConfig
+	if ( -not (Test-Path $sConfigPath) ) {
+		$arrResults.Add("FAIL $sExeName targeted_server_soft_reload config_path : missing")
+		return
+	}
+
+	$objResp = procFetch "http://127.0.0.1:$iPort/__xs/status_json"
+	if ( $objResp.status -ne 200 ) {
+		$arrResults.Add("FAIL $sExeName targeted_server_soft_reload status_json_before : $($objResp.status)")
+		return
+	}
+
+	$iPathLimitOld = procJsonIntField $objResp.body "path_limit"
+	if ( $iPathLimitOld -lt 0 ) {
+		$arrResults.Add("FAIL $sExeName targeted_server_soft_reload path_limit_before : missing")
+		return
+	}
+
+	$sConfigBody = [System.IO.File]::ReadAllText($sConfigPath, [System.Text.UTF8Encoding]::new($false))
+	$iPathLimitNew = $iPathLimitOld + 7
+	$sConfigBodyNew = [Regex]::Replace(
+		$sConfigBody,
+		'("path_limit"\s*:\s*)\d+',
+		{ param($objMatch) $objMatch.Groups[1].Value + $iPathLimitNew },
+		1
+	)
+	if ( $sConfigBodyNew -eq $sConfigBody ) {
+		$arrResults.Add("FAIL $sExeName targeted_server_soft_reload config_replace : path_limit not replaced")
+		return
+	}
+
+	try {
+		[System.IO.File]::WriteAllText($sConfigPath, $sConfigBodyNew, [System.Text.UTF8Encoding]::new($false))
+
+		if ( -not (procWaitReloadIdle) ) {
+			$arrResults.Add("FAIL $sExeName targeted_server_soft_reload_idle_wait_before : timeout")
+			return
+		}
+
+		$objResp = procFetch ("http://127.0.0.1:$iPort/__xs/reload_config_json?server=" + $sServerQuery)
+		procCheck $arrResults "$sExeName targeted_server_soft_reload_config_json" $objResp.status 200 $objResp.body '"result":true'
+		procCheckBodyContains $arrResults "$sExeName targeted_server_soft_reload_config_json body" $objResp.body 'config reload queued'
+		procCheckSecurityHeadersFromText $arrResults "$sExeName targeted_server_soft_reload_config_json" $objResp.headers
+
+		if ( -not (procWaitReloadIdle) ) {
+			$arrResults.Add("FAIL $sExeName targeted_server_soft_reload_idle_after : timeout")
+			return
+		}
+
+		$objResp = procWaitBodyContains "http://127.0.0.1:$iPort/__xs/reload_status_json" '"message":"target server soft reload success"'
+		if ( $null -eq $objResp ) {
+			$arrResults.Add("FAIL $sExeName targeted_server_soft_reload_status : missing text '""message"":""target server soft reload success""'")
+			return
+		}
+
+		procCheck $arrResults "$sExeName targeted_server_soft_reload_status" $objResp.status 200 $objResp.body '"message":"target server soft reload success"'
+		procCheckSecurityHeadersFromText $arrResults "$sExeName targeted_server_soft_reload_status" $objResp.headers
+
+		$objResp = procFetch "http://127.0.0.1:$iPort/__xs/status_json"
+		procCheck $arrResults "$sExeName targeted_server_soft_reload_status_json" $objResp.status 200 $objResp.body '"path_limit":'
+		procCheck $arrResults "$sExeName targeted_server_soft_reload_path_limit" (procJsonIntField $objResp.body "path_limit") $iPathLimitNew $objResp.body ""
+
+		[System.IO.File]::WriteAllText($sConfigPath, $sConfigBody, [System.Text.UTF8Encoding]::new($false))
+
+		if ( -not (procWaitReloadIdle) ) {
+			$arrResults.Add("FAIL $sExeName targeted_server_soft_reload_restore_idle_wait_before : timeout")
+			return
+		}
+
+		$objResp = procFetch ("http://127.0.0.1:$iPort/__xs/reload_config_json?server=" + $sServerQuery)
+		procCheck $arrResults "$sExeName targeted_server_soft_reload_restore_config_json" $objResp.status 200 $objResp.body '"result":true'
+		procCheckBodyContains $arrResults "$sExeName targeted_server_soft_reload_restore_config_json body" $objResp.body 'config reload queued'
+		procCheckSecurityHeadersFromText $arrResults "$sExeName targeted_server_soft_reload_restore_config_json" $objResp.headers
+
+		if ( -not (procWaitReloadIdle) ) {
+			$arrResults.Add("FAIL $sExeName targeted_server_soft_reload_restore_idle_after : timeout")
+			return
+		}
+
+		$objResp = procWaitBodyContains "http://127.0.0.1:$iPort/__xs/reload_status_json" '"message":"target server soft reload success"'
+		if ( $null -eq $objResp ) {
+			$arrResults.Add("FAIL $sExeName targeted_server_soft_reload_restore_status : missing text '""message"":""target server soft reload success""'")
+			return
+		}
+
+		procCheck $arrResults "$sExeName targeted_server_soft_reload_restore_status" $objResp.status 200 $objResp.body '"message":"target server soft reload success"'
+		procCheckSecurityHeadersFromText $arrResults "$sExeName targeted_server_soft_reload_restore_status" $objResp.headers
+
+		$objResp = procFetch "http://127.0.0.1:$iPort/__xs/status_json"
+		procCheck $arrResults "$sExeName targeted_server_soft_reload_restore_status_json" $objResp.status 200 $objResp.body '"path_limit":'
+		procCheck $arrResults "$sExeName targeted_server_soft_reload_restore_path_limit" (procJsonIntField $objResp.body "path_limit") $iPathLimitOld $objResp.body ""
+	} finally {
+		if ( [System.IO.File]::Exists($sConfigPath) ) {
+			[System.IO.File]::WriteAllText($sConfigPath, $sConfigBody, [System.Text.UTF8Encoding]::new($false))
+		}
+	}
+}
+
+function procCheckClientTokens([System.Collections.Generic.List[string]]$arrResults, [string]$sName, $tblRun, [string[]]$arrTokens)
+{
+	$bOK = $true
+
+	if ( $null -eq $tblRun -or $tblRun.code -ne 0 ) {
+		$arrResults.Add("FAIL $sName : client exit $($tblRun.code)")
+		return
+	}
+
+	foreach ( $sToken in $arrTokens ) {
+		if ( -not [string]::IsNullOrEmpty($sToken) -and ($tblRun.text -notlike "*$sToken*") ) {
+			$bOK = $false
+			break
+		}
+	}
+
+	if ( $bOK ) {
+		$arrResults.Add("OK   $sName : 0")
+	} else {
+		$arrResults.Add("FAIL $sName : unexpected body")
+	}
+}
+
+function procRunNamedServerNumericFieldSoftReloadCheck(
+	[System.Collections.Generic.List[string]]$arrResults,
+	[string]$sExeName,
+	[string]$sConfigName,
+	[string]$sServerName,
+	[string]$sCaseName,
+	[string]$sFieldName,
+	[bool]$bToggleZero,
+	[int]$iFieldDelta,
+	[int]$iFieldZeroFallback,
+	[string]$sClientExe,
+	[string[]]$arrClientArgs,
+	[string[]]$arrExpectTokens
+)
+{
+	$sConfigPath = Join-Path $sReleaseDir $sConfigName
+	$sServerQuery = [Uri]::EscapeDataString($sServerName)
+	$sConfigBody = ""
+	$sConfigBodyNew = ""
+	$objConfig = $null
+	$objService = $null
+	$iFieldOld = 0
+	$iFieldNew = 0
+	$objResp = $null
+
+	if ( -not (Test-Path $sConfigPath) ) {
+		$arrResults.Add("FAIL $sExeName $sCaseName config_path : missing")
+		return
+	}
+
+	$sConfigBody = [System.IO.File]::ReadAllText($sConfigPath, [System.Text.UTF8Encoding]::new($false))
+	try {
+		$objConfig = $sConfigBody | ConvertFrom-Json
+	} catch {
+		$arrResults.Add("FAIL $sExeName $sCaseName config_parse : $($_.Exception.Message)")
+		return
+	}
+
+	if ( $null -eq $objConfig -or $null -eq $objConfig.services ) {
+		$arrResults.Add("FAIL $sExeName $sCaseName config_services : missing")
+		return
+	}
+
+	$objService = @($objConfig.services) | Where-Object { $_.name -eq $sServerName } | Select-Object -First 1
+	if ( $null -eq $objService ) {
+		$arrResults.Add("FAIL $sExeName $sCaseName target_server : missing")
+		return
+	}
+	if ( $null -eq $objService.PSObject.Properties[$sFieldName] ) {
+		$arrResults.Add("FAIL $sExeName $sCaseName ${sFieldName}_before : missing")
+		return
+	}
+
+	$iFieldOld = [int]$objService.PSObject.Properties[$sFieldName].Value
+	if ( $bToggleZero ) {
+		$iFieldNew = 0
+		if ( $iFieldOld -eq 0 ) {
+			$iFieldNew = $iFieldZeroFallback
+		}
+	} else {
+		$iFieldNew = $iFieldOld + $iFieldDelta
+		if ( $iFieldNew -eq $iFieldOld ) {
+			if ( ($iFieldOld -eq 0) -and ($iFieldZeroFallback -gt 0) ) {
+				$iFieldNew = $iFieldZeroFallback
+			} else {
+				$iFieldNew = $iFieldOld + 1
+			}
+		}
+	}
+
+	$objService.PSObject.Properties[$sFieldName].Value = $iFieldNew
+	$sConfigBodyNew = $objConfig | ConvertTo-Json -Depth 64
+	if ( $sConfigBodyNew -eq $sConfigBody ) {
+		$arrResults.Add("FAIL $sExeName $sCaseName config_replace : $sFieldName not replaced")
+		return
+	}
+
+	try {
+		[System.IO.File]::WriteAllText($sConfigPath, $sConfigBodyNew, [System.Text.UTF8Encoding]::new($false))
+
+		if ( -not (procWaitReloadIdle) ) {
+			$arrResults.Add("FAIL $sExeName $sCaseName idle_wait_before : timeout")
+			return
+		}
+
+		$objResp = procFetch ("http://127.0.0.1:$iPort/__xs/reload_config_json?server=" + $sServerQuery)
+		procCheck $arrResults "$sExeName $sCaseName reload_config_json" $objResp.status 200 $objResp.body '"result":true'
+		procCheckBodyContains $arrResults "$sExeName $sCaseName reload_config_json body" $objResp.body 'config reload queued'
+		procCheckSecurityHeadersFromText $arrResults "$sExeName $sCaseName reload_config_json" $objResp.headers
+
+		if ( -not (procWaitReloadIdle) ) {
+			$arrResults.Add("FAIL $sExeName $sCaseName idle_after : timeout")
+			return
+		}
+
+		$objResp = procWaitBodyContains "http://127.0.0.1:$iPort/__xs/reload_status_json" '"message":"target server soft reload success"'
+		if ( $null -eq $objResp ) {
+			$arrResults.Add("FAIL $sExeName $sCaseName status : missing text '""message"":""target server soft reload success""'")
+			return
+		}
+
+		procCheck $arrResults "$sExeName $sCaseName status" $objResp.status 200 $objResp.body '"message":"target server soft reload success"'
+		procCheckBodyContains $arrResults "$sExeName $sCaseName status server" $objResp.body ('"server":"' + $sServerName + '"')
+		procCheckSecurityHeadersFromText $arrResults "$sExeName $sCaseName status" $objResp.headers
+		procCheckClientTokens $arrResults "$sExeName $sCaseName client" (procRunClientRetry $sClientExe $arrClientArgs) $arrExpectTokens
+
+		[System.IO.File]::WriteAllText($sConfigPath, $sConfigBody, [System.Text.UTF8Encoding]::new($false))
+
+		if ( -not (procWaitReloadIdle) ) {
+			$arrResults.Add("FAIL $sExeName $sCaseName restore_idle_wait_before : timeout")
+			return
+		}
+
+		$objResp = procFetch ("http://127.0.0.1:$iPort/__xs/reload_config_json?server=" + $sServerQuery)
+		procCheck $arrResults "$sExeName $sCaseName restore_reload_config_json" $objResp.status 200 $objResp.body '"result":true'
+		procCheckBodyContains $arrResults "$sExeName $sCaseName restore_reload_config_json body" $objResp.body 'config reload queued'
+		procCheckSecurityHeadersFromText $arrResults "$sExeName $sCaseName restore_reload_config_json" $objResp.headers
+
+		if ( -not (procWaitReloadIdle) ) {
+			$arrResults.Add("FAIL $sExeName $sCaseName restore_idle_after : timeout")
+			return
+		}
+
+		$objResp = procWaitBodyContains "http://127.0.0.1:$iPort/__xs/reload_status_json" '"message":"target server soft reload success"'
+		if ( $null -eq $objResp ) {
+			$arrResults.Add("FAIL $sExeName $sCaseName restore_status : missing text '""message"":""target server soft reload success""'")
+			return
+		}
+
+		procCheck $arrResults "$sExeName $sCaseName restore_status" $objResp.status 200 $objResp.body '"message":"target server soft reload success"'
+		procCheckBodyContains $arrResults "$sExeName $sCaseName restore_status server" $objResp.body ('"server":"' + $sServerName + '"')
+		procCheckSecurityHeadersFromText $arrResults "$sExeName $sCaseName restore_status" $objResp.headers
+		procCheckClientTokens $arrResults "$sExeName $sCaseName restore_client" (procRunClientRetry $sClientExe $arrClientArgs) $arrExpectTokens
+	} finally {
+		if ( [System.IO.File]::Exists($sConfigPath) ) {
+			[System.IO.File]::WriteAllText($sConfigPath, $sConfigBody, [System.Text.UTF8Encoding]::new($false))
+		}
+	}
+}
+
+function procRunNamedServerSoftReloadCheck(
+	[System.Collections.Generic.List[string]]$arrResults,
+	[string]$sExeName,
+	[string]$sConfigName,
+	[string]$sServerName,
+	[string]$sCaseName,
+	[string]$sClientExe,
+	[string[]]$arrClientArgs,
+	[string[]]$arrExpectTokens
+)
+{
+	procRunNamedServerNumericFieldSoftReloadCheck `
+		$arrResults `
+		$sExeName `
+		$sConfigName `
+		$sServerName `
+		$sCaseName `
+		"idle_timeout" `
+		$true `
+		0 `
+		3000 `
+		$sClientExe `
+		$arrClientArgs `
+		$arrExpectTokens
 }
 
 function procBuildXtpSmokeClient()
@@ -430,6 +743,15 @@ function procBuildXtpSmokeClient()
 	return $script:sXtpClientExe
 }
 
+function procBuildUdpSmokeClient()
+{
+	if ( $script:sUdpClientExe -and (Test-Path $script:sUdpClientExe) ) {
+		return $script:sUdpClientExe
+	}
+
+	$script:sUdpClientExe = procBuildCClient "udp_smoke_client.c" "udp_smoke_client"
+	return $script:sUdpClientExe
+}
 function procBuildCClient([string]$sSourceName, [string]$sOutputName)
 {
 	$sSource = Join-Path $sToolDir $sSourceName
@@ -2558,6 +2880,16 @@ function procRunXtpCase([string]$sExeName, [bool]$bDebug)
 			$arrResults.Add("FAIL $sExeName xtp_callrequeststatus : unexpected body")
 		}
 
+		procRunNamedServerSoftReloadCheck `
+			$arrResults `
+			$sExeName `
+			"xs_manage_xtp_test.json" `
+			"test XTP Server" `
+			"xtp_soft_reload" `
+			$sClientExe `
+			@("127.0.0.1", "$iXtpPort", "demo.callself", "tag=soft-reload") `
+			@("status=0", "cmd=xtp.reply", "self call ok")
+
 		$iCode = 0
 		foreach ( $sLine in $arrResults ) {
 			if ( $sLine.StartsWith("FAIL ") ) {
@@ -2632,6 +2964,70 @@ function procRunWsCase([string]$sExeName)
 	}
 }
 
+function procRunUdpCase([string]$sExeName)
+{
+	$sExePath = Join-Path $sReleaseDir $sExeName
+	$arrResults = New-Object 'System.Collections.Generic.List[string]'
+	$sClientExe = $null
+
+	if ( -not (Test-Path $sExePath) ) {
+		$arrResults.Add("FAIL $sExeName udp : executable not found")
+		return @{ code = 1; lines = $arrResults }
+	}
+
+	try {
+		$sClientExe = procBuildUdpSmokeClient
+	} catch {
+		$arrResults.Add("FAIL $sExeName udp_build : $($_.Exception.Message)")
+		return @{ code = 1; lines = $arrResults }
+	}
+
+	$objProc = Start-Process -FilePath $sExePath -ArgumentList "xs_manage_udp_test.json" -WorkingDirectory $sReleaseDir -PassThru -WindowStyle Hidden
+
+	try {
+		if ( -not (procWaitReady) ) {
+			$arrResults.Add("FAIL $sExeName udp_ready : timeout")
+			return @{ code = 1; lines = $arrResults }
+		}
+
+		Start-Sleep -Milliseconds 500
+		$tblRun = procRunClientRetry $sClientExe @("127.0.0.1", "9097", "smoke-udp")
+		if ( $tblRun.code -ne 0 ) {
+			$arrResults.Add("FAIL $sExeName udp_echo : client exit $($tblRun.code)")
+		} elseif ( ($tblRun.text -like "*udp demo*") -and ($tblRun.text -like "*data=smoke-udp*") ) {
+			$arrResults.Add("OK   $sExeName udp_echo : 0")
+		} else {
+			$arrResults.Add("FAIL $sExeName udp_echo : unexpected body")
+		}
+
+		procRunNamedServerNumericFieldSoftReloadCheck `
+			$arrResults `
+			$sExeName `
+			"xs_manage_udp_test.json" `
+			"test UDP Server" `
+			"udp_soft_reload" `
+			"recv_limit" `
+			$false `
+			2048 `
+			2048 `
+			$sClientExe `
+			@("127.0.0.1", "9097", "smoke-udp-reload") `
+			@("udp demo", "data=smoke-udp-reload")
+
+		$iCode = 0
+		foreach ( $sLine in $arrResults ) {
+			if ( $sLine.StartsWith("FAIL ") ) {
+				$iCode = 1
+				break
+			}
+		}
+
+		return @{ code = $iCode; lines = $arrResults }
+	} finally {
+		Stop-Process -Id $objProc.Id -Force -ErrorAction SilentlyContinue
+		Start-Sleep -Milliseconds 500
+	}
+}
 function procRunCustomCase([string]$sExeName)
 {
 	$sExePath = Join-Path $sReleaseDir $sExeName
@@ -2672,6 +3068,16 @@ function procRunCustomCase([string]$sExeName)
 		} else {
 			$arrResults.Add("FAIL $sExeName custom_echo : unexpected body")
 		}
+
+		procRunNamedServerSoftReloadCheck `
+			$arrResults `
+			$sExeName `
+			"xs_manage_custom_test.json" `
+			"test Custom Server" `
+			"custom_soft_reload" `
+			$sClientExe `
+			@("127.0.0.1", "9098", "smoke-custom-reload") `
+			@("custom demo", "data=smoke-custom-reload")
 
 		$iCode = 0
 		foreach ( $sLine in $arrResults ) {
@@ -2730,6 +3136,13 @@ if ( $tblCase.code -ne 0 ) {
 	$iExit = $tblCase.code
 }
 
+$tblCase = procRunUdpCase "xs.exe"
+$arrOut.Add("[xs-udp]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
 $tblCase = procRunCustomCase "xs.exe"
 $arrOut.Add("[xs-custom]")
 procAppendLines $arrOut $tblCase.lines
@@ -2760,6 +3173,13 @@ if ( $tblCase.code -ne 0 ) {
 
 $tblCase = procRunWsCase "xsdbg.exe"
 $arrOut.Add("[xsdbg-ws]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
+$tblCase = procRunUdpCase "xsdbg.exe"
+$arrOut.Add("[xsdbg-udp]")
 procAppendLines $arrOut $tblCase.lines
 if ( $tblCase.code -ne 0 ) {
 	$iExit = $tblCase.code
