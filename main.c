@@ -6,6 +6,9 @@
 // 定义 XRT_IMPLEMENTATION 导入功能实现
 #define XRT_IMPLEMENTATION
 #include "lib/xrt.h"
+#ifdef XRT_BUILD_CORE
+	#undef XRT_BUILD_CORE
+#endif
 
 // vNext 支撑层
 #include "src/support/log.h"
