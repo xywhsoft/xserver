@@ -480,7 +480,7 @@ static bool Request_Template(XS_ServerObject objServer, XS_HostObject objHost, X
 {
 	char* sTemplateFile;
 	char* sTemplateText;
-	XTE_LiteObject objTemplate;
+	xtetemplate objTemplate;
 	xvalue objData;
 	xvalue objList;
 	char* sPage;
@@ -501,7 +501,7 @@ static bool Request_Template(XS_ServerObject objServer, XS_HostObject objHost, X
 	
 	objTemplate = xteParse(sTemplateText, strlen(sTemplateText), NULL);
 	xrtFree(sTemplateText);
-	if ( objTemplate == NULL || objTemplate->Success == FALSE ) {
+	if ( objTemplate == NULL ) {
 		if ( objTemplate ) {
 			xteParseFree(objTemplate);
 		}

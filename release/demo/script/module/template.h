@@ -14,7 +14,7 @@ xvalue TemplateProc_Project_MakeXID(xvalue varENV, xvalue varParam)
 
 char* MakePageWithTemplate(char* sTemplate, xvalue tblData, size_t* pRetSize)
 {
-	XTE_LiteObject objTemplate;
+	xtetemplate objTemplate;
 	str sFilePath;
 	str sText;
 	char* sPage;
@@ -34,7 +34,7 @@ char* MakePageWithTemplate(char* sTemplate, xvalue tblData, size_t* pRetSize)
 	iSize = strlen(sText);
 	objTemplate = xteParse(sText, iSize, NULL);
 	xrtFree(sText);
-	if ( objTemplate == NULL || !objTemplate->Success ) {
+	if ( objTemplate == NULL ) {
 		if ( objTemplate ) {
 			xteParseFree(objTemplate);
 		}
