@@ -973,6 +973,75 @@ function procRunStaticHomepageAudit()
 	}
 }
 
+function procRunStaticPathGuardCase([string]$sExeName)
+{
+	$sExePath = Join-Path $sReleaseDir $sExeName
+	$iStaticPort = 8082
+	$sBaseUrl = "http://127.0.0.1:$iStaticPort"
+	$tEnd = [DateTime]::UtcNow.AddMilliseconds($iWaitMS)
+	$bReady = $false
+	$arrResults = New-Object 'System.Collections.Generic.List[string]'
+
+	if ( -not (Test-Path $sExePath) ) {
+		$arrResults.Add("FAIL $sExeName static_path_guard : executable not found")
+		return @{
+			code = 1
+			lines = $arrResults
+		}
+	}
+
+	$objProc = Start-Process -FilePath $sExePath -ArgumentList "xs_static_test.json" -WorkingDirectory $sReleaseDir -PassThru -WindowStyle Hidden
+
+	try {
+		while ( [DateTime]::UtcNow -lt $tEnd ) {
+			try {
+				$objResp = procFetch "$sBaseUrl/__xs/status_json"
+				if ( $objResp.status -eq 200 ) {
+					$bReady = $true
+					break
+				}
+			} catch {
+			}
+
+			Start-Sleep -Milliseconds 200
+		}
+
+		if ( -not $bReady ) {
+			$arrResults.Add("FAIL $sExeName static_ready : timeout")
+			return @{
+				code = 1
+				lines = $arrResults
+			}
+		}
+
+		$objResp = procFetch "$sBaseUrl/static_access.json"
+		procCheck $arrResults "$sExeName static_json" $objResp.status 200 $objResp.body 'xserver static json smoke'
+		procCheckBodyContains $arrResults "$sExeName static_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'application/json'
+
+		$objResp = procFetch "$sBaseUrl/.gitignore"
+		procCheck $arrResults "$sExeName static_dotfile" $objResp.status 403 $objResp.body
+
+		$objResp = procFetch "$sBaseUrl/res%5Clayui%5Ccss%5Clayui.css"
+		procCheck $arrResults "$sExeName static_backslash" $objResp.status 403 $objResp.body
+
+		$iCode = 0
+		foreach ( $sLine in $arrResults ) {
+			if ( $sLine.StartsWith("FAIL ") ) {
+				$iCode = 1
+				break
+			}
+		}
+
+		return @{
+			code = $iCode
+			lines = $arrResults
+		}
+	} finally {
+		Stop-Process -Id $objProc.Id -Force -ErrorAction SilentlyContinue
+		Start-Sleep -Milliseconds 500
+	}
+}
+
 function procRunCase([string]$sExeName, [bool]$bDebug)
 {
 	$sExePath = Join-Path $sReleaseDir $sExeName
@@ -3108,6 +3177,13 @@ if ( $tblCase.code -ne 0 ) {
 	$iExit = $tblCase.code
 }
 
+$tblCase = procRunStaticPathGuardCase "xs.exe"
+$arrOut.Add("[xs-static]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
 $tblCase = procRunCase "xs.exe" $false
 $arrOut.Add("[xs]")
 procAppendLines $arrOut $tblCase.lines
@@ -3152,6 +3228,13 @@ if ( $tblCase.code -ne 0 ) {
 
 $tblCase = procRunCase "xsdbg.exe" $true
 $arrOut.Add("[xsdbg]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
+$tblCase = procRunStaticPathGuardCase "xsdbg.exe"
+$arrOut.Add("[xsdbg-static]")
 procAppendLines $arrOut $tblCase.lines
 if ( $tblCase.code -ne 0 ) {
 	$iExit = $tblCase.code

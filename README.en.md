@@ -182,7 +182,7 @@ void ServiceUnit(XS_ServerObject objServer, XS_HostObject objHost)
 | Function | Description |
 |----------|-------------|
 | `ServiceInit / ServiceStart / ServiceStop / ServiceUnit` | Host or service script lifecycle |
-| `RequestProc` | HTTP request handler |
+| `RequestProc` | HTTP request handler; returning `true` marks the request handled, while returning `false` only falls back to `host.path` static files for `GET / HEAD`, and other methods default to `404` |
 | `MessageProc` | Host bus message handler |
 | `WsOpenProc / WsTextProc / WsBinaryProc / WsPingProc / WsPongProc / WsCloseProc` | WebSocket host callbacks |
 | `EventOpenProc / EventDataProc / EventCloseProc` | Stream callbacks for TCP / Custom / XTP |
