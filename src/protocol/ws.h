@@ -349,7 +349,7 @@ static inline bool XS_WsInitServer(xnetengine* pEngine, XS_ServerConfig* objServ
 	if ( objServer->WsProtocol && objServer->WsProtocol[0] ) {
 		snprintf(tConfig.sProtocol, sizeof(tConfig.sProtocol), "%s", objServer->WsProtocol);
 	}
-	
+
 	memset(&tEvents, 0, sizeof(tEvents));
 	tEvents.OnOpen = XS_WsOnOpen;
 	tEvents.OnText = XS_WsOnText;
@@ -358,7 +358,7 @@ static inline bool XS_WsInitServer(xnetengine* pEngine, XS_ServerConfig* objServ
 	tEvents.OnPong = XS_WsOnPong;
 	tEvents.OnClose = XS_WsOnClose;
 	tEvents.OnError = XS_WsOnError;
-	
+
 	pServer = xrtWsServerCreate(pEngine, &tConfig, &tEvents, objServer);
 	if ( pServer == NULL ) {
 		XS_ReportError("ws init failed: xrtWsServerCreate returned null");

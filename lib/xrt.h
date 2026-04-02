@@ -1,7 +1,7 @@
 /*
 
     XRT Single Header File
-    Generated: 2026-04-02 10:11:58
+    Generated: 2026-04-02 17:14:20
 
     MIT License
 
@@ -307,6 +307,7 @@
 #if defined(XRT_MINIMAL)
 	#define XRT_NO_TIME
 	#define XRT_NO_FILE
+	#define XRT_NO_FILE_ASYNC
 	#define XRT_NO_THREAD
 	#define XRT_NO_QUEUE
 	#define XRT_NO_COROUTINE
@@ -327,11 +328,16 @@
 	#define XRT_NO_VALUE
 	#define XRT_NO_JNUM
 	#define XRT_NO_JSON
+	#define XRT_NO_XSON
 	#define XRT_NO_TEMPLATE
 	#define XRT_NO_REGEX		// 禁用正则表达式模块
+	#define XRT_NO_SUBPROCESS
 #endif
 // 网络根模块裁剪时，同步裁剪全部网络子库
 #if defined(XRT_NO_NETWORK)
+	#ifndef XRT_NO_FILE_ASYNC
+		#define XRT_NO_FILE_ASYNC
+	#endif
 	#ifndef XRT_NO_XURL
 		#define XRT_NO_XURL
 	#endif
@@ -354,6 +360,16 @@
 #if defined(XRT_NO_QUEUE)
 	#ifndef XRT_NO_QUEUE_WAIT
 		#define XRT_NO_QUEUE_WAIT
+	#endif
+#endif
+#if defined(XRT_NO_FILE)
+	#ifndef XRT_NO_FILE_ASYNC
+		#define XRT_NO_FILE_ASYNC
+	#endif
+#endif
+#if defined(XRT_NO_JSON)
+	#ifndef XRT_NO_XSON
+		#define XRT_NO_XSON
 	#endif
 #endif
 // 裁剪依赖警告辅助
@@ -1584,6 +1600,7 @@
 	
 	// 运行程序并等待程序运行结束
 	XXAPI int xrtChain(str sPath, size_t iSize);
+#ifndef XRT_NO_SUBPROCESS
 	#define XPROC_STATE_FAILED		-1
 	#define XPROC_STATE_INIT		0
 	#define XPROC_STATE_RUNNING		1
@@ -1750,6 +1767,7 @@
 	XXAPI bool xrtExecCapture(const xprocessconfig* pConfig, xprocessresult* pResult, uint32 iTimeoutMs);
 	// 释放进程结果
 	XXAPI void xrtProcessResultUnit(xprocessresult* pResult);
+#endif
 	
 	
 	
@@ -4729,6 +4747,7 @@
 	XXAPI xfuture* xTaskRunDelayed(xnetengine* pEngine, uint32 iAffinityKey, uint32 iDelayMs, xtask_engine_fn pfnTask, ptr pArg);
 	// 在独立线程中运行任务
 	XXAPI xfuture* xTaskRunThread(xtask_thread_fn pfnTask, ptr pArg, size_t iStackSize);
+	#if !defined(XRT_NO_FILE_ASYNC)
 	// 异步读取文件
 	XXAPI xfuture* xrtAsyncFileReadAt(xasyncfile* pFile, uint64 iOffset, size_t iSize);
 	// 异步写入文件
@@ -4765,8 +4784,11 @@
 	XXAPI xfuture* xrtDirMoveAsync(str sSrc, str sDst, bool bReWrite);
 	// 异步删除目录
 	XXAPI xfuture* xrtDirDeleteAsync(str sPath);
+	#endif
+	#ifndef XRT_NO_SUBPROCESS
 	// 等待进程 Future
 	XXAPI xfuture* xrtProcessWaitFuture(xprocess* pProcess);
+	#endif
 	#if !defined(XRT_NO_COROUTINE)
 	// 在协程调度器中运行任务
 	XXAPI xfuture* xTaskRunCo(xcosched* pSched, xtask_co_fn pfnTask, ptr pArg, size_t iStackSize);
@@ -7016,6 +7038,7 @@
 	
 	
 	
+	#if !defined(XRT_NO_XSON)
 	/* ------------------------------------ XSON 函数库 ------------------------------------ */
 	/*
 		依赖项：
@@ -7042,6 +7065,7 @@
 	XXAPI str xrtStringifyXSON(xvalue varVal, int bFormat, uint32 iFlags, size_t* pRetSize);
 	// 将 xvalue 格式化为 XSON 并写入文件
 	XXAPI int xrtStringifyXSON_File(str sFile, xvalue varVal, int bFormat, uint32 iFlags);
+	#endif
 	
 	
 	
@@ -10296,7 +10320,7 @@ static size_t __xrtUtf8CharLenSafe(str sText, size_t iSize, size_t iPos)
 	return iCharLen;
 }
 // 内部函数：检查字节序列是否在集合中
-static bool __xrtStrHasToken(str sText, size_t iSize, const char* sToken, size_t iTokenSize)
+static bool __xrtStrHasToken(str sText, size_t iSize, const unsigned char* sToken, size_t iTokenSize)
 {
 	if ( !sText || !sToken || (iTokenSize == 0) || (iSize < iTokenSize) ) { return FALSE; }
 	for ( size_t i = 0; (i + iTokenSize) <= iSize; i++ ) {
@@ -17037,6 +17061,7 @@ XXAPI int xrtDirDelete(str sPath)
 	#endif
 	return 0;
 }
+#if !defined(XRT_NO_FILE_ASYNC)
 
 // ========================================
 // File: D:/git/xrt/lib/file_async.h
@@ -18487,6 +18512,7 @@ XXAPI xfuture* xrtDirDeleteAsync(str sPath)
 	}
 	return __xafileStartPathTask(pTask);
 }
+#endif
 #endif
 #endif
 #endif
@@ -54701,6 +54727,7 @@ str xrtGetLocalName()
 	return xCore.sNull;
 }
 #endif
+#ifndef XRT_NO_SUBPROCESS
 
 // ========================================
 // File: D:/git/xrt/lib/subprocess.h
@@ -55900,6 +55927,7 @@ struct xprocess_struct {
 };
 static void __xprocFreeProcess(xprocess* pProcess);
 // 内部函数：增加引用
+#if !defined(XRT_NO_NETWORK)
 static xprocess* __xprocAddRef(xprocess* pProcess)
 {
 	if ( pProcess ) {
@@ -55907,6 +55935,7 @@ static xprocess* __xprocAddRef(xprocess* pProcess)
 	}
 	return pProcess;
 }
+#endif
 // 内部函数：释放引用
 static void __xprocReleaseProcess(xprocess* pProcess)
 {
@@ -56198,6 +56227,17 @@ static void __xprocPushEventLocked(xprocess* pProcess, int iKind, int iStream, u
 		procDeleteProcThreadAttributeList DeleteProcThreadAttributeList;
 	} __xproc_conpty_api;
 	static __xproc_conpty_api __gxprocConPtyApi;
+	static void __xprocAssignProcAddress(void* pTarget, size_t iTargetSize, FARPROC procAddress)
+	{
+		if ( pTarget == NULL || iTargetSize == 0 ) {
+			return;
+		}
+		memset(pTarget, 0, iTargetSize);
+		if ( iTargetSize > sizeof(procAddress) ) {
+			iTargetSize = sizeof(procAddress);
+		}
+		memcpy(pTarget, &procAddress, iTargetSize);
+	}
 	static void __xprocLoadConPtyApi(void)
 	{
 		HMODULE hKernel;
@@ -56210,12 +56250,12 @@ static void __xprocPushEventLocked(xprocess* pProcess, int iKind, int iStream, u
 		if ( hKernel == NULL ) {
 			return;
 		}
-		__gxprocConPtyApi.CreatePseudoConsole = (procCreatePseudoConsole)GetProcAddress(hKernel, "CreatePseudoConsole");
-		__gxprocConPtyApi.ClosePseudoConsole = (procClosePseudoConsole)GetProcAddress(hKernel, "ClosePseudoConsole");
-		__gxprocConPtyApi.ResizePseudoConsole = (procResizePseudoConsole)GetProcAddress(hKernel, "ResizePseudoConsole");
-		__gxprocConPtyApi.InitializeProcThreadAttributeList = (procInitializeProcThreadAttributeList)GetProcAddress(hKernel, "InitializeProcThreadAttributeList");
-		__gxprocConPtyApi.UpdateProcThreadAttribute = (procUpdateProcThreadAttribute)GetProcAddress(hKernel, "UpdateProcThreadAttribute");
-		__gxprocConPtyApi.DeleteProcThreadAttributeList = (procDeleteProcThreadAttributeList)GetProcAddress(hKernel, "DeleteProcThreadAttributeList");
+		__xprocAssignProcAddress(&__gxprocConPtyApi.CreatePseudoConsole, sizeof(__gxprocConPtyApi.CreatePseudoConsole), GetProcAddress(hKernel, "CreatePseudoConsole"));
+		__xprocAssignProcAddress(&__gxprocConPtyApi.ClosePseudoConsole, sizeof(__gxprocConPtyApi.ClosePseudoConsole), GetProcAddress(hKernel, "ClosePseudoConsole"));
+		__xprocAssignProcAddress(&__gxprocConPtyApi.ResizePseudoConsole, sizeof(__gxprocConPtyApi.ResizePseudoConsole), GetProcAddress(hKernel, "ResizePseudoConsole"));
+		__xprocAssignProcAddress(&__gxprocConPtyApi.InitializeProcThreadAttributeList, sizeof(__gxprocConPtyApi.InitializeProcThreadAttributeList), GetProcAddress(hKernel, "InitializeProcThreadAttributeList"));
+		__xprocAssignProcAddress(&__gxprocConPtyApi.UpdateProcThreadAttribute, sizeof(__gxprocConPtyApi.UpdateProcThreadAttribute), GetProcAddress(hKernel, "UpdateProcThreadAttribute"));
+		__xprocAssignProcAddress(&__gxprocConPtyApi.DeleteProcThreadAttributeList, sizeof(__gxprocConPtyApi.DeleteProcThreadAttributeList), GetProcAddress(hKernel, "DeleteProcThreadAttributeList"));
 		__gxprocConPtyApi.bSupported = __gxprocConPtyApi.CreatePseudoConsole != NULL
 			&& __gxprocConPtyApi.ClosePseudoConsole != NULL
 			&& __gxprocConPtyApi.ResizePseudoConsole != NULL
@@ -58129,6 +58169,7 @@ XXAPI xfuture* xrtProcessWaitFuture(xprocess* pProcess)
 }
 #endif
 #endif
+#endif
 #ifndef XRT_NO_XID
 
 // ========================================
@@ -58339,10 +58380,12 @@ static inline void __xrtPtrArrayUnit_NoLock(xparray pObject)
 // 内部函数：__xrtPtrArrayMalloc_NoLock
 static inline bool __xrtPtrArrayMalloc_NoLock(xparray pObject, uint32 iCount)
 {
-	size_t iBytes = (size_t)iCount * sizeof(ptr);
-	if ( iCount != 0 && (size_t)iCount > (SIZE_MAX / sizeof(ptr)) ) {
+	size_t iBytes;
+	uint64 iCount64 = iCount;
+	if ( iCount != 0 && iCount64 > (SIZE_MAX / sizeof(ptr)) ) {
 		return FALSE;
 	}
+	iBytes = (size_t)iCount * sizeof(ptr);
 	if ( iCount > pObject->AllocCount ) {
 		// 增量
 		ptr* pNew = xrtRealloc(pObject->Memory, iBytes);
@@ -58969,10 +59012,16 @@ static inline uint32 __xrtBsmmPageMMUAppend(xbsmm objBSMM, ptr pBlock)
 {
 	if ( objBSMM->PageMMU.Count >= objBSMM->PageMMU.AllocCount ) {
 		uint32 iNewCount = objBSMM->PageMMU.Count + objBSMM->PageMMU.AllocStep;
-		if ( iNewCount < objBSMM->PageMMU.Count || (size_t)iNewCount > (SIZE_MAX / sizeof(ptr)) ) {
+		size_t iNewBytes;
+		uint64 iNewCount64 = iNewCount;
+		if ( iNewCount < objBSMM->PageMMU.Count ) {
 			return 0;
 		}
-		ptr* pNew = xrtRealloc(objBSMM->PageMMU.Memory, (size_t)iNewCount * sizeof(ptr));
+		if ( iNewCount64 > (SIZE_MAX / sizeof(ptr)) ) {
+			return 0;
+		}
+		iNewBytes = (size_t)iNewCount * sizeof(ptr);
+		ptr* pNew = xrtRealloc(objBSMM->PageMMU.Memory, iNewBytes);
 		if ( pNew == NULL ) {
 			return 0;
 		}
@@ -60880,6 +60929,9 @@ static inline bool __xrtMemPoolBuildBucketPlan(xmempool objMP, uint32 iCutoff)
 	uint32 iBucketCount;
 	uint32 iBucket;
 	uint32 iSize;
+	size_t iLutCount;
+	uint64 iBucketCount64;
+	uint64 iCutoff64;
 	objMP->FSB_Memory = NULL;
 	objMP->FSB_RootNode = NULL;
 	objMP->FSB_Lut = NULL;
@@ -60890,25 +60942,31 @@ static inline bool __xrtMemPoolBuildBucketPlan(xmempool objMP, uint32 iCutoff)
 		return TRUE;
 	}
 	iBucketCount = __xrtMemPoolBucketCount(iCutoff);
-	if ( iBucketCount == 0 || (size_t)iBucketCount > (SIZE_MAX / sizeof(FSB_Item)) ) {
+	iBucketCount64 = iBucketCount;
+	iCutoff64 = iCutoff;
+	if ( iBucketCount == 0 ) {
+		return FALSE;
+	}
+	if ( iBucketCount64 > (SIZE_MAX / sizeof(FSB_Item)) ) {
 		return FALSE;
 	}
 	objMP->FSB_Memory = xrtCalloc(iBucketCount, sizeof(FSB_Item));
 	if ( objMP->FSB_Memory == NULL ) {
 		return FALSE;
 	}
-	if ( (size_t)iCutoff >= (SIZE_MAX / sizeof(uint32)) ) {
+	if ( iCutoff64 >= (SIZE_MAX / sizeof(uint32)) ) {
 		xrtFree(objMP->FSB_Memory);
 		objMP->FSB_Memory = NULL;
 		return FALSE;
 	}
-	objMP->FSB_Lut = xrtMalloc(sizeof(uint32) * (iCutoff + 1));
+	iLutCount = (size_t)iCutoff + 1u;
+	objMP->FSB_Lut = xrtMalloc(sizeof(uint32) * iLutCount);
 	if ( objMP->FSB_Lut == NULL ) {
 		xrtFree(objMP->FSB_Memory);
 		objMP->FSB_Memory = NULL;
 		return FALSE;
 	}
-	memset(objMP->FSB_Lut, 0, sizeof(uint32) * (iCutoff + 1));
+	memset(objMP->FSB_Lut, 0, sizeof(uint32) * iLutCount);
 	objMP->iBucketCount = iBucketCount;
 	objMP->FSB_RootNode = &objMP->FSB_Memory[0];
 	for ( iBucket = 0; iBucket < iBucketCount; iBucket++ ) {
@@ -72665,6 +72723,7 @@ XXAPI int xrtStringifyJSON_File(str sFile, xvalue varVal, int bFormat)
 		return FALSE;
 	}
 }
+#if !defined(XRT_NO_XSON)
 
 // ========================================
 // File: D:/git/xrt/lib/xson.h
@@ -73967,6 +74026,7 @@ XXAPI int xrtStringifyXSON_File(str sFile, xvalue varVal, int bFormat, uint32 iF
 	xrtFree(sText);
 	return iRet;
 }
+#endif
 #endif
 #ifndef XRT_NO_TEMPLATE
 

@@ -10,7 +10,6 @@ static inline bool XS_ManageAPIEnabled(const XS_ServerConfig* objServer, const X
 }
 
 static inline bool XS_HttpPathExpectsJSONError(const char* sPath);
-static inline bool XS_HttpPathReservedManage(const char* sPath);
 static inline const char* XS_HttpDebugOnlyAPIMessage(const char* sPath);
 
 static inline bool XS_DebugManageAPIEnabled(const XS_ServerConfig* objServer, const XS_HostConfig* objHost)
@@ -26,15 +25,6 @@ static inline bool XS_DebugManageAPIEnabled(const XS_ServerConfig* objServer, co
 #endif
 }
 
-static inline bool XS_BuiltinManageAppEnabled(void)
-{
-#ifdef XRT_MEM_DEBUG
-	return TRUE;
-#else
-	return FALSE;
-#endif
-}
-
 static inline bool XS_CoreManageAPIPath(const char* sPath)
 {
 	/*
@@ -43,7 +33,7 @@ static inline bool XS_CoreManageAPIPath(const char* sPath)
 	- do not add new built-in manage endpoints here unless docs/稳定API.md
 	  and test_stable.* are updated together
 	*/
-	if ( !XS_BuiltinManageAppEnabled() || sPath == NULL || sPath[0] == '\0' ) {
+	if ( sPath == NULL || sPath[0] == '\0' ) {
 		return FALSE;
 	}
 
@@ -69,7 +59,7 @@ static inline bool XS_DebugManageAPIPath(const char* sPath)
 	- new built-in manage / debug / governance endpoints should land here first
 	- production xs should stay thin unless the endpoint is explicitly frozen
 	*/
-	if ( !XS_BuiltinManageAppEnabled() || sPath == NULL || sPath[0] == '\0' ) {
+	if ( sPath == NULL || sPath[0] == '\0' ) {
 		return FALSE;
 	}
 	if ( strcmp(sPath, "/__xs/bus") == 0 || strncmp(sPath, "/__xs/bus/", 10) == 0 ) {
@@ -101,9 +91,6 @@ static inline bool XS_DebugManageAPIPath(const char* sPath)
 
 static inline bool XS_RuntimeManageAPIEnabled(const XS_ServerConfig* objServer, const XS_HostConfig* objHost, const char* sPath)
 {
-	if ( !XS_BuiltinManageAppEnabled() ) {
-		return FALSE;
-	}
 	if ( !XS_ManageAPIEnabled(objServer, objHost) ) {
 		return FALSE;
 	}
@@ -239,23 +226,33 @@ static inline bool XS_HttpPathExpectsJSONError(const char* sPath)
 	if ( sPath == NULL || sPath[0] == '\0' ) {
 		return FALSE;
 	}
-	if ( !XS_HttpPathReservedManage(sPath) ) {
-		return FALSE;
-	}
 	if ( strcmp(sPath, "/__xs/bus") == 0 || strncmp(sPath, "/__xs/bus/", 10) == 0 ) {
 		return TRUE;
 	}
-	iLen = strlen(sPath);
-	return (iLen >= 5u && strcmp(sPath + iLen - 5u, "_json") == 0);
+	if ( strncmp(sPath, "/__xs/", 6) == 0 ) {
+		iLen = strlen(sPath);
+		if ( iLen >= 5u && strcmp(sPath + iLen - 5u, "_json") == 0 ) {
+			return TRUE;
+		}
+	}
+	return
+		strcmp(sPath, "/__xs/http_metrics_json") == 0 ||
+		strcmp(sPath, "/__xs/ws_metrics_json") == 0 ||
+		strcmp(sPath, "/__xs/xtp_metrics_json") == 0 ||
+		strcmp(sPath, "/__xs/udp_metrics_json") == 0 ||
+		strcmp(sPath, "/__xs/custom_metrics_json") == 0 ||
+		strcmp(sPath, "/__xs/check_config_json") == 0 ||
+		strcmp(sPath, "/__xs/status_json") == 0 ||
+		strcmp(sPath, "/__xs/reload_json") == 0 ||
+		strcmp(sPath, "/__xs/reload_status_json") == 0 ||
+		strcmp(sPath, "/__xs/reload_config_json") == 0 ||
+		strcmp(sPath, "/__xs/health_json") == 0 ||
+		strcmp(sPath, "/__xs/dashboard_json") == 0;
 }
 
 static inline bool XS_HttpPathReservedManage(const char* sPath)
 {
-	if ( !XS_BuiltinManageAppEnabled() || sPath == NULL ) {
-		return FALSE;
-	}
-
-	return strcmp(sPath, "/__xs") == 0 || strncmp(sPath, "/__xs/", 6) == 0;
+	return sPath && (strcmp(sPath, "/__xs") == 0 || strncmp(sPath, "/__xs/", 6) == 0);
 }
 
 static inline const char* XS_HttpReadOnlyAPIAllowHeader(const char* sPath)
@@ -315,7 +312,7 @@ static inline const char* XS_HttpGetOnlyAPIMethodMessage(const char* sPath)
 
 static inline bool XS_HttpBusReadOnlyPath(const char* sPath)
 {
-	if ( !XS_HttpPathReservedManage(sPath) ) {
+	if ( sPath == NULL || sPath[0] == '\0' ) {
 		return FALSE;
 	}
 	return
@@ -330,7 +327,7 @@ static inline bool XS_HttpBusReadOnlyPath(const char* sPath)
 
 static inline bool XS_HttpBusMutatingPath(const char* sPath)
 {
-	if ( !XS_HttpPathReservedManage(sPath) ) {
+	if ( sPath == NULL || sPath[0] == '\0' ) {
 		return FALSE;
 	}
 	return
@@ -442,87 +439,85 @@ static inline bool XS_HttpValidateRequest(XS_ServerConfig* objServer, const xhtt
 		return XS_HttpRespondText(pResp, 413, "Payload Too Large", "request body limit exceeded");
 	}
 
-	if ( XS_HttpPathReservedManage(pReq->sPath) ) {
-		if ( XS_HttpBusReadOnlyPath(pReq->sPath) ) {
-			if ( _stricmp(pReq->sMethod, "GET") != 0 ) {
-				xrtHttpdResponseSetHeader(pResp, "Allow", "GET");
-				if ( bJsonError ) {
-					return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, "bus management api only supports GET");
-				}
-				return XS_HttpRespondText(pResp, 405, "Method Not Allowed", "bus management api only supports GET");
+	if ( XS_HttpBusReadOnlyPath(pReq->sPath) ) {
+		if ( _stricmp(pReq->sMethod, "GET") != 0 ) {
+			xrtHttpdResponseSetHeader(pResp, "Allow", "GET");
+			if ( bJsonError ) {
+				return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, "bus management api only supports GET");
 			}
+			return XS_HttpRespondText(pResp, 405, "Method Not Allowed", "bus management api only supports GET");
 		}
+	}
 
-		if ( XS_HttpBusMutatingPath(pReq->sPath) ) {
-			if ( _stricmp(pReq->sMethod, "GET") != 0 ) {
-				xrtHttpdResponseSetHeader(pResp, "Allow", "GET");
-				if ( bJsonError ) {
-					return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, "bus management api only supports GET");
-				}
-				return XS_HttpRespondText(pResp, 405, "Method Not Allowed", "bus management api only supports GET");
+	if ( XS_HttpBusMutatingPath(pReq->sPath) ) {
+		if ( _stricmp(pReq->sMethod, "GET") != 0 ) {
+			xrtHttpdResponseSetHeader(pResp, "Allow", "GET");
+			if ( bJsonError ) {
+				return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, "bus management api only supports GET");
 			}
+			return XS_HttpRespondText(pResp, 405, "Method Not Allowed", "bus management api only supports GET");
 		}
+	}
 
-		if ( strcmp(pReq->sPath, "/__xs/reload_json") == 0 || strcmp(pReq->sPath, "/__xs/reload_config_json") == 0 ) {
-			if ( _stricmp(pReq->sMethod, "GET") != 0 && _stricmp(pReq->sMethod, "POST") != 0 ) {
-				xrtHttpdResponseSetHeader(pResp, "Allow", "GET, POST");
-				if ( strcmp(pReq->sPath, "/__xs/reload_json") == 0 ) {
-					return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, "reload json api only supports GET or POST");
-				}
-				return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, "config reload json api only supports GET or POST");
+	if ( strcmp(pReq->sPath, "/__xs/reload_json") == 0 || strcmp(pReq->sPath, "/__xs/reload_config_json") == 0 ) {
+		if ( _stricmp(pReq->sMethod, "GET") != 0 && _stricmp(pReq->sMethod, "POST") != 0 ) {
+			xrtHttpdResponseSetHeader(pResp, "Allow", "GET, POST");
+			if ( strcmp(pReq->sPath, "/__xs/reload_json") == 0 ) {
+				return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, "reload json api only supports GET or POST");
 			}
+			return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, "config reload json api only supports GET or POST");
 		}
+	}
 
-		if (
-			strcmp(pReq->sPath, "/__xs/check_config") == 0 ||
-			strcmp(pReq->sPath, "/__xs/check_config_json") == 0 ||
-			strcmp(pReq->sPath, "/__xs/check_config_clear") == 0 ||
-			strcmp(pReq->sPath, "/__xs/reload_clear") == 0 ||
-			strcmp(pReq->sPath, "/__xs/reload_reset") == 0 ||
-			strcmp(pReq->sPath, "/__xs/http_metrics_clear") == 0 ||
-			strcmp(pReq->sPath, "/__xs/ws_metrics_clear") == 0 ||
-			strcmp(pReq->sPath, "/__xs/xtp_metrics_clear") == 0 ||
-			strcmp(pReq->sPath, "/__xs/udp_metrics_clear") == 0 ||
-			strcmp(pReq->sPath, "/__xs/custom_metrics_clear") == 0
-		) {
-			if ( _stricmp(pReq->sMethod, "GET") != 0 ) {
-				const char* sMethodMessage = XS_HttpGetOnlyAPIMethodMessage(pReq->sPath);
-				xrtHttpdResponseSetHeader(pResp, "Allow", "GET");
-				if ( bJsonError ) {
-					return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, sMethodMessage);
-				}
-				return XS_HttpRespondText(pResp, 405, "Method Not Allowed", sMethodMessage);
+	if (
+		strcmp(pReq->sPath, "/__xs/check_config") == 0 ||
+		strcmp(pReq->sPath, "/__xs/check_config_json") == 0 ||
+		strcmp(pReq->sPath, "/__xs/check_config_clear") == 0 ||
+		strcmp(pReq->sPath, "/__xs/reload_clear") == 0 ||
+		strcmp(pReq->sPath, "/__xs/reload_reset") == 0 ||
+		strcmp(pReq->sPath, "/__xs/http_metrics_clear") == 0 ||
+		strcmp(pReq->sPath, "/__xs/ws_metrics_clear") == 0 ||
+		strcmp(pReq->sPath, "/__xs/xtp_metrics_clear") == 0 ||
+		strcmp(pReq->sPath, "/__xs/udp_metrics_clear") == 0 ||
+		strcmp(pReq->sPath, "/__xs/custom_metrics_clear") == 0
+	) {
+		if ( _stricmp(pReq->sMethod, "GET") != 0 ) {
+			const char* sMethodMessage = XS_HttpGetOnlyAPIMethodMessage(pReq->sPath);
+			xrtHttpdResponseSetHeader(pResp, "Allow", "GET");
+			if ( bJsonError ) {
+				return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, sMethodMessage);
 			}
+			return XS_HttpRespondText(pResp, 405, "Method Not Allowed", sMethodMessage);
 		}
+	}
 
-		if (
-			strcmp(pReq->sPath, "/__xs/health") == 0 ||
-			strcmp(pReq->sPath, "/__xs/http_metrics") == 0 ||
-			strcmp(pReq->sPath, "/__xs/http_metrics_json") == 0 ||
-			strcmp(pReq->sPath, "/__xs/ws_metrics") == 0 ||
-			strcmp(pReq->sPath, "/__xs/ws_metrics_json") == 0 ||
-			strcmp(pReq->sPath, "/__xs/xtp_metrics") == 0 ||
-			strcmp(pReq->sPath, "/__xs/xtp_metrics_json") == 0 ||
-			strcmp(pReq->sPath, "/__xs/udp_metrics") == 0 ||
-			strcmp(pReq->sPath, "/__xs/udp_metrics_json") == 0 ||
-			strcmp(pReq->sPath, "/__xs/custom_metrics") == 0 ||
-			strcmp(pReq->sPath, "/__xs/custom_metrics_json") == 0 ||
-			strcmp(pReq->sPath, "/__xs/dashboard") == 0 ||
-			strcmp(pReq->sPath, "/__xs/status") == 0 ||
-			strcmp(pReq->sPath, "/__xs/status_json") == 0 ||
-			strcmp(pReq->sPath, "/__xs/reload_status") == 0 ||
-			strcmp(pReq->sPath, "/__xs/reload_status_json") == 0 ||
-			strcmp(pReq->sPath, "/__xs/health_json") == 0 ||
-			strcmp(pReq->sPath, "/__xs/dashboard_json") == 0
-		) {
-			if ( _stricmp(pReq->sMethod, "GET") != 0 && _stricmp(pReq->sMethod, "HEAD") != 0 ) {
-				const char* sMethodMessage = XS_HttpReadOnlyAPIMethodMessage(pReq->sPath);
-				xrtHttpdResponseSetHeader(pResp, "Allow", XS_HttpReadOnlyAPIAllowHeader(pReq->sPath));
-				if ( bJsonError ) {
-					return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, sMethodMessage);
-				}
-				return XS_HttpRespondText(pResp, 405, "Method Not Allowed", sMethodMessage);
+	if (
+		strcmp(pReq->sPath, "/__xs/health") == 0 ||
+		strcmp(pReq->sPath, "/__xs/http_metrics") == 0 ||
+		strcmp(pReq->sPath, "/__xs/http_metrics_json") == 0 ||
+		strcmp(pReq->sPath, "/__xs/ws_metrics") == 0 ||
+		strcmp(pReq->sPath, "/__xs/ws_metrics_json") == 0 ||
+		strcmp(pReq->sPath, "/__xs/xtp_metrics") == 0 ||
+		strcmp(pReq->sPath, "/__xs/xtp_metrics_json") == 0 ||
+		strcmp(pReq->sPath, "/__xs/udp_metrics") == 0 ||
+		strcmp(pReq->sPath, "/__xs/udp_metrics_json") == 0 ||
+		strcmp(pReq->sPath, "/__xs/custom_metrics") == 0 ||
+		strcmp(pReq->sPath, "/__xs/custom_metrics_json") == 0 ||
+		strcmp(pReq->sPath, "/__xs/dashboard") == 0 ||
+		strcmp(pReq->sPath, "/__xs/status") == 0 ||
+		strcmp(pReq->sPath, "/__xs/status_json") == 0 ||
+		strcmp(pReq->sPath, "/__xs/reload_status") == 0 ||
+		strcmp(pReq->sPath, "/__xs/reload_status_json") == 0 ||
+		strcmp(pReq->sPath, "/__xs/health_json") == 0 ||
+		strcmp(pReq->sPath, "/__xs/dashboard_json") == 0
+	) {
+		if ( _stricmp(pReq->sMethod, "GET") != 0 && _stricmp(pReq->sMethod, "HEAD") != 0 ) {
+			const char* sMethodMessage = XS_HttpReadOnlyAPIMethodMessage(pReq->sPath);
+			xrtHttpdResponseSetHeader(pResp, "Allow", XS_HttpReadOnlyAPIAllowHeader(pReq->sPath));
+			if ( bJsonError ) {
+				return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, sMethodMessage);
 			}
+			return XS_HttpRespondText(pResp, 405, "Method Not Allowed", sMethodMessage);
 		}
 	}
 

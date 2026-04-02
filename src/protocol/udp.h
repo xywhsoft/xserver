@@ -38,6 +38,20 @@ static void XS_UdpOnRecv(ptr pOwner, xdgramsock* pSock, const xnetaddr* pFrom, x
 	if ( iLen == 0 ) {
 		return;
 	}
+
+	sFrom = pFrom ? xrtNetAddrToStr(pFrom) : NULL;
+	if ( XS_RuntimeGovernEnabled() && objServer && objServer->RecvLimit > 0u && iLen > (size_t)objServer->RecvLimit ) {
+		XS_UdpRecordRejectEvent("recv limit exceeded", sFrom, iLen);
+		XS_LogWarn(
+			"udp recv limit exceeded: server=%s from=%s bytes=%u limit=%u",
+			objServer->Name ? objServer->Name : "(null)",
+			sFrom ? sFrom : "(null)",
+			(unsigned)iLen,
+			(unsigned)objServer->RecvLimit
+		);
+		xrtNetChainClear(pChain);
+		return;
+	}
 	
 	pBuf = (char*)xrtMalloc(iLen);
 	if ( pBuf == NULL ) {
@@ -47,7 +61,6 @@ static void XS_UdpOnRecv(ptr pOwner, xdgramsock* pSock, const xnetaddr* pFrom, x
 	
 	(void)xrtNetChainPeek(pChain, pBuf, iLen);
 	xrtNetChainConsume(pChain, iLen);
-	sFrom = pFrom ? xrtNetAddrToStr(pFrom) : NULL;
 	if ( XS_RuntimeStatsEnabled() ) {
 		XS_UdpMetricAdd(&g_iXsUdpRecvCount, 1);
 		XS_UdpMetricAdd(&g_iXsUdpRecvBytes, (int64)iLen);

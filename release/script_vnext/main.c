@@ -213,7 +213,7 @@ bool RequestProc(XS_ServerObject objServer, XS_HostObject objHost, XS_RequestObj
 		return true;
 	}
 	if ( strncmp(sPath, "/bus/", 5) == 0 ) {
-		return xsHttpJson(objResp, 404, "Not Found", "{\"result\":false,\"message\":\"bus demo route removed, use /__xs/bus/*\"}") != 0;
+		return xsHttpJson(objResp, 404, "Not Found", "{\"result\":false,\"message\":\"bus demo route removed, expose your own app route via xsData/xsMsg APIs\"}") != 0;
 	}
 	if ( DispatchBasicRoute(objServer, objHost, objReq, objResp) ) {
 		return true;

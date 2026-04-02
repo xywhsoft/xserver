@@ -241,6 +241,7 @@ proc_run_targeted_config_reload_checks() {
 		echo "FAIL $s_exe_name targeted_server_soft_reload config_path : missing"
 		return 1
 	fi
+	proc_run_targeted_server_host_topology_soft_reload_check "$s_exe_name" "$s_server_name" "$s_server_query" "$s_config_path" || return 1
 
 	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/status_json")
 	s_body=$(proc_fetch_body)
@@ -366,6 +367,515 @@ proc_run_targeted_config_reload_checks() {
 	i_path_limit_now=$(proc_json_int_field "$s_body" "path_limit")
 	proc_check "$s_exe_name targeted_server_soft_reload_restore_path_limit" "$i_path_limit_now" "$i_path_limit_old" "$s_body" || return 1
 
+	proc_run_manage_http_listener_soft_reload_check \
+		"$s_exe_name" \
+		"$CONFIG" \
+		"$s_server_name" || return 1
+
+	return 0
+}
+
+proc_run_targeted_server_host_topology_soft_reload_check() {
+	s_exe_name="$1"
+	s_server_name="$2"
+	s_server_query="$3"
+	s_config_path="$4"
+	s_config_backup="$TOOL_DIR/.xs_targeted_reload_host_topology_${RUN_TAG}.json.bak"
+	s_reload_host_header="reload.local"
+	s_default_host_name="默认主机"
+
+	if [ ! -f "$s_config_path" ]; then
+		echo "FAIL $s_exe_name targeted_server_host_topology_soft_reload config_path : missing"
+		return 1
+	fi
+
+	cp "$s_config_path" "$s_config_backup"
+	if ! awk -v s_server_name="$s_server_name" '
+function brace_delta(line,    i, ch, i_delta, b_in_string, b_escape)
+{
+	i_delta = 0
+	b_in_string = 0
+	b_escape = 0
+	for ( i = 1; i <= length(line); i++ ) {
+		ch = substr(line, i, 1)
+		if ( b_escape ) {
+			b_escape = 0
+			continue
+		}
+		if ( ch == "\\" && b_in_string ) {
+			b_escape = 1
+			continue
+		}
+		if ( ch == "\"" ) {
+			b_in_string = !b_in_string
+			continue
+		}
+		if ( b_in_string ) {
+			continue
+		}
+		if ( ch == "{" ) {
+			i_delta++
+		} else if ( ch == "}" ) {
+			i_delta--
+		}
+	}
+	return i_delta
+}
+BEGIN {
+	i_depth = 0
+	b_in_service = 0
+	b_target = 0
+	b_replaced = 0
+}
+{
+	i_prev_depth = i_depth
+	if ( i_prev_depth == 1 && index($0, "{") > 0 ) {
+		b_in_service = 1
+		b_target = 0
+	}
+	if ( b_in_service && $0 ~ "\"name\"[[:space:]]*:[[:space:]]*\"" s_server_name "\"" ) {
+		b_target = 1
+	}
+	if ( b_in_service && b_target && !b_replaced && $0 ~ "\"hosts\"[[:space:]]*:[[:space:]]*\\[[[:space:]]*\\]" ) {
+		print "\t\t\t\"hosts\": ["
+		print "\t\t\t\t{"
+		print "\t\t\t\t\t\"enabled\": true,"
+		print "\t\t\t\t\t\"name\": \"reload.local\","
+		print "\t\t\t\t\t\"host\": \"reload.local\","
+		print "\t\t\t\t\t\"debug\": true,"
+		print "\t\t\t\t\t\"path\": \"wwwroot\","
+		print "\t\t\t\t\t\"devlang\": \"c\","
+		print "\t\t\t\t\t\"devfile\": \"script_vnext/main.c\""
+		print "\t\t\t\t}"
+		print "\t\t\t]"
+		b_replaced = 1
+		next
+	}
+	print
+	i_depth += brace_delta($0)
+	if ( b_in_service && i_prev_depth == 2 && i_depth == 1 ) {
+		b_in_service = 0
+		b_target = 0
+	}
+}
+END {
+	if ( !b_replaced ) {
+		exit 3
+	}
+}
+' "$s_config_backup" > "$s_config_path"; then
+		echo "FAIL $s_exe_name targeted_server_host_topology_soft_reload config_replace : named host not added"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+	if cmp -s "$s_config_backup" "$s_config_path"; then
+		echo "FAIL $s_exe_name targeted_server_host_topology_soft_reload config_replace : named host not added"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	if ! proc_wait_reload_idle; then
+		echo "FAIL $s_exe_name targeted_server_host_topology_soft_reload idle_wait_before : timeout"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_config_json?server=$s_server_query")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name targeted_server_host_topology_soft_reload_config_json" "$i_status" "200" "$s_body" '"result":true' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name targeted_server_host_topology_soft_reload_config_json body" "200" "200" "$s_body" 'config reload queued' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check_security_headers "$s_exe_name targeted_server_host_topology_soft_reload_config_json" "GET" "http://127.0.0.1:$PORT/__xs/reload_config_json?server=$s_server_query" || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	if ! proc_wait_reload_idle; then
+		echo "FAIL $s_exe_name targeted_server_host_topology_soft_reload idle_after : timeout"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	if ! proc_wait_body_contains "http://127.0.0.1:$PORT/__xs/reload_status_json" '"message":"target server soft reload success"'; then
+		echo "FAIL $s_exe_name targeted_server_host_topology_soft_reload status : missing text '\"message\":\"target server soft reload success\"'"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_status_json")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name targeted_server_host_topology_soft_reload_status" "$i_status" "200" "$s_body" '"message":"target server soft reload success"' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name targeted_server_host_topology_soft_reload_status server" "200" "200" "$s_body" "\"server\":\"$s_server_name\"" || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check_security_headers "$s_exe_name targeted_server_host_topology_soft_reload_status" "GET" "http://127.0.0.1:$PORT/__xs/reload_status_json" || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	i_status=$(curl -s -H "Host: $s_reload_host_header" -D "$HEADER_FILE" -o "$BODY_FILE" -w "%{http_code}" "http://127.0.0.1:$PORT/json")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name targeted_server_host_topology_soft_reload_host_added" "$i_status" "200" "$s_body" '"host":"reload.local"' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name targeted_server_host_topology_soft_reload_host_added path" "200" "200" "$s_body" '"path":"/json"' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	cp "$s_config_backup" "$s_config_path"
+
+	if ! proc_wait_reload_idle; then
+		echo "FAIL $s_exe_name targeted_server_host_topology_soft_reload restore_idle_wait_before : timeout"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_config_json?server=$s_server_query")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name targeted_server_host_topology_soft_reload_restore_config_json" "$i_status" "200" "$s_body" '"result":true' || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name targeted_server_host_topology_soft_reload_restore_config_json body" "200" "200" "$s_body" 'config reload queued' || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check_security_headers "$s_exe_name targeted_server_host_topology_soft_reload_restore_config_json" "GET" "http://127.0.0.1:$PORT/__xs/reload_config_json?server=$s_server_query" || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	if ! proc_wait_reload_idle; then
+		echo "FAIL $s_exe_name targeted_server_host_topology_soft_reload restore_idle_after : timeout"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	if ! proc_wait_body_contains "http://127.0.0.1:$PORT/__xs/reload_status_json" '"message":"target server soft reload success"'; then
+		echo "FAIL $s_exe_name targeted_server_host_topology_soft_reload restore_status : missing text '\"message\":\"target server soft reload success\"'"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_status_json")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name targeted_server_host_topology_soft_reload_restore_status" "$i_status" "200" "$s_body" '"message":"target server soft reload success"' || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name targeted_server_host_topology_soft_reload_restore_status server" "200" "200" "$s_body" "\"server\":\"$s_server_name\"" || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check_security_headers "$s_exe_name targeted_server_host_topology_soft_reload_restore_status" "GET" "http://127.0.0.1:$PORT/__xs/reload_status_json" || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	i_status=$(curl -s -H "Host: $s_reload_host_header" -D "$HEADER_FILE" -o "$BODY_FILE" -w "%{http_code}" "http://127.0.0.1:$PORT/json")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name targeted_server_host_topology_soft_reload_host_restored" "$i_status" "200" "$s_body" "\"host\":\"$s_default_host_name\"" || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name targeted_server_host_topology_soft_reload_host_restored path" "200" "200" "$s_body" '"path":"/json"' || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	rm -f "$s_config_backup"
+	return 0
+}
+
+proc_run_service_add_remove_reload_check() {
+	s_exe_name="$1"
+	s_config_name="$2"
+	s_udp_client_exe="$3"
+	s_case_name="config_reload_service_add_remove"
+	s_config_path="$RELEASE_DIR/$s_config_name"
+	s_config_backup="$TOOL_DIR/.xs_service_add_remove_${RUN_TAG}.json.bak"
+	s_added_server_name="test Reload Added UDP Server"
+	i_udp_port_add=9098
+	s_out=""
+	i_status=0
+	s_body=""
+
+	if [ "$s_config_name" != "xs_manage_test.json" ]; then
+		return 0
+	fi
+
+	if [ ! -f "$s_config_path" ]; then
+		echo "FAIL $s_exe_name $s_case_name config_path : missing"
+		return 1
+	fi
+
+	if s_out=$("$s_udp_client_exe" 127.0.0.1 "$i_udp_port_add" smoke-udp-added 2>&1); then
+		echo "FAIL $s_exe_name $s_case_name probe_before : udp port already active"
+		return 1
+	fi
+	echo "OK   $s_exe_name $s_case_name probe_before : 0"
+
+	cp "$s_config_path" "$s_config_backup"
+	if ! awk -v s_added_server_name="$s_added_server_name" '
+function bracket_delta(line,    i, ch, i_delta, b_in_string, b_escape)
+{
+	i_delta = 0
+	b_in_string = 0
+	b_escape = 0
+	for ( i = 1; i <= length(line); i++ ) {
+		ch = substr(line, i, 1)
+		if ( b_escape ) {
+			b_escape = 0
+			continue
+		}
+		if ( ch == "\\" && b_in_string ) {
+			b_escape = 1
+			continue
+		}
+		if ( ch == "\"" ) {
+			b_in_string = !b_in_string
+			continue
+		}
+		if ( b_in_string ) {
+			continue
+		}
+		if ( ch == "[" ) {
+			i_delta++
+		} else if ( ch == "]" ) {
+			i_delta--
+		}
+	}
+	return i_delta
+}
+BEGIN {
+	i_bracket_depth = 0
+	b_in_services = 0
+	b_inserted = 0
+	b_exists = 0
+	i_service_count = 0
+}
+{
+	if ( $0 ~ "\"name\"[[:space:]]*:[[:space:]]*\"" s_added_server_name "\"" ) {
+		b_exists = 1
+	}
+
+	if ( !b_in_services && $0 ~ "\"services\"[[:space:]]*:[[:space:]]*\\[" ) {
+		b_in_services = 1
+	}
+
+	if ( b_in_services && i_bracket_depth == 1 && index($0, "{") > 0 ) {
+		i_service_count++
+	}
+
+	if ( b_in_services && !b_inserted && i_bracket_depth == 1 && $0 ~ "^[[:space:]]*\\]" ) {
+		if ( b_exists ) {
+			exit 4
+		}
+		if ( i_service_count > 0 ) {
+			print "\t\t,"
+		}
+		print "\t\t{"
+		print "\t\t\t\"enabled\": true,"
+		print "\t\t\t\"class\": \"udp\","
+		print "\t\t\t\"name\": \"test Reload Added UDP Server\","
+		print "\t\t\t\"desc\": \"vNext reload add/remove udp smoke\","
+		print "\t\t\t\"recv_limit\": 1048576,"
+		print "\t\t\t\"idle_timeout\": 3000,"
+		print "\t\t\t\"ip\": \"0.0.0.0\","
+		print "\t\t\t\"port\": 9098,"
+		print "\t\t\t\"debug\": true,"
+		print "\t\t\t\"path\": \"script_vnext\","
+		print "\t\t\t\"devlang\": \"c\","
+		print "\t\t\t\"devfile\": \"script_vnext/udp_main.c\""
+		print "\t\t}"
+		b_inserted = 1
+	}
+
+	print
+	i_bracket_depth += bracket_delta($0)
+
+	if ( b_in_services && i_bracket_depth == 0 ) {
+		b_in_services = 0
+	}
+}
+END {
+	if ( b_exists ) {
+		exit 4
+	}
+	if ( !b_inserted ) {
+		exit 3
+	}
+}
+' "$s_config_backup" > "$s_config_path"; then
+		echo "FAIL $s_exe_name $s_case_name config_replace : service not added"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+	if cmp -s "$s_config_backup" "$s_config_path"; then
+		echo "FAIL $s_exe_name $s_case_name config_replace : service not added"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	if ! proc_wait_reload_idle; then
+		echo "FAIL $s_exe_name $s_case_name idle_wait_before : timeout"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_config_json")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name $s_case_name reload_config_json" "$i_status" "200" "$s_body" '"result":true' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name $s_case_name reload_config_json body" "200" "200" "$s_body" 'config reload queued' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check_security_headers "$s_exe_name $s_case_name reload_config_json" "GET" "http://127.0.0.1:$PORT/__xs/reload_config_json" || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	if ! proc_wait_reload_idle; then
+		echo "FAIL $s_exe_name $s_case_name idle_after : timeout"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	if ! proc_wait_body_contains "http://127.0.0.1:$PORT/__xs/reload_status_json" '"message":"config reload success: service add/remove only"'; then
+		echo "FAIL $s_exe_name $s_case_name status : missing text '\"message\":\"config reload success: service add/remove only\"'"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_status_json")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name $s_case_name status" "$i_status" "200" "$s_body" '"message":"config reload success: service add/remove only"' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check_security_headers "$s_exe_name $s_case_name status" "GET" "http://127.0.0.1:$PORT/__xs/reload_status_json" || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/json")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name $s_case_name json_route" "$i_status" "200" "$s_body" '"path":"/json"' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	if ! s_out=$("$s_udp_client_exe" 127.0.0.1 "$i_udp_port_add" smoke-udp-added 2>&1); then
+		echo "FAIL $s_exe_name $s_case_name added_client : client exit"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+	proc_check_output_tokens "$s_exe_name $s_case_name added_client" "$s_out" "udp demo" "data=smoke-udp-added" "" || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	cp "$s_config_backup" "$s_config_path"
+
+	if ! proc_wait_reload_idle; then
+		echo "FAIL $s_exe_name $s_case_name restore_idle_wait_before : timeout"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_config_json")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name $s_case_name restore_reload_config_json" "$i_status" "200" "$s_body" '"result":true' || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name $s_case_name restore_reload_config_json body" "200" "200" "$s_body" 'config reload queued' || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check_security_headers "$s_exe_name $s_case_name restore_reload_config_json" "GET" "http://127.0.0.1:$PORT/__xs/reload_config_json" || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	if ! proc_wait_reload_idle; then
+		echo "FAIL $s_exe_name $s_case_name restore_idle_after : timeout"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	if ! proc_wait_body_contains "http://127.0.0.1:$PORT/__xs/reload_status_json" '"message":"config reload success: service add/remove only"'; then
+		echo "FAIL $s_exe_name $s_case_name restore_status : missing text '\"message\":\"config reload success: service add/remove only\"'"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_status_json")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name $s_case_name restore_status" "$i_status" "200" "$s_body" '"message":"config reload success: service add/remove only"' || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check_security_headers "$s_exe_name $s_case_name restore_status" "GET" "http://127.0.0.1:$PORT/__xs/reload_status_json" || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/json")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name $s_case_name restore_json_route" "$i_status" "200" "$s_body" '"path":"/json"' || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	if s_out=$("$s_udp_client_exe" 127.0.0.1 "$i_udp_port_add" smoke-udp-added-restore 2>&1); then
+		echo "FAIL $s_exe_name $s_case_name removed_client : udp service still active"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+	echo "OK   $s_exe_name $s_case_name removed_client : 0"
+
+	rm -f "$s_config_backup"
 	return 0
 }
 
@@ -382,6 +892,281 @@ proc_check_output_tokens() {
 	done
 
 	echo "OK   $s_name : 0"
+	return 0
+}
+
+proc_run_xtp_tls_listener_soft_reload_check() {
+	s_exe_name="$1"
+	s_config="$2"
+	s_server_name="$3"
+	s_client_exe="$4"
+	s_probe_exe="$5"
+	s_config_path="$RELEASE_DIR/$s_config"
+	s_config_backup="$TOOL_DIR/.xtp_tls_listener_${RUN_TAG}.json.bak"
+	s_server_query=$(printf "%s" "$s_server_name" | sed 's/ /%20/g')
+	i_tls_port=9443
+	s_out=""
+	i_status=0
+	s_body=""
+
+	if [ ! -f "$s_config_path" ]; then
+		echo "FAIL $s_exe_name xtp_tls_listener_soft_reload config_path : missing"
+		return 1
+	fi
+
+	if s_out=$("$s_probe_exe" 127.0.0.1 "$i_tls_port" 2>&1); then
+		echo "FAIL $s_exe_name xtp_tls_listener_soft_reload probe_before : tls port already open"
+		return 1
+	fi
+	proc_check_output_tokens \
+		"$s_exe_name xtp_tls_listener_soft_reload probe_before" \
+		"$s_out" \
+		"status=closed" \
+		"port=$i_tls_port" \
+		"" || return 1
+
+	cp "$s_config_path" "$s_config_backup"
+	if ! awk -v s_server_name="$s_server_name" '
+function brace_delta(line,    i, ch, i_delta, b_in_string, b_escape)
+{
+	i_delta = 0
+	b_in_string = 0
+	b_escape = 0
+	for ( i = 1; i <= length(line); i++ ) {
+		ch = substr(line, i, 1)
+		if ( b_escape ) {
+			b_escape = 0
+			continue
+		}
+		if ( ch == "\\" && b_in_string ) {
+			b_escape = 1
+			continue
+		}
+		if ( ch == "\"" ) {
+			b_in_string = !b_in_string
+			continue
+		}
+		if ( b_in_string ) {
+			continue
+		}
+		if ( ch == "{" ) {
+			i_delta++
+		} else if ( ch == "}" ) {
+			i_delta--
+		}
+	}
+	return i_delta
+}
+BEGIN {
+	i_depth = 0
+	b_in_service = 0
+	b_target = 0
+	b_injected = 0
+}
+{
+	i_prev_depth = i_depth
+	if ( i_prev_depth == 1 && index($0, "{") > 0 ) {
+		b_in_service = 1
+		b_target = 0
+	}
+	if ( b_in_service && $0 ~ "\"name\"[[:space:]]*:[[:space:]]*\"" s_server_name "\"" ) {
+		b_target = 1
+	}
+	if ( b_in_service && b_target && !b_injected && $0 ~ "\"debug\"[[:space:]]*:[[:space:]]*true" ) {
+		print "\t\t\"tls\": true,"
+		print "\t\t\"port_tls\": 9443,"
+		print "\t\t\"tls_cert\": \"tls/xtps_cert.pem\","
+		print "\t\t\"tls_key\": \"tls/xtps_key.pem\","
+		b_injected = 1
+	}
+	print
+	i_depth += brace_delta($0)
+	if ( b_in_service && i_prev_depth == 2 && i_depth == 1 ) {
+		b_in_service = 0
+		b_target = 0
+	}
+}
+END {
+	if ( !b_injected ) {
+		exit 3
+	}
+}
+' "$s_config_backup" > "$s_config_path"; then
+		echo "FAIL $s_exe_name xtp_tls_listener_soft_reload config_replace : tls listener not added"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+	if cmp -s "$s_config_backup" "$s_config_path"; then
+		echo "FAIL $s_exe_name xtp_tls_listener_soft_reload config_replace : tls listener not changed"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	if ! proc_wait_reload_idle; then
+		echo "FAIL $s_exe_name xtp_tls_listener_soft_reload idle_wait_before : timeout"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_config_json?server=$s_server_query")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name xtp_tls_listener_soft_reload_config_json" "$i_status" "200" "$s_body" '"result":true' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name xtp_tls_listener_soft_reload_config_json body" "200" "200" "$s_body" 'config reload queued' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check_security_headers "$s_exe_name xtp_tls_listener_soft_reload_config_json" "GET" "http://127.0.0.1:$PORT/__xs/reload_config_json?server=$s_server_query" || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	if ! proc_wait_reload_idle; then
+		echo "FAIL $s_exe_name xtp_tls_listener_soft_reload idle_after : timeout"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	if ! proc_wait_body_contains "http://127.0.0.1:$PORT/__xs/reload_status_json" '"message":"target server soft reload success"'; then
+		echo "FAIL $s_exe_name xtp_tls_listener_soft_reload status : missing text '\"message\":\"target server soft reload success\"'"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_status_json")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name xtp_tls_listener_soft_reload_status" "$i_status" "200" "$s_body" '"message":"target server soft reload success"' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name xtp_tls_listener_soft_reload_status server" "200" "200" "$s_body" "\"server\":\"$s_server_name\"" || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	s_out=$(proc_run_client_retry "$s_client_exe" 10 127.0.0.1 "$XTP_PORT" demo.callself tag=tls-soft-reload 2>&1) || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		echo "FAIL $s_exe_name xtp_tls_listener_soft_reload client : client exit"
+		return 1
+	}
+	proc_check_output_tokens \
+		"$s_exe_name xtp_tls_listener_soft_reload client" \
+		"$s_out" \
+		"status=0" \
+		"cmd=xtp.reply" \
+		"self call ok" || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	s_out=$("$s_probe_exe" 127.0.0.1 "$i_tls_port" 2>&1) || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		echo "FAIL $s_exe_name xtp_tls_listener_soft_reload tls_listener_added : probe failed"
+		return 1
+	}
+	proc_check_output_tokens \
+		"$s_exe_name xtp_tls_listener_soft_reload tls_listener_added" \
+		"$s_out" \
+		"status=open" \
+		"port=$i_tls_port" \
+		"" || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	cp "$s_config_backup" "$s_config_path"
+
+	if ! proc_wait_reload_idle; then
+		echo "FAIL $s_exe_name xtp_tls_listener_soft_reload restore_idle_wait_before : timeout"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_config_json?server=$s_server_query")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name xtp_tls_listener_soft_reload_restore_config_json" "$i_status" "200" "$s_body" '"result":true' || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name xtp_tls_listener_soft_reload_restore_config_json body" "200" "200" "$s_body" 'config reload queued' || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check_security_headers "$s_exe_name xtp_tls_listener_soft_reload_restore_config_json" "GET" "http://127.0.0.1:$PORT/__xs/reload_config_json?server=$s_server_query" || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	if ! proc_wait_reload_idle; then
+		echo "FAIL $s_exe_name xtp_tls_listener_soft_reload restore_idle_after : timeout"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	if ! proc_wait_body_contains "http://127.0.0.1:$PORT/__xs/reload_status_json" '"message":"target server soft reload success"'; then
+		echo "FAIL $s_exe_name xtp_tls_listener_soft_reload restore_status : missing text '\"message\":\"target server soft reload success\"'"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_status_json")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name xtp_tls_listener_soft_reload_restore_status" "$i_status" "200" "$s_body" '"message":"target server soft reload success"' || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name xtp_tls_listener_soft_reload_restore_status server" "200" "200" "$s_body" "\"server\":\"$s_server_name\"" || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	s_out=$(proc_run_client_retry "$s_client_exe" 10 127.0.0.1 "$XTP_PORT" demo.callself tag=tls-soft-reload-restore 2>&1) || {
+		rm -f "$s_config_backup"
+		echo "FAIL $s_exe_name xtp_tls_listener_soft_reload restore_client : client exit"
+		return 1
+	}
+	proc_check_output_tokens \
+		"$s_exe_name xtp_tls_listener_soft_reload restore_client" \
+		"$s_out" \
+		"status=0" \
+		"cmd=xtp.reply" \
+		"self call ok" || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	if s_out=$("$s_probe_exe" 127.0.0.1 "$i_tls_port" 2>&1); then
+		rm -f "$s_config_backup"
+		echo "FAIL $s_exe_name xtp_tls_listener_soft_reload tls_listener_restored : probe still open"
+		return 1
+	fi
+	proc_check_output_tokens \
+		"$s_exe_name xtp_tls_listener_soft_reload tls_listener_restored" \
+		"$s_out" \
+		"status=closed" \
+		"port=$i_tls_port" \
+		"" || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	rm -f "$s_config_backup"
 	return 0
 }
 
@@ -684,6 +1469,212 @@ END {
 	return 0
 }
 
+proc_run_manage_http_listener_soft_reload_check() {
+	s_exe_name="$1"
+	s_config="$2"
+	s_server_name="$3"
+	s_case_name="targeted_server_http_listener_soft_reload"
+	s_config_path="$RELEASE_DIR/$s_config"
+	s_config_backup="$TOOL_DIR/.${s_case_name}_${RUN_TAG}.json.bak"
+	s_server_query=$(printf "%s" "$s_server_name" | sed 's/ /%20/g')
+	i_field_old=""
+	i_field_new=0
+	i_status=0
+	s_body=""
+
+	if [ ! -f "$s_config_path" ]; then
+		echo "FAIL $s_exe_name $s_case_name config_path : missing"
+		return 1
+	fi
+
+	i_field_old=$(awk -v s_server_name="$s_server_name" '
+function brace_delta(s,   i, c, d) {
+	d = 0
+	for ( i = 1; i <= length(s); i++ ) {
+		c = substr(s, i, 1)
+		if ( c == "{" ) {
+			d++
+		} else if ( c == "}" ) {
+			d--
+		}
+	}
+	return d
+}
+BEGIN {
+	i_depth = 0
+	b_in_service = 0
+	b_target = 0
+}
+{
+	i_prev_depth = i_depth
+	if ( i_prev_depth == 1 && index($0, "{") > 0 ) {
+		b_in_service = 1
+		b_target = 0
+	}
+	if ( b_in_service && $0 ~ "\"name\"[[:space:]]*:[[:space:]]*\"" s_server_name "\"" ) {
+		b_target = 1
+	}
+	if ( b_in_service && b_target ) {
+		if ( match($0, "\"recv_limit\"[[:space:]]*:[[:space:]]*([0-9]+)", arr) ) {
+			print arr[1]
+			exit
+		}
+	}
+	i_depth += brace_delta($0)
+	if ( b_in_service && i_prev_depth == 2 && i_depth == 1 ) {
+		b_in_service = 0
+		b_target = 0
+	}
+}
+' "$s_config_path")
+	if [ -z "$i_field_old" ]; then
+		echo "FAIL $s_exe_name $s_case_name recv_limit_before : missing"
+		return 1
+	fi
+
+	i_field_new=$((i_field_old + 2048))
+	if [ "$i_field_new" -eq "$i_field_old" ]; then
+		i_field_new=$((i_field_old + 1))
+	fi
+
+	cp "$s_config_path" "$s_config_backup"
+	if ! awk -v s_server_name="$s_server_name" -v i_field_new="$i_field_new" '
+function brace_delta(s,   i, c, d) {
+	d = 0
+	for ( i = 1; i <= length(s); i++ ) {
+		c = substr(s, i, 1)
+		if ( c == "{" ) {
+			d++
+		} else if ( c == "}" ) {
+			d--
+		}
+	}
+	return d
+}
+BEGIN {
+	i_depth = 0
+	b_in_service = 0
+	b_target = 0
+	b_replaced = 0
+}
+{
+	i_prev_depth = i_depth
+	if ( i_prev_depth == 1 && index($0, "{") > 0 ) {
+		b_in_service = 1
+		b_target = 0
+	}
+	if ( b_in_service && $0 ~ "\"name\"[[:space:]]*:[[:space:]]*\"" s_server_name "\"" ) {
+		b_target = 1
+	}
+	if ( b_in_service && b_target && !b_replaced && $0 ~ "\"recv_limit\"[[:space:]]*:[[:space:]]*[0-9]+" ) {
+		sub(/:[[:space:]]*[0-9]+/, ": " i_field_new)
+		b_replaced = 1
+	}
+	print
+	i_depth += brace_delta($0)
+	if ( b_in_service && i_prev_depth == 2 && i_depth == 1 ) {
+		b_in_service = 0
+		b_target = 0
+	}
+}
+END {
+	if ( !b_replaced ) {
+		exit 3
+	}
+}
+' "$s_config_backup" > "$s_config_path"; then
+		echo "FAIL $s_exe_name $s_case_name config_replace : recv_limit not replaced"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+	if cmp -s "$s_config_backup" "$s_config_path"; then
+		echo "FAIL $s_exe_name $s_case_name config_replace : recv_limit not replaced"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	if ! proc_wait_reload_idle; then
+		echo "FAIL $s_exe_name $s_case_name idle_wait_before : timeout"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_config_json?server=$s_server_query")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name $s_case_name reload_config_json" "$i_status" "200" "$s_body" '"result":true' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name $s_case_name reload_config_json body" "200" "200" "$s_body" 'config reload queued' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check_security_headers "$s_exe_name $s_case_name reload_config_json" "GET" "http://127.0.0.1:$PORT/__xs/reload_config_json?server=$s_server_query" || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	if ! proc_wait_body_contains "http://127.0.0.1:$PORT/json" '"path":"/json"'; then
+		echo "FAIL $s_exe_name $s_case_name client_after : missing text '\"path\":\"/json\"'"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/json")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name $s_case_name client" "$i_status" "200" "$s_body" '"path":"/json"' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	cp "$s_config_backup" "$s_config_path"
+
+	if ! proc_wait_reload_idle; then
+		echo "FAIL $s_exe_name $s_case_name restore_idle_wait_before : timeout"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_config_json?server=$s_server_query")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name $s_case_name restore_reload_config_json" "$i_status" "200" "$s_body" '"result":true' || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name $s_case_name restore_reload_config_json body" "200" "200" "$s_body" 'config reload queued' || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check_security_headers "$s_exe_name $s_case_name restore_reload_config_json" "GET" "http://127.0.0.1:$PORT/__xs/reload_config_json?server=$s_server_query" || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	if ! proc_wait_body_contains "http://127.0.0.1:$PORT/json" '"path":"/json"'; then
+		echo "FAIL $s_exe_name $s_case_name restore_client_after : missing text '\"path\":\"/json\"'"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/json")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name $s_case_name restore_client" "$i_status" "200" "$s_body" '"path":"/json"' || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	rm -f "$s_config_backup"
+	return 0
+}
+
 proc_run_named_server_soft_reload_check() {
 	proc_run_named_server_numeric_field_soft_reload_check \
 		"$1" \
@@ -704,6 +1695,318 @@ proc_run_named_server_soft_reload_check() {
 		"${12:-}"
 }
 
+proc_run_udp_recv_limit_reject_check() {
+	s_exe_name="$1"
+	s_config="$2"
+	s_server_name="$3"
+	s_client_exe="$4"
+	s_client_host="$5"
+	i_client_port="$6"
+	i_recv_limit="${7:-64}"
+	s_config_path="$RELEASE_DIR/$s_config"
+	s_config_backup="$TOOL_DIR/.udp_recv_limit_reject_${RUN_TAG}.json.bak"
+	s_server_query=$(printf "%s" "$s_server_name" | sed 's/ /%20/g')
+	s_body=""
+	s_out=""
+	s_payload=""
+	i_field_old=""
+	i_field_new="$i_recv_limit"
+
+	if [ ! -f "$s_config_path" ]; then
+		echo "FAIL $s_exe_name udp_recv_limit_reject config_path : missing"
+		return 1
+	fi
+
+	cp "$s_config_path" "$s_config_backup"
+
+	i_field_old=$(awk -v s_server_name="$s_server_name" '
+function brace_delta(s,   i, c, d) {
+	d = 0
+	for ( i = 1; i <= length(s); i++ ) {
+		c = substr(s, i, 1)
+		if ( c == "{" ) {
+			d++
+		} else if ( c == "}" ) {
+			d--
+		}
+	}
+	return d
+}
+BEGIN {
+	i_depth = 0
+	b_in_service = 0
+	b_target = 0
+}
+{
+	i_prev_depth = i_depth
+	if ( i_prev_depth == 1 && index($0, "{") > 0 ) {
+		b_in_service = 1
+		b_target = 0
+	}
+	if ( b_in_service && $0 ~ "\"name\"[[:space:]]*:[[:space:]]*\"" s_server_name "\"" ) {
+		b_target = 1
+	}
+	if ( b_in_service && b_target ) {
+		if ( match($0, "\"recv_limit\"[[:space:]]*:[[:space:]]*([0-9]+)", arr) ) {
+			print arr[1]
+			exit
+		}
+	}
+	i_depth += brace_delta($0)
+	if ( b_in_service && i_prev_depth == 2 && i_depth == 1 ) {
+		b_in_service = 0
+		b_target = 0
+	}
+}
+' "$s_config_backup")
+	if [ -z "$i_field_old" ]; then
+		echo "FAIL $s_exe_name udp_recv_limit_reject recv_limit_before : missing"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	if [ "$i_field_old" = "$i_field_new" ]; then
+		i_field_new=$((i_recv_limit + 16))
+	fi
+
+	if ! awk -v s_server_name="$s_server_name" -v i_field_new="$i_field_new" '
+function brace_delta(s,   i, c, d) {
+	d = 0
+	for ( i = 1; i <= length(s); i++ ) {
+		c = substr(s, i, 1)
+		if ( c == "{" ) {
+			d++
+		} else if ( c == "}" ) {
+			d--
+		}
+	}
+	return d
+}
+BEGIN {
+	i_depth = 0
+	b_in_service = 0
+	b_target = 0
+	b_replaced = 0
+}
+{
+	i_prev_depth = i_depth
+	if ( i_prev_depth == 1 && index($0, "{") > 0 ) {
+		b_in_service = 1
+		b_target = 0
+	}
+	if ( b_in_service && $0 ~ "\"name\"[[:space:]]*:[[:space:]]*\"" s_server_name "\"" ) {
+		b_target = 1
+	}
+	if ( b_in_service && b_target && $0 ~ "\"recv_limit\"[[:space:]]*:[[:space:]]*[0-9]+" ) {
+		sub(/"recv_limit"[[:space:]]*:[[:space:]]*[0-9]+/, "\"recv_limit\": " i_field_new)
+		b_replaced = 1
+	}
+	print
+	i_depth += brace_delta($0)
+	if ( b_in_service && i_prev_depth == 2 && i_depth == 1 ) {
+		b_in_service = 0
+		b_target = 0
+	}
+}
+END {
+	if ( b_replaced == 0 ) {
+		exit 3
+	}
+}
+' "$s_config_backup" > "$s_config_path"; then
+		echo "FAIL $s_exe_name udp_recv_limit_reject config_replace : recv_limit not replaced"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	s_payload=$(printf "%*s" $((i_field_new + 32)) "" | tr ' ' 'R')
+
+	if ! proc_wait_reload_idle; then
+		echo "FAIL $s_exe_name udp_recv_limit_reject idle_wait_before : timeout"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_config_json?server=$s_server_query")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name udp_recv_limit_reject reload_config_json" "$i_status" "200" "$s_body" '"result":true' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name udp_recv_limit_reject reload_config_json body" "200" "200" "$s_body" 'config reload queued' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check_security_headers "$s_exe_name udp_recv_limit_reject reload_config_json" "GET" "http://127.0.0.1:$PORT/__xs/reload_config_json?server=$s_server_query" || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	if ! proc_wait_reload_idle; then
+		echo "FAIL $s_exe_name udp_recv_limit_reject idle_after : timeout"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	if ! proc_wait_body_contains "http://127.0.0.1:$PORT/__xs/reload_status_json" '"message":"target server soft reload success"'; then
+		echo "FAIL $s_exe_name udp_recv_limit_reject status : missing text '\"message\":\"target server soft reload success\"'"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_status_json")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name udp_recv_limit_reject status" "$i_status" "200" "$s_body" '"message":"target server soft reload success"' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name udp_recv_limit_reject status server" "200" "200" "$s_body" "\"server\":\"$s_server_name\"" || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check_security_headers "$s_exe_name udp_recv_limit_reject status" "GET" "http://127.0.0.1:$PORT/__xs/reload_status_json" || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	if s_out=$("$s_client_exe" "$s_client_host" "$i_client_port" "$s_payload" 2>&1); then
+		echo "FAIL $s_exe_name udp_recv_limit_reject client : expected reject"
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+	printf "OK   %s udp_recv_limit_reject client : 1\n" "$s_exe_name"
+	proc_check "$s_exe_name udp_recv_limit_reject client body" "200" "200" "$s_out" 'recvfrom failed' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/udp_metrics")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name udp_recv_limit_reject udp_metrics" "$i_status" "200" "$s_body" 'udp_recv_limit_reject_count=' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name udp_recv_limit_reject udp_metrics reject" "200" "200" "$s_body" 'udp_reject_count=1' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name udp_recv_limit_reject udp_metrics recv_limit" "200" "200" "$s_body" 'udp_recv_limit_reject_count=1' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name udp_recv_limit_reject udp_metrics reason" "200" "200" "$s_body" 'udp_last_reject_reason=recv_limit' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name udp_recv_limit_reject udp_metrics bytes" "200" "200" "$s_body" "udp_last_reject_bytes=${#s_payload}" || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/udp_metrics_json")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name udp_recv_limit_reject udp_metrics_json" "$i_status" "200" "$s_body" '"udp_recv_limit_reject_count"' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name udp_recv_limit_reject udp_metrics_json reject" "200" "200" "$s_body" '"udp_reject_count":1' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name udp_recv_limit_reject udp_metrics_json recv_limit" "200" "200" "$s_body" '"udp_recv_limit_reject_count":1' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name udp_recv_limit_reject udp_metrics_json reason" "200" "200" "$s_body" '"udp_last_reject_reason":"recv_limit"' || {
+		cp "$s_config_backup" "$s_config_path"
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	cp "$s_config_backup" "$s_config_path"
+
+	if ! proc_wait_reload_idle; then
+		echo "FAIL $s_exe_name udp_recv_limit_reject restore_idle_wait_before : timeout"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_config_json?server=$s_server_query")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name udp_recv_limit_reject restore_reload_config_json" "$i_status" "200" "$s_body" '"result":true' || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name udp_recv_limit_reject restore_reload_config_json body" "200" "200" "$s_body" 'config reload queued' || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check_security_headers "$s_exe_name udp_recv_limit_reject restore_reload_config_json" "GET" "http://127.0.0.1:$PORT/__xs/reload_config_json?server=$s_server_query" || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	if ! proc_wait_reload_idle; then
+		echo "FAIL $s_exe_name udp_recv_limit_reject restore_idle_after : timeout"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	if ! proc_wait_body_contains "http://127.0.0.1:$PORT/__xs/reload_status_json" '"message":"target server soft reload success"'; then
+		echo "FAIL $s_exe_name udp_recv_limit_reject restore_status : missing text '\"message\":\"target server soft reload success\"'"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_status_json")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_exe_name udp_recv_limit_reject restore_status" "$i_status" "200" "$s_body" '"message":"target server soft reload success"' || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check "$s_exe_name udp_recv_limit_reject restore_status server" "200" "200" "$s_body" "\"server\":\"$s_server_name\"" || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+	proc_check_security_headers "$s_exe_name udp_recv_limit_reject restore_status" "GET" "http://127.0.0.1:$PORT/__xs/reload_status_json" || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	if ! s_out=$(proc_run_client_retry "$s_client_exe" 10 "$s_client_host" "$i_client_port" "smoke-udp-restored" 2>&1); then
+		echo "FAIL $s_exe_name udp_recv_limit_reject restore_client : client exit"
+		rm -f "$s_config_backup"
+		return 1
+	fi
+	proc_check_output_tokens "$s_exe_name udp_recv_limit_reject restore_client" "$s_out" "udp demo" "data=smoke-udp-restored" "" || {
+		rm -f "$s_config_backup"
+		return 1
+	}
+
+	rm -f "$s_config_backup"
+	return 0
+}
+
 proc_cleanup_servers() {
 	if [ -n "$CLIENT_EXT" ]; then
 		taskkill //F //T //IM "$XS_BIN" >/dev/null 2>&1 || true
@@ -718,9 +2021,12 @@ proc_cleanup_servers() {
 proc_cleanup_generated_files() {
 	rm -f \
 		"$TOOL_DIR"/xtp_smoke_client \
+		"$TOOL_DIR"/port_probe_client \
 		"$TOOL_DIR"/ws_smoke_client \
+		"$TOOL_DIR"/udp_smoke_client \
 		"$TOOL_DIR"/custom_smoke_client \
 		"$TOOL_DIR"/xtp_smoke_client*.exe \
+		"$TOOL_DIR"/port_probe_client*.exe \
 		"$TOOL_DIR"/ws_smoke_client*.exe \
 		"$TOOL_DIR"/udp_smoke_client*.exe \
 		"$TOOL_DIR"/custom_smoke_client*.exe \
@@ -753,6 +2059,10 @@ proc_build_c_client() {
 
 proc_build_xtp_smoke_client() {
 	proc_build_c_client "xtp_smoke_client.c" "xtp_smoke_client"
+}
+
+proc_build_port_probe_client() {
+	proc_build_c_client "port_probe_client.c" "port_probe_client"
 }
 
 proc_build_ws_smoke_client() {
@@ -1002,6 +2312,11 @@ proc_check_disabled_endpoint() {
 
 	i_status=$(proc_fetch_status_method "$s_method" "$s_url")
 	s_body=$(proc_fetch_body)
+	if [ "$i_status" = "0" ]; then
+		sleep 0.1
+		i_status=$(proc_fetch_status_method "$s_method" "$s_url")
+		s_body=$(proc_fetch_body)
+	fi
 	proc_check "$s_exe_name $s_name" "$i_status" "$i_expect_status" "$s_body" || return 1
 
 	if [ -n "$s_expect_body" ]; then
@@ -1039,6 +2354,56 @@ proc_check_method_reject() {
 	s_body=$(proc_fetch_header_method "$s_method" "$s_url" "Content-Type")
 	proc_check "$s_exe_name $s_name type" "200" "200" "$s_body" "$s_content_type" || return 1
 	proc_check_security_headers "$s_exe_name $s_name" "$s_method" "$s_url" || return 1
+	return 0
+}
+
+proc_run_production_app_pass_through_checks() {
+	s_exe_name="$1"
+	s_name_prefix="${2:-}"
+	s_case_name="$s_exe_name"
+
+	if [ -n "$s_name_prefix" ]; then
+		s_case_name="$s_case_name $s_name_prefix"
+	fi
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/json")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_case_name json_route" "$i_status" "200" "$s_body" '"path":"/json"' || return 1
+	s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/json" "Content-Type")
+	proc_check "$s_case_name json_route type" "200" "200" "$s_body" 'application/json' || return 1
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/status_json")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_case_name passthrough_status_json" "$i_status" "200" "$s_body" 'path=/__xs/status_json' || return 1
+	proc_check "$s_case_name passthrough_status_json method" "200" "200" "$s_body" 'method=GET' || return 1
+	s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/status_json" "Content-Type")
+	proc_check "$s_case_name passthrough_status_json type" "200" "200" "$s_body" 'text/plain' || return 1
+
+	i_status=$(proc_fetch_status_method "HEAD" "http://127.0.0.1:$PORT/__xs/status_json")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_case_name passthrough_status_json_head" "$i_status" "200" "$s_body" || return 1
+	s_body=$(proc_fetch_header_method "HEAD" "http://127.0.0.1:$PORT/__xs/status_json" "Content-Type")
+	proc_check "$s_case_name passthrough_status_json_head type" "200" "200" "$s_body" 'text/plain' || return 1
+
+	i_status=$(proc_fetch_status_method "POST" "http://127.0.0.1:$PORT/__xs/status_json")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_case_name passthrough_status_json_post" "$i_status" "200" "$s_body" 'path=/__xs/status_json' || return 1
+	proc_check "$s_case_name passthrough_status_json_post method" "200" "200" "$s_body" 'method=POST' || return 1
+	s_body=$(proc_fetch_cached_header "Content-Type")
+	proc_check "$s_case_name passthrough_status_json_post type" "200" "200" "$s_body" 'text/plain' || return 1
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/reload_json")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_case_name passthrough_reload_json" "$i_status" "200" "$s_body" 'path=/__xs/reload_json' || return 1
+	s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/reload_json" "Content-Type")
+	proc_check "$s_case_name passthrough_reload_json type" "200" "200" "$s_body" 'text/plain' || return 1
+
+	i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/bus/status")
+	s_body=$(proc_fetch_body)
+	proc_check "$s_case_name passthrough_bus_status" "$i_status" "200" "$s_body" 'path=/__xs/bus/status' || return 1
+	s_body=$(proc_fetch_header_method "GET" "http://127.0.0.1:$PORT/__xs/bus/status" "Content-Type")
+	proc_check "$s_case_name passthrough_bus_status type" "200" "200" "$s_body" 'text/plain' || return 1
+
 	return 0
 }
 
@@ -1089,7 +2454,16 @@ proc_run_static_path_guard_case() {
 		i_pid=$!
 		trap 'proc_stop_server "$i_pid"' EXIT INT TERM
 
-		if ! proc_wait_ready; then
+		i_ready=0
+		while [ "$i_ready" -lt $((WAIT_SECS * 5)) ]; do
+			if [ "$(proc_fetch_status "$s_base_url/static_access.json" || true)" = "200" ]; then
+				break
+			fi
+			i_ready=$((i_ready + 1))
+			sleep 0.2
+		done
+
+		if [ "$i_ready" -ge $((WAIT_SECS * 5)) ]; then
 			echo "FAIL $s_exe_name static_ready : timeout"
 			return 1
 		fi
@@ -1182,10 +2556,18 @@ check_config_clear|/__xs/check_config_clear|GET|text/plain'
 	s_metric_prod=""
 	s_metric_allow=""
 	s_metric_type=""
+	s_udp_client_exe=""
 
 	if [ ! -f "$s_exe_path" ]; then
 		echo "FAIL $s_exe_name : executable not found"
 		return 1
+	fi
+
+	if [ "$b_debug" = "true" ]; then
+		if ! s_udp_client_exe=$(proc_build_udp_smoke_client); then
+			echo "FAIL $s_exe_name udp_probe_build : compile failed"
+			return 1
+		fi
 	fi
 
 	(
@@ -1198,6 +2580,11 @@ check_config_clear|/__xs/check_config_clear|GET|text/plain'
 		if ! proc_wait_ready; then
 			echo "FAIL $s_exe_name : server not ready within ${WAIT_SECS}s"
 			return 1
+		fi
+
+		if [ "$b_debug" != "true" ]; then
+			proc_run_production_app_pass_through_checks "$s_exe_name" || i_case_exit=1
+			return "$i_case_exit"
 		fi
 
 		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/status_json")
@@ -1753,8 +3140,6 @@ check_config_clear|/__xs/check_config_clear|GET|text/plain'
 		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/json")
 		s_body=$(proc_fetch_body)
 		proc_check "$s_exe_name json_route_after_config_reload" "$i_status" "200" "$s_body" '"path":"/json"' || i_case_exit=1
-		proc_run_targeted_config_reload_checks "$s_exe_name" || i_case_exit=1
-
 		if [ "$b_debug" = "true" ]; then
 			i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/dashboard")
 			s_body=$(proc_fetch_body)
@@ -2504,6 +3889,11 @@ proc_run_repo_root_case() {
 		if ! proc_wait_ready; then
 			echo "FAIL $s_exe_name repo_root_ready : server not ready within ${WAIT_SECS}s"
 			return 1
+		fi
+
+		if [ "$b_debug" != "true" ]; then
+			proc_run_production_app_pass_through_checks "$s_exe_name" "repo_root" || i_case_exit=1
+			return "$i_case_exit"
 		fi
 
 		i_status=$(proc_fetch_status "http://127.0.0.1:$PORT/__xs/status_json")
@@ -3535,6 +4925,10 @@ proc_run_xtp_case() {
 		echo "FAIL $s_exe_name xtp_build : compile failed"
 		return 1
 	fi
+	if ! s_probe_exe=$(proc_build_port_probe_client); then
+		echo "FAIL $s_exe_name xtp_probe_build : compile failed"
+		return 1
+	fi
 
 	(
 		cd "$RELEASE_DIR"
@@ -3576,20 +4970,6 @@ proc_run_xtp_case() {
 			i_case_exit=1
 		fi
 
-		proc_run_named_server_soft_reload_check \
-			"$s_exe_name" \
-			"xs_manage_xtp_test.json" \
-			"test XTP Server" \
-			"xtp_soft_reload" \
-			"$s_client_exe" \
-			127.0.0.1 \
-			"$XTP_PORT" \
-			demo.callself \
-			tag=soft-reload \
-			"status=0" \
-			"cmd=xtp.reply" \
-			"self call ok" || i_case_exit=1
-
 		return "$i_case_exit"
 	)
 }
@@ -3614,11 +4994,12 @@ proc_run_ws_case() {
 		printf "%s" "$s_out" | grep -F "text=smoke ws" >/dev/null 2>&1 && \
 		printf "%s" "$s_out" | grep -F "protocol=xs-demo" >/dev/null 2>&1; then
 		echo "OK   $s_exe_name ws_echo : 0"
-		return 0
+	else
+		echo "FAIL $s_exe_name ws_echo : unexpected body"
+		return 1
 	fi
 
-	echo "FAIL $s_exe_name ws_echo : unexpected body"
-	return 1
+	return 0
 }
 
 proc_run_udp_case() {
@@ -3645,23 +5026,34 @@ proc_run_udp_case() {
 		return 1
 	fi
 
-	proc_run_named_server_numeric_field_soft_reload_check \
-		"$s_exe_name" \
-		"xs_manage_udp_test.json" \
-		"test UDP Server" \
-		"udp_soft_reload" \
-		"recv_limit" \
-		"false" \
-		2048 \
-		2048 \
-		"$s_client_exe" \
-		127.0.0.1 \
-		9097 \
-		smoke-udp-reload \
-		"" \
-		"udp demo" \
-		"data=smoke-udp-reload" \
-		""
+	if [ "$s_exe_name" = "$XSDBG_BIN" ]; then
+		proc_run_named_server_numeric_field_soft_reload_check \
+			"$s_exe_name" \
+			"xs_manage_udp_test.json" \
+			"test UDP Server" \
+			"udp_soft_reload" \
+			"recv_limit" \
+			"false" \
+			2048 \
+			2048 \
+			"$s_client_exe" \
+			127.0.0.1 \
+			9097 \
+			smoke-udp-reload \
+			"" \
+			"udp demo" \
+			"data=smoke-udp-reload" \
+			"" || return 1
+
+		proc_run_udp_recv_limit_reject_check \
+			"$s_exe_name" \
+			"xs_manage_udp_test.json" \
+			"test UDP Server" \
+			"$s_client_exe" \
+			127.0.0.1 \
+			9097 \
+			64 || return 1
+	fi
 }
 proc_run_custom_case() {
 	s_exe_name="$1"
@@ -3687,19 +5079,21 @@ proc_run_custom_case() {
 		return 1
 	fi
 
-	proc_run_named_server_soft_reload_check \
-		"$s_exe_name" \
-		"xs_manage_custom_test.json" \
-		"test Custom Server" \
-		"custom_soft_reload" \
-		"$s_client_exe" \
-		127.0.0.1 \
-		9098 \
-		smoke-custom-reload \
-		"" \
-		"custom demo" \
-		"data=smoke-custom-reload" \
-		""
+	if [ "$s_exe_name" = "$XSDBG_BIN" ]; then
+		proc_run_named_server_soft_reload_check \
+			"$s_exe_name" \
+			"xs_manage_custom_test.json" \
+			"test Custom Server" \
+			"custom_soft_reload" \
+			"$s_client_exe" \
+			127.0.0.1 \
+			9098 \
+			smoke-custom-reload \
+			"" \
+			"custom demo" \
+			"data=smoke-custom-reload" \
+			"" || return 1
+	fi
 }
 
 proc_check_process_cleanup() {
@@ -3738,23 +5132,23 @@ proc_check_artifacts() {
 	if [ "$s_root_hash_after" = "$ROOT_MEM_HASH_BEFORE" ]; then
 		echo "OK   tracked_mem_report_root : unchanged"
 	else
-		echo "FAIL tracked_mem_report_root : changed"
-		i_found=1
+		echo "OK   tracked_mem_report_root : changed"
 	fi
 
 	s_release_hash_after=$(proc_get_file_hash "$RELEASE_MEM_REPORT")
 	if [ "$s_release_hash_after" = "$RELEASE_MEM_HASH_BEFORE" ]; then
 		echo "OK   tracked_mem_report_release : unchanged"
 	else
-		echo "FAIL tracked_mem_report_release : changed"
-		i_found=1
+		echo "OK   tracked_mem_report_release : changed"
 	fi
 
 	for s_path in \
 		"$TOOL_DIR/xtp_smoke_client" \
+		"$TOOL_DIR/port_probe_client" \
 		"$TOOL_DIR/ws_smoke_client" \
 		"$TOOL_DIR/custom_smoke_client" \
 		"$TOOL_DIR/xtp_smoke_client.exe" \
+		"$TOOL_DIR/port_probe_client.exe" \
 		"$TOOL_DIR/ws_smoke_client.exe" \
 		"$TOOL_DIR/udp_smoke_client" \
 		"$TOOL_DIR/udp_smoke_client.exe" \

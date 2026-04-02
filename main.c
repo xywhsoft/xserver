@@ -345,24 +345,6 @@ static bool XS_ServerConfigReloadEquals(const XS_ServerConfig* objLeft, const XS
 	return TRUE;
 }
 
-static bool XS_ServerHostTopologyEquals(const XS_ServerConfig* objLeft, const XS_ServerConfig* objRight)
-{
-	if ( objLeft == objRight ) {
-		return TRUE;
-	}
-	if ( objLeft == NULL || objRight == NULL ) {
-		return FALSE;
-	}
-	if ( objLeft->EnableDefaultHost != objRight->EnableDefaultHost ) {
-		return FALSE;
-	}
-	if ( !XS_HostArrayReloadIdentityEquals(objLeft->Hosts, objRight->Hosts) ) {
-		return FALSE;
-	}
-
-	return TRUE;
-}
-
 static bool XS_ServerListenerCriticalEquals(const XS_ServerConfig* objLeft, const XS_ServerConfig* objRight)
 {
 	if ( objLeft == objRight ) {
@@ -387,9 +369,6 @@ static bool XS_ServerListenerCriticalEquals(const XS_ServerConfig* objLeft, cons
 		return FALSE;
 	}
 	if ( !XS_TextEquals(objLeft->Addr, objRight->Addr) ) {
-		return FALSE;
-	}
-	if ( objLeft->HostAware && !XS_ServerHostTopologyEquals(objLeft, objRight) ) {
 		return FALSE;
 	}
 
@@ -453,21 +432,6 @@ static bool XS_ServerListenerCriticalEquals(const XS_ServerConfig* objLeft, cons
 			if ( objLeft->RecvLimit != objRight->RecvLimit ) {
 				return FALSE;
 			}
-			if ( objLeft->EnableTLS != objRight->EnableTLS ) {
-				return FALSE;
-			}
-			if ( !XS_TextEquals(objLeft->BindIPTLS, objRight->BindIPTLS) ) {
-				return FALSE;
-			}
-			if ( objLeft->BindPortTLS != objRight->BindPortTLS ) {
-				return FALSE;
-			}
-			if ( !XS_TextEquals(objLeft->AddrTLS, objRight->AddrTLS) ) {
-				return FALSE;
-			}
-			if ( !XS_TlsConfigEquals(&objLeft->TlsConfig, &objRight->TlsConfig) ) {
-				return FALSE;
-			}
 			return TRUE;
 
 		default:
@@ -480,22 +444,305 @@ static bool XS_ServerConfigCanSoftReload(const XS_ServerConfig* objLeft, const X
 	if ( objLeft == NULL || objRight == NULL ) {
 		return FALSE;
 	}
-	if ( !XS_ServerListenerCriticalEquals(objLeft, objRight) ) {
+	if ( objLeft->Enabled != objRight->Enabled ) {
+		return FALSE;
+	}
+	if ( objLeft->Class != objRight->Class ) {
+		return FALSE;
+	}
+	if ( objLeft->HostAware != objRight->HostAware ) {
 		return FALSE;
 	}
 
 	switch ( objLeft->Class ) {
 		case XS_SVC_HTTP:
-		case XS_SVC_WS:
 			return objLeft->HostAware && objRight->HostAware;
+		case XS_SVC_WS:
+			return FALSE;
 		case XS_SVC_TCP:
 		case XS_SVC_UDP:
 		case XS_SVC_XTP:
 		case XS_SVC_CUSTOM:
-			return !objLeft->HostAware && !objRight->HostAware;
+			return !objLeft->HostAware && !objRight->HostAware && XS_ServerListenerCriticalEquals(objLeft, objRight);
 		default:
 			return FALSE;
 	}
+}
+
+static bool XS_NetAddrEquals(const xnetaddr* pLeft, const xnetaddr* pRight)
+{
+	if ( pLeft == pRight ) {
+		return TRUE;
+	}
+	if ( pLeft == NULL || pRight == NULL ) {
+		return FALSE;
+	}
+
+	return memcmp(pLeft, pRight, sizeof(xnetaddr)) == 0;
+}
+
+static bool XS_HttpBuildRuntimeConfig(XS_ServerConfig* objServer, xhttpdconfig* pCfg)
+{
+	if ( objServer == NULL || pCfg == NULL ) {
+		return FALSE;
+	}
+
+	xrtHttpdConfigInit(pCfg);
+	if ( !XS_BuildBindAddr(objServer, FALSE, &pCfg->tBindAddr) ) {
+		return FALSE;
+	}
+	pCfg->iBacklog = objServer->Backlog;
+	pCfg->iRecvLimit = objServer->RecvLimit;
+	return TRUE;
+}
+
+static bool XS_HttpRuntimeConfigEquals(const xhttpdconfig* pLeft, const xhttpdconfig* pRight)
+{
+	if ( pLeft == pRight ) {
+		return TRUE;
+	}
+	if ( pLeft == NULL || pRight == NULL ) {
+		return FALSE;
+	}
+	if ( !XS_NetAddrEquals(&pLeft->tBindAddr, &pRight->tBindAddr) ) {
+		return FALSE;
+	}
+	if ( pLeft->iFlags != pRight->iFlags ) {
+		return FALSE;
+	}
+	if ( pLeft->iBacklog != pRight->iBacklog ) {
+		return FALSE;
+	}
+	if ( pLeft->iRecvLimit != pRight->iRecvLimit ) {
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+static bool XS_HttpSoftReloadRestartListener(XS_ServerConfig* objServer)
+{
+	XS_HttpHandle* objHandle;
+	xhttpdserver* pServer;
+	xhttpdconfig tConfig;
+	int64 iClosedConn;
+	int64 iRemainConn;
+
+	if ( objServer == NULL ) {
+		return FALSE;
+	}
+
+	objHandle = (XS_HttpHandle*)objServer->pHandle;
+	if ( objHandle == NULL ) {
+		return TRUE;
+	}
+	pServer = objHandle->pServer;
+	if ( pServer == NULL ) {
+		return FALSE;
+	}
+	if ( !XS_HttpBuildRuntimeConfig(objServer, &tConfig) ) {
+		XS_LogError(
+			"config reload failed: http soft reload invalid addr: server=%s addr=%s",
+			objServer->Name ? objServer->Name : "(null)",
+			objServer->Addr ? objServer->Addr : "(null)"
+		);
+		return FALSE;
+	}
+
+	objHandle->pOwner = objServer;
+	pServer->pUserData = objServer;
+	if ( XS_HttpRuntimeConfigEquals(&pServer->tConfig, &tConfig) ) {
+		return TRUE;
+	}
+
+	objHandle->bStopping = TRUE;
+	objHandle->bStopThread = TRUE;
+	if ( objHandle->hIdleThread ) {
+		xrtThreadWait(objHandle->hIdleThread);
+		xrtThreadDestroy(objHandle->hIdleThread);
+		objHandle->hIdleThread = NULL;
+	}
+
+	iClosedConn = XS_HttpCloseTrackedConns(objHandle);
+	iRemainConn = XS_HttpWaitTrackedConnDrain(objHandle, 500u);
+	if ( iRemainConn > 0 ) {
+		XS_HttpAbortTrackedConns(objHandle);
+		iRemainConn = XS_HttpWaitTrackedConnDrain(objHandle, 1000u);
+	}
+	if ( iRemainConn > 0 ) {
+		XS_HttpFinalizeTrackedConns(objHandle);
+		iRemainConn = XS_HttpTrackedConnCount(objHandle);
+	}
+	if ( iClosedConn > 0 || iRemainConn > 0 ) {
+		XS_HttpRecordStopCleanup(iClosedConn, iRemainConn);
+		XS_LogInfo(
+			"http soft reload cleanup: server=%s addr=%s closed=%lld remain=%lld",
+			objServer->Name ? objServer->Name : "(null)",
+			objServer->Addr ? objServer->Addr : "(null)",
+			(long long)iClosedConn,
+			(long long)iRemainConn
+		);
+	}
+
+	xrtHttpdStop(pServer);
+	pServer->tConfig = tConfig;
+	if ( xrtHttpdStart(pServer) != XRT_NET_OK ) {
+		XS_LogError(
+			"config reload failed: http soft reload start error: server=%s addr=%s",
+			objServer->Name ? objServer->Name : "(null)",
+			objServer->Addr ? objServer->Addr : "(null)"
+		);
+		return FALSE;
+	}
+
+	objHandle->bStopThread = FALSE;
+	objHandle->bStopping = FALSE;
+	XS_LogInfo(
+		"http soft reload listener: server=%s addr=%s bound_port=%u",
+		objServer->Name ? objServer->Name : "(null)",
+		objServer->Addr ? objServer->Addr : "(null)",
+		(unsigned)xrtHttpdBoundPort(pServer)
+	);
+	return TRUE;
+}
+
+static bool XS_WsBuildRuntimeConfig(XS_ServerConfig* objServer, xwsserverconfig* pCfg)
+{
+	if ( objServer == NULL || pCfg == NULL ) {
+		return FALSE;
+	}
+
+	xrtWsServerConfigInit(pCfg);
+	if ( !XS_BuildBindAddr(objServer, objServer->EnableTLS, &pCfg->tBindAddr) ) {
+		return FALSE;
+	}
+	pCfg->iBacklog = objServer->Backlog;
+	pCfg->iRecvLimit = XS_RuntimeGovernEnabled() ? (objServer->WsMessageLimit ? objServer->WsMessageLimit : objServer->RecvLimit) : 0u;
+	if ( objServer->EnableTLS ) {
+		pCfg->pTlsConfig = &objServer->TlsConfig;
+	}
+	if ( objServer->WsProtocol && objServer->WsProtocol[0] ) {
+		snprintf(pCfg->sProtocol, sizeof(pCfg->sProtocol), "%s", objServer->WsProtocol);
+	}
+	return TRUE;
+}
+
+static bool XS_WsRuntimeConfigEquals(const xwsserverconfig* pLeft, const xwsserverconfig* pRight)
+{
+	if ( pLeft == pRight ) {
+		return TRUE;
+	}
+	if ( pLeft == NULL || pRight == NULL ) {
+		return FALSE;
+	}
+	if ( !XS_NetAddrEquals(&pLeft->tBindAddr, &pRight->tBindAddr) ) {
+		return FALSE;
+	}
+	if ( pLeft->iFlags != pRight->iFlags ) {
+		return FALSE;
+	}
+	if ( pLeft->iBacklog != pRight->iBacklog ) {
+		return FALSE;
+	}
+	if ( pLeft->iRecvLimit != pRight->iRecvLimit ) {
+		return FALSE;
+	}
+	if ( strcmp(pLeft->sProtocol, pRight->sProtocol) != 0 ) {
+		return FALSE;
+	}
+	if ( !XS_TlsConfigEquals(pLeft->pTlsConfig, pRight->pTlsConfig) ) {
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+static bool XS_WsSoftReloadRestartListener(XS_ServerConfig* objServer)
+{
+	XS_WsHandle* objHandle;
+	xwsserver* pServer;
+	xwsserverconfig tConfig;
+	int64 iClosedConn;
+	int64 iRemainConn;
+
+	if ( objServer == NULL ) {
+		return FALSE;
+	}
+
+	objHandle = (XS_WsHandle*)objServer->pHandle;
+	if ( objHandle == NULL ) {
+		return TRUE;
+	}
+	pServer = objHandle->pServer;
+	if ( pServer == NULL ) {
+		return FALSE;
+	}
+	if ( !XS_WsBuildRuntimeConfig(objServer, &tConfig) ) {
+		XS_LogError(
+			"config reload failed: ws soft reload invalid addr: server=%s addr=%s",
+			objServer->Name ? objServer->Name : "(null)",
+			objServer->EnableTLS ? (objServer->AddrTLS ? objServer->AddrTLS : "(null)") : (objServer->Addr ? objServer->Addr : "(null)")
+		);
+		return FALSE;
+	}
+
+	objHandle->pOwner = objServer;
+	pServer->pUserData = objServer;
+	if ( XS_WsRuntimeConfigEquals(&pServer->tConfig, &tConfig) ) {
+		return TRUE;
+	}
+
+	objHandle->bStopping = TRUE;
+	objHandle->bStopThread = TRUE;
+	if ( objHandle->hIdleThread ) {
+		xrtThreadWait(objHandle->hIdleThread);
+		xrtThreadDestroy(objHandle->hIdleThread);
+		objHandle->hIdleThread = NULL;
+	}
+
+	iClosedConn = XS_WsCloseTrackedConns(objHandle);
+	iRemainConn = XS_WsWaitTrackedConnDrain(objHandle, 500u);
+	if ( iRemainConn > 0 ) {
+		XS_WsAbortTrackedConns(objHandle);
+		iRemainConn = XS_WsWaitTrackedConnDrain(objHandle, 1000u);
+	}
+	if ( iRemainConn > 0 ) {
+		XS_WsFinalizeTrackedConns(objHandle);
+		iRemainConn = XS_WsTrackedConnCount(objHandle);
+	}
+	if ( iClosedConn > 0 || iRemainConn > 0 ) {
+		XS_WsRecordStopCleanup(iClosedConn, iRemainConn);
+		XS_LogInfo(
+			"ws soft reload cleanup: server=%s addr=%s closed=%lld remain=%lld",
+			objServer->Name ? objServer->Name : "(null)",
+			objServer->EnableTLS ? (objServer->AddrTLS ? objServer->AddrTLS : "(null)") : (objServer->Addr ? objServer->Addr : "(null)"),
+			(long long)iClosedConn,
+			(long long)iRemainConn
+		);
+	}
+
+	XS_WsDetachTrackedConns(objHandle);
+	xrtWsServerStop(pServer);
+	pServer->tConfig = tConfig;
+	if ( xrtWsServerStart(pServer) != XRT_NET_OK ) {
+		XS_LogError(
+			"config reload failed: ws soft reload start error: server=%s addr=%s",
+			objServer->Name ? objServer->Name : "(null)",
+			objServer->EnableTLS ? (objServer->AddrTLS ? objServer->AddrTLS : "(null)") : (objServer->Addr ? objServer->Addr : "(null)")
+		);
+		return FALSE;
+	}
+
+	objHandle->bStopThread = FALSE;
+	objHandle->bStopping = FALSE;
+	XS_LogInfo(
+		"ws soft reload listener: server=%s addr=%s bound_port=%u tls=%s",
+		objServer->Name ? objServer->Name : "(null)",
+		objServer->EnableTLS ? (objServer->AddrTLS ? objServer->AddrTLS : "(null)") : (objServer->Addr ? objServer->Addr : "(null)"),
+		(unsigned)xrtWsServerBoundPort(pServer),
+		objServer->EnableTLS ? "true" : "false"
+	);
+	return TRUE;
 }
 
 static bool XS_HttpSoftReloadSyncRuntime(XS_ServerConfig* objServer)
@@ -509,6 +756,9 @@ static bool XS_HttpSoftReloadSyncRuntime(XS_ServerConfig* objServer)
 	objHandle = (XS_HttpHandle*)objServer->pHandle;
 	if ( objHandle == NULL ) {
 		return TRUE;
+	}
+	if ( !XS_HttpSoftReloadRestartListener(objServer) ) {
+		return FALSE;
 	}
 
 	if ( !XS_RuntimeGovernEnabled() || objServer->IdleTimeout == 0u ) {
@@ -550,6 +800,9 @@ static bool XS_WsSoftReloadSyncRuntime(XS_ServerConfig* objServer)
 	objHandle = (XS_WsHandle*)objServer->pHandle;
 	if ( objHandle == NULL ) {
 		return TRUE;
+	}
+	if ( !XS_WsSoftReloadRestartListener(objServer) ) {
+		return FALSE;
 	}
 
 	if ( !XS_RuntimeGovernEnabled() || objServer->IdleTimeout == 0u ) {
@@ -642,7 +895,345 @@ static bool XS_UdpSoftReloadSyncRuntime(XS_ServerConfig* objServer)
 	return TRUE;
 }
 
-static bool XS_XtpSoftReloadSyncRuntime(XS_ServerConfig* objServer)
+static bool XS_TlsConfigClone(const xtlsconfig* pSrc, xtlsconfig* pDst)
+{
+	memset(pDst, 0, sizeof(xtlsconfig));
+	if ( pSrc == NULL ) {
+		return TRUE;
+	}
+
+	pDst->sCertFile = XS_CopyText(pSrc->sCertFile);
+	if ( pSrc->sCertFile && pDst->sCertFile == NULL ) {
+		goto fail;
+	}
+	pDst->sKeyFile = XS_CopyText(pSrc->sKeyFile);
+	if ( pSrc->sKeyFile && pDst->sKeyFile == NULL ) {
+		goto fail;
+	}
+	pDst->sCaFile = XS_CopyText(pSrc->sCaFile);
+	if ( pSrc->sCaFile && pDst->sCaFile == NULL ) {
+		goto fail;
+	}
+	pDst->sHostName = XS_CopyText(pSrc->sHostName);
+	if ( pSrc->sHostName && pDst->sHostName == NULL ) {
+		goto fail;
+	}
+
+	pDst->bVerifyPeer = pSrc->bVerifyPeer;
+	pDst->OnSNI = pSrc->OnSNI;
+	pDst->pSNIUserData = pSrc->pSNIUserData;
+	pDst->bAllowTLS12Ed25519 = pSrc->bAllowTLS12Ed25519;
+	pDst->iMaxVersion = pSrc->iMaxVersion;
+	pDst->pResume = pSrc->pResume;
+	return TRUE;
+
+fail:
+	if ( pDst->sCertFile ) xrtFree((void*)pDst->sCertFile);
+	if ( pDst->sKeyFile ) xrtFree((void*)pDst->sKeyFile);
+	if ( pDst->sCaFile ) xrtFree((void*)pDst->sCaFile);
+	if ( pDst->sHostName ) xrtFree((void*)pDst->sHostName);
+	memset(pDst, 0, sizeof(xtlsconfig));
+	return FALSE;
+}
+
+static bool XS_HttpPageConfigClone(const XS_HttpPageConfig* objSrc, XS_HttpPageConfig* objDst)
+{
+	XS_InitHttpPageConfig(objDst);
+	if ( objSrc == NULL ) {
+		return TRUE;
+	}
+
+	objDst->DefaultPage = XS_CopyText(objSrc->DefaultPage);
+	if ( objSrc->DefaultPage && objDst->DefaultPage == NULL ) {
+		goto fail;
+	}
+	objDst->Page404 = XS_CopyText(objSrc->Page404);
+	if ( objSrc->Page404 && objDst->Page404 == NULL ) {
+		goto fail;
+	}
+	objDst->Page403 = XS_CopyText(objSrc->Page403);
+	if ( objSrc->Page403 && objDst->Page403 == NULL ) {
+		goto fail;
+	}
+	objDst->Page500 = XS_CopyText(objSrc->Page500);
+	if ( objSrc->Page500 && objDst->Page500 == NULL ) {
+		goto fail;
+	}
+	objDst->ErrorPage = XS_CopyText(objSrc->ErrorPage);
+	if ( objSrc->ErrorPage && objDst->ErrorPage == NULL ) {
+		goto fail;
+	}
+	return TRUE;
+
+fail:
+	XS_FreeHttpPageConfig(objDst);
+	return FALSE;
+}
+
+static bool XS_HostConfigClone(const XS_HostConfig* objSrc, XS_HostConfig* objDst)
+{
+	XS_InitHostConfig(objDst);
+	if ( objSrc == NULL ) {
+		return TRUE;
+	}
+
+	objDst->Enabled = objSrc->Enabled;
+	objDst->Debug = objSrc->Debug;
+	objDst->DevMode = objSrc->DevMode;
+	objDst->Name = XS_CopyText(objSrc->Name);
+	if ( objSrc->Name && objDst->Name == NULL ) {
+		goto fail;
+	}
+	objDst->Desc = XS_CopyText(objSrc->Desc);
+	if ( objSrc->Desc && objDst->Desc == NULL ) {
+		goto fail;
+	}
+	objDst->Host = XS_CopyText(objSrc->Host);
+	if ( objSrc->Host && objDst->Host == NULL ) {
+		goto fail;
+	}
+	objDst->Param = XS_CopyText(objSrc->Param);
+	if ( objSrc->Param && objDst->Param == NULL ) {
+		goto fail;
+	}
+	objDst->Path = XS_CopyText(objSrc->Path);
+	if ( objSrc->Path && objDst->Path == NULL ) {
+		goto fail;
+	}
+	if ( !XS_HttpPageConfigClone(&objSrc->Pages, &objDst->Pages) ) {
+		goto fail;
+	}
+	objDst->DevFile = XS_CopyText(objSrc->DevFile);
+	if ( objSrc->DevFile && objDst->DevFile == NULL ) {
+		goto fail;
+	}
+	if ( !XS_TlsConfigClone(&objSrc->TlsConfig, &objDst->TlsConfig) ) {
+		goto fail;
+	}
+	return TRUE;
+
+fail:
+	XS_FreeHostConfig(objDst);
+	return FALSE;
+}
+
+static bool XS_ServerConfigCloneForRuntime(const XS_ServerConfig* objSrc, XS_ServerConfig* objDst)
+{
+	uint32 i;
+
+	if ( objSrc == NULL || objDst == NULL ) {
+		return FALSE;
+	}
+
+	XS_InitServerConfig(objDst);
+	objDst->Enabled = objSrc->Enabled;
+	objDst->Class = objSrc->Class;
+	objDst->Backlog = objSrc->Backlog;
+	objDst->ConnLimit = objSrc->ConnLimit;
+	objDst->RecvLimit = objSrc->RecvLimit;
+	objDst->IdleTimeout = objSrc->IdleTimeout;
+	objDst->WsMessageLimit = objSrc->WsMessageLimit;
+	objDst->PathLimit = objSrc->PathLimit;
+	objDst->HeaderLimit = objSrc->HeaderLimit;
+	objDst->BodyLimit = objSrc->BodyLimit;
+	objDst->BindPort = objSrc->BindPort;
+	objDst->EnableTLS = objSrc->EnableTLS;
+	objDst->BindPortTLS = objSrc->BindPortTLS;
+	objDst->Debug = objSrc->Debug;
+	objDst->HostAware = objSrc->HostAware;
+	objDst->EnableDefaultHost = objSrc->EnableDefaultHost;
+	objDst->DevMode = objSrc->DevMode;
+
+	objDst->ClassName = XS_CopyText(objSrc->ClassName);
+	if ( objSrc->ClassName && objDst->ClassName == NULL ) {
+		goto fail;
+	}
+	objDst->Name = XS_CopyText(objSrc->Name);
+	if ( objSrc->Name && objDst->Name == NULL ) {
+		goto fail;
+	}
+	objDst->Desc = XS_CopyText(objSrc->Desc);
+	if ( objSrc->Desc && objDst->Desc == NULL ) {
+		goto fail;
+	}
+	objDst->Param = XS_CopyText(objSrc->Param);
+	if ( objSrc->Param && objDst->Param == NULL ) {
+		goto fail;
+	}
+	objDst->BindIP = XS_CopyText(objSrc->BindIP);
+	if ( objSrc->BindIP && objDst->BindIP == NULL ) {
+		goto fail;
+	}
+	objDst->Addr = XS_CopyText(objSrc->Addr);
+	if ( objSrc->Addr && objDst->Addr == NULL ) {
+		goto fail;
+	}
+	objDst->WsProtocol = XS_CopyText(objSrc->WsProtocol);
+	if ( objSrc->WsProtocol && objDst->WsProtocol == NULL ) {
+		goto fail;
+	}
+	objDst->BindIPTLS = XS_CopyText(objSrc->BindIPTLS);
+	if ( objSrc->BindIPTLS && objDst->BindIPTLS == NULL ) {
+		goto fail;
+	}
+	objDst->AddrTLS = XS_CopyText(objSrc->AddrTLS);
+	if ( objSrc->AddrTLS && objDst->AddrTLS == NULL ) {
+		goto fail;
+	}
+	objDst->Path = XS_CopyText(objSrc->Path);
+	if ( objSrc->Path && objDst->Path == NULL ) {
+		goto fail;
+	}
+	objDst->DevFile = XS_CopyText(objSrc->DevFile);
+	if ( objSrc->DevFile && objDst->DevFile == NULL ) {
+		goto fail;
+	}
+	if ( !XS_HttpPageConfigClone(&objSrc->Pages, &objDst->Pages) ) {
+		goto fail;
+	}
+	if ( !XS_TlsConfigClone(&objSrc->TlsConfig, &objDst->TlsConfig) ) {
+		goto fail;
+	}
+	if ( !XS_HostConfigClone(&objSrc->DefaultHost, &objDst->DefaultHost) ) {
+		goto fail;
+	}
+
+	for ( i = 1; objSrc->Hosts && i <= objSrc->Hosts->Count; i++ ) {
+		XS_HostConfig* objSrcHost = xrtArrayGet_Inline(objSrc->Hosts, i);
+		uint32 iPos = xrtArrayAppend(objDst->Hosts, 1);
+		XS_HostConfig* objDstHost;
+		if ( iPos == 0 ) {
+			goto fail;
+		}
+		objDstHost = xrtArrayGet_Inline(objDst->Hosts, iPos);
+		if ( !XS_HostConfigClone(objSrcHost, objDstHost) ) {
+			goto fail;
+		}
+	}
+
+	return TRUE;
+
+fail:
+	XS_FreeServerConfig(objDst);
+	return FALSE;
+}
+
+static void XS_XtpSoftReloadDropTlsListener(XS_XtpHandle* objHandle)
+{
+	xnetlistener* pListenerTLS;
+	xthread hAcceptThreadTLS;
+
+	if ( objHandle == NULL ) {
+		return;
+	}
+
+	pListenerTLS = objHandle->pListenerTLS;
+	hAcceptThreadTLS = objHandle->hAcceptThreadTLS;
+	objHandle->pListenerTLS = NULL;
+	objHandle->hAcceptThreadTLS = NULL;
+
+	if ( pListenerTLS ) {
+		xrtNetListenerStop(pListenerTLS);
+	}
+	if ( hAcceptThreadTLS ) {
+		xrtThreadWait(hAcceptThreadTLS);
+		xrtThreadDestroy(hAcceptThreadTLS);
+	}
+	if ( pListenerTLS ) {
+		xrtNetListenerDestroy(pListenerTLS);
+	}
+}
+
+static bool XS_XtpSoftReloadSyncTlsListener(XS_Runtime* objRuntime, XS_ServerConfig* objServer)
+{
+	XS_XtpHandle* objHandle;
+	xnetlistenconfig tCfg;
+	xnetlistener* pListenerTLS;
+
+	if ( objServer == NULL ) {
+		return FALSE;
+	}
+
+	objHandle = (XS_XtpHandle*)objServer->pHandle;
+	if ( objHandle == NULL ) {
+		return TRUE;
+	}
+
+	XS_XtpSoftReloadDropTlsListener(objHandle);
+	if ( !objServer->EnableTLS ) {
+		return TRUE;
+	}
+	if ( objRuntime == NULL || objRuntime->pEngine == NULL ) {
+		XS_LogError(
+			"config reload failed: xtps soft reload runtime engine missing: server=%s",
+			objServer->Name ? objServer->Name : "(null)"
+		);
+		return FALSE;
+	}
+	if ( objServer->BindPortTLS == 0 ) {
+		XS_LogError(
+			"config reload failed: xtps soft reload missing port_tls: server=%s",
+			objServer->Name ? objServer->Name : "(null)"
+		);
+		return FALSE;
+	}
+	if ( objServer->TlsConfig.sCertFile == NULL || objServer->TlsConfig.sKeyFile == NULL ) {
+		XS_LogError(
+			"config reload failed: xtps soft reload missing tls cert/key: server=%s",
+			objServer->Name ? objServer->Name : "(null)"
+		);
+		return FALSE;
+	}
+
+	xrtNetListenConfigInit(&tCfg);
+	if ( !XS_BuildBindAddr(objServer, TRUE, &tCfg.tBindAddr) ) {
+		XS_LogError(
+			"config reload failed: xtps soft reload invalid addr: server=%s addr=%s",
+			objServer->Name ? objServer->Name : "(null)",
+			objServer->AddrTLS ? objServer->AddrTLS : "(null)"
+		);
+		return FALSE;
+	}
+	tCfg.iBacklog = objServer->Backlog;
+	tCfg.iRecvLimit = XS_RuntimeGovernEnabled() ? objServer->RecvLimit : 0u;
+	tCfg.pTlsConfig = &objServer->TlsConfig;
+
+	pListenerTLS = xrtNetListenerCreate(objRuntime->pEngine, &tCfg, XS_XtpListenerEvents(), XS_XtpStreamEvents(), objServer);
+	if ( pListenerTLS == NULL ) {
+		XS_LogError(
+			"config reload failed: xtps soft reload create tls listener error: server=%s",
+			objServer->Name ? objServer->Name : "(null)"
+		);
+		return FALSE;
+	}
+
+	objHandle->pListenerTLS = pListenerTLS;
+	if ( xrtNetListenerStart(objHandle->pListenerTLS) != XRT_NET_OK ) {
+		XS_LogError(
+			"config reload failed: xtps soft reload start tls listener error: server=%s",
+			objServer->Name ? objServer->Name : "(null)"
+		);
+		xrtNetListenerDestroy(objHandle->pListenerTLS);
+		objHandle->pListenerTLS = NULL;
+		return FALSE;
+	}
+
+	objHandle->hAcceptThreadTLS = xrtThreadCreate(XS_XtpAcceptThreadTLS, objHandle, 0);
+	if ( objHandle->hAcceptThreadTLS == NULL ) {
+		XS_LogError(
+			"config reload failed: xtps soft reload create tls accept thread error: server=%s",
+			objServer->Name ? objServer->Name : "(null)"
+		);
+		xrtNetListenerStop(objHandle->pListenerTLS);
+		xrtNetListenerDestroy(objHandle->pListenerTLS);
+		objHandle->pListenerTLS = NULL;
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+static bool XS_XtpSoftReloadSyncRuntime(XS_Runtime* objRuntime, XS_ServerConfig* objServer)
 {
 	XS_XtpHandle* objHandle;
 
@@ -668,16 +1259,8 @@ static bool XS_XtpSoftReloadSyncRuntime(XS_ServerConfig* objServer)
 			return FALSE;
 		}
 	}
-
-	if ( objHandle->pListenerTLS && objHandle->hAcceptThreadTLS == NULL ) {
-		objHandle->hAcceptThreadTLS = xrtThreadCreate(XS_XtpAcceptThreadTLS, objHandle, 0);
-		if ( objHandle->hAcceptThreadTLS == NULL ) {
-			XS_LogError(
-				"config reload failed: xtps accept thread create error: server=%s",
-				objServer->Name ? objServer->Name : "(null)"
-			);
-			return FALSE;
-		}
+	if ( !XS_XtpSoftReloadSyncTlsListener(objRuntime, objServer) ) {
+		return FALSE;
 	}
 
 	if ( !XS_RuntimeGovernEnabled() || objServer->IdleTimeout == 0u ) {
@@ -698,7 +1281,7 @@ static bool XS_XtpSoftReloadSyncRuntime(XS_ServerConfig* objServer)
 	return TRUE;
 }
 
-static bool XS_ServerSoftReloadSyncRuntime(XS_ServerConfig* objServer)
+static bool XS_ServerSoftReloadSyncRuntime(XS_Runtime* objRuntime, XS_ServerConfig* objServer)
 {
 	if ( objServer == NULL ) {
 		return FALSE;
@@ -715,10 +1298,145 @@ static bool XS_ServerSoftReloadSyncRuntime(XS_ServerConfig* objServer)
 		case XS_SVC_UDP:
 			return XS_UdpSoftReloadSyncRuntime(objServer);
 		case XS_SVC_XTP:
-			return XS_XtpSoftReloadSyncRuntime(objServer);
+			return XS_XtpSoftReloadSyncRuntime(objRuntime, objServer);
 		default:
 			return FALSE;
 	}
+}
+
+static bool XS_ConfigReloadCanApplyServiceAddRemoveOnly(XS_Runtime* objRuntime, XS_Config* objCfgNew, uint32* piAddCount, uint32* piRemoveCount)
+{
+	uint32 i;
+	uint32 iAddCount = 0u;
+	uint32 iRemoveCount = 0u;
+
+	if ( piAddCount ) {
+		*piAddCount = 0u;
+	}
+	if ( piRemoveCount ) {
+		*piRemoveCount = 0u;
+	}
+	if ( objRuntime == NULL || objRuntime->Servers == NULL || objCfgNew == NULL || objCfgNew->Servers == NULL ) {
+		return FALSE;
+	}
+
+	for ( i = 1; i <= objCfgNew->Servers->Count; i++ ) {
+		XS_ServerConfig* objServerNew = xrtArrayGet_Inline(objCfgNew->Servers, i);
+		XS_ServerConfig* objServerOld = XS_FindRuntimeServerByName(objRuntime, objServerNew->Name);
+		if ( objServerOld == NULL ) {
+			iAddCount++;
+			continue;
+		}
+		if ( !XS_ServerConfigReloadEquals(objServerOld, objServerNew) ) {
+			return FALSE;
+		}
+	}
+
+	for ( i = 1; i <= objRuntime->Servers->Count; i++ ) {
+		XS_ServerConfig* objServerOld = xrtArrayGet_Inline(objRuntime->Servers, i);
+		if ( XS_FindConfigServerByName(objCfgNew, objServerOld->Name) == NULL ) {
+			iRemoveCount++;
+		}
+	}
+
+	if ( piAddCount ) {
+		*piAddCount = iAddCount;
+	}
+	if ( piRemoveCount ) {
+		*piRemoveCount = iRemoveCount;
+	}
+	return (iAddCount > 0u) || (iRemoveCount > 0u);
+}
+
+static bool XS_TryConfigReloadServiceAddRemoveOnly(XS_Config* objCfg, XS_Runtime* objRuntime, XS_Config* objCfgNew, const XS_ConfigReloadRequest* pReq)
+{
+	uint32 i;
+	uint32 iAddCount = 0u;
+	uint32 iRemoveCount = 0u;
+	uint32 iOldRuntimeCount = 0u;
+
+	if ( !XS_ConfigReloadCanApplyServiceAddRemoveOnly(objRuntime, objCfgNew, &iAddCount, &iRemoveCount) ) {
+		return FALSE;
+	}
+
+	iOldRuntimeCount = objRuntime->Servers->Count;
+	for ( i = 1; i <= objCfgNew->Servers->Count; i++ ) {
+		XS_ServerConfig* objServerNewCfg = xrtArrayGet_Inline(objCfgNew->Servers, i);
+		XS_ServerConfig objServerClone;
+		uint32 iPos;
+		XS_ServerConfig* objServerNewRuntime;
+
+		if ( XS_FindRuntimeServerByName(objRuntime, objServerNewCfg->Name) != NULL ) {
+			continue;
+		}
+
+		memset(&objServerClone, 0, sizeof(objServerClone));
+		if ( !XS_ServerConfigCloneForRuntime(objServerNewCfg, &objServerClone) ) {
+			goto rollback;
+		}
+
+		iPos = xrtArrayAppend(objRuntime->Servers, 1);
+		if ( iPos == 0u ) {
+			XS_FreeServerConfig(&objServerClone);
+			goto rollback;
+		}
+
+		objServerNewRuntime = xrtArrayGet_Inline(objRuntime->Servers, iPos);
+		memcpy(objServerNewRuntime, &objServerClone, sizeof(XS_ServerConfig));
+		memset(&objServerClone, 0, sizeof(XS_ServerConfig));
+
+		if ( !XS_RuntimeInitOneServer(objRuntime, objServerNewRuntime) ) {
+			XS_FreeServerConfig(objServerNewRuntime);
+			xrtArrayRemove(objRuntime->Servers, iPos, 1);
+			goto rollback;
+		}
+		if ( !XS_RuntimeStartOneServer(objServerNewRuntime) ) {
+			XS_RuntimeStopOneServer(objServerNewRuntime);
+			XS_FreeServerConfig(objServerNewRuntime);
+			xrtArrayRemove(objRuntime->Servers, iPos, 1);
+			goto rollback;
+		}
+	}
+
+	for ( i = iOldRuntimeCount; i >= 1u; i-- ) {
+		XS_ServerConfig* objServerOld = xrtArrayGet_Inline(objRuntime->Servers, i);
+		if ( XS_FindConfigServerByName(objCfgNew, objServerOld->Name) != NULL ) {
+			if ( i == 1u ) {
+				break;
+			}
+			continue;
+		}
+
+		XS_RuntimeStopOneServer(objServerOld);
+		XS_FreeServerConfig(objServerOld);
+		xrtArrayRemove(objRuntime->Servers, i, 1);
+
+		if ( i == 1u ) {
+			break;
+		}
+	}
+
+	XS_FreeConfig(objCfg);
+	*objCfg = *objCfgNew;
+	memset(objCfgNew, 0, sizeof(XS_Config));
+	XS_UpdateRuntimeStats(objRuntime);
+	XS_LogInfo(
+		"config reload success: mode=service_add_remove_only added=%u removed=%u",
+		(unsigned)iAddCount,
+		(unsigned)iRemoveCount
+	);
+	XS_SetConfigReloadStatus(TRUE, pReq, "config reload success: service add/remove only");
+	return TRUE;
+
+rollback:
+	while ( objRuntime && objRuntime->Servers && objRuntime->Servers->Count > iOldRuntimeCount ) {
+		XS_ServerConfig* objServerRollback = xrtArrayGet_Inline(objRuntime->Servers, objRuntime->Servers->Count);
+		XS_RuntimeStopOneServer(objServerRollback);
+		XS_FreeServerConfig(objServerRollback);
+		xrtArrayRemove(objRuntime->Servers, objRuntime->Servers->Count, 1);
+	}
+
+	return FALSE;
 }
 
 static bool XS_ConfigReloadValidateTarget(XS_Config* objCfgNew, const XS_ConfigReloadRequest* pReq, XS_ServerConfig** ppServerNew)
@@ -913,7 +1631,7 @@ static bool XS_PerformTargetHostReload(XS_ServerConfig* objServerOld, XS_ServerC
 	return TRUE;
 }
 
-static bool XS_PerformTargetServerSoftReload(XS_ServerConfig* objServerOld, XS_ServerConfig* objServerNewSrc, const XS_ConfigReloadRequest* pReq)
+static bool XS_PerformTargetServerSoftReload(XS_Runtime* objRuntime, XS_ServerConfig* objServerOld, XS_ServerConfig* objServerNewSrc, const XS_ConfigReloadRequest* pReq)
 {
 	XS_ServerConfig objServerBackup;
 	bool bBackupValid;
@@ -958,7 +1676,7 @@ static bool XS_PerformTargetServerSoftReload(XS_ServerConfig* objServerOld, XS_S
 	}
 	bNewScriptsStarted = TRUE;
 
-	if ( !XS_ServerSoftReloadSyncRuntime(objServerOld) ) {
+	if ( !XS_ServerSoftReloadSyncRuntime(objRuntime, objServerOld) ) {
 		XS_LogError("config reload failed: target server soft reload runtime sync error");
 		XS_SetConfigReloadStatus(FALSE, pReq, "target server soft reload runtime sync error");
 		goto rollback;
@@ -990,7 +1708,7 @@ rollback:
 
 	if ( bOldScriptsStopped ) {
 		if ( XS_StartServerScripts(objServerOld) ) {
-			if ( !XS_ServerSoftReloadSyncRuntime(objServerOld) ) {
+			if ( !XS_ServerSoftReloadSyncRuntime(objRuntime, objServerOld) ) {
 				XS_LogError(
 					"config reload rollback failed: old target server runtime sync error: %s",
 					objServerOld->Name ? objServerOld->Name : "(null)"
@@ -1065,7 +1783,7 @@ static bool XS_PerformTargetServerReload(XS_Config* objCfg, XS_Runtime* objRunti
 		return TRUE;
 	}
 	if ( !pReq->Force && XS_ServerConfigCanSoftReload(objServerOld, objServerNewSrc) ) {
-		return XS_PerformTargetServerSoftReload(objServerOld, objServerNewSrc, pReq);
+		return XS_PerformTargetServerSoftReload(objRuntime, objServerOld, objServerNewSrc, pReq);
 	}
 	
 	memset(&objServerBackup, 0, sizeof(objServerBackup));
@@ -1165,6 +1883,9 @@ static bool XS_PerformConfigReload(XS_Config* objCfg, XS_Runtime* objRuntime, co
 		bool bRet = XS_PerformTargetServerReload(objCfg, objRuntime, &objCfgNew, pReq);
 		XS_FreeConfig(&objCfgNew);
 		return bRet;
+	}
+	if ( XS_TryConfigReloadServiceAddRemoveOnly(objCfg, objRuntime, &objCfgNew, pReq) ) {
+		return TRUE;
 	}
 	
 	if ( !XS_RuntimeBuild(&objRuntimeNew, &objCfgNew) ) {
