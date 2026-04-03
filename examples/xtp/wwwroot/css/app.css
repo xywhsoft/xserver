@@ -1,0 +1,137 @@
+:root {
+	--bg: #edf3ef;
+	--panel: rgba(255, 255, 255, 0.94);
+	--line: rgba(22, 37, 31, 0.12);
+	--text: #1d2922;
+	--muted: #607068;
+	--accent: #19725f;
+	--shadow: 0 18px 40px rgba(24, 36, 30, 0.10);
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+	color: var(--text);
+	background:
+		radial-gradient(circle at top left, rgba(25, 114, 95, 0.16), transparent 26%),
+		linear-gradient(180deg, #f9fcfa 0%, var(--bg) 100%);
+}
+
+.page {
+	max-width: 1240px;
+	margin: 0 auto;
+	padding: 28px 18px 44px;
+}
+
+.hero,
+.panel {
+	border: 1px solid var(--line);
+	border-radius: 24px;
+	background: var(--panel);
+	box-shadow: var(--shadow);
+}
+
+.hero {
+	display: flex;
+	justify-content: space-between;
+	gap: 18px;
+	padding: 24px;
+}
+
+.eyebrow {
+	margin: 0 0 10px;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--accent);
+}
+
+.hero h1,
+.panel h2 {
+	margin: 0 0 12px;
+}
+
+.desc {
+	margin: 0;
+	max-width: 760px;
+	line-height: 1.8;
+	color: var(--muted);
+}
+
+.hero-side {
+	min-width: 180px;
+	display: grid;
+	gap: 12px;
+}
+
+.meta,
+.code {
+	padding: 14px 16px;
+	border-radius: 18px;
+	background: rgba(25, 114, 95, 0.08);
+}
+
+.panel {
+	padding: 22px;
+	margin-top: 18px;
+}
+
+.panel-head {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 12px;
+	margin-bottom: 16px;
+}
+
+.btn {
+	border: 0;
+	border-radius: 16px;
+	padding: 12px 18px;
+	background: var(--accent);
+	color: #fff;
+	font: inherit;
+	font-weight: 700;
+	cursor: pointer;
+}
+
+.table-wrap {
+	overflow-x: auto;
+}
+
+.table {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+.table th,
+.table td {
+	padding: 12px 10px;
+	border-bottom: 1px solid rgba(22, 37, 31, 0.08);
+	text-align: left;
+	vertical-align: top;
+	font-size: 14px;
+}
+
+.table th {
+	color: var(--muted);
+	font-size: 13px;
+}
+
+.empty {
+	padding: 18px;
+	border-radius: 18px;
+	background: rgba(22, 37, 31, 0.04);
+	color: var(--muted);
+}
+
+@media (max-width: 860px) {
+	.hero {
+		flex-direction: column;
+	}
+}

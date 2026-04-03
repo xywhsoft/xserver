@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>WebSocket 点对点示例</title>
+	<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+	<div class="page">
+		<section class="hero">
+			<div>
+				<p class="eyebrow">xserver examples / ws</p>
+				<h1>WebSocket 点对点通信</h1>
+				<p class="desc">打开两个浏览器标签页即可互相发消息。每个连接都会拿到一个 `peer_id`，也可以在连接后设置自己的昵称。</p>
+			</div>
+			<div class="hero-side">
+				<div class="status" id="StatusText">状态：未连接</div>
+				<div class="status alt" id="SelfText">当前 Peer：-</div>
+			</div>
+		</section>
+
+		<section class="grid">
+			<div class="panel">
+				<h2>连接配置</h2>
+				<label class="label" for="NameInput">昵称</label>
+				<input id="NameInput" class="input" type="text" placeholder="例如：浏览器A">
+				<label class="label" for="UrlInput">WebSocket URL</label>
+				<input id="UrlInput" class="input" type="text" value="ws://127.0.0.1:18181/">
+				<label class="label" for="ProtocolInput">子协议</label>
+				<input id="ProtocolInput" class="input" type="text" value="xs-demo-p2p">
+				<div class="toolbar">
+					<button class="btn" id="ConnectBtn" type="button">连接</button>
+					<button class="btn alt" id="RenameBtn" type="button">更新昵称</button>
+					<button class="btn warn" id="CloseBtn" type="button">断开</button>
+				</div>
+			</div>
+
+			<div class="panel">
+				<h2>在线 Peer</h2>
+				<div class="peer-list" id="PeerList"></div>
+			</div>
+		</section>
+
+		<section class="panel">
+			<h2>发送消息</h2>
+			<label class="label" for="TargetInput">目标 peer_id</label>
+			<input id="TargetInput" class="input" type="text" placeholder="点击右侧在线列表可自动填充">
+			<label class="label" for="MessageInput">消息内容</label>
+			<textarea id="MessageInput" class="input textarea" placeholder="输入要发送的文本"></textarea>
+			<div class="toolbar">
+				<button class="btn" id="SendBtn" type="button">发送点对点消息</button>
+				<button class="btn ghost" id="ClearBtn" type="button">清空日志</button>
+			</div>
+		</section>
+
+		<section class="panel">
+			<h2>消息日志</h2>
+			<pre class="log" id="LogText">ready
+</pre>
+		</section>
+	</div>
+
+	<script src="/js/app.js"></script>
+</body>
+</html>

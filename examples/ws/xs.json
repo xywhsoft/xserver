@@ -1,0 +1,52 @@
+{
+	"services": [
+		{
+			"enabled": true,
+			"class": "http",
+			"name": "examples ws http server",
+			"desc": "serve websocket demo page",
+			"backlog": 128,
+			"recv_limit": 1048576,
+			"path_limit": 200,
+			"header_limit": 32,
+			"body_limit": 262144,
+			"ip": "0.0.0.0",
+			"port": 18180,
+			"tls": false,
+			"port_tls": 18480,
+			"host_default": {
+				"enabled": true,
+				"name": "ws http host",
+				"desc": "serve ws demo page",
+				"path": "wwwroot",
+				"debug": false,
+				"devlang": "c",
+				"devfile": "script/http_main.c"
+			},
+			"hosts": []
+		},
+		{
+			"enabled": true,
+			"class": "ws",
+			"name": "examples ws service",
+			"desc": "websocket p2p demo",
+			"backlog": 128,
+			"recv_limit": 1048576,
+			"ws_message_limit": 262144,
+			"idle_timeout": 300000,
+			"ws_protocol": "xs-demo-p2p",
+			"ip": "0.0.0.0",
+			"port": 18181,
+			"debug": false,
+			"host_default": {
+				"enabled": true,
+				"name": "ws protocol host",
+				"path": "wwwroot",
+				"debug": false,
+				"devlang": "c",
+				"devfile": "script/ws_main.c"
+			},
+			"hosts": []
+		}
+	]
+}

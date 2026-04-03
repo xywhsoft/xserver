@@ -1,0 +1,42 @@
+{
+	"services": [
+		{
+			"enabled": true,
+			"class": "http",
+			"name": "examples udp http server",
+			"desc": "serve udp chat dashboard",
+			"backlog": 128,
+			"recv_limit": 1048576,
+			"path_limit": 200,
+			"header_limit": 32,
+			"body_limit": 262144,
+			"ip": "0.0.0.0",
+			"port": 18480,
+			"tls": false,
+			"port_tls": 18880,
+			"host_default": {
+				"enabled": true,
+				"name": "udp http host",
+				"path": "wwwroot",
+				"debug": false,
+				"devlang": "c",
+				"devfile": "script/http_main.c"
+			},
+			"hosts": []
+		},
+		{
+			"enabled": true,
+			"class": "udp",
+			"name": "examples udp chat service",
+			"desc": "udp peer chat demo",
+			"backlog": 128,
+			"recv_limit": 1048576,
+			"ip": "0.0.0.0",
+			"port": 18493,
+			"debug": false,
+			"path": "script",
+			"devlang": "c",
+			"devfile": "script/udp_main.c"
+		}
+	]
+}

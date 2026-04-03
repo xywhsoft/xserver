@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Custom 计划任务示例</title>
+	<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+	<div class="page">
+		<section class="hero">
+			<div>
+				<p class="eyebrow">xserver examples / custom</p>
+				<h1>Custom 计划任务面板</h1>
+				<p class="desc">创建一次性任务，到达时间后由 `custom` 服务后台线程自动执行命令，并记录输出结果。</p>
+			</div>
+			<div class="hero-side">
+				<div class="meta">HTTP：`18580`</div>
+				<div class="meta">Custom：`18591`</div>
+			</div>
+		</section>
+
+		<section class="panel">
+			<h2>命令示例</h2>
+			<pre class="code">Windows：cmd /c echo custom task run >> data\temp\task.log
+Linux：sh -lc 'echo custom task run >> data/temp/task.log'</pre>
+		</section>
+
+		<section class="panel">
+			<h2>新增任务</h2>
+			<div class="form-grid">
+				<div>
+					<label class="label" for="NameInput">任务名称</label>
+					<input id="NameInput" class="input" type="text" placeholder="例如：一分钟后执行">
+				</div>
+				<div>
+					<label class="label" for="TimeInput">执行时间</label>
+					<input id="TimeInput" class="input" type="datetime-local">
+				</div>
+				<div class="full">
+					<label class="label" for="CommandInput">命令</label>
+					<input id="CommandInput" class="input" type="text" placeholder="输入要执行的命令">
+				</div>
+				<div class="full">
+					<label class="label" for="WorkdirInput">工作目录</label>
+					<input id="WorkdirInput" class="input" type="text" placeholder="可选">
+				</div>
+			</div>
+			<div class="toolbar">
+				<button class="btn" id="AddBtn" type="button">创建任务</button>
+			</div>
+		</section>
+
+		<section class="grid">
+			<div class="panel">
+				<div class="panel-head">
+					<h2>任务列表</h2>
+					<button class="btn" id="RefreshTaskBtn" type="button">刷新</button>
+				</div>
+				<div id="TaskList"></div>
+			</div>
+
+			<div class="panel">
+				<div class="panel-head">
+					<h2>执行记录</h2>
+					<button class="btn" id="RefreshRunBtn" type="button">刷新</button>
+				</div>
+				<div id="RunList"></div>
+			</div>
+		</section>
+	</div>
+
+	<script src="/js/app.js"></script>
+</body>
+</html>

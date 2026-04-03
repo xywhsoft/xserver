@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>UDP 聊天示例</title>
+	<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+	<div class="page">
+		<section class="hero">
+			<div>
+				<p class="eyebrow">xserver examples / udp</p>
+				<h1>UDP 点对点聊天看板</h1>
+				<p class="desc">聊天数据通过命令行工具发送，服务端按 `name -> target` 做简单路由，浏览器页面用于查看在线 peer 和聊天日志。</p>
+			</div>
+			<div class="hero-side">
+				<div class="meta">HTTP：`18480`</div>
+				<div class="meta">UDP：`18493`</div>
+			</div>
+		</section>
+
+		<section class="panel">
+			<h2>客户端命令示例</h2>
+			<pre class="code">python tools/udp_chat.py --host 127.0.0.1 --port 18493 --name alice</pre>
+		</section>
+
+		<section class="grid">
+			<div class="panel">
+				<div class="panel-head">
+					<h2>在线 Peer</h2>
+					<button class="btn" id="RefreshPeerBtn" type="button">刷新</button>
+				</div>
+				<div id="PeerList"></div>
+			</div>
+
+			<div class="panel">
+				<div class="panel-head">
+					<h2>聊天日志</h2>
+					<button class="btn" id="RefreshChatBtn" type="button">刷新</button>
+				</div>
+				<div id="ChatList"></div>
+			</div>
+		</section>
+	</div>
+
+	<script src="/js/app.js"></script>
+</body>
+</html>
