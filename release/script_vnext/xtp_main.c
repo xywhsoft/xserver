@@ -1,4 +1,4 @@
-#include <xs_vnext_full.h>
+#include <xsbase.h>
 #include <string.h>
 
 #ifndef XTP_MSG_RESPONSE

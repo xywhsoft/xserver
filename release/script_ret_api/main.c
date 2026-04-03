@@ -1,4 +1,4 @@
-#include <xs_vnext_full.h>
+#include <xsbase.h>
 #include <string.h>
 
 bool RequestProc(XS_ServerObject objServer, XS_HostObject objHost, XS_RequestObject objReq, XS_ResponseObject objResp)

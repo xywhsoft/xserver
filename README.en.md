@@ -4,7 +4,9 @@
 
 ## Overview
 
-**XServer** is a high-performance, multi-protocol server host framework written in C. It uses `xrt` as its infrastructure layer and provides dynamic script loading plus virtual host support for embedded systems, IoT gateways, and edge computing scenarios.
+**XServer** is a lightweight, production-stable multi-protocol network framework and script host written in C. It uses `xrt` as its infrastructure layer and provides dynamic script loading plus virtual host support for embedded systems, IoT gateways, edge nodes, game servers, and agent services.
+
+Its role is not to be a built-in management application. Its role is to provide a portable, reloadable, stable network foundation for application-layer projects.
 
 ## Key Features
 
@@ -189,29 +191,34 @@ void ServiceUnit(XS_ServerObject objServer, XS_HostObject objHost)
 | `EventDgramProc` | UDP datagram callback |
 | `EventXtpProc` | XTP message callback |
 
-## Debug Endpoints
+## Build Boundaries
 
-When `server.debug` or `host.debug` is `true`, HTTP hosts expose minimal debug endpoints:
+The current boundary is intentionally narrow:
 
-- `GET /__xs/status`
-- `GET /__xs/status_json`
-- `GET /__xs/health`
-- `GET /__xs/health_json`
-- `GET /__xs/reload`
-- `GET /__xs/reload_json`
-- `GET /__xs/reload_status`
-- `GET /__xs/reload_status_json`
-- `GET /__xs/check_config`
-- `GET /__xs/check_config_json`
-- `GET /__xs/reload?host=<host-name>&force=true`
+- production `xs` no longer ships builtin `__xs/*` routes and no longer reserves `__xs/*`
+- `Bus / reload / check_config` remain runtime APIs for C code, script code, or app-defined routes
+- `xsdbg` keeps a minimal builtin debug app for protocol inspection, error diagnosis, memory debugging, and reload/check diagnosis
 
-Host-level script hot reload is available through `xsReloadCurrentHost` and `xsReloadHostByName` in `script-c` hosts.
+Current builtin `xsdbg` endpoints:
 
-## Build Variant Surfaces
+- `__xs/status*`
+- `__xs/health*`
+- `__xs/reload*`
+- `__xs/check_config*`
+- `__xs/*_metrics*`
+- `__xs/*_clear`
 
-- `xs` keeps the core manage surface only: `status*`, `health*`, `reload*`, `reload_status*`, `check_config*`
-- `xsdbg` additionally enables `dashboard*`, `__xs/bus/*`, `http/ws/xtp/udp/custom *_metrics*`, and the related `*_clear / reload_clear / reload_reset / check_config_clear` helpers
-- Runtime counters such as `http_req_count`, `ws_open_count`, `xtp_conn_current`, `udp_recv_count`, `custom_conn_current`, and `bus_queue_count` are retained in `xsdbg`, not in production `xs`
+At the same time:
+
+- `__xs/dashboard*` is no longer builtin in any build variant
+- `__xs/bus/*` is no longer builtin in any build variant
+- if these paths exist, they belong to the application layer
+- because there is no builtin Bus HTTP manage surface anymore, `http_metrics / http_metrics_json` no longer expose `http_bus_*` debug fields in xsdbg
+- `status / health / http_metrics / http_metrics_json` also no longer expose builtin control-surface reject stats such as `api_disabled / reload_busy / check_config_failed / host_not_found / method`; they now stay focused on protocol and stability diagnostics
+- the builtin `status* / health*` Bus section is now reduced to a minimal runtime summary and no longer exposes namespace policies, limits, or governance lists
+- the legacy dashboard source has been removed from the mainline and archived in [dev/2026-04-03_xsdbg_dashboard_code_trim_backup](/D:/git/xserver/dev/2026-04-03_xsdbg_dashboard_code_trim_backup)
+
+Host-level script hot reload is still available through `xsReloadCurrentHost` and `xsReloadHostByName` in `script-c` hosts.
 
 ## Project Structure
 

@@ -1,13 +1,6 @@
 /* extracted http runtime surface */
 
-static inline bool XS_HttpIsManagePath(const char* sPath)
-{
-	if ( sPath == NULL ) {
-		return FALSE;
-	}
-
-	return strcmp(sPath, "/__xs") == 0 || strncmp(sPath, "/__xs/", 6) == 0;
-}
+static inline bool XS_HttpIsManagePath(const char* sPath);
 
 static inline uint64 XS_ProcessID(void)
 {
@@ -273,148 +266,7 @@ static inline const char* XS_HttpCanonicalRejectReason(const char* sReason)
 	if ( strcmp(sReason, "check config failed") == 0 || strcmp(sReason, "config file not set") == 0 ) {
 		return "check_config_failed";
 	}
-	if (
-		strcmp(sReason, "data limit exceeded") == 0 ||
-		strcmp(sReason, "queue limit exceeded") == 0 ||
-		strcmp(sReason, "namespace limit exceeded") == 0 ||
-		strcmp(sReason, "namespace data limit exceeded") == 0 ||
-		strcmp(sReason, "bus_limit") == 0
-	) {
-		return "bus_limit";
-	}
-	if ( strcmp(sReason, "bus_bad_request") == 0 || strcmp(sReason, "bus_not_found") == 0 || strcmp(sReason, "bus_failed") == 0 ) {
-		return sReason;
-	}
-
 	return sReason;
-}
-
-static inline void XS_HttpRecordPolicyReject(const char* sReason)
-{
-	if ( sReason == NULL || sReason[0] == '\0' ) {
-		return;
-	}
-	if ( strcmp(sReason, "api_disabled") == 0 ) {
-		XS_HttpMetricAdd(&g_iXsHttpApiDisabledRejectCount, 1);
-		g_tXsHttpLastApiDisabledRejectTime = xrtNow();
-		return;
-	}
-	if ( strcmp(sReason, "method_not_allowed") == 0 ) {
-		XS_HttpMetricAdd(&g_iXsHttpMethodRejectCount, 1);
-		g_tXsHttpLastMethodRejectTime = xrtNow();
-		return;
-	}
-	if ( strcmp(sReason, "host_not_found") == 0 ) {
-		XS_HttpMetricAdd(&g_iXsHttpHostNotFoundRejectCount, 1);
-		g_tXsHttpLastHostNotFoundRejectTime = xrtNow();
-		return;
-	}
-}
-
-static inline void XS_HttpRecordManageReject(const char* sReason)
-{
-	if ( sReason == NULL || sReason[0] == '\0' ) {
-		return;
-	}
-	if ( strcmp(sReason, "reload_busy") == 0 ) {
-		XS_HttpMetricAdd(&g_iXsHttpReloadBusyRejectCount, 1);
-		g_tXsHttpLastReloadBusyRejectTime = xrtNow();
-		return;
-	}
-	if ( strcmp(sReason, "reload_failed") == 0 ) {
-		XS_HttpMetricAdd(&g_iXsHttpReloadFailedRejectCount, 1);
-		g_tXsHttpLastReloadFailedRejectTime = xrtNow();
-		return;
-	}
-	if ( strcmp(sReason, "check_config_failed") == 0 ) {
-		XS_HttpMetricAdd(&g_iXsHttpCheckConfigFailedRejectCount, 1);
-		g_tXsHttpLastCheckConfigFailedRejectTime = xrtNow();
-		return;
-	}
-}
-
-static inline void XS_HttpRecordBusReject(const char* sReason)
-{
-	if ( sReason == NULL || sReason[0] == '\0' ) {
-		return;
-	}
-	if ( strcmp(sReason, "bus_bad_request") == 0 ) {
-		XS_HttpMetricAdd(&g_iXsHttpBusBadRequestRejectCount, 1);
-		g_tXsHttpLastBusBadRequestRejectTime = xrtNow();
-		return;
-	}
-	if ( strcmp(sReason, "bus_not_found") == 0 ) {
-		XS_HttpMetricAdd(&g_iXsHttpBusNotFoundRejectCount, 1);
-		g_tXsHttpLastBusNotFoundRejectTime = xrtNow();
-		return;
-	}
-	if ( strcmp(sReason, "bus_limit") == 0 ) {
-		XS_HttpMetricAdd(&g_iXsHttpBusLimitRejectCount, 1);
-		g_tXsHttpLastBusLimitRejectTime = xrtNow();
-		return;
-	}
-	if ( strcmp(sReason, "bus_failed") == 0 ) {
-		XS_HttpMetricAdd(&g_iXsHttpBusFailedRejectCount, 1);
-		g_tXsHttpLastBusFailedRejectTime = xrtNow();
-		return;
-	}
-}
-
-static inline int32 XS_HttpBusErrorStatusCode(int32 iBusCode)
-{
-	if ( XS_BusIsBadRequestError(iBusCode) ) {
-		return 400;
-	}
-	if ( XS_BusIsLimitError(iBusCode) ) {
-		return 409;
-	}
-
-	return 500;
-}
-
-static inline const char* XS_HttpBusErrorStatusText(int32 iBusCode)
-{
-	if ( XS_BusIsBadRequestError(iBusCode) ) {
-		return "Bad Request";
-	}
-	if ( XS_BusIsLimitError(iBusCode) ) {
-		return "Conflict";
-	}
-
-	return "Internal Server Error";
-}
-
-static inline bool XS_HttpRespondBusNamespaceBadRequest(xhttpdresponse* pResp, const char* sNamespace)
-{
-	const char* sError;
-	int32 iBusCode;
-	char sBody[256];
-
-	if ( pResp == NULL || sNamespace == NULL || sNamespace[0] == '\0' ) {
-		return FALSE;
-	}
-
-	sError = XS_BusNamespaceInvalidReason(sNamespace);
-	iBusCode = XS_BUS_ERR_NONE;
-	if ( sError ) {
-		iBusCode = XS_BUS_ERR_INVALID_NAMESPACE;
-	} else if ( XS_BusIsReservedNamespace(sNamespace) ) {
-		sError = "reserved namespace";
-		iBusCode = XS_BUS_ERR_RESERVED_NAMESPACE;
-	}
-	if ( sError == NULL || iBusCode == XS_BUS_ERR_NONE ) {
-		return FALSE;
-	}
-
-	snprintf(
-		sBody,
-		sizeof(sBody),
-		"{\"result\":false,\"message\":\"invalid namespace\",\"bus_code\":%d,\"bus_error\":\"%s\"}",
-		(int)iBusCode,
-		sError
-	);
-	xrtHttpdResponseSetStatus(pResp, 400, "Bad Request");
-	return xrtHttpdResponseSetBodyCopy(pResp, sBody, strlen(sBody), "application/json; charset=utf-8");
 }
 
 static inline bool XS_HttpParseInt64(const char* sText, int64* piValue)
@@ -732,9 +584,6 @@ static inline void XS_HttpRecordRejectEvent(int64 iStatusCode, const char* sReas
 
 	XS_HttpRecordRejectCommon(&g_iXsHttpRejectCount, &g_tXsHttpLastRejectTime, g_sXsHttpLastRejectReason, sizeof(g_sXsHttpLastRejectReason), g_sXsHttpLastRejectRemote, sizeof(g_sXsHttpLastRejectRemote), sCanonical, g_sXsHttpLastRemote);
 	g_iXsHttpLastRejectStatus = iStatusCode;
-	XS_HttpRecordPolicyReject(sCanonical);
-	XS_HttpRecordManageReject(sCanonical);
-	XS_HttpRecordBusReject(sCanonical);
 }
 
 static inline void XS_HttpRecordStopCleanup(int64 iClosed, int64 iRemain)
@@ -996,20 +845,6 @@ static inline const char* XS_HttpRejectReasonTextEx(const xhttpdrequest* pReq, c
 	sPath = (pReq && pReq->sPath) ? pReq->sPath : NULL;
 	iStatusCode = pResp->iStatusCode;
 	if ( sPath ) {
-		if ( strcmp(sPath, "/__xs/bus") == 0 || strncmp(sPath, "/__xs/bus/", 10) == 0 ) {
-			if ( iStatusCode == 400u ) {
-				return "bus_bad_request";
-			}
-			if ( iStatusCode == 404u ) {
-				return "bus_not_found";
-			}
-			if ( iStatusCode == 409u ) {
-				return "bus_limit";
-			}
-			if ( iStatusCode >= 500u ) {
-				return "bus_failed";
-			}
-		}
 		if (
 			(strcmp(sPath, "/__xs/reload_config") == 0 || strcmp(sPath, "/__xs/reload_config_json") == 0) &&
 			iStatusCode == 409u
@@ -1928,47 +1763,6 @@ static inline void XS_HttpClearMetrics(void)
 	if ( iValue != 0 ) {
 		XS_HttpMetricAdd(&g_iXsHttpPathLimitRejectCount, -iValue);
 	}
-	iValue = XS_HttpMetricGet(&g_iXsHttpApiDisabledRejectCount);
-	if ( iValue != 0 ) {
-		XS_HttpMetricAdd(&g_iXsHttpApiDisabledRejectCount, -iValue);
-	}
-	iValue = XS_HttpMetricGet(&g_iXsHttpMethodRejectCount);
-	if ( iValue != 0 ) {
-		XS_HttpMetricAdd(&g_iXsHttpMethodRejectCount, -iValue);
-	}
-	iValue = XS_HttpMetricGet(&g_iXsHttpHostNotFoundRejectCount);
-	if ( iValue != 0 ) {
-		XS_HttpMetricAdd(&g_iXsHttpHostNotFoundRejectCount, -iValue);
-	}
-	iValue = XS_HttpMetricGet(&g_iXsHttpReloadBusyRejectCount);
-	if ( iValue != 0 ) {
-		XS_HttpMetricAdd(&g_iXsHttpReloadBusyRejectCount, -iValue);
-	}
-	iValue = XS_HttpMetricGet(&g_iXsHttpReloadFailedRejectCount);
-	if ( iValue != 0 ) {
-		XS_HttpMetricAdd(&g_iXsHttpReloadFailedRejectCount, -iValue);
-	}
-	iValue = XS_HttpMetricGet(&g_iXsHttpCheckConfigFailedRejectCount);
-	if ( iValue != 0 ) {
-		XS_HttpMetricAdd(&g_iXsHttpCheckConfigFailedRejectCount, -iValue);
-	}
-	iValue = XS_HttpMetricGet(&g_iXsHttpBusBadRequestRejectCount);
-	if ( iValue != 0 ) {
-		XS_HttpMetricAdd(&g_iXsHttpBusBadRequestRejectCount, -iValue);
-	}
-	iValue = XS_HttpMetricGet(&g_iXsHttpBusNotFoundRejectCount);
-	if ( iValue != 0 ) {
-		XS_HttpMetricAdd(&g_iXsHttpBusNotFoundRejectCount, -iValue);
-	}
-	iValue = XS_HttpMetricGet(&g_iXsHttpBusLimitRejectCount);
-	if ( iValue != 0 ) {
-		XS_HttpMetricAdd(&g_iXsHttpBusLimitRejectCount, -iValue);
-	}
-	iValue = XS_HttpMetricGet(&g_iXsHttpBusFailedRejectCount);
-	if ( iValue != 0 ) {
-		XS_HttpMetricAdd(&g_iXsHttpBusFailedRejectCount, -iValue);
-	}
-
 	iValue = XS_HttpMetricGet(&g_iXsHttpMethodGetCount);
 	if ( iValue != 0 ) {
 		XS_HttpMetricAdd(&g_iXsHttpMethodGetCount, -iValue);
@@ -2021,16 +1815,6 @@ static inline void XS_HttpClearMetrics(void)
 	g_tXsHttpLastHeaderLimitRejectTime = 0;
 	g_tXsHttpLastBodyLimitRejectTime = 0;
 	g_tXsHttpLastPathLimitRejectTime = 0;
-	g_tXsHttpLastApiDisabledRejectTime = 0;
-	g_tXsHttpLastMethodRejectTime = 0;
-	g_tXsHttpLastHostNotFoundRejectTime = 0;
-	g_tXsHttpLastReloadBusyRejectTime = 0;
-	g_tXsHttpLastReloadFailedRejectTime = 0;
-	g_tXsHttpLastCheckConfigFailedRejectTime = 0;
-	g_tXsHttpLastBusBadRequestRejectTime = 0;
-	g_tXsHttpLastBusNotFoundRejectTime = 0;
-	g_tXsHttpLastBusLimitRejectTime = 0;
-	g_tXsHttpLastBusFailedRejectTime = 0;
 	g_iXsHttpLastStopCleanupClosed = 0;
 	g_iXsHttpLastStopCleanupRemain = 0;
 	g_sXsHttpLastPath[0] = '\0';
@@ -2662,96 +2446,6 @@ static inline char* XS_HttpLastPathLimitRejectTimeText(void)
 	return xrtTimeToStr(g_tXsHttpLastPathLimitRejectTime, XRT_TIME_FORMAT_DATETIME);
 }
 
-static inline char* XS_HttpLastApiDisabledRejectTimeText(void)
-{
-	if ( g_tXsHttpLastApiDisabledRejectTime <= 0 ) {
-		return NULL;
-	}
-
-	return xrtTimeToStr(g_tXsHttpLastApiDisabledRejectTime, XRT_TIME_FORMAT_DATETIME);
-}
-
-static inline char* XS_HttpLastMethodRejectTimeText(void)
-{
-	if ( g_tXsHttpLastMethodRejectTime <= 0 ) {
-		return NULL;
-	}
-
-	return xrtTimeToStr(g_tXsHttpLastMethodRejectTime, XRT_TIME_FORMAT_DATETIME);
-}
-
-static inline char* XS_HttpLastHostNotFoundRejectTimeText(void)
-{
-	if ( g_tXsHttpLastHostNotFoundRejectTime <= 0 ) {
-		return NULL;
-	}
-
-	return xrtTimeToStr(g_tXsHttpLastHostNotFoundRejectTime, XRT_TIME_FORMAT_DATETIME);
-}
-
-static inline char* XS_HttpLastReloadBusyRejectTimeText(void)
-{
-	if ( g_tXsHttpLastReloadBusyRejectTime <= 0 ) {
-		return NULL;
-	}
-
-	return xrtTimeToStr(g_tXsHttpLastReloadBusyRejectTime, XRT_TIME_FORMAT_DATETIME);
-}
-
-static inline char* XS_HttpLastReloadFailedRejectTimeText(void)
-{
-	if ( g_tXsHttpLastReloadFailedRejectTime <= 0 ) {
-		return NULL;
-	}
-
-	return xrtTimeToStr(g_tXsHttpLastReloadFailedRejectTime, XRT_TIME_FORMAT_DATETIME);
-}
-
-static inline char* XS_HttpLastCheckConfigFailedRejectTimeText(void)
-{
-	if ( g_tXsHttpLastCheckConfigFailedRejectTime <= 0 ) {
-		return NULL;
-	}
-
-	return xrtTimeToStr(g_tXsHttpLastCheckConfigFailedRejectTime, XRT_TIME_FORMAT_DATETIME);
-}
-
-static inline char* XS_HttpLastBusBadRequestRejectTimeText(void)
-{
-	if ( g_tXsHttpLastBusBadRequestRejectTime <= 0 ) {
-		return NULL;
-	}
-
-	return xrtTimeToStr(g_tXsHttpLastBusBadRequestRejectTime, XRT_TIME_FORMAT_DATETIME);
-}
-
-static inline char* XS_HttpLastBusNotFoundRejectTimeText(void)
-{
-	if ( g_tXsHttpLastBusNotFoundRejectTime <= 0 ) {
-		return NULL;
-	}
-
-	return xrtTimeToStr(g_tXsHttpLastBusNotFoundRejectTime, XRT_TIME_FORMAT_DATETIME);
-}
-
-static inline char* XS_HttpLastBusLimitRejectTimeText(void)
-{
-	if ( g_tXsHttpLastBusLimitRejectTime <= 0 ) {
-		return NULL;
-	}
-
-	return xrtTimeToStr(g_tXsHttpLastBusLimitRejectTime, XRT_TIME_FORMAT_DATETIME);
-}
-
-static inline char* XS_HttpLastBusFailedRejectTimeText(void)
-{
-	if ( g_tXsHttpLastBusFailedRejectTime <= 0 ) {
-		return NULL;
-	}
-
-	return xrtTimeToStr(g_tXsHttpLastBusFailedRejectTime, XRT_TIME_FORMAT_DATETIME);
-}
-
 static inline const char* XS_XtpLastMsgTypeName(void)
 {
 	switch ( XS_HttpMetricGet(&g_iXsXtpLastMsgType) ) {
@@ -3213,96 +2907,6 @@ static inline int64 XS_HttpLastPathLimitRejectAgeMS(void)
 	return (int64)(xrtNow() - g_tXsHttpLastPathLimitRejectTime) * 1000;
 }
 
-static inline int64 XS_HttpLastApiDisabledRejectAgeMS(void)
-{
-	if ( g_tXsHttpLastApiDisabledRejectTime <= 0 ) {
-		return -1;
-	}
-
-	return (int64)(xrtNow() - g_tXsHttpLastApiDisabledRejectTime) * 1000;
-}
-
-static inline int64 XS_HttpLastMethodRejectAgeMS(void)
-{
-	if ( g_tXsHttpLastMethodRejectTime <= 0 ) {
-		return -1;
-	}
-
-	return (int64)(xrtNow() - g_tXsHttpLastMethodRejectTime) * 1000;
-}
-
-static inline int64 XS_HttpLastHostNotFoundRejectAgeMS(void)
-{
-	if ( g_tXsHttpLastHostNotFoundRejectTime <= 0 ) {
-		return -1;
-	}
-
-	return (int64)(xrtNow() - g_tXsHttpLastHostNotFoundRejectTime) * 1000;
-}
-
-static inline int64 XS_HttpLastReloadBusyRejectAgeMS(void)
-{
-	if ( g_tXsHttpLastReloadBusyRejectTime <= 0 ) {
-		return -1;
-	}
-
-	return (int64)(xrtNow() - g_tXsHttpLastReloadBusyRejectTime) * 1000;
-}
-
-static inline int64 XS_HttpLastReloadFailedRejectAgeMS(void)
-{
-	if ( g_tXsHttpLastReloadFailedRejectTime <= 0 ) {
-		return -1;
-	}
-
-	return (int64)(xrtNow() - g_tXsHttpLastReloadFailedRejectTime) * 1000;
-}
-
-static inline int64 XS_HttpLastCheckConfigFailedRejectAgeMS(void)
-{
-	if ( g_tXsHttpLastCheckConfigFailedRejectTime <= 0 ) {
-		return -1;
-	}
-
-	return (int64)(xrtNow() - g_tXsHttpLastCheckConfigFailedRejectTime) * 1000;
-}
-
-static inline int64 XS_HttpLastBusBadRequestRejectAgeMS(void)
-{
-	if ( g_tXsHttpLastBusBadRequestRejectTime <= 0 ) {
-		return -1;
-	}
-
-	return (int64)(xrtNow() - g_tXsHttpLastBusBadRequestRejectTime) * 1000;
-}
-
-static inline int64 XS_HttpLastBusNotFoundRejectAgeMS(void)
-{
-	if ( g_tXsHttpLastBusNotFoundRejectTime <= 0 ) {
-		return -1;
-	}
-
-	return (int64)(xrtNow() - g_tXsHttpLastBusNotFoundRejectTime) * 1000;
-}
-
-static inline int64 XS_HttpLastBusLimitRejectAgeMS(void)
-{
-	if ( g_tXsHttpLastBusLimitRejectTime <= 0 ) {
-		return -1;
-	}
-
-	return (int64)(xrtNow() - g_tXsHttpLastBusLimitRejectTime) * 1000;
-}
-
-static inline int64 XS_HttpLastBusFailedRejectAgeMS(void)
-{
-	if ( g_tXsHttpLastBusFailedRejectTime <= 0 ) {
-		return -1;
-	}
-
-	return (int64)(xrtNow() - g_tXsHttpLastBusFailedRejectTime) * 1000;
-}
-
 static inline int64 XS_HttpLastAppRequestAgeMS(void)
 {
 	if ( g_tXsHttpLastAppRequestTime <= 0 ) {
@@ -3404,111 +3008,9 @@ static inline void XS_HttpAppendRequestLimitMetrics(xvalue objValue)
 	}
 }
 
-static inline void XS_HttpAppendPolicyRejectMetrics(xvalue objValue)
-{
-	char* sApiDisabledTime;
-	char* sMethodTime;
-	char* sHostNotFoundTime;
-
-	if ( objValue == NULL ) {
-		return;
-	}
-
-	sApiDisabledTime = XS_HttpLastApiDisabledRejectTimeText();
-	sMethodTime = XS_HttpLastMethodRejectTimeText();
-	sHostNotFoundTime = XS_HttpLastHostNotFoundRejectTimeText();
-	xvoTableSetInt(objValue, "http_api_disabled_reject_count", sizeof("http_api_disabled_reject_count") - 1, XS_HttpMetricGet(&g_iXsHttpApiDisabledRejectCount));
-	xvoTableSetText(objValue, "http_last_api_disabled_reject_time", sizeof("http_last_api_disabled_reject_time") - 1, (ptr)(sApiDisabledTime ? sApiDisabledTime : ""), 0, FALSE);
-	xvoTableSetInt(objValue, "http_last_api_disabled_reject_age_ms", sizeof("http_last_api_disabled_reject_age_ms") - 1, XS_HttpLastApiDisabledRejectAgeMS());
-	xvoTableSetInt(objValue, "http_method_reject_count", sizeof("http_method_reject_count") - 1, XS_HttpMetricGet(&g_iXsHttpMethodRejectCount));
-	xvoTableSetText(objValue, "http_last_method_reject_time", sizeof("http_last_method_reject_time") - 1, (ptr)(sMethodTime ? sMethodTime : ""), 0, FALSE);
-	xvoTableSetInt(objValue, "http_last_method_reject_age_ms", sizeof("http_last_method_reject_age_ms") - 1, XS_HttpLastMethodRejectAgeMS());
-	xvoTableSetInt(objValue, "http_host_not_found_reject_count", sizeof("http_host_not_found_reject_count") - 1, XS_HttpMetricGet(&g_iXsHttpHostNotFoundRejectCount));
-	xvoTableSetText(objValue, "http_last_host_not_found_reject_time", sizeof("http_last_host_not_found_reject_time") - 1, (ptr)(sHostNotFoundTime ? sHostNotFoundTime : ""), 0, FALSE);
-	xvoTableSetInt(objValue, "http_last_host_not_found_reject_age_ms", sizeof("http_last_host_not_found_reject_age_ms") - 1, XS_HttpLastHostNotFoundRejectAgeMS());
-	if ( sApiDisabledTime ) {
-		xrtFree(sApiDisabledTime);
-	}
-	if ( sMethodTime ) {
-		xrtFree(sMethodTime);
-	}
-	if ( sHostNotFoundTime ) {
-		xrtFree(sHostNotFoundTime);
-	}
-}
-
-static inline void XS_HttpAppendManageRejectMetrics(xvalue objValue)
-{
-	char* sReloadBusyTime;
-	char* sReloadFailedTime;
-	char* sCheckConfigFailedTime;
-
-	if ( objValue == NULL ) {
-		return;
-	}
-
-	sReloadBusyTime = XS_HttpLastReloadBusyRejectTimeText();
-	sReloadFailedTime = XS_HttpLastReloadFailedRejectTimeText();
-	sCheckConfigFailedTime = XS_HttpLastCheckConfigFailedRejectTimeText();
-	xvoTableSetInt(objValue, "http_reload_busy_reject_count", sizeof("http_reload_busy_reject_count") - 1, XS_HttpMetricGet(&g_iXsHttpReloadBusyRejectCount));
-	xvoTableSetText(objValue, "http_last_reload_busy_reject_time", sizeof("http_last_reload_busy_reject_time") - 1, (ptr)(sReloadBusyTime ? sReloadBusyTime : ""), 0, FALSE);
-	xvoTableSetInt(objValue, "http_last_reload_busy_reject_age_ms", sizeof("http_last_reload_busy_reject_age_ms") - 1, XS_HttpLastReloadBusyRejectAgeMS());
-	xvoTableSetInt(objValue, "http_reload_failed_reject_count", sizeof("http_reload_failed_reject_count") - 1, XS_HttpMetricGet(&g_iXsHttpReloadFailedRejectCount));
-	xvoTableSetText(objValue, "http_last_reload_failed_reject_time", sizeof("http_last_reload_failed_reject_time") - 1, (ptr)(sReloadFailedTime ? sReloadFailedTime : ""), 0, FALSE);
-	xvoTableSetInt(objValue, "http_last_reload_failed_reject_age_ms", sizeof("http_last_reload_failed_reject_age_ms") - 1, XS_HttpLastReloadFailedRejectAgeMS());
-	xvoTableSetInt(objValue, "http_check_config_failed_reject_count", sizeof("http_check_config_failed_reject_count") - 1, XS_HttpMetricGet(&g_iXsHttpCheckConfigFailedRejectCount));
-	xvoTableSetText(objValue, "http_last_check_config_failed_reject_time", sizeof("http_last_check_config_failed_reject_time") - 1, (ptr)(sCheckConfigFailedTime ? sCheckConfigFailedTime : ""), 0, FALSE);
-	xvoTableSetInt(objValue, "http_last_check_config_failed_reject_age_ms", sizeof("http_last_check_config_failed_reject_age_ms") - 1, XS_HttpLastCheckConfigFailedRejectAgeMS());
-	if ( sReloadBusyTime ) {
-		xrtFree(sReloadBusyTime);
-	}
-	if ( sReloadFailedTime ) {
-		xrtFree(sReloadFailedTime);
-	}
-	if ( sCheckConfigFailedTime ) {
-		xrtFree(sCheckConfigFailedTime);
-	}
-}
-
 static inline void XS_HttpAppendBusRejectMetrics(xvalue objValue)
 {
-	char* sBadRequestTime;
-	char* sNotFoundTime;
-	char* sLimitTime;
-	char* sFailedTime;
-
-	if ( objValue == NULL ) {
-		return;
-	}
-
-	sBadRequestTime = XS_HttpLastBusBadRequestRejectTimeText();
-	sNotFoundTime = XS_HttpLastBusNotFoundRejectTimeText();
-	sLimitTime = XS_HttpLastBusLimitRejectTimeText();
-	sFailedTime = XS_HttpLastBusFailedRejectTimeText();
-	xvoTableSetInt(objValue, "http_bus_bad_request_reject_count", sizeof("http_bus_bad_request_reject_count") - 1, XS_HttpMetricGet(&g_iXsHttpBusBadRequestRejectCount));
-	xvoTableSetText(objValue, "http_last_bus_bad_request_reject_time", sizeof("http_last_bus_bad_request_reject_time") - 1, (ptr)(sBadRequestTime ? sBadRequestTime : ""), 0, FALSE);
-	xvoTableSetInt(objValue, "http_last_bus_bad_request_reject_age_ms", sizeof("http_last_bus_bad_request_reject_age_ms") - 1, XS_HttpLastBusBadRequestRejectAgeMS());
-	xvoTableSetInt(objValue, "http_bus_not_found_reject_count", sizeof("http_bus_not_found_reject_count") - 1, XS_HttpMetricGet(&g_iXsHttpBusNotFoundRejectCount));
-	xvoTableSetText(objValue, "http_last_bus_not_found_reject_time", sizeof("http_last_bus_not_found_reject_time") - 1, (ptr)(sNotFoundTime ? sNotFoundTime : ""), 0, FALSE);
-	xvoTableSetInt(objValue, "http_last_bus_not_found_reject_age_ms", sizeof("http_last_bus_not_found_reject_age_ms") - 1, XS_HttpLastBusNotFoundRejectAgeMS());
-	xvoTableSetInt(objValue, "http_bus_limit_reject_count", sizeof("http_bus_limit_reject_count") - 1, XS_HttpMetricGet(&g_iXsHttpBusLimitRejectCount));
-	xvoTableSetText(objValue, "http_last_bus_limit_reject_time", sizeof("http_last_bus_limit_reject_time") - 1, (ptr)(sLimitTime ? sLimitTime : ""), 0, FALSE);
-	xvoTableSetInt(objValue, "http_last_bus_limit_reject_age_ms", sizeof("http_last_bus_limit_reject_age_ms") - 1, XS_HttpLastBusLimitRejectAgeMS());
-	xvoTableSetInt(objValue, "http_bus_failed_reject_count", sizeof("http_bus_failed_reject_count") - 1, XS_HttpMetricGet(&g_iXsHttpBusFailedRejectCount));
-	xvoTableSetText(objValue, "http_last_bus_failed_reject_time", sizeof("http_last_bus_failed_reject_time") - 1, (ptr)(sFailedTime ? sFailedTime : ""), 0, FALSE);
-	xvoTableSetInt(objValue, "http_last_bus_failed_reject_age_ms", sizeof("http_last_bus_failed_reject_age_ms") - 1, XS_HttpLastBusFailedRejectAgeMS());
-	if ( sBadRequestTime ) {
-		xrtFree(sBadRequestTime);
-	}
-	if ( sNotFoundTime ) {
-		xrtFree(sNotFoundTime);
-	}
-	if ( sLimitTime ) {
-		xrtFree(sLimitTime);
-	}
-	if ( sFailedTime ) {
-		xrtFree(sFailedTime);
-	}
+	(void)objValue;
 }
 
 static inline void XS_ConfigCheckStatusSnapshot(XS_CheckConfigStatusSnapshot* pStatus)

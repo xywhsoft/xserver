@@ -21,8 +21,8 @@
 这意味着：
 
 - `GET /__xs/status_json`
-- `GET /__xs/reload_json`
 - `GET /__xs/bus/status`
+- `GET /__xs/dashboard`
 
 在 production `xs` 下是否存在、返回什么，都由应用层决定，不再是 `xs` 内建 HTTP 契约。
 
@@ -44,9 +44,15 @@
 - `__xs/health*`
 - `__xs/reload*`
 - `__xs/check_config*`
-- `__xs/dashboard*`
 - `__xs/*_metrics*`
-- `__xs/bus/*`
+- `__xs/*_clear`
+
+同时：
+
+- `__xs/dashboard*` 已不再是内置调试页
+- `__xs/bus/*` 已不再是内置 HTTP 管理面
+- 除了上面列出的调试入口，其余 `__xs/*` 也不再由 xsdbg 预留
+- 如果这些路径存在，也应理解为应用层自己定义的路由
 
 这组入口的定位是：
 
@@ -70,7 +76,8 @@
 
 2. xsdbg 的最小调试面
 - 上述 `__xs/*` 调试入口继续可用
-- 现有稳定 smoke 会继续锁定它们的最小方法语义、`Content-Type` 和安全头
+- `dashboard / __xs/bus/*` 不再属于 xsdbg 内建调试应用
+- 现有稳定 smoke 会继续锁定这批内建调试入口的最小方法语义、`Content-Type` 和安全头
 
 如果未来需要新增任何内建 `__xs/*` 入口：
 

@@ -3336,7 +3336,7 @@ static inline bool XS_XtpStartServer(XS_ServerConfig* objServer)
 		xrtNetListenerStop(objHandle->pListener);
 		return FALSE;
 	}
-	if ( XS_RuntimeGovernEnabled() ) {
+	if ( objServer->IdleTimeout > 0u ) {
 		objHandle->hIdleThread = xrtThreadCreate(XS_XtpIdleThread, objHandle, 0);
 		if ( objHandle->hIdleThread == NULL ) {
 			XS_ReportError("xtp start failed: create idle thread error");

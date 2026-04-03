@@ -422,7 +422,7 @@ static inline bool XS_WsStartServer(XS_ServerConfig* objServer)
 		return FALSE;
 	}
 	objHandle->bStopThread = FALSE;
-	if ( XS_RuntimeGovernEnabled() ) {
+	if ( objServer->IdleTimeout > 0u ) {
 		objHandle->hIdleThread = xrtThreadCreate(XS_WsIdleThread, objHandle, 0);
 		if ( objHandle->hIdleThread == NULL ) {
 			xrtWsServerStop(pServer);

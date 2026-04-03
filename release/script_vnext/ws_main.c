@@ -1,4 +1,4 @@
-#include <xs_vnext_full.h>
+#include <xsbase.h>
 #include <string.h>
 
 void ServiceInit(XS_ServerObject objServer, XS_HostObject objHost)

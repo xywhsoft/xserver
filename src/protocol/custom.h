@@ -505,7 +505,7 @@ static inline bool XS_CustomStartServer(XS_ServerConfig* objServer)
 		xrtNetListenerStop(objHandle->pListener);
 		return FALSE;
 	}
-	if ( XS_RuntimeGovernEnabled() ) {
+	if ( objServer->IdleTimeout > 0u ) {
 		objHandle->hIdleThread = xrtThreadCreate(XS_CustomIdleThread, objHandle, 0);
 		if ( objHandle->hIdleThread == NULL ) {
 			XS_ReportError("custom start failed: create idle thread error");

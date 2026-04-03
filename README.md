@@ -4,7 +4,9 @@
 
 ## 概述
 
-**XServer** 是一个高性能、多协议网络服务器宿主框架，采用 C 语言编写。它以 `xrt` 为基础设施，提供动态脚本加载能力和多虚拟主机支持，适合嵌入式系统、物联网网关和边缘计算场景。
+**XServer** 是一个面向 production 稳定性的轻量级、多协议网络框架与脚本宿主，采用 C 语言编写。它以 `xrt` 为基础设施，提供动态脚本加载能力和多虚拟主机支持，适合嵌入式系统、物联网网关、边缘计算节点、游戏服务端和 Agent 服务等上层应用。
+
+它的定位不是内置管理平台，而是给应用层提供可移植、可热加载、可稳定运行的网络底座。
 
 ## 核心特性
 
@@ -224,7 +226,7 @@ void ServiceUnit(XS_ServerObject objServer, XS_HostObject objHost)
 - `xsDataFindFirst`
 - `xsBusLastErrorCode / xsBusLastError`
 
-脚本侧 `xsDataRetain / xsDataRelease` 现在也会受 `readonly_namespaces / disabled_namespaces` 约束；命中策略时可通过 `xsBusLastErrorCode / xsBusLastError` 读取失败原因。
+脚本侧如果调用 `xsData* / xsMsg*` 失败，可通过 `xsBusLastErrorCode / xsBusLastError` 读取运行时错误原因。
 - `xsMsgSendToServer / xsMsgSendToHost`
 - `xsMsgBroadcast`
 - `xsAppPath`
@@ -243,15 +245,15 @@ void ServiceUnit(XS_ServerObject objServer, XS_HostObject objHost)
 - `POST /app/edit`
 - `POST /app/del`
 
+这些只是仓库自带 demo 应用路由，不属于 `xs` 内置能力。
+
 另外提供了独立的 WebSocket demo：
 
 - 配置文件：`release/xs_ws.json`
 - TLS 配置文件：`release/xs_wss.json`
 - 脚本入口：`release/script_vnext/ws_main.c`
 - `ws_protocol` 可用于要求客户端协商指定子协议；当前 demo 使用 `xs-demo`
-- `ws_message_limit` 可用于单独限制单条 WebSocket 消息的聚合大小；当前 demo 使用 `262144`
 - `idle_timeout` 现已支持 `ws/wss`，示例配置默认使用 `3000ms`
-- `conn_limit` 现已支持 `http/ws/wss/custom/tcp/xtp/xtps`，`0` 表示不限制；当活动连接数超过上限时，宿主会主动关闭后续超额连接
 - 未带正确子协议的客户端握手会被拒绝，带 `xs-demo` 的客户端可以正常连接
 - `wss` demo 使用 `release/tls/xtps_cert.pem` 和 `release/tls/xtps_key.pem`
 - `release/wwwroot/ws.html` 现已支持一键切换 `ws://127.0.0.1:8081/` 与 `wss://127.0.0.1:8444/`
@@ -319,44 +321,46 @@ WebSocket 脚本 API 额外提供：
 
 `xadmin` 已经是当前协作边界的实际参考：应用层自己定义路由、缓存观测、插件重载和业务调试接口，`xs` 只提供网络协议、脚本宿主和稳定性保护，不自带应用层控制面。
 
-当前这一轮又继续把 `protocol/http.h` 内部的运行时/治理 helper 拆到 `src/manage/http_runtime.h`；配合前一轮已经抽出的 `src/manage/http_manage.h`，`src/protocol/http.h` 现在主要保留协议入口、静态资源与请求回调 glue，用来把 `protocol` 目录继续收回到更接近旧版 `old/legacy` 的职责边界。最近这轮里，原来散落在 `protocol/http.h` 里的大段管理面 if-chain 也已经收成了单一的 `XS_HttpHandleManageRequest(...)` 入口，协议层只再做一次管理面转发，不再自己展开 `reload / status / health / check / bus / dashboard / metrics` 的分发细节。
+当前这一轮又继续把 `protocol/http.h` 内部的运行时辅助逻辑拆到 `src/manage/http_runtime.h`；配合前一轮已经抽出的 `src/manage/http_manage.h`，`src/protocol/http.h` 现在主要保留协议入口、静态资源与请求回调 glue，用来把 `protocol` 目录继续收回到更接近旧版 `old/legacy` 的职责边界。最近这轮里，原来散落在 `protocol/http.h` 里的大段管理面 if-chain 也已经收成了单一的 `XS_HttpHandleManageRequest(...)` 入口，协议层只再做一次调试面转发，不再自己展开 `reload / status / health / check / metrics` 这些细节。
 同一轮里，`protocol/ws.h` 和 `protocol/custom.h` 顶部那批连接跟踪、idle thread、reject/invalid/stop-cleanup 统计，也分别继续抽到了 `src/manage/ws_runtime.h` 和 `src/manage/custom_runtime.h`，让 `protocol` 目录进一步回到“协议回调本身”。
-这一轮又把 `protocol/xtp.h` 顶部那批连接跟踪、idle/stop-cleanup、reject/invalid/error remote 快照等运行时治理 helper 继续抽到了 `src/manage/xtp_runtime.h`；`XTP` 的消息结构、同步客户端和高级接口仍然保留在 `protocol/xtp.h`，避免影响你当前最看重的 `XTP` 高层能力。
+这一轮又把 `protocol/xtp.h` 顶部那批连接跟踪、idle/stop-cleanup、reject/invalid/error remote 快照等运行时辅助逻辑继续抽到了 `src/manage/xtp_runtime.h`；`XTP` 的消息结构、同步客户端和高级接口仍然保留在 `protocol/xtp.h`，避免影响你当前最看重的 `XTP` 高层能力。
 这轮又把 `main.c` 里那批运行时状态仓库与状态快照 API 继续拆到 `src/manage/runtime_state.h` 和 `src/manage/runtime_state_api.h`；`main.c` 本体已经明显回落到更接近“启动与调度主流程”的形态，后面继续 freeze `xs` 生产边界时，重心会更多落在 `src/manage`，而不是再回到 `protocol`。
 
-当前管理面已经按编译变体分层：
+当前内置调试面已经按编译变体分层：
 
 - `build.bat` 产出的 `xs` 不再内置固定管理面，`/__xs/*` 会像普通业务路径一样交给应用层 Host 处理
-- `build_debug.bat` 产出的 `xsdbg` 当前继续保留 `__xs/*` 内置调试应用，用于协议调试、错误排查、运行时观测和内存调试
+- `build_debug.bat` 产出的 `xsdbg` 当前继续保留最小 `__xs/*` 内置调试应用，用于协议调试、错误排查、运行时观测和内存调试
+- `__xs/dashboard*` 和 `__xs/bus/*` 已不再由任何编译变体内置；如果这些路径存在，属于应用层自定义路由
 - `Bus / reload / check_config` 这类能力保留在运行时 API，不再被视为 production `xs` 的固定 HTTP 管理入口
 
 当前字段口径也已经跟着分层收紧：
 
 - production `xs` 不再承诺任何固定的 `__xs/*` 返回字段
-- `xsdbg` 当前内置调试应用仍会返回 `status_json / health_json / dashboard_json / *_metrics_json`
-- 后续会继续把 xsdbg 里的应用层治理字段收窄，只保留对协议调试、错误排查、内存调试真正有用的字段
+- `xsdbg` 当前内置调试应用仍会返回 `status_json / health_json / reload_status_json / check_config_json / *_metrics_json`
+- 后续会继续把 xsdbg 里的调试字段收窄，只保留对协议调试、错误排查、内存调试真正有用的字段
 
 当前接口分组可以按下面理解：
 
 - production `xs`：无固定内置 HTTP 管理接口
-- `xsdbg`：当前保留 `__xs/status* / health* / reload* / check_config* / dashboard* / *_metrics* / __xs/bus/*`
-- 应用层：如果要做网页端控制重载、Bus 管理、调试页面或业务治理入口，应由应用层自己暴露 URI，而不是依赖 `xs` 预置路由
+- `xsdbg`：当前保留 `__xs/status* / health* / reload* / check_config* / *_metrics* / *_clear`
+- 应用层：如果要做网页端控制重载、Bus 操作、调试页面或业务控制入口，应由应用层自己暴露 URI，而不是依赖 `xs` 预置路由
 
 核心 reload / check 行为当前是：
 
-- `reload` 支持 Host 级脚本热重载，`reload_config` 支持最小配置热加载、按 `server` 定向重载，以及对 `http / tcp / udp / xtp / custom` 做 targeted soft reload；其中 `http` 已覆盖 `bind / backlog / recv_limit` 这类 listener 参数变化，并继续支持 default host 开关和 host 身份集合这类 host 拓扑变更，`xtp` 已覆盖 TLS listener 的差异化重建；`ws` 当前保留按 `server` 的定向整服务重建，不再承诺 listener 级 soft reload；对于“既有服务完全不变，只新增或删除服务”的场景，`reload_config` 也已经支持 `service add/remove only` 短路路径
+- `reload` 支持 Host 级脚本热重载，`reload_config` 支持最小配置热加载、按 `server` 定向重载，以及对 `http / ws / tcp / udp / xtp / custom` 做 targeted soft reload；其中 `http` 已覆盖 `bind / backlog / recv_limit` 这类 listener 参数变化，并继续支持 default host 开关和 host 身份集合这类 host 拓扑变更；`ws` 已覆盖 `bind / tls / ws_protocol / ws_message_limit / backlog` 这类 listener 参数变化；`udp` 已把 `recv_limit / backlog` 这类非 socket 关键参数改成对象级同步；`xtp` 已覆盖 TLS listener 的差异化重建；对于“既有服务完全不变，只新增或删除服务”的场景，`reload_config` 也已经支持 `service add/remove only` 短路路径
+- `reload` / `reload_config` 命中脚本加载失败时，会保留旧运行时并记录失败状态；当前稳定 smoke 已锁住“失败后 `/json` 业务路由继续可用、配置恢复后再次 reload 返回 unchanged”这条回滚语义
 - `reload` / `reload_json` / `reload_config` / `reload_config_json` 在命中同一目标的并发窗口时，会返回 `409 + reload busy`
 - `reload` / `reload_json` / `reload_config` / `reload_config_json` 的 `force` 参数已改成严格布尔校验，非法值直接返回 `400`
 - JSON 风格接口在 `disabled / not found / build failed / bad request / method not allowed` 这类直接错误分支里，仍保持 `application/json`
 
-`Bus` 当前继续保留为运行时共享数据与消息原语；如果应用层需要网页端控制、在线编辑或治理策略，应由应用层自己基于这些 API 实现，而不是依赖 `xs` 预设的 `__xs/bus/*` 路由。
+`Bus` 当前继续保留为运行时共享数据与消息原语；如果应用层需要网页端控制、在线编辑或业务控制，应由应用层自己基于 `xsData* / xsMsg* / reload* / check_config*` 这些 API 实现，而不是依赖 `xs` 预设的 HTTP 路由。
 
 如果要看当前冻结边界、production `xs` 的“无内置应用”原则，以及 `xsdbg` 当前内置调试应用的范围，直接看：
 
 - `docs/稳定API.md`
 - `docs/发布检查清单.md`
 
-当前网络服务配置还支持：
+当前仍保留的底层保护字段包括：
 
 - `backlog`
 - `recv_limit`
@@ -374,7 +378,9 @@ WebSocket 脚本 API 额外提供：
 - `static` Host 默认只允许 `GET / HEAD`，其他方法返回 `405`
 - `static` Host 默认拒绝点文件和反斜杠路径
 - `script-c` Host 未导出 `RequestProc` 时会直接按 `host.path` 走静态资源；导出后若返回 `false`，仅 `GET / HEAD` 会继续静态回退，路径规范化、防目录穿越和 MIME 推断统一由 `xs` 处理
-- HTTP 响应默认附带 `X-Content-Type-Options: nosniff`，`/__xs/*` 管理接口默认附带 `Cache-Control: no-store`
+- HTTP 响应默认附带 `X-Content-Type-Options: nosniff`，`xsdbg` 内置调试接口默认附带 `Cache-Control: no-store`
+
+这些字段的目标是防止异常输入或失稳场景，不作为 `xs` 后续重点扩张方向。
 
 ## 项目结构
 
@@ -418,7 +424,7 @@ xserver/
 5. **丰富的协议**: 一套框架支持 HTTP、WS、TCP、UDP、XTP 与自定义协议
 6. **开发友好**: 用 C 语言编写"脚本"，运行时编译
 
-## 当前管理面摘要
+## 当前编译变体摘要
 
 - production `xs`
 - 不再内置 `__xs/*` 管理应用
@@ -426,89 +432,61 @@ xserver/
 - `Bus / reload / check_config` 仍保留为运行时 API 能力
 
 - `xsdbg`
-- 暂时继续保留 `__xs/*` 内置调试应用
-- `__xs/status_json / __xs/health_json / __xs/dashboard_json / *_metrics_json` 继续可用
-- 后续会继续把应用层治理能力从 xsdbg 内置应用里剥离，收成更纯粹的调试工具
+- 暂时继续保留最小 `__xs/*` 内置调试应用
+- 当前保留 `__xs/status* / health* / reload* / check_config* / *_metrics* / *_clear`
+- `__xs/dashboard*` 与 `__xs/bus/*` 已回到应用层路由，不再属于内置调试应用
+- 因为已经没有内置 `Bus` HTTP 管理入口，`http_metrics / http_metrics_json` 里的 `http_bus_*` 调试字段也已从 xsdbg 清退
+- `status / health / http_metrics / http_metrics_json` 也不再暴露 `api_disabled / reload_busy / check_config_failed / host_not_found / method` 这类内置控制面拒绝统计，只保留协议与稳定性排错所需字段
+- `status* / health*` 里的 Bus 信息也已收窄为最小运行时摘要，不再暴露 namespace 策略、限额和治理名单
+- 历史 `dashboard` 源码已从主线清退，并备份到 [dev/2026-04-03_xsdbg_dashboard_code_trim_backup](/D:/git/xserver/dev/2026-04-03_xsdbg_dashboard_code_trim_backup)
+- 后续会继续把剩余字段和页面收窄成更纯粹的协议调试、错误排查和内存调试工具
 
 ## 未完成任务
 
-以下事项截至 `2026-04-02` 仍未最终完成，后续应优先按此清单继续：
+以下事项截至 `2026-04-03` 仍未最终完成，后续应优先按此清单继续：
 
-1. production `xs` 收口
+1. production `xs` 稳定性收口
 - 继续确认 production `xs` 没有内置应用，只保留协议栈、脚本宿主、Bus / reload 运行时 API 和稳定性保护
-- 继续补“异常连接清理、停服、reload、脚本编译失败、非法输入”这类稳定性回归
-- 逐步把与应用层治理、在线管理、复杂观测相关的能力从 production `xs` 主线移走
+- 当前稳定 smoke 已覆盖 `graceful stop`、HTTP `path_limit / body_limit` 非法输入，以及 `http / ws / xtp / custom` 的 `idle_timeout` 空闲连接清理回归
+- 仍可继续补更细的异常连接、半开连接和极端边界回归，但主线稳定性保护已经形成一轮可用基线
+- 继续梳理现有保护字段，区分哪些属于稳定性保护，哪些只做兼容不再继续扩张
 
-2. `xsdbg` 调试应用重整
+2. 配置热加载做最终差异化重建
+- 当前已支持全量 reload、按 `server` reload、`http / ws` host 原位 reload、`http / ws / tcp / udp / xtp / custom` targeted server soft reload、纯 service add/remove 的 `reload_config` 短路重建，以及失败回滚
+- 当前 `http` 已覆盖 `bind / backlog / recv_limit` 这类 listener 参数变化
+- 当前 `ws` 已覆盖 `bind / tls / ws_protocol / ws_message_limit / backlog` 这类 listener 参数变化
+- 当前 `udp` 已把 `recv_limit / backlog` 这类非 socket 关键参数改成对象级同步
+- 当前 `xtp` 已把 `tls / port_tls / tls_cert / tls_key` 这类 TLS listener 配置变化纳入 targeted server soft reload
+- 仍需继续补同一 service 内更细粒度的 listener / object 级最小替换，重点还是 listener 增删、更多对象级同步，以及更细的 listener 资源热切换
+
+3. XTP 高层 API 最终定版
+- 当前已完成 `xtp v2 / xtps`、同步客户端、one-shot call、request object，以及 `body / result / error / meta / summary / value / json`
+- 仍需继续补或决定最终保留哪些 API、是否补异步 pending request、是否补持久客户端对象体系
+
+4. `xsdbg` 调试应用规划与重整（较长周期）
 - `xsdbg` 可以保留内置调试应用，但只服务于协议调试、错误排查、内存调试、reload/check 诊断
-- 继续把 `dashboard / __xs/bus/* / *_metrics*` 里的应用层治理和在线编辑能力剥离出去
-- 最终形成“production `xs` 可直接交付，`xsdbg` 独立长周期演进”的节奏
-
-3. 配置热加载做最终差异化重建
-- 当前已支持：
-	- 全量 reload
-	- 按 `server` reload
-- `http / ws` 的 host 原位 reload
-- 对 `http / tcp / udp / xtp / custom` 做 targeted server soft reload
-- 既有服务配置不变时，纯 service add/remove 的 `reload_config` 短路重建
-- 失败回滚
-- 当前 `http` 已经把 `bind / backlog / recv_limit` 这类 listener 参数变化纳入 targeted server soft reload。
-- 当前 `ws` 按 `server` 的定向重载仍可用，但 listener 参数变化会回落到整服务重建，不再走 targeted server soft reload。
-- 当前 `udp` 已经把 `recv_limit / backlog` 这类非 socket 关键参数从整服务重建里剥掉，改成对象级同步。
-- 当前 `xtp` 已经把 `tls / port_tls / tls_cert / tls_key` 这类 TLS listener 配置变化纳入 targeted server soft reload，并补了真实 add/remove 回归。
-- 仍需继续补同一 service 内更细粒度的 listener / object 级别最小替换；简单 service 增删已经单独短路，剩余重点还是 listener 增删、更多对象级同步，以及更细的 listener 资源热切换。
-
-3. Bus 运行时能力收口
-- 当前已完成：
-	- 注册、查找、更新、retain/release、ttl、namespace、send/broadcast
-	- `xsData* / xsMsg*` 这组运行时 API
-	- `data_limit / queue_limit / namespace_limit / namespace_data_limit`
-	- `sweep / cleanup / sweep_interval_ms`
-	- `readonly_namespaces / disabled_namespaces / ttl_required_namespaces / tag_required_namespaces`
-- 仍需继续补：
-	- 继续把 `__xs/bus/*` 这类宿主管理面从主线定位里退出，只保留 Bus 运行时能力
-	- 继续评估现有 bus limit / policy 配置，区分哪些属于稳定性保护，哪些应降级或后续清退
-	- 与最终文档、压测、长稳结论做统一收口
-
-4. XTP 高层 API 最终定版
-- 当前已完成：
-	- `xtp v2 / xtps`
-	- 同步客户端
-	- one-shot call
-	- request object
-	- `body / result / error / meta / summary / value / json`
-- 仍需继续补或决定：
-	- 最终保留哪些 API
-	- 是否补异步 pending request
-	- 是否补持久客户端对象体系
+- `dashboard / __xs/bus/*` 已经从内置调试应用退出，历史 `dashboard` 源码也已从主线清退；后续继续把剩余页面和字段收窄成纯调试工具，而不是应用层控制面
+- 在 production `xs` 主线稳定之前，不再让 `xsdbg` 阻塞主线交付
 
 5. 旧业务脚本迁移继续推进
-- `release/script_vnext` 的 demo 主线已较完整。
-- 仓库内 `release/script` 这批 legacy demo 已迁到 vNext 宿主，并补了 `test_script_demo.bat/sh` smoke。
-- 剩余迁移工作主要落在真实业务项目或未入库旧脚本，不再是仓库内这份 demo。
+- `release/script_vnext` 的 demo 主线已较完整
+- 仓库内 `release/script` 这批 legacy demo 已迁到 vNext 宿主，并补了 `test_script_demo.bat/sh` smoke
+- 剩余迁移工作主要落在真实业务项目或未入库旧脚本，不再是仓库内这份 demo
 
-6. 长稳 / 压测 / 内存调试验证
-- 当前已完成：
-	- 压测基线：`tools/xs_pressure_baseline.ps1/.sh` 与 `test_pressure.bat/sh`
-	- 长稳窗口：`tools/xs_soak_check.ps1/.sh` 与 `test_soak.bat/sh`
-	- Windows `SIGBREAK` 停服链路已经接到 `main.c`，`CTRL_BREAK` 现在会进入正常停服与 `xrtUnit()`，不再直接把 `xsdbg` 截断在自动报告之前
-	- `tools/xs_memdebug_check.ps1/.sh` 与 `test_memdebug.bat/sh` 已补齐“临时目录运行 + 自动报告 + 不写脏仓库跟踪 mem report”的收口脚本
-	- `test_memdebug.*` 的 accepted threshold 已按当前脚本 workload 定版：HTTP `foreign_live_count<=900`、WS `<=840`、XTP `<=840`、Custom `<=840`，并已在 Windows 入口下完成实测
-
-7. 文档最终发布版整理
-- README 和设计稿已持续同步。
-- 但仍需最后做一轮统一整理，收成正式交付版本。
+6. 文档最终发布版整理
+- README、稳定边界、发布检查和运行补记已持续同步
+- 但仍需最后做一轮统一整理，收成正式交付版本
 
 ## 建议续做顺序
 
 建议下一个上下文优先按下面顺序继续：
 
-1. 协议层生产化治理
-2. XTP 接口定版
-3. 配置热加载差异化重建
-4. 旧业务脚本迁移
-5. 文档最终整理
-6. Bus 新治理规则最终回归归档
+1. production `xs` 稳定性回归收口
+2. 配置热加载差异化重建
+3. XTP 接口定版
+4. 文档最终整理
+5. `xsdbg` 调试应用规划与重整
+6. 旧业务脚本迁移
 
 ## 依赖项
 

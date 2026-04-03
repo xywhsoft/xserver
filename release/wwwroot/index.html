@@ -1,373 +1,220 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-	<title>XServer vNext Demo</title>
-	<link rel="stylesheet" type="text/css" href="/res/layui/css/layui.css">
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>xsdbg Diagnostic Portal</title>
 	<style>
+		:root {
+			--bg: #f3efe6;
+			--panel: rgba(255, 255, 255, 0.84);
+			--panel-border: rgba(30, 42, 44, 0.12);
+			--text: #1d2526;
+			--muted: #6a7475;
+			--accent: #0e6d66;
+			--accent-soft: #d7efe8;
+			--warn: #8d3b2f;
+			--shadow: 0 18px 48px rgba(23, 35, 37, 0.10);
+		}
+
+		* {
+			box-sizing: border-box;
+		}
+
 		body {
 			margin: 0;
-			padding: 24px;
+			font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
 			background:
-				radial-gradient(circle at top left, rgba(30, 159, 255, 0.10), transparent 280px),
-				radial-gradient(circle at top right, rgba(22, 155, 98, 0.10), transparent 260px),
-				#f5f8fc;
-			color: #1f2d3d;
+				radial-gradient(circle at top left, rgba(14, 109, 102, 0.14), transparent 34%),
+				radial-gradient(circle at right center, rgba(178, 122, 56, 0.12), transparent 28%),
+				linear-gradient(180deg, #f8f3ea 0%, var(--bg) 100%);
+			color: var(--text);
 		}
+
+		a {
+			color: inherit;
+			text-decoration: none;
+		}
+
 		.page {
-			max-width: 1280px;
+			max-width: 1240px;
 			margin: 0 auto;
+			padding: 28px 20px 48px;
 		}
+
 		.hero {
-			display: grid;
-			grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.9fr);
-			gap: 16px;
-			margin-bottom: 16px;
-		}
-		.hero-main,
-		.hero-side,
-		.section-card {
-			background: rgba(255, 255, 255, 0.92);
-			backdrop-filter: blur(6px);
-			border-radius: 20px;
-			box-shadow: 0 18px 42px rgba(31, 56, 88, 0.10);
-		}
-		.hero-main {
 			padding: 24px;
+			border: 1px solid var(--panel-border);
+			border-radius: 24px;
+			background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(243, 250, 248, 0.86));
+			box-shadow: var(--shadow);
 		}
-		.hero-side {
-			padding: 20px;
-		}
-		.kicker {
-			display: inline-flex;
-			align-items: center;
+
+		.hero-kicker {
+			display: inline-block;
 			padding: 6px 12px;
 			border-radius: 999px;
-			background: #e9f5ff;
-			color: #1677c8;
-			font-size: 13px;
+			background: var(--accent-soft);
+			color: var(--accent);
+			font-size: 12px;
 			font-weight: 700;
-			letter-spacing: 0.04em;
+			letter-spacing: 0.08em;
 			text-transform: uppercase;
 		}
-		.hero-title {
-			margin: 16px 0 10px;
-			font-size: 36px;
-			line-height: 1.15;
+
+		.hero h1 {
+			margin: 14px 0 10px;
+			font-size: 34px;
+			line-height: 1.1;
 		}
-		.hero-desc {
+
+		.hero p {
 			margin: 0;
-			font-size: 16px;
-			line-height: 1.75;
-			color: #4f6478;
+			max-width: 760px;
+			font-size: 15px;
+			line-height: 1.8;
+			color: var(--muted);
 		}
-		.hero-actions {
+
+		.hero-note {
+			margin-top: 18px;
+			padding: 14px 16px;
+			border-left: 4px solid var(--warn);
+			border-radius: 12px;
+			background: rgba(141, 59, 47, 0.08);
+			color: #5e2921;
+			font-size: 14px;
+			line-height: 1.7;
+		}
+
+		.toolbar {
 			display: flex;
 			flex-wrap: wrap;
-			gap: 10px;
+			gap: 12px;
 			margin-top: 18px;
 		}
-		.hero-actions a {
-			display: inline-flex;
-			align-items: center;
-			justify-content: center;
-			min-width: 120px;
+
+		.btn {
 			padding: 10px 16px;
+			border: 0;
 			border-radius: 12px;
-			text-decoration: none;
+			background: var(--accent);
+			color: #fff;
+			cursor: pointer;
+			font-size: 14px;
 			font-weight: 700;
 		}
-		.hero-actions a.primary {
-			background: #1e9fff;
-			color: #fff;
+
+		.btn.alt {
+			background: #d7e2e0;
+			color: var(--text);
 		}
-		.hero-actions a.secondary {
-			background: #edf3f8;
-			color: #29435c;
-		}
-		.status-title,
-		.section-title {
-			margin: 0 0 12px;
-			font-size: 20px;
-		}
-		.status-grid,
-		.cap-grid {
+
+		.grid {
 			display: grid;
+			grid-template-columns: repeat(12, minmax(0, 1fr));
+			gap: 18px;
+			margin-top: 20px;
+		}
+
+		.card {
+			grid-column: span 12;
+			padding: 18px;
+			border: 1px solid var(--panel-border);
+			border-radius: 20px;
+			background: var(--panel);
+			box-shadow: var(--shadow);
+			backdrop-filter: blur(12px);
+		}
+
+		.card h2 {
+			margin: 0 0 12px;
+			font-size: 18px;
+		}
+
+		.card p {
+			margin: 0 0 12px;
+			color: var(--muted);
+			font-size: 14px;
+			line-height: 1.7;
+		}
+
+		.link-grid {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
 			gap: 12px;
 		}
-		.status-grid {
-			grid-template-columns: repeat(2, minmax(0, 1fr));
-		}
-		.status-item,
-		.cap-item {
-			padding: 14px;
-			border-radius: 14px;
-			background: #f6f9fc;
-		}
-		.status-label,
-		.cap-label {
-			margin-bottom: 6px;
-			font-size: 12px;
-			color: #6c8298;
-			text-transform: uppercase;
-			letter-spacing: 0.05em;
-		}
-		.status-value {
-			font-size: 16px;
-			font-weight: 700;
-			word-break: break-all;
-		}
-		.section-grid {
-			display: grid;
-			grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
-			gap: 16px;
-			align-items: start;
-		}
-		.section-card {
-			padding: 20px;
-		}
-		.section-sub {
-			margin: -2px 0 16px;
-			color: #62788d;
-			line-height: 1.7;
-		}
-		.cap-grid {
-			grid-template-columns: repeat(2, minmax(0, 1fr));
-			margin-bottom: 16px;
-		}
-		.cap-value {
-			font-size: 18px;
-			font-weight: 700;
-		}
-		.demo-links {
-			display: grid;
-			gap: 10px;
-		}
-		.demo-link {
-			display: block;
+
+		.link-card {
 			padding: 14px 16px;
-			border-radius: 14px;
-			background: #f6f9fc;
-			text-decoration: none;
-			color: #1f2d3d;
-			transition: transform 0.18s ease, box-shadow 0.18s ease;
-		}
-		.demo-link:hover {
-			transform: translateY(-1px);
-			box-shadow: 0 10px 20px rgba(31, 56, 88, 0.08);
-		}
-		.demo-link-title {
-			font-size: 15px;
-			font-weight: 700;
-		}
-		.demo-link-desc {
-			margin-top: 4px;
-			font-size: 13px;
-			color: #62788d;
-			line-height: 1.6;
-		}
-		.table-wrap {
-			margin-top: 16px;
+			border: 1px solid rgba(14, 109, 102, 0.18);
 			border-radius: 16px;
-			overflow: hidden;
-			background: #fff;
+			background: rgba(250, 255, 253, 0.92);
 		}
-		.layui-table-cell {
-			text-align: center;
-			height: 32px;
-			line-height: 32px;
-			padding: 0;
+
+		.link-card strong {
+			display: block;
+			font-size: 14px;
+			margin-bottom: 6px;
 		}
-		.layui-unselect {
-			height: 32px;
+
+		.link-card code {
+			display: block;
+			overflow-wrap: anywhere;
+			color: var(--accent);
+			font-size: 13px;
 		}
-		.code-box {
-			margin: 0;
-			padding: 14px 16px;
-			border-radius: 14px;
-			background: #0f1720;
-			color: #d7e6f5;
-			font-size: 12px;
-			line-height: 1.7;
-			white-space: pre-wrap;
-			word-break: break-word;
-			min-height: 170px;
-		}
-		.action-stack {
+
+		.snapshot-grid {
 			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
 			gap: 16px;
 		}
-		.reload-box {
-			padding: 14px 16px;
-			border-radius: 14px;
-			background: #f6f9fc;
+
+		.snapshot {
+			padding: 16px;
+			border-radius: 18px;
+			background: rgba(17, 25, 27, 0.94);
+			color: #f3f6f6;
 		}
-		.reload-line {
+
+		.snapshot-head {
 			display: flex;
-			flex-wrap: wrap;
-			align-items: center;
-			gap: 10px;
-			margin-top: 10px;
-		}
-		.reload-line label {
-			display: inline-flex;
-			align-items: center;
-			gap: 6px;
-			font-size: 14px;
-			color: #486176;
-		}
-		.reload-result {
-			margin-top: 10px;
-			font-size: 13px;
-			line-height: 1.7;
-			color: #486176;
-			white-space: pre-wrap;
-			word-break: break-word;
-		}
-		.config-box {
-			padding: 14px 16px;
-			border-radius: 14px;
-			background: #f6f9fc;
-		}
-		.config-tools {
-			display: flex;
-			flex-wrap: wrap;
-			gap: 10px;
-			margin-top: 10px;
-		}
-		.config-tools input {
-			flex: 1 1 180px;
-			min-width: 0;
-			padding: 10px 12px;
-			border: 1px solid #d5e1ec;
-			border-radius: 12px;
-			background: #fff;
-			color: #29435c;
-		}
-		.config-result {
-			margin-top: 10px;
-			font-size: 13px;
-			line-height: 1.7;
-			color: #486176;
-			white-space: pre-wrap;
-			word-break: break-word;
-		}
-		.reload-btn {
-			border: 0;
-			border-radius: 12px;
-			background: #169b62;
-			color: #fff;
-			padding: 10px 14px;
-			font-weight: 700;
-			cursor: pointer;
-		}
-		.reload-btn:disabled {
-			opacity: 0.6;
-			cursor: wait;
-		}
-		.bus-box {
-			padding: 14px 16px;
-			border-radius: 14px;
-			background: #f6f9fc;
-		}
-		.bus-actions {
-			display: flex;
-			flex-wrap: wrap;
-			gap: 10px;
-			margin-top: 10px;
-		}
-		.bus-tools {
-			display: flex;
-			flex-wrap: wrap;
-			gap: 10px;
-			margin-top: 10px;
-		}
-		.bus-tools input {
-			flex: 1 1 180px;
-			min-width: 0;
-			padding: 10px 12px;
-			border: 1px solid #d5e1ec;
-			border-radius: 12px;
-			background: #fff;
-			color: #29435c;
-		}
-		.bus-btn {
-			border: 0;
-			border-radius: 12px;
-			background: #1e9fff;
-			color: #fff;
-			padding: 10px 14px;
-			font-weight: 700;
-			cursor: pointer;
-		}
-		.bus-btn.alt {
-			background: #ff8f1f;
-		}
-		.bus-result {
-			margin-top: 10px;
-			font-size: 13px;
-			line-height: 1.7;
-			color: #486176;
-			white-space: pre-wrap;
-			word-break: break-word;
-		}
-		.namespace-grid {
-			grid-template-columns: repeat(4, minmax(0, 1fr));
-			margin-bottom: 12px;
-		}
-		.namespace-list {
-			display: grid;
-			gap: 10px;
-			margin-bottom: 12px;
-		}
-		.namespace-card {
-			padding: 14px 16px;
-			border-radius: 14px;
-			background: #f6f9fc;
-		}
-		.namespace-card-head {
-			display: flex;
-			align-items: center;
 			justify-content: space-between;
-			gap: 10px;
-			margin-bottom: 8px;
+			align-items: center;
+			gap: 12px;
+			margin-bottom: 10px;
 		}
-		.namespace-card-title {
-			font-size: 15px;
-			font-weight: 700;
-			word-break: break-all;
+
+		.snapshot-head strong {
+			font-size: 14px;
 		}
-		.namespace-card-meta {
+
+		.snapshot-path {
 			font-size: 12px;
-			color: #6c8298;
-			white-space: nowrap;
+			color: #91d6ca;
 		}
-		.namespace-card-line {
-			font-size: 12px;
-			line-height: 1.8;
-			color: #486176;
+
+		pre {
+			margin: 0;
+			white-space: pre-wrap;
 			word-break: break-word;
+			font-size: 12px;
+			line-height: 1.65;
+			font-family: Consolas, "Courier New", monospace;
 		}
-		@media (max-width: 1024px) {
-			.hero,
-			.section-grid {
-				grid-template-columns: 1fr;
-			}
-			.namespace-grid {
-				grid-template-columns: repeat(2, minmax(0, 1fr));
-			}
+
+		.mono-list {
+			margin: 0;
+			padding-left: 18px;
+			color: var(--muted);
+			font-size: 14px;
+			line-height: 1.8;
 		}
-		@media (max-width: 720px) {
-			body {
-				padding: 16px;
-			}
-			.hero-title {
-				font-size: 28px;
-			}
-			.status-grid,
-			.cap-grid,
-			.namespace-grid {
+
+		@media (max-width: 960px) {
+			.link-grid,
+			.snapshot-grid {
 				grid-template-columns: 1fr;
 			}
 		}
@@ -376,3623 +223,217 @@
 <body>
 	<div class="page">
 		<section class="hero">
-			<div class="hero-main">
-				<div class="kicker">XServer vNext Demo Portal</div>
-				<h1 class="hero-title">脚本宿主、静态回退、SQLite CRUD、模板和图表已汇总到一个首页。</h1>
-				<p class="hero-desc">
-					这个页面用于验证当前 vNext 主线的综合状态。底层使用 xrt 网络设施，HTTP Host 挂载 TCC C 脚本宿主，
-					业务 demo 已切到 SQLite 预编译语句方式，不再依赖 xdo。
-				</p>
-				<div class="hero-actions">
-					<a class="primary" href="/add.html" target="_blank">打开新增页</a>
-					<a class="secondary" href="/chart.html" target="_blank">打开图表页</a>
-					<a class="secondary" href="/template" target="_blank">打开模板页</a>
-					<a class="secondary" href="/json" target="_blank">查看 JSON</a>
-					<a class="secondary" href="/ws.html" target="_blank">WS 测试页</a>
-					<a class="secondary" href="/ws.html" target="_blank">WSS 测试入口</a>
-				</div>
+			<span class="hero-kicker">xsdbg builtin app</span>
+			<h1>仅保留诊断能力的调试入口</h1>
+			<p>
+				这个页面只服务于协议调试、运行状态查看、reload/check 诊断与错误排查。
+				production `xs` 不再内置固定 `__xs/*`；如果业务需要网页端控制 Bus、重载或其他上层操作，应由应用层自己暴露路由并调用运行时 API。
+			</p>
+			<div class="hero-note">
+				内置 Bus 宿主管理、dashboard 总览和在线治理入口已经从主线清退。`xsdbg` 当前内置页不再预设这些 URI，也不再承载应用层功能。
 			</div>
-			<div class="hero-side">
-				<h2 class="status-title">宿主状态</h2>
-				<div class="status-grid">
-					<div class="status-item">
-						<div class="status-label">Server</div>
-						<div class="status-value" id="StatusServer">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Class</div>
-						<div class="status-value" id="StatusClass">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Default Host</div>
-						<div class="status-value" id="StatusHost">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Script Loaded</div>
-						<div class="status-value" id="StatusScript">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Health</div>
-						<div class="status-value" id="StatusHealth">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Reload Last</div>
-						<div class="status-value" id="StatusReloadLast">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Reload Age</div>
-						<div class="status-value" id="StatusReloadAge">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Reload Total</div>
-						<div class="status-value" id="StatusReloadTotal">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Reload Success</div>
-						<div class="status-value" id="StatusReloadSuccess">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Reload Failure</div>
-						<div class="status-value" id="StatusReloadFailure">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Bus Data</div>
-						<div class="status-value" id="StatusBusData">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Bus Limits</div>
-						<div class="status-value" id="StatusBusLimits">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Bus Limit Hit</div>
-						<div class="status-value" id="StatusBusLimitReject">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Bus Sweep</div>
-						<div class="status-value" id="StatusBusSweep">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Bus Cleanup</div>
-						<div class="status-value" id="StatusBusCleanup">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Config</div>
-						<div class="status-value" id="StatusConfig">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Config Name</div>
-						<div class="status-value" id="StatusConfigName">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Config MTime</div>
-						<div class="status-value" id="StatusConfigMTime">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Config Size</div>
-						<div class="status-value" id="StatusConfigSize">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Config Check</div>
-						<div class="status-value" id="StatusConfigCheck">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Check Last</div>
-						<div class="status-value" id="StatusCheckLast">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Check Age</div>
-						<div class="status-value" id="StatusCheckAge">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Check Total</div>
-						<div class="status-value" id="StatusCheckTotal">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Check Success</div>
-						<div class="status-value" id="StatusCheckSuccess">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Check Failure</div>
-						<div class="status-value" id="StatusCheckFailure">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">App Path</div>
-						<div class="status-value" id="StatusAppPath">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">App MTime</div>
-						<div class="status-value" id="StatusAppMTime">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">App Size</div>
-						<div class="status-value" id="StatusAppSize">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Current Dir</div>
-						<div class="status-value" id="StatusCurrentDir">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">PID</div>
-						<div class="status-value" id="StatusPID">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Uptime</div>
-						<div class="status-value" id="StatusUptime">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Workers</div>
-						<div class="status-value" id="StatusWorkers">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Req</div>
-						<div class="status-value" id="StatusHttpReq">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP 2xx</div>
-						<div class="status-value" id="StatusHttp2xx">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP 4xx</div>
-						<div class="status-value" id="StatusHttp4xx">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP 5xx</div>
-						<div class="status-value" id="StatusHttp5xx">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Conn</div>
-						<div class="status-value" id="StatusHttpConn">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Peak</div>
-						<div class="status-value" id="StatusHttpPeak">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">GET / POST</div>
-						<div class="status-value" id="StatusHttpMethods">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP App / Manage</div>
-						<div class="status-value" id="StatusHttpKinds">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Avg</div>
-						<div class="status-value" id="StatusHttpAvg">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Max</div>
-						<div class="status-value" id="StatusHttpMax">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Last</div>
-						<div class="status-value" id="StatusHttpLast">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Last Age</div>
-						<div class="status-value" id="StatusHttpLastAge">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Last Cost</div>
-						<div class="status-value" id="StatusHttpLastCost">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Last Body</div>
-						<div class="status-value" id="StatusHttpLastBody">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Last Headers</div>
-						<div class="status-value" id="StatusHttpLastHeaders">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Query</div>
-						<div class="status-value" id="StatusHttpLastQuery">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Last Path</div>
-						<div class="status-value" id="StatusHttpLastPath">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Version</div>
-						<div class="status-value" id="StatusHttpLastVersion">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Remote</div>
-						<div class="status-value" id="StatusHttpLastRemote">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Host</div>
-						<div class="status-value" id="StatusHttpLastHost">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP UA</div>
-						<div class="status-value" id="StatusHttpLastUA">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Referer</div>
-						<div class="status-value" id="StatusHttpLastReferer">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Origin</div>
-						<div class="status-value" id="StatusHttpLastOrigin">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Accept</div>
-						<div class="status-value" id="StatusHttpLastAccept">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Accept-Encoding</div>
-						<div class="status-value" id="StatusHttpLastAcceptEncoding">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Cookie</div>
-						<div class="status-value" id="StatusHttpLastCookie">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP XFF</div>
-						<div class="status-value" id="StatusHttpLastForwardedFor">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Real-IP</div>
-						<div class="status-value" id="StatusHttpLastRealIP">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Connection</div>
-						<div class="status-value" id="StatusHttpLastConnection">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Cache-Control</div>
-						<div class="status-value" id="StatusHttpLastCacheControl">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Type</div>
-						<div class="status-value" id="StatusHttpLastType">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP App Last</div>
-						<div class="status-value" id="StatusHttpAppLast">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP App Age</div>
-						<div class="status-value" id="StatusHttpAppLastAge">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP App Cost</div>
-						<div class="status-value" id="StatusHttpAppLastCost">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP App Body</div>
-						<div class="status-value" id="StatusHttpAppLastBody">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP App Headers</div>
-						<div class="status-value" id="StatusHttpAppLastHeaders">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP App Query</div>
-						<div class="status-value" id="StatusHttpAppLastQuery">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP App Path</div>
-						<div class="status-value" id="StatusHttpAppLastPath">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP App Version</div>
-						<div class="status-value" id="StatusHttpAppLastVersion">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP App Remote</div>
-						<div class="status-value" id="StatusHttpAppLastRemote">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP App Host</div>
-						<div class="status-value" id="StatusHttpAppLastHost">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP App UA</div>
-						<div class="status-value" id="StatusHttpAppLastUA">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP App Referer</div>
-						<div class="status-value" id="StatusHttpAppLastReferer">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP App Origin</div>
-						<div class="status-value" id="StatusHttpAppLastOrigin">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP App Accept</div>
-						<div class="status-value" id="StatusHttpAppLastAccept">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP App Accept-Encoding</div>
-						<div class="status-value" id="StatusHttpAppLastAcceptEncoding">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP App Cookie</div>
-						<div class="status-value" id="StatusHttpAppLastCookie">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP App XFF</div>
-						<div class="status-value" id="StatusHttpAppLastForwardedFor">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP App Real-IP</div>
-						<div class="status-value" id="StatusHttpAppLastRealIP">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP App Connection</div>
-						<div class="status-value" id="StatusHttpAppLastConnection">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP App Cache-Control</div>
-						<div class="status-value" id="StatusHttpAppLastCacheControl">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP App Type</div>
-						<div class="status-value" id="StatusHttpAppLastType">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">WS Limit</div>
-						<div class="status-value" id="StatusWsLimit">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">WS Conn</div>
-						<div class="status-value" id="StatusWsConn">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">WS Peak</div>
-						<div class="status-value" id="StatusWsPeak">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">WS Open / Close</div>
-						<div class="status-value" id="StatusWsOpenClose">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">WS Text / Binary</div>
-						<div class="status-value" id="StatusWsTextBinary">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">WS Ping / Pong</div>
-						<div class="status-value" id="StatusWsPingPong">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">WS Error</div>
-						<div class="status-value" id="StatusWsError">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">WS Error Age</div>
-						<div class="status-value" id="StatusWsErrorAge">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">WS Close Reason</div>
-						<div class="status-value" id="StatusWsCloseReason">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">WS Close Age</div>
-						<div class="status-value" id="StatusWsCloseAge">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">WS Remote / Bytes</div>
-						<div class="status-value" id="StatusWsLast">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">WS Last Age</div>
-						<div class="status-value" id="StatusWsLastAge">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">WS Idle Close</div>
-						<div class="status-value" id="StatusWsIdleClose">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">WS Idle Age</div>
-						<div class="status-value" id="StatusWsIdleAge">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Server Idle Timeout</div>
-						<div class="status-value" id="StatusIdleTimeout">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Server Conn Limit</div>
-						<div class="status-value" id="StatusConnLimit">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Limit Close</div>
-						<div class="status-value" id="StatusHttpLimitClose">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Req Limit</div>
-						<div class="status-value" id="StatusHttpReqLimit">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Policy</div>
-						<div class="status-value" id="StatusHttpPolicyReject">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Manage Err</div>
-						<div class="status-value" id="StatusHttpManageReject">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Bus Err</div>
-						<div class="status-value" id="StatusHttpBusReject">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">WS Limit Close</div>
-						<div class="status-value" id="StatusWsLimitClose">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">WS Msg Limit</div>
-						<div class="status-value" id="StatusWsMessageLimit">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">XTP Limit Close</div>
-						<div class="status-value" id="StatusXtpLimitClose">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">XTP Recv Limit</div>
-						<div class="status-value" id="StatusXtpRecvLimit">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">TCP Limit Close</div>
-						<div class="status-value" id="StatusCustomLimitClose">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">TCP Recv Limit</div>
-						<div class="status-value" id="StatusCustomRecvLimit">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Reject</div>
-						<div class="status-value" id="StatusHttpReject">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">WS Reject</div>
-						<div class="status-value" id="StatusWsReject">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">WS Invalid</div>
-						<div class="status-value" id="StatusWsInvalid">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">WS Invalid Reason</div>
-						<div class="status-value" id="StatusWsInvalidReason">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">WS Invalid Age</div>
-						<div class="status-value" id="StatusWsInvalidAge">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">XTP Reject</div>
-						<div class="status-value" id="StatusXtpReject">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">TCP Reject</div>
-						<div class="status-value" id="StatusCustomReject">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Cleanup</div>
-						<div class="status-value" id="StatusHttpCleanup">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">WS Cleanup</div>
-						<div class="status-value" id="StatusWsCleanup">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">XTP Cleanup</div>
-						<div class="status-value" id="StatusXtpCleanup">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">TCP Cleanup</div>
-						<div class="status-value" id="StatusCustomCleanup">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Idle Close</div>
-						<div class="status-value" id="StatusHttpIdleClose">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">HTTP Idle Age</div>
-						<div class="status-value" id="StatusHttpIdleAge">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">XTP Conn</div>
-						<div class="status-value" id="StatusXtpConn">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">XTP Msg</div>
-						<div class="status-value" id="StatusXtpMsg">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">XTP Req / Resp</div>
-						<div class="status-value" id="StatusXtpReqResp">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">XTP Invalid</div>
-						<div class="status-value" id="StatusXtpInvalid">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">XTP Last</div>
-						<div class="status-value" id="StatusXtpLast">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">XTP Shape</div>
-						<div class="status-value" id="StatusXtpShape">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">XTP Invalid Reason</div>
-						<div class="status-value" id="StatusXtpInvalidReason">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">XTP Invalid Age</div>
-						<div class="status-value" id="StatusXtpInvalidAge">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">XTP Error</div>
-						<div class="status-value" id="StatusXtpError">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">XTP Error Age</div>
-						<div class="status-value" id="StatusXtpErrorAge">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">XTP Remote / Bytes</div>
-						<div class="status-value" id="StatusXtpLastBytes">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">UDP Recv / Send</div>
-						<div class="status-value" id="StatusUdpPackets">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">UDP Bytes</div>
-						<div class="status-value" id="StatusUdpBytes">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">UDP Last From</div>
-						<div class="status-value" id="StatusUdpFrom">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">UDP Last Age</div>
-						<div class="status-value" id="StatusUdpAge">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">UDP Last Bytes</div>
-						<div class="status-value" id="StatusUdpLastBytes">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">UDP Error</div>
-						<div class="status-value" id="StatusUdpError">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">TCP Conn</div>
-						<div class="status-value" id="StatusCustomConn">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">TCP Recv / Send</div>
-						<div class="status-value" id="StatusCustomPackets">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">TCP Invalid</div>
-						<div class="status-value" id="StatusCustomInvalid">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">TCP Invalid Reason</div>
-						<div class="status-value" id="StatusCustomInvalidReason">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">TCP Invalid Age</div>
-						<div class="status-value" id="StatusCustomInvalidAge">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">TCP Error</div>
-						<div class="status-value" id="StatusCustomError">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">TCP Close Reason</div>
-						<div class="status-value" id="StatusCustomCloseReason">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">TCP Bytes</div>
-						<div class="status-value" id="StatusCustomBytes">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">TCP Remote / Bytes</div>
-						<div class="status-value" id="StatusCustomLastBytes">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">TCP Last Age</div>
-						<div class="status-value" id="StatusCustomAge">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Bus Queued</div>
-						<div class="status-value" id="StatusBusQueued">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Bus Delivered</div>
-						<div class="status-value" id="StatusBusDelivered">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Bus Dropped</div>
-						<div class="status-value" id="StatusBusDropped">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Bus Queue Time</div>
-						<div class="status-value" id="StatusBusQueueTime">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Bus Dispatch Time</div>
-						<div class="status-value" id="StatusBusDispatchTime">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Servers</div>
-						<div class="status-value" id="StatusServerCount">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Build</div>
-						<div class="status-value" id="StatusBuild">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Compiler</div>
-						<div class="status-value" id="StatusCompiler">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Platform</div>
-						<div class="status-value" id="StatusPlatform">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Manage API</div>
-						<div class="status-value" id="StatusManageApi">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">TLS</div>
-						<div class="status-value" id="StatusTls">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Listen</div>
-						<div class="status-value" id="StatusListen">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Mem Debug</div>
-						<div class="status-value" id="StatusMemDebug">-</div>
-					</div>
-				</div>
+			<div class="toolbar">
+				<button type="button" class="btn" id="RefreshBtn">刷新快照</button>
+				<a class="btn alt" href="/__xs/status_json" target="_blank">打开 status_json</a>
+				<a class="btn alt" href="/__xs/health_json" target="_blank">打开 health_json</a>
 			</div>
 		</section>
 
-		<section class="section-grid">
-			<div class="section-card">
-				<h2 class="section-title">SQLite CRUD Demo</h2>
-				<p class="section-sub">
-					这里展示 `/app/list /app/add /app/edit /app/del` 的综合状态。数据已经切到独立的 `xs_demo_test` 表，
-					用于隔离旧 demo 的历史污染。
-				</p>
-				<div class="cap-grid">
-					<div class="cap-item">
-						<div class="cap-label">Record Count</div>
-						<div class="cap-value" id="CapCount">-</div>
-					</div>
-					<div class="cap-item">
-						<div class="cap-label">Last Message</div>
-						<div class="cap-value" id="CapMsg">-</div>
-					</div>
-				</div>
-				<div class="table-wrap">
-					<table class="layui-hide" id="DataList" lay-filter="DataList"></table>
+		<section class="grid">
+			<div class="card">
+				<h2>核心诊断入口</h2>
+				<p>这些入口是当前 xsdbg 内置页仍然保留的固定诊断 URI。</p>
+				<div class="link-grid">
+					<a class="link-card" href="/__xs/status" target="_blank">
+						<strong>Status</strong>
+						<code>/__xs/status</code>
+					</a>
+					<a class="link-card" href="/__xs/status_json" target="_blank">
+						<strong>Status JSON</strong>
+						<code>/__xs/status_json</code>
+					</a>
+					<a class="link-card" href="/__xs/health" target="_blank">
+						<strong>Health</strong>
+						<code>/__xs/health</code>
+					</a>
+					<a class="link-card" href="/__xs/health_json" target="_blank">
+						<strong>Health JSON</strong>
+						<code>/__xs/health_json</code>
+					</a>
+					<a class="link-card" href="/__xs/reload_status" target="_blank">
+						<strong>Reload Status</strong>
+						<code>/__xs/reload_status</code>
+					</a>
+					<a class="link-card" href="/__xs/reload_status_json" target="_blank">
+						<strong>Reload Status JSON</strong>
+						<code>/__xs/reload_status_json</code>
+					</a>
+					<a class="link-card" href="/__xs/check_config" target="_blank">
+						<strong>Check Config</strong>
+						<code>/__xs/check_config</code>
+					</a>
+					<a class="link-card" href="/__xs/check_config_json" target="_blank">
+						<strong>Check Config JSON</strong>
+						<code>/__xs/check_config_json</code>
+					</a>
 				</div>
 			</div>
-			<div class="section-card">
-				<h2 class="section-title">能力入口</h2>
-				<p class="section-sub">这些页面和接口都已经接到当前 Host 的真实脚本实现。</p>
-				<div class="action-stack">
-					<div class="demo-links">
-						<a class="demo-link" href="/chart.html" target="_blank">
-							<div class="demo-link-title">图表页面</div>
-							<div class="demo-link-desc">调用 `/chart/get`，验证脚本生成图表数据。</div>
-						</a>
-						<a class="demo-link" href="/template" target="_blank">
-							<div class="demo-link-title">模板页面</div>
-							<div class="demo-link-desc">调用 xrt 模板能力，验证模板读取、解析与渲染。</div>
-						</a>
-						<a class="demo-link" href="/json" target="_blank">
-							<div class="demo-link-title">JSON 状态</div>
-							<div class="demo-link-desc">查看脚本宿主暴露的 server/host/app_path 等状态。</div>
-						</a>
-						<a class="demo-link" href="/__xs/status" target="_blank">
-							<div class="demo-link-title">宿主调试状态</div>
-							<div class="demo-link-desc">查看当前 server、default host、script_loaded 等摘要。</div>
-						</a>
-						<a class="demo-link" href="/__xs/status_json" target="_blank">
-							<div class="demo-link-title">宿主状态 JSON</div>
-							<div class="demo-link-desc">直接读取结构化状态，便于脚本和外部工具消费。</div>
-						</a>
-						<a class="demo-link" href="/__xs/health_json" target="_blank">
-							<div class="demo-link-title">健康检查 JSON</div>
-							<div class="demo-link-desc">汇总宿主、reload、bus 的轻量健康摘要。</div>
-						</a>
-						<a class="demo-link" href="/__xs/health" target="_blank">
-							<div class="demo-link-title">健康检查文本</div>
-							<div class="demo-link-desc">返回简洁文本和明确的 200/503 状态码，适合探针。</div>
-						</a>
-						<a class="demo-link" href="/__xs/http_metrics_json" target="_blank" data-debug-manage="true">
-							<div class="demo-link-title">HTTP 指标 JSON</div>
-							<div class="demo-link-desc">查看当前进程内 HTTP 请求总量与 2xx/3xx/4xx/5xx 分布，仅 xsdbg 开放。</div>
-						</a>
-						<a class="demo-link" href="/__xs/http_metrics_clear" target="_blank" data-debug-manage="true">
-							<div class="demo-link-title">清空 HTTP 指标</div>
-							<div class="demo-link-desc">将 HTTP 计数归零，便于压测窗口或故障复盘重新采样，仅 xsdbg 开放。</div>
-						</a>
-						<a class="demo-link" href="/__xs/ws_metrics_json" target="_blank" data-debug-manage="true">
-							<div class="demo-link-title">WS 指标 JSON</div>
-							<div class="demo-link-desc">查看当前进程内 WebSocket 连接、消息、ping/pong 与错误统计，仅 xsdbg 开放。</div>
-						</a>
-						<a class="demo-link" href="/__xs/ws_metrics_clear" target="_blank" data-debug-manage="true">
-							<div class="demo-link-title">清空 WS 指标</div>
-							<div class="demo-link-desc">将 WebSocket 计数归零，便于压测窗口或故障复盘重新采样，仅 xsdbg 开放。</div>
-						</a>
-						<a class="demo-link" href="/__xs/xtp_metrics_json" target="_blank" data-debug-manage="true">
-							<div class="demo-link-title">XTP 指标 JSON</div>
-							<div class="demo-link-desc">查看 XTP 连接、消息类型分布、最近一包上下文与收发字节统计，仅 xsdbg 开放。</div>
-						</a>
-						<a class="demo-link" href="/__xs/xtp_metrics_clear" target="_blank" data-debug-manage="true">
-							<div class="demo-link-title">清空 XTP 指标</div>
-							<div class="demo-link-desc">将 XTP 计数归零，便于协议压测窗口和故障复盘重新采样，仅 xsdbg 开放。</div>
-						</a>
-						<a class="demo-link" href="/__xs/udp_metrics_json" target="_blank" data-debug-manage="true">
-							<div class="demo-link-title">UDP 指标 JSON</div>
-							<div class="demo-link-desc">查看 UDP 收发包数、字节数、错误数和最近一包上下文，仅 xsdbg 开放。</div>
-						</a>
-						<a class="demo-link" href="/__xs/udp_metrics_clear" target="_blank" data-debug-manage="true">
-							<div class="demo-link-title">清空 UDP 指标</div>
-							<div class="demo-link-desc">将 UDP 计数归零，便于 UDP 压测窗口和故障复盘重新采样，仅 xsdbg 开放。</div>
-						</a>
-						<a class="demo-link" href="/__xs/custom_metrics_json" target="_blank" data-debug-manage="true">
-							<div class="demo-link-title">Custom/TCP 指标 JSON</div>
-							<div class="demo-link-desc">查看 custom/tcp 连接、收发、错误和最近一次收包上下文，仅 xsdbg 开放。</div>
-						</a>
-						<a class="demo-link" href="/__xs/custom_metrics_clear" target="_blank" data-debug-manage="true">
-							<div class="demo-link-title">清空 Custom/TCP 指标</div>
-							<div class="demo-link-desc">将 custom/tcp 计数归零，便于 TCP 压测窗口和故障复盘重新采样，仅 xsdbg 开放。</div>
-						</a>
-						<a class="demo-link" href="/__xs/dashboard" target="_blank" data-debug-manage="true">
-							<div class="demo-link-title">总览文本</div>
-							<div class="demo-link-desc">以纯文本输出 status、health、reload、bus 的总览摘要，仅 xsdbg 开放。</div>
-						</a>
-						<a class="demo-link" href="/__xs/dashboard_json" target="_blank" data-debug-manage="true">
-							<div class="demo-link-title">总览 JSON</div>
-							<div class="demo-link-desc">汇总 status、health、reload、bus 的结构化总览，仅 xsdbg 开放。</div>
-						</a>
-						<a class="demo-link" href="/__xs/check_config" target="_blank">
-							<div class="demo-link-title">配置校验文本</div>
-							<div class="demo-link-desc">在线校验当前配置文件，不触发热加载。</div>
-						</a>
-						<a class="demo-link" href="/__xs/check_config_json" target="_blank">
-							<div class="demo-link-title">配置校验 JSON</div>
-							<div class="demo-link-desc">结构化返回配置校验结果、配置路径和服务数量。</div>
-						</a>
-						<a class="demo-link" href="/__xs/reload_json" target="_blank">
-							<div class="demo-link-title">热重载 JSON</div>
-							<div class="demo-link-desc">结构化触发脚本热重载，便于页面与工具直接消费。</div>
-						</a>
-						<a class="demo-link" href="/__xs/bus/status" target="_blank" data-bus-manage="true">
-							<div class="demo-link-title">Bus 宿主管理状态</div>
-							<div class="demo-link-desc">直接查看宿主层 bus 注册表与队列状态，不经过业务脚本路由，仅 xsdbg 开放。</div>
-						</a>
-						<a class="demo-link" href="/ws.html" target="_blank">
-							<div class="demo-link-title">WebSocket 测试页</div>
-							<div class="demo-link-desc">联调 `xs_ws.json` 对应的 WebSocket demo，验证连接、发送和回显。</div>
-						</a>
-						<a class="demo-link" href="/ws.html" target="_blank">
-							<div class="demo-link-title">WSS 测试页</div>
-							<div class="demo-link-desc">页面内一键切到 `wss://127.0.0.1:8444/`，验证 TLS WebSocket 与子协议协商。</div>
-						</a>
+
+			<div class="card">
+				<h2>调试专用入口</h2>
+				<p>这些入口只在 xsdbg 内置调试页中保留，用于 reset、clear 与协议 metrics 观察。</p>
+				<div class="link-grid">
+					<a class="link-card" href="/__xs/reload_clear" target="_blank" data-debug-manage="true">
+						<strong>Reload Clear</strong>
+						<code>/__xs/reload_clear</code>
+					</a>
+					<a class="link-card" href="/__xs/reload_reset" target="_blank" data-debug-manage="true">
+						<strong>Reload Reset</strong>
+						<code>/__xs/reload_reset</code>
+					</a>
+					<a class="link-card" href="/__xs/check_config_clear" target="_blank" data-debug-manage="true">
+						<strong>Check Config Clear</strong>
+						<code>/__xs/check_config_clear</code>
+					</a>
+					<a class="link-card" href="/__xs/http_metrics_json" target="_blank" data-debug-manage="true">
+						<strong>HTTP Metrics JSON</strong>
+						<code>/__xs/http_metrics_json</code>
+					</a>
+					<a class="link-card" href="/__xs/ws_metrics_json" target="_blank" data-debug-manage="true">
+						<strong>WS Metrics JSON</strong>
+						<code>/__xs/ws_metrics_json</code>
+					</a>
+					<a class="link-card" href="/__xs/xtp_metrics_json" target="_blank" data-debug-manage="true">
+						<strong>XTP Metrics JSON</strong>
+						<code>/__xs/xtp_metrics_json</code>
+					</a>
+					<a class="link-card" href="/__xs/udp_metrics_json" target="_blank" data-debug-manage="true">
+						<strong>UDP Metrics JSON</strong>
+						<code>/__xs/udp_metrics_json</code>
+					</a>
+					<a class="link-card" href="/__xs/custom_metrics_json" target="_blank" data-debug-manage="true">
+						<strong>Custom Metrics JSON</strong>
+						<code>/__xs/custom_metrics_json</code>
+					</a>
+					<a class="link-card" href="/__xs/http_metrics_clear" target="_blank" data-debug-manage="true">
+						<strong>HTTP Metrics Clear</strong>
+						<code>/__xs/http_metrics_clear</code>
+					</a>
+					<a class="link-card" href="/__xs/ws_metrics_clear" target="_blank" data-debug-manage="true">
+						<strong>WS Metrics Clear</strong>
+						<code>/__xs/ws_metrics_clear</code>
+					</a>
+					<a class="link-card" href="/__xs/xtp_metrics_clear" target="_blank" data-debug-manage="true">
+						<strong>XTP Metrics Clear</strong>
+						<code>/__xs/xtp_metrics_clear</code>
+					</a>
+					<a class="link-card" href="/__xs/udp_metrics_clear" target="_blank" data-debug-manage="true">
+						<strong>UDP Metrics Clear</strong>
+						<code>/__xs/udp_metrics_clear</code>
+					</a>
+					<a class="link-card" href="/__xs/custom_metrics_clear" target="_blank" data-debug-manage="true">
+						<strong>Custom Metrics Clear</strong>
+						<code>/__xs/custom_metrics_clear</code>
+					</a>
+				</div>
+			</div>
+
+			<div class="card">
+				<h2>实时快照</h2>
+				<p>页面加载后会抓取四个核心 JSON 入口，用于快速确认当前服务状态。</p>
+				<div class="snapshot-grid">
+					<div class="snapshot">
+						<div class="snapshot-head">
+							<strong>Status</strong>
+							<span class="snapshot-path">/__xs/status_json</span>
+						</div>
+						<pre id="StatusJson">loading...</pre>
 					</div>
-					<div class="reload-box">
-						<div class="demo-link-title">脚本热重载演示</div>
-						<div class="demo-link-desc">页面内直接调用 `/__xs/reload_json`。默认重载当前 Host，可选 `force`。</div>
-						<div class="reload-line">
-							<button type="button" class="reload-btn" id="ReloadBtn">立即热重载</button>
-							<label><input type="checkbox" id="ReloadForce"> Force 模式</label>
+					<div class="snapshot">
+						<div class="snapshot-head">
+							<strong>Health</strong>
+							<span class="snapshot-path">/__xs/health_json</span>
 						</div>
-						<div class="reload-result" id="ReloadResult">尚未触发热重载。</div>
+						<pre id="HealthJson">loading...</pre>
 					</div>
-					<div class="config-box">
-						<div class="demo-link-title">配置热加载演示</div>
-						<div class="demo-link-desc">通过 `/__xs/reload_config_json` 触发最小配置热加载，并读取 `/__xs/reload_status_json` 查看最终结果。</div>
-						<div class="config-tools">
-							<input type="text" id="ReloadServerInput" placeholder="server，可留空表示全部">
-							<input type="text" id="ReloadHostInput" placeholder="host，仅 http/ws 有效">
-							<button type="button" class="reload-btn" id="ReloadConfigBtn">重载配置</button>
-							<button type="button" class="bus-btn" id="ReloadStatusBtn">刷新结果</button>
-							<button type="button" class="bus-btn alt" id="ReloadClearBtn">清空结果</button>
-							<button type="button" class="bus-btn alt" id="ReloadResetBtn">清空统计</button>
-							<a class="demo-link" href="/__xs/reload_config_json" target="_blank" style="margin:0;">触发 JSON</a>
-							<a class="demo-link" href="/__xs/reload_status_json" target="_blank" style="margin:0;">查看状态 JSON</a>
-							<a class="demo-link" id="ReloadResetLink" href="/__xs/reload_reset" target="_blank" style="margin:0;" data-debug-manage="true">清空统计</a>
+					<div class="snapshot">
+						<div class="snapshot-head">
+							<strong>Reload</strong>
+							<span class="snapshot-path">/__xs/reload_status_json</span>
 						</div>
-						<div class="config-result" id="ReloadConfigResult">尚未触发配置热加载。</div>
-						<pre class="code-box" id="ReloadConfigRaw" style="margin-top:10px; min-height:120px;">loading...</pre>
+						<pre id="ReloadJson">loading...</pre>
 					</div>
-					<div class="config-box">
-						<div class="demo-link-title">在线配置校验</div>
-						<div class="demo-link-desc">通过 `/__xs/check_config_json` 在线校验当前配置文件，不触发热加载。</div>
-						<div class="config-tools">
-							<input type="text" id="CheckConfigFileInput" placeholder="可选 file，默认当前运行配置">
-							<button type="button" class="reload-btn" id="CheckConfigBtn">校验配置</button>
-							<button type="button" class="reload-btn" id="CheckConfigClearBtn">清空统计</button>
-							<a class="demo-link" href="/__xs/check_config" target="_blank" style="margin:0;">查看文本</a>
-							<a class="demo-link" href="/__xs/check_config_json" target="_blank" style="margin:0;">查看 JSON</a>
-							<a class="demo-link" id="CheckConfigClearLink" href="/__xs/check_config_clear" target="_blank" style="margin:0;" data-debug-manage="true">清空统计</a>
+					<div class="snapshot">
+						<div class="snapshot-head">
+							<strong>Check Config</strong>
+							<span class="snapshot-path">/__xs/check_config_json</span>
 						</div>
-						<div class="config-result" id="CheckConfigResult">尚未触发配置校验。</div>
-						<pre class="code-box" id="CheckConfigRaw" style="margin-top:10px; min-height:120px;">loading...</pre>
-					</div>
-					<div class="bus-box">
-						<div class="demo-link-title">全局总线演示</div>
-						<div class="demo-link-desc">当前页面上的 bus 收发与注册表管理都已切到 `/__xs/bus/*` 宿主管理接口；production `xs` 下会自动降级为只读提示，实际写操作与注册表管理入口仅在 `xsdbg` 开放。</div>
-						<div class="bus-actions">
-							<button type="button" class="bus-btn" id="BusSendServerBtn">发送到 Server</button>
-							<button type="button" class="bus-btn alt" id="BusSendHostBtn">发送到当前 Host</button>
-							<button type="button" class="bus-btn" id="BusSendBroadcastBtn">广播到全部</button>
-							<button type="button" class="bus-btn" id="BusSweepBtn">立即清理</button>
-							<button type="button" class="bus-btn alt" id="BusResetStatsBtn">清空统计</button>
-						</div>
-						<div class="bus-tools">
-							<input type="text" id="BusTopicInput" placeholder="topic，默认 demo.portal.server">
-							<input type="text" id="BusTargetServerInput" placeholder="目标 server，可留空使用当前服务">
-							<input type="text" id="BusTargetHostInput" placeholder="目标 host，可留空使用当前主机">
-							<input type="text" id="BusTextInput" placeholder="可选 text payload，将自动注册共享数据">
-							<label><input type="checkbox" id="BusPersistInput"> 持久保留自动注册数据</label>
-						</div>
-						<div class="bus-tools">
-							<input type="text" id="BusJsonInput" placeholder='可选 json payload，例如 {"kind":"demo","value":1}'>
-						</div>
-						<div class="bus-tools">
-							<input type="text" id="BusDataIDInput" placeholder="data_id，可直接按 ID 发送/读取/删除">
-							<input type="text" id="BusNamespaceInput" placeholder="namespace，可留空">
-							<input type="text" id="BusTagInput" placeholder="持久注册 tag，可留空">
-							<input type="text" id="BusTTLInput" placeholder="TTL(ms)，0 表示不过期">
-							<button type="button" class="bus-btn" id="BusRegisterBtn">注册数据</button>
-							<button type="button" class="bus-btn" id="BusSetBtn">更新数据</button>
-							<button type="button" class="bus-btn" id="BusFindBtn">查找数据</button>
-							<button type="button" class="bus-btn" id="BusExistsBtn">检查存在</button>
-							<button type="button" class="bus-btn" id="BusGetBtn">查看 payload</button>
-							<button type="button" class="bus-btn" id="BusRetainBtn">Retain</button>
-							<button type="button" class="bus-btn" id="BusReleaseBtn">Release</button>
-							<button type="button" class="bus-btn" id="BusTouchBtn">续期 TTL</button>
-							<button type="button" class="bus-btn alt" id="BusRemoveBtn">移除最后 ID</button>
-							<button type="button" class="bus-btn alt" id="BusRemoveAllBtn">批量清理</button>
-						</div>
-						<div class="bus-tools">
-							<input type="text" id="BusReadonlyNamespacesInput" placeholder="readonly_namespaces，例如 policy.live,team.*">
-							<input type="text" id="BusDisabledNamespacesInput" placeholder="disabled_namespaces，例如 policy.off,queue.*">
-							<input type="text" id="BusTTLRequiredNamespacesInput" placeholder="ttl_required_namespaces，例如 cache.*,session.*">
-							<input type="text" id="BusTagRequiredNamespacesInput" placeholder="tag_required_namespaces，例如 order.*,event.*">
-							<button type="button" class="bus-btn" id="BusPolicyBtn">更新 Policy</button>
-						</div>
-						<div class="bus-result" id="BusSendResult">尚未发送消息。</div>
+						<pre id="CheckJson">loading...</pre>
 					</div>
 				</div>
-				<h2 class="section-title" style="margin-top:20px;">JSON 预览</h2>
-				<pre class="code-box" id="JsonRaw">loading...</pre>
-				<h2 class="section-title" style="margin-top:20px;">原始总览状态</h2>
-				<pre class="code-box" id="DashboardRaw">loading...</pre>
-				<h2 class="section-title" style="margin-top:20px;">原始宿主状态</h2>
-				<pre class="code-box" id="StatusRaw">loading...</pre>
-				<h2 class="section-title" style="margin-top:20px;">原始健康状态</h2>
-				<pre class="code-box" id="HealthRaw">loading...</pre>
-				<h2 class="section-title" style="margin-top:20px;">Bus 状态</h2>
-				<pre class="code-box" id="BusRaw">loading...</pre>
-				<h2 class="section-title" style="margin-top:20px;">Bus Registry</h2>
-				<pre class="code-box" id="BusRegistryRaw">loading...</pre>
-				<h2 class="section-title" style="margin-top:20px;">Bus Payload</h2>
-				<pre class="code-box" id="BusPayloadRaw">loading...</pre>
-				<h2 class="section-title" style="margin-top:20px;">Bus Namespace Summary</h2>
-				<div class="status-grid namespace-grid">
-					<div class="status-item">
-						<div class="status-label">Namespace Count</div>
-						<div class="status-value" id="BusNamespaceCount">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Namespace Limit</div>
-						<div class="status-value" id="BusNamespaceLimit">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Hot Namespace</div>
-						<div class="status-value" id="BusNamespacePressure">-</div>
-					</div>
-					<div class="status-item">
-						<div class="status-label">Next Expire</div>
-						<div class="status-value" id="BusNamespaceWindow">-</div>
-					</div>
-				</div>
-				<div class="namespace-list" id="BusNamespaceList">
-					<div class="namespace-card">
-						<div class="namespace-card-line">loading...</div>
-					</div>
-				</div>
-				<h2 class="section-title" style="margin-top:20px;">Bus Namespaces</h2>
-				<pre class="code-box" id="BusNamespaceRaw">loading...</pre>
+			</div>
+
+			<div class="card">
+				<h2>边界说明</h2>
+				<ul class="mono-list">
+					<li>production `xs` 不再内置固定 `__xs/*`。</li>
+					<li>`Bus / reload / check_config` 仍然保留为运行时 API，但不再对应预设网页端 URI。</li>
+					<li>xsdbg 只保留诊断入口，不再内置 Bus 宿主管理、dashboard 总览或应用级治理页。</li>
+					<li>如果要做业务控制台，请在应用层自己暴露路由，并调用 `xsData* / xsMsg* / xsReload*` 等 API。</li>
+				</ul>
 			</div>
 		</section>
 	</div>
 
-	<script type="text/html" id="DeviceToolbar">
-		<div class="layui-btn-container">
-			<button class="layui-btn layui-btn-sm layui-bg-blue" lay-event="AddRow">添加数据</button>
-			<button class="layui-btn layui-btn-sm layui-bg-blue" lay-event="DelRow">删除数据</button>
-			<button class="layui-btn layui-btn-sm layui-bg-blue" lay-event="RefreshList">刷新列表</button>
-		</div>
-	</script>
-
-	<script src="/res/layui/layui.js"></script>
 	<script>
-		layui.use(['table'], function(){
-			var table = layui.table;
-			var layer = layui.layer;
-			var procMessage = function(tblData)
-			{
-				if ( !tblData ) {
-					return '';
-				}
-				return tblData.msg || tblData.message || '';
-			};
+		(function(){
+			var arrTargets = [
+				{ id: "StatusJson", path: "/__xs/status_json" },
+				{ id: "HealthJson", path: "/__xs/health_json" },
+				{ id: "ReloadJson", path: "/__xs/reload_status_json" },
+				{ id: "CheckJson", path: "/__xs/check_config_json" }
+			];
+
 			var procSetText = function(sID, sText)
 			{
-				var obj = document.getElementById(sID);
-				if ( obj ) {
-					obj.textContent = sText;
-				}
-			};
-			var procSyncInputValue = function(sID, sValue)
-			{
-				var obj = document.getElementById(sID);
-				if ( obj && document.activeElement !== obj ) {
-					obj.value = (sValue === undefined || sValue === null) ? '' : String(sValue);
-				}
-			};
-			var procSetHTML = function(sID, sHTML)
-			{
-				var obj = document.getElementById(sID);
-				if ( obj ) {
-					obj.innerHTML = sHTML;
-				}
-			};
-			var procEscapeHTML = function(sText)
-			{
-				return String((sText === undefined || sText === null) ? '' : sText)
-					.replace(/&/g, '&amp;')
-					.replace(/</g, '&lt;')
-					.replace(/>/g, '&gt;')
-					.replace(/"/g, '&quot;')
-					.replace(/'/g, '&#39;');
-			};
-			var procParseJSONText = function(sText)
-			{
-				var tblData = {};
-				try {
-					tblData = JSON.parse(sText || '{}') || {};
-				} catch ( objErr ) {
-					tblData = {};
-				}
-				return tblData;
-			};
-			var g_bBusManageAvailable = true;
-			var g_sBusManageDisabledText = 'bus api only available in xsdbg';
-			var g_bDebugManageActionAvailable = true;
-			var g_sDebugManageDisabledText = 'debug manage api only available in xsdbg';
-			var procBusManageDisabled = function(tblData)
-			{
-				var sMessage = procMessage(tblData);
+				var objNode = document.getElementById(sID);
 
-				return sMessage.indexOf('bus api not included in production xs') >= 0;
-			};
-			var procSetBusManageEnabled = function(bEnabled)
-			{
-				var arrNodes = document.querySelectorAll('.bus-box input, .bus-box button, a[data-bus-manage="true"]');
-				var i;
-				var objNode;
-				var sHref;
-
-				for ( i = 0; i < arrNodes.length; i++ ) {
-					objNode = arrNodes[i];
-					if ( objNode.tagName === 'A' ) {
-						sHref = objNode.getAttribute('data-href') || objNode.getAttribute('href') || '';
-						if ( sHref ) {
-							objNode.setAttribute('data-href', sHref);
-						}
-						if ( bEnabled ) {
-							if ( sHref ) {
-								objNode.setAttribute('href', sHref);
-							}
-							objNode.style.pointerEvents = '';
-							objNode.style.opacity = '';
-							objNode.removeAttribute('aria-disabled');
-							objNode.removeAttribute('title');
-						} else {
-							objNode.removeAttribute('href');
-							objNode.style.pointerEvents = 'none';
-							objNode.style.opacity = '0.5';
-							objNode.setAttribute('aria-disabled', 'true');
-							objNode.setAttribute('title', g_sBusManageDisabledText);
-						}
-						continue;
-					}
-					objNode.disabled = !bEnabled;
-					if ( bEnabled ) {
-						objNode.removeAttribute('title');
-					} else {
-						objNode.setAttribute('title', g_sBusManageDisabledText);
-					}
+				if ( objNode ) {
+					objNode.textContent = sText;
 				}
 			};
-			var procSetDebugManageActionEnabled = function(bEnabled)
-			{
-				var arrIDs = ['ReloadClearBtn', 'ReloadResetBtn', 'ReloadResetLink', 'CheckConfigClearBtn', 'CheckConfigClearLink'];
-				var arrNodes = document.querySelectorAll('a[data-debug-manage="true"]');
-				var i;
-				var objNode;
-				var sHref;
 
-				for ( i = 0; i < arrNodes.length; i++ ) {
-					objNode = arrNodes[i];
-					sHref = objNode.getAttribute('data-href') || objNode.getAttribute('href') || '';
-					if ( sHref ) {
-						objNode.setAttribute('data-href', sHref);
-					}
-					if ( bEnabled ) {
-						if ( sHref ) {
-							objNode.setAttribute('href', sHref);
-						}
-						objNode.style.pointerEvents = '';
-						objNode.style.opacity = '';
-						objNode.removeAttribute('aria-disabled');
-						objNode.removeAttribute('title');
-					} else {
-						objNode.removeAttribute('href');
-						objNode.style.pointerEvents = 'none';
-						objNode.style.opacity = '0.5';
-						objNode.setAttribute('aria-disabled', 'true');
-						objNode.setAttribute('title', g_sDebugManageDisabledText);
-					}
-				}
-
-				for ( i = 0; i < arrIDs.length; i++ ) {
-					objNode = document.getElementById(arrIDs[i]);
-					if ( !objNode ) {
-						continue;
-					}
-					if ( objNode.tagName === 'A' ) {
-						sHref = objNode.getAttribute('data-href') || objNode.getAttribute('href') || '';
-						if ( sHref ) {
-							objNode.setAttribute('data-href', sHref);
-						}
-						if ( bEnabled ) {
-							if ( sHref ) {
-								objNode.setAttribute('href', sHref);
-							}
-							objNode.style.pointerEvents = '';
-							objNode.style.opacity = '';
-							objNode.removeAttribute('aria-disabled');
-							objNode.removeAttribute('title');
-						} else {
-							objNode.removeAttribute('href');
-							objNode.style.pointerEvents = 'none';
-							objNode.style.opacity = '0.5';
-							objNode.setAttribute('aria-disabled', 'true');
-							objNode.setAttribute('title', g_sDebugManageDisabledText);
-						}
-						continue;
-					}
-					objNode.disabled = !bEnabled;
-					if ( bEnabled ) {
-						objNode.removeAttribute('title');
-					} else {
-						objNode.setAttribute('title', g_sDebugManageDisabledText);
-					}
-				}
-			};
-			var procDisableDebugManageActions = function(sMessage)
+			var procLoadOne = function(tblItem)
 			{
-				g_bDebugManageActionAvailable = false;
-				g_sDebugManageDisabledText = sMessage || g_sDebugManageDisabledText;
-				procSetDebugManageActionEnabled(false);
-			};
-			var procEnableDebugManageActions = function()
-			{
-				g_bDebugManageActionAvailable = true;
-				g_sDebugManageDisabledText = 'debug manage api only available in xsdbg';
-				procSetDebugManageActionEnabled(true);
-			};
-			var procDisableBusManage = function(sMessage)
-			{
-				var sText = sMessage || g_sBusManageDisabledText;
-
-				g_bBusManageAvailable = false;
-				g_sBusManageDisabledText = sText;
-				procSetBusManageEnabled(false);
-				procSetText('BusRaw', sText);
-				procSetText('BusRegistryRaw', sText);
-				procSetText('BusPayloadRaw', sText);
-				procSetText('BusNamespaceCount', 'Bus disabled');
-				procSetText('BusNamespaceLimit', 'xsdbg only');
-				procSetText('BusNamespacePressure', '-');
-				procSetText('BusNamespaceWindow', '-');
-				procSetHTML(
-					'BusNamespaceList',
-					'<div class="namespace-card"><div class="namespace-card-line">' + procEscapeHTML(sText) + '</div></div>'
-				);
-				procSetText('BusNamespaceRaw', sText);
-				procSetText('BusSendResult', sText);
-			};
-			var procFetchTextResponse = function(sURL)
-			{
-				return fetch(sURL)
+				fetch(tblItem.path)
 				.then(function(objResp){
-					return objResp.text()
-					.then(function(sText){
+					return objResp.text().then(function(sBody){
 						return {
 							status: objResp.status,
-							text: sText || ''
-						};
-					});
-				});
-			};
-			var procStatusUsesDebugManage = function(tblStatus)
-			{
-				return !!(tblStatus && (tblStatus.mem_debug === true || tblStatus.build === 'xsdbg'));
-			};
-			var procFormatCountLimit = function(iCount, iLimit)
-			{
-				if ( iLimit !== undefined && iLimit !== null && Number(iLimit) > 0 ) {
-					return String(iCount) + '/' + String(iLimit);
-				}
-				return String(iCount);
-			};
-			var procFormatAgeText = function(iAgeMS)
-			{
-				if ( iAgeMS === undefined || iAgeMS === null || Number(iAgeMS) < 0 ) {
-					return '-';
-				}
-				return String(iAgeMS) + ' ms';
-			};
-			var procFormatNetResultReason = function(iCode)
-			{
-				switch ( iCode ) {
-					case 0:
-						return 'none';
-					case -1:
-						return 'error';
-					case -2:
-						return 'again';
-					case -3:
-						return 'timeout';
-					case -4:
-						return 'closed';
-					case -5:
-						return 'cancelled';
-					default:
-						return 'unknown';
-				}
-			};
-			var procFormatNetResultCode = function(iCode)
-			{
-				var iValue = Number(iCode);
-
-				if ( iCode === undefined || iCode === null || iCode === '' || isNaN(iValue) ) {
-					return '-';
-				}
-				return String(iValue) + ' / ' + procFormatNetResultReason(iValue);
-			};
-			var procFormatWsCloseReason = function(iReason)
-			{
-				var iCode = Number(iReason);
-				var sText = '';
-
-				if ( iReason === undefined || iReason === null || iReason === '' || isNaN(iCode) ) {
-					return '-';
-				}
-				switch ( iCode ) {
-					case 1000:
-						sText = 'normal';
-						break;
-					case 1001:
-						sText = 'going away';
-						break;
-					case 1002:
-						sText = 'protocol';
-						break;
-					case 1003:
-						sText = 'unsupported';
-						break;
-					case 1009:
-						sText = 'too big';
-						break;
-					case 1011:
-						sText = 'internal';
-						break;
-					default:
-						sText = procFormatNetResultReason(iCode);
-						break;
-				}
-				return String(iCode) + ' / ' + sText;
-			};
-			var procAppendLatestEvent = function(sText, arrEvents)
-			{
-				var i;
-				var tblEvent;
-				var iAgeMS;
-				var iLatestAgeMS = -1;
-				var sLatestTime = '';
-
-				if ( !Array.isArray(arrEvents) ) {
-					return sText;
-				}
-				for ( i = 0; i < arrEvents.length; i++ ) {
-					tblEvent = arrEvents[i] || {};
-					iAgeMS = Number(tblEvent.age_ms);
-					if ( isNaN(iAgeMS) || iAgeMS < 0 ) {
-						continue;
-					}
-					if ( iLatestAgeMS < 0 || iAgeMS < iLatestAgeMS ) {
-						iLatestAgeMS = iAgeMS;
-						sLatestTime = tblEvent.time || '';
-					}
-				}
-				if ( iLatestAgeMS < 0 ) {
-					return sText;
-				}
-				return String(sText) + ' / ' + (sLatestTime || '-') + ' / ' + procFormatAgeText(iLatestAgeMS);
-			};
-			var procFormatCountTimeAge = function(vCount, sTime, iAgeMS)
-			{
-				return String((vCount !== undefined && vCount !== null) ? vCount : '-') +
-					' / ' +
-					(sTime || '-') +
-					' / ' +
-					procFormatAgeText(iAgeMS);
-			};
-			var procFormatCleanupText = function(vCount, vClosed, vRemain, sTime, iAgeMS)
-			{
-				return String((vCount !== undefined && vCount !== null) ? vCount : '-') +
-					' / ' +
-					String((vClosed !== undefined && vClosed !== null) ? vClosed : '-') +
-					' / ' +
-					String((vRemain !== undefined && vRemain !== null) ? vRemain : '-') +
-					' / ' +
-					(sTime || '-') +
-					' / ' +
-					procFormatAgeText(iAgeMS);
-			};
-			var procFormatLimitText = function(iLimit)
-			{
-				if ( iLimit === undefined || iLimit === null || Number(iLimit) <= 0 ) {
-					return 'unlimited';
-				}
-				return String(iLimit);
-			};
-			var procFormatRemainingText = function(iRemain, iLimit)
-			{
-				if ( iLimit === undefined || iLimit === null || Number(iLimit) <= 0 ) {
-					return 'unlimited';
-				}
-				if ( iRemain === undefined || iRemain === null || Number(iRemain) < 0 ) {
-					return '0';
-				}
-				return String(iRemain);
-			};
-			var procFormatReachedText = function(bReached, iLimit)
-			{
-				if ( iLimit === undefined || iLimit === null || Number(iLimit) <= 0 ) {
-					return 'unlimited';
-				}
-				return String(!!bReached);
-			};
-			var procFormatTimeoutText = function(iTimeoutMS)
-			{
-				if ( iTimeoutMS === undefined || iTimeoutMS === null || Number(iTimeoutMS) <= 0 ) {
-					return 'unlimited';
-				}
-				return String(iTimeoutMS) + ' ms';
-			};
-			var procFormatWsMessageLimitText = function(iMessageLimit, iRecvLimit)
-			{
-				var bHasMessageLimit = !(iMessageLimit === undefined || iMessageLimit === null);
-				var iLimit = bHasMessageLimit ? Number(iMessageLimit) : 0;
-				var iRecv = (iRecvLimit === undefined || iRecvLimit === null) ? 0 : Number(iRecvLimit);
-
-				if ( !bHasMessageLimit ) {
-					return '-';
-				}
-				if ( iLimit > 0 ) {
-					return String(iLimit) + ' B';
-				}
-				if ( iRecv > 0 ) {
-					return 'recv_limit ' + String(iRecv) + ' B';
-				}
-				return 'unlimited';
-			};
-			var procCountRuleList = function(sRules)
-			{
-				var arrItems;
-				var i;
-				var iCount = 0;
-
-				if ( !sRules ) {
-					return 0;
-				}
-				arrItems = String(sRules).split(',');
-				for ( i = 0; i < arrItems.length; i++ ) {
-					if ( arrItems[i] && arrItems[i].trim() ) {
-						iCount++;
-					}
-				}
-				return iCount;
-			};
-			var procRenderBusNamespaces = function(tblData)
-			{
-				var arrItems = [];
-				var arrSorted = [];
-				var arrVisible = [];
-				var objHot = null;
-				var objNextExpire = null;
-				var sHTML = '';
-				var i;
-				var objItem;
-				var iNamespaceCount;
-				var iNamespaceItemCount;
-				var iNamespaceLimit;
-				var iNamespaceRemain;
-				var iReadonlyNamespaceCount;
-				var iDisabledNamespaceCount;
-				var iDerivedNamespaceCount = 0;
-				var iDerivedNamespaceItemCount = 0;
-				var iDerivedReadonlyNamespaceCount = 0;
-				var iDerivedDisabledNamespaceCount = 0;
-				var iDerivedTTLRequiredNamespaceCount = 0;
-				var iDerivedTagRequiredNamespaceCount = 0;
-				var iPressureCount;
-				var iPressureLimit;
-				var iHotCount;
-				var iHotLimit;
-				var fHotScore;
-				var fScore;
-				
-				tblData = tblData || {};
-				arrItems = Array.isArray(tblData.items) ? tblData.items : [];
-				iNamespaceLimit = (tblData.namespace_limit !== undefined) ? Number(tblData.namespace_limit) : 0;
-				var iTTLRequiredNamespaceCount;
-				var iTagRequiredNamespaceCount;
-				for ( i = 0; i < arrItems.length; i++ ) {
-					objItem = arrItems[i] || {};
-					iHotCount = (objItem.count !== undefined) ? Number(objItem.count) : 0;
-					if ( iHotCount > 0 ) {
-						iDerivedNamespaceCount++;
-					}
-					iDerivedNamespaceItemCount += iHotCount;
-					if ( objItem.readonly !== undefined && objItem.readonly ) {
-						iDerivedReadonlyNamespaceCount++;
-					}
-					if ( objItem.disabled !== undefined && objItem.disabled ) {
-						iDerivedDisabledNamespaceCount++;
-					}
-					if ( objItem.ttl_required !== undefined && objItem.ttl_required ) {
-						iDerivedTTLRequiredNamespaceCount++;
-					}
-					if ( objItem.tag_required !== undefined && objItem.tag_required ) {
-						iDerivedTagRequiredNamespaceCount++;
-					}
-				}
-				iNamespaceCount = (tblData.namespace_count !== undefined) ? Number(tblData.namespace_count) : iDerivedNamespaceCount;
-				iNamespaceItemCount = (tblData.namespace_item_count !== undefined) ? Number(tblData.namespace_item_count) : iDerivedNamespaceItemCount;
-				iNamespaceRemain = (tblData.namespace_limit_remaining !== undefined) ? Number(tblData.namespace_limit_remaining) : ((iNamespaceLimit > 0 && iNamespaceCount < iNamespaceLimit) ? (iNamespaceLimit - iNamespaceCount) : 0);
-				iReadonlyNamespaceCount = (tblData.readonly_namespace_count !== undefined) ? Number(tblData.readonly_namespace_count) : iDerivedReadonlyNamespaceCount;
-				iDisabledNamespaceCount = (tblData.disabled_namespace_count !== undefined) ? Number(tblData.disabled_namespace_count) : iDerivedDisabledNamespaceCount;
-				iTTLRequiredNamespaceCount = (tblData.ttl_required_namespace_count !== undefined) ? Number(tblData.ttl_required_namespace_count) : iDerivedTTLRequiredNamespaceCount;
-				iTagRequiredNamespaceCount = (tblData.tag_required_namespace_count !== undefined) ? Number(tblData.tag_required_namespace_count) : iDerivedTagRequiredNamespaceCount;
-				procSetText('BusNamespaceCount', 'Active:' + String(iNamespaceCount) + ' Items:' + String(iNamespaceItemCount) + ' Remain:' + procFormatRemainingText(iNamespaceRemain, iNamespaceLimit));
-				procSetText(
-					'BusNamespaceLimit',
-					'L:' + procFormatLimitText(iNamespaceLimit) +
-					' S:' + procFormatReachedText(tblData.namespace_limit_reached, iNamespaceLimit) +
-					' RO:' + String(iReadonlyNamespaceCount) +
-					' DI:' + String(iDisabledNamespaceCount) +
-					' TR:' + String(iTTLRequiredNamespaceCount) +
-					' TG:' + String(iTagRequiredNamespaceCount)
-				);
-				if ( arrItems.length === 0 ) {
-					procSetText('BusNamespacePressure', '-');
-					procSetText('BusNamespaceWindow', '-');
-					procSetHTML(
-						'BusNamespaceList',
-						'<div class="namespace-card"><div class="namespace-card-line">(empty)</div></div>'
-					);
-					return;
-				}
-				
-				arrSorted = arrItems.slice().sort(function(objA, objB){
-					var iACount = (objA && objA.count !== undefined) ? Number(objA.count) : 0;
-					var iBCount = (objB && objB.count !== undefined) ? Number(objB.count) : 0;
-					var iALimit = (objA && objA.namespace_data_limit !== undefined) ? Number(objA.namespace_data_limit) : 0;
-					var iBLimit = (objB && objB.namespace_data_limit !== undefined) ? Number(objB.namespace_data_limit) : 0;
-					var fAScore = (iALimit > 0) ? (iACount / iALimit) : iACount;
-					var fBScore = (iBLimit > 0) ? (iBCount / iBLimit) : iBCount;
-					
-					if ( fBScore !== fAScore ) {
-						return fBScore - fAScore;
-					}
-					if ( iBCount !== iACount ) {
-						return iBCount - iACount;
-					}
-					return String((objA && objA.namespace) ? objA.namespace : '').localeCompare(String((objB && objB.namespace) ? objB.namespace : ''));
-				});
-				arrVisible = arrSorted.slice(0, 6);
-				for ( i = 0; i < arrItems.length; i++ ) {
-					objItem = arrItems[i] || {};
-					iHotCount = (objItem.count !== undefined) ? Number(objItem.count) : 0;
-					iHotLimit = (objItem.namespace_data_limit !== undefined) ? Number(objItem.namespace_data_limit) : 0;
-					fHotScore = (iHotLimit > 0) ? (iHotCount / iHotLimit) : iHotCount;
-					if ( iHotCount > 0 && (!objHot || (fHotScore > fScore) || (fHotScore === fScore && iHotCount > iPressureCount)) ) {
-						objHot = objItem;
-						fScore = fHotScore;
-						iPressureCount = iHotCount;
-						iPressureLimit = iHotLimit;
-					}
-					if ( objItem.next_expire_in_ms !== undefined && Number(objItem.next_expire_in_ms) >= 0 ) {
-						if ( !objNextExpire || Number(objItem.next_expire_in_ms) < Number(objNextExpire.next_expire_in_ms) ) {
-							objNextExpire = objItem;
-						}
-					}
-				}
-				procSetText(
-					'BusNamespacePressure',
-					objHot ?
-						((objHot.namespace ? objHot.namespace : '-') + ' ' + procFormatCountLimit(iPressureCount, iPressureLimit)) :
-						'-'
-				);
-				procSetText(
-					'BusNamespaceWindow',
-					objNextExpire ?
-						((objNextExpire.namespace || '-') + ' @ ' + (objNextExpire.next_expire_time_text || '-') + ' / in ' + procFormatAgeText(objNextExpire.next_expire_in_ms)) :
-						'-'
-				);
-				for ( i = 0; i < arrVisible.length; i++ ) {
-					objItem = arrVisible[i] || {};
-					sHTML += '<div class="namespace-card">';
-					sHTML += '<div class="namespace-card-head">';
-					sHTML += '<div class="namespace-card-title">' + procEscapeHTML(objItem.namespace || '(default)') + '</div>';
-					sHTML += '<div class="namespace-card-meta">' + procEscapeHTML(objItem.policy_state || 'active') + ' | count ' + procFormatCountLimit((objItem.count !== undefined) ? Number(objItem.count) : 0, (objItem.namespace_data_limit !== undefined) ? Number(objItem.namespace_data_limit) : 0) + '</div>';
-					sHTML += '</div>';
-					sHTML += '<div class="namespace-card-line">persistent ' + procEscapeHTML(String((objItem.persistent_count !== undefined) ? objItem.persistent_count : 0)) + ' | ttl ' + procEscapeHTML(String((objItem.ttl_count !== undefined) ? objItem.ttl_count : 0)) + ' | remain ' + procEscapeHTML(procFormatRemainingText((objItem.namespace_data_limit_remaining !== undefined) ? Number(objItem.namespace_data_limit_remaining) : -1, (objItem.namespace_data_limit !== undefined) ? Number(objItem.namespace_data_limit) : 0)) + '</div>';
-					sHTML += '<div class="namespace-card-line">policy readonly ' + procEscapeHTML(String((objItem.readonly !== undefined) ? objItem.readonly : false)) + ' | disabled ' + procEscapeHTML(String((objItem.disabled !== undefined) ? objItem.disabled : false)) + ' | ttl_required ' + procEscapeHTML(String((objItem.ttl_required !== undefined) ? objItem.ttl_required : false)) + ' | tag_required ' + procEscapeHTML(String((objItem.tag_required !== undefined) ? objItem.tag_required : false)) + '</div>';
-					sHTML += '<div class="namespace-card-line">policy hits total ' + procEscapeHTML(String((objItem.policy_reject_count !== undefined) ? objItem.policy_reject_count : 0)) + ' | ro ' + procEscapeHTML(String((objItem.readonly_reject_count !== undefined) ? objItem.readonly_reject_count : 0)) + ' | di ' + procEscapeHTML(String((objItem.disabled_reject_count !== undefined) ? objItem.disabled_reject_count : 0)) + ' | tr ' + procEscapeHTML(String((objItem.ttl_required_reject_count !== undefined) ? objItem.ttl_required_reject_count : 0)) + ' | tg ' + procEscapeHTML(String((objItem.tag_required_reject_count !== undefined) ? objItem.tag_required_reject_count : 0)) + '</div>';
-					sHTML += '<div class="namespace-card-line">last policy ' + procEscapeHTML(objItem.last_policy_reject_reason || '-') + ' / ' + procEscapeHTML(objItem.last_policy_reject_action || '-') + ' / ' + procEscapeHTML(objItem.last_policy_reject_namespace || '-') + ' / ' + procEscapeHTML(objItem.last_policy_reject_time_text || '-') + ' / ' + procEscapeHTML(procFormatAgeText(objItem.last_policy_reject_age_ms)) + '</div>';
-					sHTML += '<div class="namespace-card-line">oldest ' + procEscapeHTML(objItem.oldest_create_time_text || '-') + ' / ' + procEscapeHTML(procFormatAgeText(objItem.oldest_create_age_ms)) + ' | newest ' + procEscapeHTML(objItem.newest_create_time_text || '-') + ' / ' + procEscapeHTML(procFormatAgeText(objItem.newest_create_age_ms)) + '</div>';
-					sHTML += '<div class="namespace-card-line">next expire ' + procEscapeHTML(objItem.next_expire_time_text || '-') + ' | in ' + procEscapeHTML(procFormatAgeText(objItem.next_expire_in_ms)) + '</div>';
-					sHTML += '</div>';
-				}
-				procSetHTML('BusNamespaceList', sHTML);
-			};
-			var procSetBusDataID = function(vID)
-			{
-				var obj = document.getElementById('BusDataIDInput');
-				if ( !obj ) {
-					return;
-				}
-				if ( vID === null || vID === undefined || vID === '' ) {
-					obj.value = '';
-					return;
-				}
-				obj.value = String(vID);
-			};
-			var procLoadStatus = function()
-			{
-				procFetchTextResponse('/__xs/status_json')
-				.then(function(tblStatusResp){
-					var tblStatusData = procParseJSONText(tblStatusResp.text || '');
-
-					if ( tblStatusResp.status !== 200 ) {
-						throw new Error(tblStatusResp.text || 'status unavailable');
-					}
-					if ( !procStatusUsesDebugManage(tblStatusData) ) {
-						procDisableDebugManageActions('debug manage api only available in xsdbg');
-						procDisableBusManage('bus api not included in production xs');
-						return Promise.all([
-							Promise.resolve(tblStatusResp),
-							procFetchTextResponse('/__xs/health_json'),
-							procFetchTextResponse('/__xs/check_config_json')
-						])
-						.then(function(arrResp){
-							var tblData = {
-								status: procParseJSONText(arrResp[0].text || ''),
-								health: procParseJSONText(arrResp[1].text || ''),
-								check_config: procParseJSONText(arrResp[2].text || ''),
-								bus: {}
-							};
-							return {
-								text: 'core manage only\n' + JSON.stringify(tblData || {}, null, 2),
-								data: tblData
-							};
-						});
-					}
-					procEnableDebugManageActions();
-					return procFetchTextResponse('/__xs/dashboard_json')
-					.then(function(tblResp){
-						if ( tblResp.status === 200 ) {
-							return {
-								text: tblResp.text || '',
-								data: procParseJSONText(tblResp.text || '')
-							};
-						}
-						return Promise.all([
-							Promise.resolve(tblStatusResp),
-							procFetchTextResponse('/__xs/health_json'),
-							procFetchTextResponse('/__xs/check_config_json'),
-							procFetchTextResponse('/__xs/bus/status')
-						])
-						.then(function(arrResp){
-							var tblDashboardErr = procParseJSONText(tblResp.text || '');
-							var tblBusResp = arrResp[3] || {};
-							var tblBusErr = procParseJSONText(tblBusResp.text || '');
-							var tblBus = (tblBusResp.status === 200) ? tblBusErr : {};
-
-							if ( procBusManageDisabled(tblBusErr) ) {
-								procDisableBusManage(procMessage(tblBusErr));
-							}
-							var tblData = {
-								status: procParseJSONText(arrResp[0].text || ''),
-								health: procParseJSONText(arrResp[1].text || ''),
-								check_config: procParseJSONText(arrResp[2].text || ''),
-								bus: tblBus
-							};
-							var sFallback = (tblDashboardErr.message || 'dashboard unavailable') + '\n' + JSON.stringify(tblData || {}, null, 2);
-							return {
-								text: sFallback,
-								data: tblData
-							};
-						});
-					});
-				})
-				.then(function(tblResult){
-					var sText = tblResult.text || '';
-					var tblData = tblResult.data || {};
-					var tblBus = {};
-					var tblStatus = {};
-					var tblHealth = {};
-					var tblCheck = {};
-					tblBus = tblData.bus || {};
-					tblStatus = tblData.status || {};
-					tblHealth = tblData.health || {};
-					tblCheck = tblData.check_config || {};
-					procSetText('StatusServer', tblStatus.server || '-');
-					procSetText('StatusClass', tblStatus.class || '-');
-					procSetText('StatusHost', (tblStatus.default && tblStatus.default.name) ? tblStatus.default.name : ((tblStatus.default_host ? '默认主机' : '-')));
-					procSetText('StatusScript', (tblStatus.script_loaded !== undefined) ? String(tblStatus.script_loaded) : '-');
-					procSetText('StatusHealth', (tblHealth.ok !== undefined) ? String(tblHealth.ok) : '-');
-					procSetText(
-						'StatusReloadLast',
-						procAppendLatestEvent(
-							tblHealth.reload_time || '-',
-							[
-								{time: tblHealth.reload_time, age_ms: tblHealth.reload_age_ms}
-							]
-						)
-					);
-					procSetText('StatusReloadAge', (tblHealth.reload_age_ms !== undefined && tblHealth.reload_age_ms >= 0) ? String(tblHealth.reload_age_ms) + ' ms' : '-');
-					procSetText('StatusReloadTotal', (tblHealth.reload_total_count !== undefined) ? String(tblHealth.reload_total_count) : '-');
-					procSetText('StatusReloadSuccess', (tblHealth.reload_success_count !== undefined) ? String(tblHealth.reload_success_count) : '-');
-					procSetText('StatusReloadFailure', (tblHealth.reload_failure_count !== undefined) ? String(tblHealth.reload_failure_count) : '-');
-					procSetText('StatusBusData', (tblData.bus && tblData.bus.data_count !== undefined) ? String(tblData.bus.data_count) : '-');
-					procSetText(
-						'StatusBusLimits',
-						'D:' +
-						((tblBus.data_limit !== undefined && tblBus.data_limit > 0) ? String(tblBus.data_limit) : 'unlimited') +
-						' Q:' +
-						((tblBus.queue_limit !== undefined && tblBus.queue_limit > 0) ? String(tblBus.queue_limit) : 'unlimited') +
-						' NS:' +
-						((tblBus.namespace_limit !== undefined && tblBus.namespace_limit > 0) ? String(tblBus.namespace_limit) : 'unlimited') +
-						' ND:' +
-						((tblBus.namespace_data_limit !== undefined && tblBus.namespace_data_limit > 0) ? String(tblBus.namespace_data_limit) : 'unlimited') +
-						' RO:' +
-						String(procCountRuleList(tblBus.readonly_namespaces)) +
-						' DI:' +
-						String(procCountRuleList(tblBus.disabled_namespaces)) +
-						' TR:' +
-						String(procCountRuleList(tblBus.ttl_required_namespaces)) +
-						' TG:' +
-						String(procCountRuleList(tblBus.tag_required_namespaces))
-					);
-					procSetText(
-						'StatusBusLimitReject',
-						procAppendLatestEvent(
-							'D:' +
-							((tblBus.data_limit_reject_count !== undefined) ? String(tblBus.data_limit_reject_count) : '-') +
-							' Q:' +
-							((tblBus.queue_limit_reject_count !== undefined) ? String(tblBus.queue_limit_reject_count) : '-') +
-							' NS:' +
-							((tblBus.namespace_limit_reject_count !== undefined) ? String(tblBus.namespace_limit_reject_count) : '-') +
-							' ND:' +
-							((tblBus.namespace_data_limit_reject_count !== undefined) ? String(tblBus.namespace_data_limit_reject_count) : '-') +
-							' RO:' +
-							((tblBus.readonly_namespace_reject_count !== undefined) ? String(tblBus.readonly_namespace_reject_count) : '-') +
-							' DI:' +
-							((tblBus.disabled_namespace_reject_count !== undefined) ? String(tblBus.disabled_namespace_reject_count) : '-') +
-							' TR:' +
-							((tblBus.ttl_required_namespace_reject_count !== undefined) ? String(tblBus.ttl_required_namespace_reject_count) : '-') +
-							' TG:' +
-							((tblBus.tag_required_namespace_reject_count !== undefined) ? String(tblBus.tag_required_namespace_reject_count) : '-'),
-							[
-								{time: tblBus.last_data_limit_reject_time, age_ms: tblBus.last_data_limit_reject_age_ms},
-								{time: tblBus.last_queue_limit_reject_time, age_ms: tblBus.last_queue_limit_reject_age_ms},
-								{time: tblBus.last_namespace_limit_reject_time, age_ms: tblBus.last_namespace_limit_reject_age_ms},
-								{time: tblBus.last_namespace_data_limit_reject_time, age_ms: tblBus.last_namespace_data_limit_reject_age_ms},
-								{time: tblBus.last_readonly_namespace_reject_time, age_ms: tblBus.last_readonly_namespace_reject_age_ms},
-								{time: tblBus.last_disabled_namespace_reject_time, age_ms: tblBus.last_disabled_namespace_reject_age_ms},
-								{time: tblBus.last_ttl_required_namespace_reject_time, age_ms: tblBus.last_ttl_required_namespace_reject_age_ms},
-								{time: tblBus.last_tag_required_namespace_reject_time, age_ms: tblBus.last_tag_required_namespace_reject_age_ms}
-							]
-						)
-					);
-					procSetText(
-						'StatusBusSweep',
-						procAppendLatestEvent(
-							'C:' +
-							((tblBus.sweep_count !== undefined) ? String(tblBus.sweep_count) : '-') +
-							' R:' +
-							((tblBus.sweep_removed_count !== undefined) ? String(tblBus.sweep_removed_count) : '-'),
-							[
-								{time: tblBus.last_sweep_time_text, age_ms: tblBus.last_sweep_age_ms}
-							]
-						)
-					);
-					procSetText(
-						'StatusBusCleanup',
-						procAppendLatestEvent(
-							'C:' +
-							((tblBus.cleanup_count !== undefined) ? String(tblBus.cleanup_count) : '-') +
-							' R:' +
-							((tblBus.last_cleanup_removed !== undefined) ? String(tblBus.last_cleanup_removed) : '-') +
-							' M:' +
-							((tblBus.last_cleanup_remain !== undefined) ? String(tblBus.last_cleanup_remain) : '-'),
-							[
-								{time: tblBus.last_cleanup_time_text, age_ms: tblBus.last_cleanup_age_ms}
-							]
-						)
-					);
-					procSyncInputValue('BusReadonlyNamespacesInput', tblBus.readonly_namespaces || '');
-					procSyncInputValue('BusDisabledNamespacesInput', tblBus.disabled_namespaces || '');
-					procSyncInputValue('BusTTLRequiredNamespacesInput', tblBus.ttl_required_namespaces || '');
-					procSyncInputValue('BusTagRequiredNamespacesInput', tblBus.tag_required_namespaces || '');
-					procSetText('StatusConfig', tblStatus.config_file || '-');
-					procSetText('StatusConfigName', tblStatus.config_name || '-');
-					procSetText('StatusConfigMTime', tblStatus.config_mtime || '-');
-					procSetText('StatusConfigSize', (tblStatus.config_size !== undefined) ? String(tblStatus.config_size) + ' B' : '-');
-					procSetText('StatusConfigCheck', tblCheck.has_result ? String(tblCheck.result) : '-');
-					procSetText(
-						'StatusCheckLast',
-						procAppendLatestEvent(
-							tblCheck.check_last_time || '-',
-							[
-								{time: tblCheck.check_last_time, age_ms: tblCheck.check_last_age_ms}
-							]
-						)
-					);
-					procSetText('StatusCheckAge', (tblCheck.check_last_age_ms !== undefined && tblCheck.check_last_age_ms >= 0) ? String(tblCheck.check_last_age_ms) + ' ms' : '-');
-					procSetText('StatusCheckTotal', (tblCheck.check_total_count !== undefined) ? String(tblCheck.check_total_count) : '-');
-					procSetText('StatusCheckSuccess', (tblCheck.check_success_count !== undefined) ? String(tblCheck.check_success_count) : '-');
-					procSetText('StatusCheckFailure', (tblCheck.check_failure_count !== undefined) ? String(tblCheck.check_failure_count) : '-');
-					procSetText('StatusAppPath', tblStatus.app_path || '-');
-					procSetText('StatusAppMTime', tblStatus.app_mtime || '-');
-					procSetText('StatusAppSize', (tblStatus.app_size !== undefined) ? String(tblStatus.app_size) + ' B' : '-');
-					procSetText('StatusCurrentDir', tblStatus.current_dir || '-');
-					procSetText('StatusPID', (tblStatus.pid !== undefined) ? String(tblStatus.pid) : '-');
-					procSetText('StatusUptime', (tblStatus.uptime_ms !== undefined) ? String(tblStatus.uptime_ms) + ' ms' : '-');
-					procSetText('StatusWorkers', (tblStatus.engine_workers !== undefined) ? String(tblStatus.engine_workers) : '-');
-					procSetText('StatusHttpReq', (tblStatus.http_req_count !== undefined) ? String(tblStatus.http_req_count) : '-');
-					procSetText('StatusHttp2xx', (tblStatus.http_2xx_count !== undefined) ? String(tblStatus.http_2xx_count) : '-');
-					procSetText('StatusHttp4xx', (tblStatus.http_4xx_count !== undefined) ? String(tblStatus.http_4xx_count) : '-');
-					procSetText('StatusHttp5xx', (tblStatus.http_5xx_count !== undefined) ? String(tblStatus.http_5xx_count) : '-');
-					procSetText('StatusHttpConn', (tblStatus.http_conn_current !== undefined) ? String(tblStatus.http_conn_current) : '-');
-					procSetText('StatusHttpPeak', (tblStatus.http_conn_peak !== undefined) ? String(tblStatus.http_conn_peak) : '-');
-					procSetText(
-						'StatusHttpMethods',
-						((tblStatus.http_get_count !== undefined) ? String(tblStatus.http_get_count) : '-') +
-						' / ' +
-						((tblStatus.http_post_count !== undefined) ? String(tblStatus.http_post_count) : '-')
-					);
-					procSetText(
-						'StatusHttpKinds',
-						((tblStatus.http_app_req_count !== undefined) ? String(tblStatus.http_app_req_count) : '-') +
-						' / ' +
-						((tblStatus.http_manage_req_count !== undefined) ? String(tblStatus.http_manage_req_count) : '-')
-					);
-					procSetText('StatusHttpAvg', (tblStatus.http_time_avg_ms !== undefined) ? String(tblStatus.http_time_avg_ms) + ' ms' : '-');
-					procSetText('StatusHttpMax', (tblStatus.http_time_max_ms !== undefined) ? String(tblStatus.http_time_max_ms) + ' ms' : '-');
-					procSetText(
-						'StatusHttpLast',
-						(tblStatus.http_last_method || '-') +
-						' ' +
-						((tblStatus.http_last_status !== undefined) ? String(tblStatus.http_last_status) : '-') +
-						' @ ' +
-						(tblStatus.http_last_time || '-')
-					);
-					procSetText('StatusHttpLastAge', (tblStatus.http_last_age_ms !== undefined && tblStatus.http_last_age_ms >= 0) ? String(tblStatus.http_last_age_ms) + ' ms' : '-');
-					procSetText('StatusHttpLastCost', (tblStatus.http_last_duration_ms !== undefined) ? String(tblStatus.http_last_duration_ms) + ' ms' : '-');
-					procSetText('StatusHttpLastBody', (tblStatus.http_last_body_len !== undefined) ? String(tblStatus.http_last_body_len) + ' B' : '-');
-					procSetText('StatusHttpLastHeaders', (tblStatus.http_last_header_count !== undefined) ? String(tblStatus.http_last_header_count) : '-');
-					procSetText('StatusHttpLastQuery', (tblStatus.http_last_query_len !== undefined) ? String(tblStatus.http_last_query_len) + ' B' : '-');
-					procSetText('StatusHttpLastPath', tblStatus.http_last_target || tblStatus.http_last_path || '-');
-					procSetText('StatusHttpLastVersion', tblStatus.http_last_version || '-');
-					procSetText('StatusHttpLastRemote', tblStatus.http_last_remote || '-');
-					procSetText('StatusHttpLastHost', tblStatus.http_last_host || '-');
-					procSetText('StatusHttpLastUA', tblStatus.http_last_user_agent || '-');
-					procSetText('StatusHttpLastReferer', tblStatus.http_last_referer || '-');
-					procSetText('StatusHttpLastOrigin', tblStatus.http_last_origin || '-');
-					procSetText('StatusHttpLastAccept', tblStatus.http_last_accept || '-');
-					procSetText('StatusHttpLastAcceptEncoding', tblStatus.http_last_accept_encoding || '-');
-					procSetText('StatusHttpLastCookie', tblStatus.http_last_cookie || '-');
-					procSetText('StatusHttpLastForwardedFor', tblStatus.http_last_forwarded_for || '-');
-					procSetText('StatusHttpLastRealIP', tblStatus.http_last_real_ip || '-');
-					procSetText('StatusHttpLastConnection', tblStatus.http_last_connection || '-');
-					procSetText('StatusHttpLastCacheControl', tblStatus.http_last_cache_control || '-');
-					procSetText('StatusHttpLastType', tblStatus.http_last_content_type || '-');
-					procSetText(
-						'StatusHttpAppLast',
-						(tblStatus.http_last_app_method || '-') +
-						' ' +
-						((tblStatus.http_last_app_status !== undefined) ? String(tblStatus.http_last_app_status) : '-') +
-						' @ ' +
-						(tblStatus.http_last_app_time || '-')
-					);
-					procSetText('StatusHttpAppLastAge', (tblStatus.http_last_app_age_ms !== undefined && tblStatus.http_last_app_age_ms >= 0) ? String(tblStatus.http_last_app_age_ms) + ' ms' : '-');
-					procSetText('StatusHttpAppLastCost', (tblStatus.http_last_app_duration_ms !== undefined) ? String(tblStatus.http_last_app_duration_ms) + ' ms' : '-');
-					procSetText('StatusHttpAppLastBody', (tblStatus.http_last_app_body_len !== undefined) ? String(tblStatus.http_last_app_body_len) + ' B' : '-');
-					procSetText('StatusHttpAppLastHeaders', (tblStatus.http_last_app_header_count !== undefined) ? String(tblStatus.http_last_app_header_count) : '-');
-					procSetText('StatusHttpAppLastQuery', (tblStatus.http_last_app_query_len !== undefined) ? String(tblStatus.http_last_app_query_len) + ' B' : '-');
-					procSetText('StatusHttpAppLastPath', tblStatus.http_last_app_target || tblStatus.http_last_app_path || '-');
-					procSetText('StatusHttpAppLastVersion', tblStatus.http_last_app_version || '-');
-					procSetText('StatusHttpAppLastRemote', tblStatus.http_last_app_remote || '-');
-					procSetText('StatusHttpAppLastHost', tblStatus.http_last_app_host || '-');
-					procSetText('StatusHttpAppLastUA', tblStatus.http_last_app_user_agent || '-');
-					procSetText('StatusHttpAppLastReferer', tblStatus.http_last_app_referer || '-');
-					procSetText('StatusHttpAppLastOrigin', tblStatus.http_last_app_origin || '-');
-					procSetText('StatusHttpAppLastAccept', tblStatus.http_last_app_accept || '-');
-					procSetText('StatusHttpAppLastAcceptEncoding', tblStatus.http_last_app_accept_encoding || '-');
-					procSetText('StatusHttpAppLastCookie', tblStatus.http_last_app_cookie || '-');
-					procSetText('StatusHttpAppLastForwardedFor', tblStatus.http_last_app_forwarded_for || '-');
-					procSetText('StatusHttpAppLastRealIP', tblStatus.http_last_app_real_ip || '-');
-					procSetText('StatusHttpAppLastConnection', tblStatus.http_last_app_connection || '-');
-					procSetText('StatusHttpAppLastCacheControl', tblStatus.http_last_app_cache_control || '-');
-					procSetText('StatusHttpAppLastType', tblStatus.http_last_app_content_type || '-');
-					procSetText('StatusWsLimit', procFormatWsMessageLimitText(tblStatus.ws_message_limit, tblStatus.recv_limit));
-					procSetText('StatusWsConn', (tblStatus.ws_conn_current !== undefined) ? String(tblStatus.ws_conn_current) : '-');
-					procSetText('StatusWsPeak', (tblStatus.ws_conn_peak !== undefined) ? String(tblStatus.ws_conn_peak) : '-');
-					procSetText(
-						'StatusWsOpenClose',
-						((tblStatus.ws_open_count !== undefined) ? String(tblStatus.ws_open_count) : '-') +
-						' / ' +
-						((tblStatus.ws_close_count !== undefined) ? String(tblStatus.ws_close_count) : '-')
-					);
-					procSetText(
-						'StatusWsTextBinary',
-						((tblStatus.ws_text_count !== undefined) ? String(tblStatus.ws_text_count) : '-') +
-						' / ' +
-						((tblStatus.ws_binary_count !== undefined) ? String(tblStatus.ws_binary_count) : '-')
-					);
-					procSetText(
-						'StatusWsPingPong',
-						((tblStatus.ws_ping_count !== undefined) ? String(tblStatus.ws_ping_count) : '-') +
-						' / ' +
-						((tblStatus.ws_pong_count !== undefined) ? String(tblStatus.ws_pong_count) : '-')
-					);
-					procSetText(
-						'StatusWsError',
-						procAppendLatestEvent(
-							((tblStatus.ws_error_count !== undefined) ? String(tblStatus.ws_error_count) : '-') +
-							' / ' +
-							procFormatNetResultCode(tblStatus.ws_last_error_code) +
-							' / ' +
-							(tblStatus.ws_last_error_remote ? tblStatus.ws_last_error_remote : '-'),
-							[
-								{time: tblStatus.ws_last_error_time, age_ms: tblStatus.ws_last_error_age_ms}
-							]
-						)
-					);
-					procSetText(
-						'StatusWsCloseReason',
-						procAppendLatestEvent(
-							procFormatWsCloseReason(tblStatus.ws_last_close_reason),
-							[
-								{time: tblStatus.ws_last_close_time, age_ms: tblStatus.ws_last_close_age_ms}
-							]
-						)
-					);
-					procSetText('StatusWsCloseAge', (tblStatus.ws_last_close_age_ms !== undefined && tblStatus.ws_last_close_age_ms >= 0) ? String(tblStatus.ws_last_close_age_ms) + ' ms' : '-');
-					procSetText(
-						'StatusWsLast',
-						(tblStatus.ws_last_remote ? tblStatus.ws_last_remote : '-') +
-						' / ' +
-						((tblStatus.ws_last_bytes !== undefined) ? String(tblStatus.ws_last_bytes) : '-')
-					);
-					procSetText('StatusWsErrorAge', (tblStatus.ws_last_error_age_ms !== undefined && tblStatus.ws_last_error_age_ms >= 0) ? String(tblStatus.ws_last_error_age_ms) + ' ms' : '-');
-					procSetText('StatusWsLastAge', (tblStatus.ws_last_age_ms !== undefined && tblStatus.ws_last_age_ms >= 0) ? String(tblStatus.ws_last_age_ms) + ' ms' : '-');
-					procSetText(
-						'StatusWsIdleClose',
-						procAppendLatestEvent(
-							(tblStatus.ws_idle_close_count !== undefined) ? String(tblStatus.ws_idle_close_count) : '-',
-							[
-								{time: tblStatus.ws_last_idle_close_time, age_ms: tblStatus.ws_last_idle_close_age_ms}
-							]
-						)
-					);
-					procSetText('StatusWsIdleAge', (tblStatus.ws_last_idle_close_age_ms !== undefined && tblStatus.ws_last_idle_close_age_ms >= 0) ? String(tblStatus.ws_last_idle_close_age_ms) + ' ms' : '-');
-					procSetText('StatusIdleTimeout', procFormatTimeoutText(tblStatus.idle_timeout));
-					procSetText('StatusConnLimit', (tblStatus.conn_limit !== undefined && tblStatus.conn_limit > 0) ? String(tblStatus.conn_limit) : 'unlimited');
-					procSetText(
-						'StatusHttpLimitClose',
-						procFormatCountTimeAge(
-							tblStatus.http_conn_limit_close_count,
-							tblStatus.http_last_conn_limit_close_time,
-							tblStatus.http_last_conn_limit_close_age_ms
-						)
-					);
-					procSetText(
-						'StatusHttpReqLimit',
-						procAppendLatestEvent(
-							'H:' +
-							((tblStatus.http_header_limit_reject_count !== undefined) ? String(tblStatus.http_header_limit_reject_count) : '-') +
-							' B:' +
-							((tblStatus.http_body_limit_reject_count !== undefined) ? String(tblStatus.http_body_limit_reject_count) : '-') +
-							' P:' +
-							((tblStatus.http_path_limit_reject_count !== undefined) ? String(tblStatus.http_path_limit_reject_count) : '-'),
-							[
-								{time: tblStatus.http_last_header_limit_reject_time, age_ms: tblStatus.http_last_header_limit_reject_age_ms},
-								{time: tblStatus.http_last_body_limit_reject_time, age_ms: tblStatus.http_last_body_limit_reject_age_ms},
-								{time: tblStatus.http_last_path_limit_reject_time, age_ms: tblStatus.http_last_path_limit_reject_age_ms}
-							]
-						)
-					);
-					procSetText(
-						'StatusHttpPolicyReject',
-						procAppendLatestEvent(
-							'A:' +
-							((tblStatus.http_api_disabled_reject_count !== undefined) ? String(tblStatus.http_api_disabled_reject_count) : '-') +
-							' M:' +
-							((tblStatus.http_method_reject_count !== undefined) ? String(tblStatus.http_method_reject_count) : '-') +
-							' H:' +
-							((tblStatus.http_host_not_found_reject_count !== undefined) ? String(tblStatus.http_host_not_found_reject_count) : '-'),
-							[
-								{time: tblStatus.http_last_api_disabled_reject_time, age_ms: tblStatus.http_last_api_disabled_reject_age_ms},
-								{time: tblStatus.http_last_method_reject_time, age_ms: tblStatus.http_last_method_reject_age_ms},
-								{time: tblStatus.http_last_host_not_found_reject_time, age_ms: tblStatus.http_last_host_not_found_reject_age_ms}
-							]
-						)
-					);
-					procSetText(
-						'StatusHttpManageReject',
-						procAppendLatestEvent(
-							'B:' +
-							((tblStatus.http_reload_busy_reject_count !== undefined) ? String(tblStatus.http_reload_busy_reject_count) : '-') +
-							' R:' +
-							((tblStatus.http_reload_failed_reject_count !== undefined) ? String(tblStatus.http_reload_failed_reject_count) : '-') +
-							' C:' +
-							((tblStatus.http_check_config_failed_reject_count !== undefined) ? String(tblStatus.http_check_config_failed_reject_count) : '-'),
-							[
-								{time: tblStatus.http_last_reload_busy_reject_time, age_ms: tblStatus.http_last_reload_busy_reject_age_ms},
-								{time: tblStatus.http_last_reload_failed_reject_time, age_ms: tblStatus.http_last_reload_failed_reject_age_ms},
-								{time: tblStatus.http_last_check_config_failed_reject_time, age_ms: tblStatus.http_last_check_config_failed_reject_age_ms}
-							]
-						)
-					);
-					procSetText(
-						'StatusHttpBusReject',
-						procAppendLatestEvent(
-							'B:' +
-							((tblStatus.http_bus_bad_request_reject_count !== undefined) ? String(tblStatus.http_bus_bad_request_reject_count) : '-') +
-							' N:' +
-							((tblStatus.http_bus_not_found_reject_count !== undefined) ? String(tblStatus.http_bus_not_found_reject_count) : '-') +
-							' L:' +
-							((tblStatus.http_bus_limit_reject_count !== undefined) ? String(tblStatus.http_bus_limit_reject_count) : '-') +
-							' F:' +
-							((tblStatus.http_bus_failed_reject_count !== undefined) ? String(tblStatus.http_bus_failed_reject_count) : '-'),
-							[
-								{time: tblStatus.http_last_bus_bad_request_reject_time, age_ms: tblStatus.http_last_bus_bad_request_reject_age_ms},
-								{time: tblStatus.http_last_bus_not_found_reject_time, age_ms: tblStatus.http_last_bus_not_found_reject_age_ms},
-								{time: tblStatus.http_last_bus_limit_reject_time, age_ms: tblStatus.http_last_bus_limit_reject_age_ms},
-								{time: tblStatus.http_last_bus_failed_reject_time, age_ms: tblStatus.http_last_bus_failed_reject_age_ms}
-							]
-						)
-					);
-					procSetText(
-						'StatusWsLimitClose',
-						procFormatCountTimeAge(
-							tblStatus.ws_conn_limit_close_count,
-							tblStatus.ws_last_conn_limit_close_time,
-							tblStatus.ws_last_conn_limit_close_age_ms
-						)
-					);
-					procSetText(
-						'StatusWsMessageLimit',
-						procFormatCountTimeAge(
-							tblStatus.ws_message_limit_close_count,
-							tblStatus.ws_last_message_limit_close_time,
-							tblStatus.ws_last_message_limit_close_age_ms
-						)
-					);
-					procSetText(
-						'StatusXtpLimitClose',
-						procFormatCountTimeAge(
-							tblStatus.xtp_conn_limit_close_count,
-							tblStatus.xtp_last_conn_limit_close_time,
-							tblStatus.xtp_last_conn_limit_close_age_ms
-						)
-					);
-					procSetText(
-						'StatusXtpRecvLimit',
-						procFormatCountTimeAge(
-							tblStatus.xtp_recv_limit_close_count,
-							tblStatus.xtp_last_recv_limit_close_time,
-							tblStatus.xtp_last_recv_limit_close_age_ms
-						)
-					);
-					procSetText(
-						'StatusCustomLimitClose',
-						procFormatCountTimeAge(
-							tblStatus.custom_conn_limit_close_count,
-							tblStatus.custom_last_conn_limit_close_time,
-							tblStatus.custom_last_conn_limit_close_age_ms
-						)
-					);
-					procSetText(
-						'StatusCustomRecvLimit',
-						procFormatCountTimeAge(
-							tblStatus.custom_recv_limit_close_count,
-							tblStatus.custom_last_recv_limit_close_time,
-							tblStatus.custom_last_recv_limit_close_age_ms
-						)
-					);
-					procSetText(
-						'StatusHttpReject',
-						procAppendLatestEvent(
-							((tblStatus.http_reject_count !== undefined) ? String(tblStatus.http_reject_count) : '-') +
-							' / ' +
-							((tblStatus.http_last_reject_status !== undefined) ? String(tblStatus.http_last_reject_status) : '-') +
-							' / ' +
-							(tblStatus.http_last_reject_reason || '-') +
-							' / ' +
-							(tblStatus.http_last_reject_remote || '-'),
-							[
-								{time: tblStatus.http_last_reject_time, age_ms: tblStatus.http_last_reject_age_ms}
-							]
-						)
-					);
-					procSetText(
-						'StatusWsReject',
-						procAppendLatestEvent(
-							((tblStatus.ws_reject_count !== undefined) ? String(tblStatus.ws_reject_count) : '-') +
-							' / ' +
-							(tblStatus.ws_last_reject_reason || '-') +
-							' / ' +
-							(tblStatus.ws_last_reject_remote || '-'),
-							[
-								{time: tblStatus.ws_last_reject_time, age_ms: tblStatus.ws_last_reject_age_ms}
-							]
-						)
-					);
-					procSetText(
-						'StatusWsInvalid',
-						procAppendLatestEvent(
-							(tblStatus.ws_invalid_count !== undefined) ? String(tblStatus.ws_invalid_count) : '-',
-							[
-								{time: tblStatus.ws_last_invalid_time, age_ms: tblStatus.ws_last_invalid_age_ms}
-							]
-						)
-					);
-					procSetText(
-						'StatusWsInvalidReason',
-						procAppendLatestEvent(
-							(tblStatus.ws_last_invalid_reason || '-') +
-							' / ' +
-							(tblStatus.ws_last_invalid_remote ? tblStatus.ws_last_invalid_remote : '-'),
-							[
-								{time: tblStatus.ws_last_invalid_time, age_ms: tblStatus.ws_last_invalid_age_ms}
-							]
-						)
-					);
-					procSetText('StatusWsInvalidAge', (tblStatus.ws_last_invalid_age_ms !== undefined && tblStatus.ws_last_invalid_age_ms >= 0) ? String(tblStatus.ws_last_invalid_age_ms) + ' ms' : '-');
-					procSetText(
-						'StatusXtpReject',
-						procAppendLatestEvent(
-							((tblStatus.xtp_reject_count !== undefined) ? String(tblStatus.xtp_reject_count) : '-') +
-							' / ' +
-							(tblStatus.xtp_last_reject_reason || '-') +
-							' / ' +
-							(tblStatus.xtp_last_reject_remote || '-'),
-							[
-								{time: tblStatus.xtp_last_reject_time, age_ms: tblStatus.xtp_last_reject_age_ms}
-							]
-						)
-					);
-					procSetText(
-						'StatusCustomReject',
-						procAppendLatestEvent(
-							((tblStatus.custom_reject_count !== undefined) ? String(tblStatus.custom_reject_count) : '-') +
-							' / ' +
-							(tblStatus.custom_last_reject_reason || '-') +
-							' / ' +
-							(tblStatus.custom_last_reject_remote || '-'),
-							[
-								{time: tblStatus.custom_last_reject_time, age_ms: tblStatus.custom_last_reject_age_ms}
-							]
-						)
-					);
-					procSetText(
-						'StatusHttpCleanup',
-						procFormatCleanupText(
-							tblStatus.http_stop_cleanup_count,
-							tblStatus.http_last_stop_cleanup_closed,
-							tblStatus.http_last_stop_cleanup_remain,
-							tblStatus.http_last_stop_cleanup_time,
-							tblStatus.http_last_stop_cleanup_age_ms
-						)
-					);
-					procSetText(
-						'StatusWsCleanup',
-						procFormatCleanupText(
-							tblStatus.ws_stop_cleanup_count,
-							tblStatus.ws_last_stop_cleanup_closed,
-							tblStatus.ws_last_stop_cleanup_remain,
-							tblStatus.ws_last_stop_cleanup_time,
-							tblStatus.ws_last_stop_cleanup_age_ms
-						)
-					);
-					procSetText(
-						'StatusXtpCleanup',
-						procFormatCleanupText(
-							tblStatus.xtp_stop_cleanup_count,
-							tblStatus.xtp_last_stop_cleanup_closed,
-							tblStatus.xtp_last_stop_cleanup_remain,
-							tblStatus.xtp_last_stop_cleanup_time,
-							tblStatus.xtp_last_stop_cleanup_age_ms
-						)
-					);
-					procSetText(
-						'StatusCustomCleanup',
-						procFormatCleanupText(
-							tblStatus.custom_stop_cleanup_count,
-							tblStatus.custom_last_stop_cleanup_closed,
-							tblStatus.custom_last_stop_cleanup_remain,
-							tblStatus.custom_last_stop_cleanup_time,
-							tblStatus.custom_last_stop_cleanup_age_ms
-						)
-					);
-					procSetText(
-						'StatusHttpIdleClose',
-						procAppendLatestEvent(
-							(tblStatus.http_idle_close_count !== undefined) ? String(tblStatus.http_idle_close_count) : '-',
-							[
-								{time: tblStatus.http_last_idle_close_time, age_ms: tblStatus.http_last_idle_close_age_ms}
-							]
-						)
-					);
-					procSetText('StatusHttpIdleAge', (tblStatus.http_last_idle_close_age_ms !== undefined && tblStatus.http_last_idle_close_age_ms >= 0) ? String(tblStatus.http_last_idle_close_age_ms) + ' ms' : '-');
-					procSetText(
-						'StatusXtpConn',
-						((tblStatus.xtp_conn_current !== undefined) ? String(tblStatus.xtp_conn_current) : '-') +
-						' / ' +
-						((tblStatus.xtp_conn_peak !== undefined) ? String(tblStatus.xtp_conn_peak) : '-')
-					);
-					procSetText('StatusXtpMsg', (tblStatus.xtp_msg_count !== undefined) ? String(tblStatus.xtp_msg_count) : '-');
-					procSetText(
-						'StatusXtpReqResp',
-						((tblStatus.xtp_req_count !== undefined) ? String(tblStatus.xtp_req_count) : '-') +
-						' / ' +
-						((tblStatus.xtp_resp_count !== undefined) ? String(tblStatus.xtp_resp_count) : '-')
-					);
-					procSetText(
-						'StatusXtpInvalid',
-						procAppendLatestEvent(
-							(tblStatus.xtp_invalid_count !== undefined) ? String(tblStatus.xtp_invalid_count) : '-',
-							[
-								{time: tblStatus.xtp_last_invalid_time, age_ms: tblStatus.xtp_last_invalid_age_ms}
-							]
-						)
-					);
-					procSetText(
-						'StatusXtpLast',
-						(tblStatus.xtp_last_msg_type ? tblStatus.xtp_last_msg_type : '-') +
-						' / ' +
-						(tblStatus.xtp_last_cmd ? tblStatus.xtp_last_cmd : '-')
-					);
-					procSetText(
-						'StatusXtpShape',
-						'f=' +
-						((tblStatus.xtp_last_flags !== undefined) ? String(tblStatus.xtp_last_flags) : '-') +
-						' p=' +
-						((tblStatus.xtp_last_param_count !== undefined) ? String(tblStatus.xtp_last_param_count) : '-') +
-						' b=' +
-						((tblStatus.xtp_last_body_size !== undefined) ? String(tblStatus.xtp_last_body_size) : '-')
-					);
-					procSetText(
-						'StatusXtpInvalidReason',
-						procAppendLatestEvent(
-							(tblStatus.xtp_last_invalid_reason || '-') +
-							' / ' +
-							(tblStatus.xtp_last_invalid_remote ? tblStatus.xtp_last_invalid_remote : '-'),
-							[
-								{time: tblStatus.xtp_last_invalid_time, age_ms: tblStatus.xtp_last_invalid_age_ms}
-							]
-						)
-					);
-					procSetText('StatusXtpInvalidAge', (tblStatus.xtp_last_invalid_age_ms !== undefined && tblStatus.xtp_last_invalid_age_ms >= 0) ? String(tblStatus.xtp_last_invalid_age_ms) + ' ms' : '-');
-					procSetText(
-						'StatusXtpError',
-						procAppendLatestEvent(
-							((tblStatus.xtp_error_count !== undefined) ? String(tblStatus.xtp_error_count) : '-') +
-							' / ' +
-							procFormatNetResultCode(tblStatus.xtp_last_error_code) +
-							' / ' +
-							(tblStatus.xtp_last_error_remote ? tblStatus.xtp_last_error_remote : '-'),
-							[
-								{time: tblStatus.xtp_last_error_time, age_ms: tblStatus.xtp_last_error_age_ms}
-							]
-						)
-					);
-					procSetText('StatusXtpErrorAge', (tblStatus.xtp_last_error_age_ms !== undefined && tblStatus.xtp_last_error_age_ms >= 0) ? String(tblStatus.xtp_last_error_age_ms) + ' ms' : '-');
-					procSetText(
-						'StatusXtpLastBytes',
-						(tblStatus.xtp_last_remote ? tblStatus.xtp_last_remote : '-') +
-						' / ' +
-						((tblStatus.xtp_last_bytes !== undefined) ? String(tblStatus.xtp_last_bytes) : '-')
-					);
-					procSetText(
-						'StatusUdpPackets',
-						((tblStatus.udp_recv_count !== undefined) ? String(tblStatus.udp_recv_count) : '-') +
-						' / ' +
-						((tblStatus.udp_send_count !== undefined) ? String(tblStatus.udp_send_count) : '-')
-					);
-					procSetText(
-						'StatusUdpBytes',
-						((tblStatus.udp_recv_bytes !== undefined) ? String(tblStatus.udp_recv_bytes) : '-') +
-						' / ' +
-						((tblStatus.udp_send_bytes !== undefined) ? String(tblStatus.udp_send_bytes) : '-')
-					);
-					procSetText('StatusUdpFrom', tblStatus.udp_last_from || '-');
-					procSetText('StatusUdpAge', (tblStatus.udp_last_age_ms !== undefined && tblStatus.udp_last_age_ms >= 0) ? String(tblStatus.udp_last_age_ms) + ' ms' : '-');
-					procSetText('StatusUdpLastBytes', (tblStatus.udp_last_bytes !== undefined) ? String(tblStatus.udp_last_bytes) : '-');
-					procSetText(
-						'StatusUdpError',
-						procAppendLatestEvent(
-							((tblStatus.udp_error_count !== undefined) ? String(tblStatus.udp_error_count) : '-') +
-							' / ' +
-							procFormatNetResultCode(tblStatus.udp_last_error_code),
-							[
-								{time: tblStatus.udp_last_error_time, age_ms: tblStatus.udp_last_error_age_ms}
-							]
-						)
-					);
-					procSetText(
-						'StatusCustomConn',
-						((tblStatus.custom_conn_current !== undefined) ? String(tblStatus.custom_conn_current) : '-') +
-						' / ' +
-						((tblStatus.custom_conn_peak !== undefined) ? String(tblStatus.custom_conn_peak) : '-')
-					);
-					procSetText(
-						'StatusCustomPackets',
-						((tblStatus.custom_recv_count !== undefined) ? String(tblStatus.custom_recv_count) : '-') +
-						' / ' +
-						((tblStatus.custom_send_count !== undefined) ? String(tblStatus.custom_send_count) : '-')
-					);
-					procSetText(
-						'StatusCustomInvalid',
-						procAppendLatestEvent(
-							(tblStatus.custom_invalid_count !== undefined) ? String(tblStatus.custom_invalid_count) : '-',
-							[
-								{time: tblStatus.custom_last_invalid_time, age_ms: tblStatus.custom_last_invalid_age_ms}
-							]
-						)
-					);
-					procSetText(
-						'StatusCustomInvalidReason',
-						procAppendLatestEvent(
-							(tblStatus.custom_last_invalid_reason || '-') +
-							' / ' +
-							(tblStatus.custom_last_invalid_remote ? tblStatus.custom_last_invalid_remote : '-'),
-							[
-								{time: tblStatus.custom_last_invalid_time, age_ms: tblStatus.custom_last_invalid_age_ms}
-							]
-						)
-					);
-					procSetText('StatusCustomInvalidAge', (tblStatus.custom_last_invalid_age_ms !== undefined && tblStatus.custom_last_invalid_age_ms >= 0) ? String(tblStatus.custom_last_invalid_age_ms) + ' ms' : '-');
-					procSetText(
-						'StatusCustomError',
-						procAppendLatestEvent(
-							((tblStatus.custom_error_count !== undefined) ? String(tblStatus.custom_error_count) : '-') +
-							' / ' +
-							procFormatNetResultCode(tblStatus.custom_last_error_code) +
-							' / ' +
-							(tblStatus.custom_last_error_remote ? tblStatus.custom_last_error_remote : '-'),
-							[
-								{time: tblStatus.custom_last_error_time, age_ms: tblStatus.custom_last_error_age_ms}
-							]
-						)
-					);
-					procSetText(
-						'StatusCustomCloseReason',
-						procAppendLatestEvent(
-							procFormatNetResultCode(tblStatus.custom_last_close_reason),
-							[
-								{time: tblStatus.custom_last_close_time, age_ms: tblStatus.custom_last_close_age_ms}
-							]
-						)
-					);
-					procSetText(
-						'StatusCustomBytes',
-						((tblStatus.custom_recv_bytes !== undefined) ? String(tblStatus.custom_recv_bytes) : '-') +
-						' / ' +
-						((tblStatus.custom_send_bytes !== undefined) ? String(tblStatus.custom_send_bytes) : '-')
-					);
-					procSetText(
-						'StatusCustomLastBytes',
-						(tblStatus.custom_last_remote ? tblStatus.custom_last_remote : '-') +
-						' / ' +
-						((tblStatus.custom_last_bytes !== undefined) ? String(tblStatus.custom_last_bytes) : '-')
-					);
-					procSetText('StatusCustomAge', (tblStatus.custom_last_age_ms !== undefined && tblStatus.custom_last_age_ms >= 0) ? String(tblStatus.custom_last_age_ms) + ' ms' : '-');
-					procSetText('StatusBusQueued', (tblBus.total_queued !== undefined) ? String(tblBus.total_queued) : '-');
-					procSetText('StatusBusDelivered', (tblBus.total_delivered !== undefined) ? String(tblBus.total_delivered) : '-');
-					procSetText('StatusBusDropped', (tblBus.total_dropped !== undefined) ? String(tblBus.total_dropped) : '-');
-					procSetText('StatusBusQueueTime', tblBus.last_queue_time_text || ((tblBus.last_queue_time !== undefined && tblBus.last_queue_time > 0) ? String(tblBus.last_queue_time) : '-'));
-					procSetText('StatusBusDispatchTime', tblBus.last_dispatch_time_text || ((tblBus.last_dispatch_time !== undefined && tblBus.last_dispatch_time > 0) ? String(tblBus.last_dispatch_time) : '-'));
-					procSetText('StatusServerCount', (tblStatus.runtime_server_count !== undefined) ? String(tblStatus.runtime_server_count) : '-');
-					procSetText('StatusBuild', tblStatus.build || '-');
-					procSetText('StatusCompiler', tblStatus.compiler || '-');
-					procSetText('StatusPlatform', ((tblStatus.platform || '-') + ' / ' + (tblStatus.arch || '-')));
-					procSetText('StatusManageApi', (tblStatus.manage_api === true) ? 'enabled' : 'disabled');
-					procSetText('StatusMemDebug', (tblStatus.mem_debug === true) ? 'enabled' : 'disabled');
-					procSetText(
-						'StatusTls',
-						(tblStatus.tls === true)
-							? ('enabled' + ((tblStatus.bind_port_tls !== undefined && tblStatus.bind_port_tls > 0) ? (' :' + String(tblStatus.bind_port_tls)) : ''))
-							: 'disabled'
-					);
-					procSetText(
-						'StatusListen',
-						(tblStatus.addr || '-') +
-						((tblStatus.tls === true && tblStatus.addr_tls) ? (' | TLS ' + tblStatus.addr_tls) : '')
-					);
-					if ( tblStatus.config_file ) {
-						var objCheckFile = document.getElementById('CheckConfigFileInput');
-						if ( objCheckFile && !objCheckFile.value ) {
-							objCheckFile.value = tblStatus.config_file;
-						}
-					}
-					procSetText(
-						'CheckConfigResult',
-						'has_result=' + String(!!tblCheck.has_result) +
-						' | result=' + (tblCheck.has_result ? String(tblCheck.result) : '(none)') +
-						' | file=' + (tblCheck.file || '(none)') +
-						' | base=' + (tblCheck.base || '(none)') +
-						' | server_count=' + String(tblCheck.server_count) +
-						' | total=' + String(tblCheck.check_total_count) +
-						' | success_count=' + String(tblCheck.check_success_count) +
-						' | failure_count=' + String(tblCheck.check_failure_count) +
-						' | last_time=' + (tblCheck.check_last_time || '(none)') +
-						' | last_age_ms=' + String((tblCheck.check_last_age_ms !== undefined) ? tblCheck.check_last_age_ms : -1) +
-						' | message=' + (tblCheck.message || '(none)')
-					);
-					procSetText('CheckConfigRaw', JSON.stringify(tblCheck || {}, null, 2));
-					procSetText('DashboardRaw', sText || '');
-					procSetText('StatusRaw', JSON.stringify(tblStatus || {}, null, 2));
-					procSetText('HealthRaw', JSON.stringify(tblHealth || {}, null, 2));
-				})
-				.catch(function(objErr){
-					procSetText('StatusConfigCheck', 'error');
-					procSetText('StatusReloadLast', 'error');
-					procSetText('StatusReloadAge', 'error');
-					procSetText('StatusReloadTotal', 'error');
-					procSetText('StatusReloadSuccess', 'error');
-					procSetText('StatusReloadFailure', 'error');
-					procSetText('StatusBusData', 'error');
-					procSetText('StatusBusLimits', 'error');
-					procSetText('StatusBusLimitReject', 'error');
-					procSetText('StatusBusSweep', 'error');
-					procSetText('StatusBusCleanup', 'error');
-					procSetText('StatusCheckLast', 'error');
-					procSetText('StatusCheckAge', 'error');
-					procSetText('StatusCheckTotal', 'error');
-					procSetText('StatusCheckSuccess', 'error');
-					procSetText('StatusCheckFailure', 'error');
-					procSetText('StatusHttpLast', 'error');
-					procSetText('StatusHttpLastAge', 'error');
-					procSetText('StatusHttpLastCost', 'error');
-					procSetText('StatusHttpLastBody', 'error');
-					procSetText('StatusHttpLastHeaders', 'error');
-					procSetText('StatusHttpLastQuery', 'error');
-					procSetText('StatusHttpLastPath', 'error');
-					procSetText('StatusHttpLastVersion', 'error');
-					procSetText('StatusHttpLastRemote', 'error');
-					procSetText('StatusHttpLastHost', 'error');
-					procSetText('StatusHttpLastUA', 'error');
-					procSetText('StatusHttpLastReferer', 'error');
-					procSetText('StatusHttpLastOrigin', 'error');
-					procSetText('StatusHttpLastAccept', 'error');
-					procSetText('StatusHttpLastAcceptEncoding', 'error');
-					procSetText('StatusHttpLastCookie', 'error');
-					procSetText('StatusHttpLastForwardedFor', 'error');
-					procSetText('StatusHttpLastRealIP', 'error');
-					procSetText('StatusHttpLastConnection', 'error');
-					procSetText('StatusHttpLastCacheControl', 'error');
-					procSetText('StatusHttpLastType', 'error');
-					procSetText('StatusHttpKinds', 'error');
-					procSetText('StatusHttpAppLast', 'error');
-					procSetText('StatusHttpAppLastAge', 'error');
-					procSetText('StatusHttpAppLastCost', 'error');
-					procSetText('StatusHttpAppLastBody', 'error');
-					procSetText('StatusHttpAppLastHeaders', 'error');
-					procSetText('StatusHttpAppLastQuery', 'error');
-					procSetText('StatusHttpAppLastPath', 'error');
-					procSetText('StatusHttpAppLastVersion', 'error');
-					procSetText('StatusHttpAppLastRemote', 'error');
-					procSetText('StatusHttpAppLastHost', 'error');
-					procSetText('StatusHttpAppLastUA', 'error');
-					procSetText('StatusHttpAppLastReferer', 'error');
-					procSetText('StatusHttpAppLastOrigin', 'error');
-					procSetText('StatusHttpAppLastAccept', 'error');
-					procSetText('StatusHttpAppLastAcceptEncoding', 'error');
-					procSetText('StatusHttpAppLastCookie', 'error');
-					procSetText('StatusHttpAppLastForwardedFor', 'error');
-					procSetText('StatusHttpAppLastRealIP', 'error');
-					procSetText('StatusHttpAppLastConnection', 'error');
-					procSetText('StatusHttpAppLastCacheControl', 'error');
-					procSetText('StatusHttpAppLastType', 'error');
-					procSetText('StatusWsLimit', 'error');
-					procSetText('StatusWsConn', 'error');
-					procSetText('StatusWsPeak', 'error');
-					procSetText('StatusWsOpenClose', 'error');
-					procSetText('StatusWsTextBinary', 'error');
-					procSetText('StatusWsPingPong', 'error');
-					procSetText('StatusWsError', 'error');
-					procSetText('StatusWsErrorAge', 'error');
-					procSetText('StatusWsCloseReason', 'error');
-					procSetText('StatusWsCloseAge', 'error');
-					procSetText('StatusWsLast', 'error');
-					procSetText('StatusWsLastAge', 'error');
-					procSetText('StatusWsIdleClose', 'error');
-					procSetText('StatusWsIdleAge', 'error');
-					procSetText('StatusIdleTimeout', 'error');
-					procSetText('StatusConnLimit', 'error');
-					procSetText('StatusHttpLimitClose', 'error');
-					procSetText('StatusHttpReqLimit', 'error');
-					procSetText('StatusHttpPolicyReject', 'error');
-					procSetText('StatusHttpManageReject', 'error');
-					procSetText('StatusHttpBusReject', 'error');
-					procSetText('StatusWsLimitClose', 'error');
-					procSetText('StatusWsMessageLimit', 'error');
-					procSetText('StatusXtpLimitClose', 'error');
-					procSetText('StatusXtpRecvLimit', 'error');
-					procSetText('StatusCustomLimitClose', 'error');
-					procSetText('StatusCustomRecvLimit', 'error');
-					procSetText('StatusHttpReject', 'error');
-					procSetText('StatusWsReject', 'error');
-					procSetText('StatusWsInvalid', 'error');
-					procSetText('StatusWsInvalidReason', 'error');
-					procSetText('StatusWsInvalidAge', 'error');
-					procSetText('StatusXtpReject', 'error');
-					procSetText('StatusCustomReject', 'error');
-					procSetText('StatusHttpCleanup', 'error');
-					procSetText('StatusWsCleanup', 'error');
-					procSetText('StatusXtpCleanup', 'error');
-					procSetText('StatusCustomCleanup', 'error');
-					procSetText('StatusHttpIdleClose', 'error');
-					procSetText('StatusHttpIdleAge', 'error');
-					procSetText('StatusXtpConn', 'error');
-					procSetText('StatusXtpMsg', 'error');
-					procSetText('StatusXtpReqResp', 'error');
-					procSetText('StatusXtpInvalid', 'error');
-					procSetText('StatusXtpLast', 'error');
-					procSetText('StatusXtpShape', 'error');
-					procSetText('StatusXtpInvalidReason', 'error');
-					procSetText('StatusXtpInvalidAge', 'error');
-					procSetText('StatusXtpError', 'error');
-					procSetText('StatusXtpErrorAge', 'error');
-					procSetText('StatusXtpLastBytes', 'error');
-					procSetText('StatusUdpPackets', 'error');
-					procSetText('StatusUdpBytes', 'error');
-					procSetText('StatusUdpFrom', 'error');
-					procSetText('StatusUdpAge', 'error');
-					procSetText('StatusUdpLastBytes', 'error');
-					procSetText('StatusUdpError', 'error');
-					procSetText('StatusCustomConn', 'error');
-					procSetText('StatusCustomPackets', 'error');
-					procSetText('StatusCustomInvalid', 'error');
-					procSetText('StatusCustomInvalidReason', 'error');
-					procSetText('StatusCustomInvalidAge', 'error');
-					procSetText('StatusCustomError', 'error');
-					procSetText('StatusCustomCloseReason', 'error');
-					procSetText('StatusCustomBytes', 'error');
-					procSetText('StatusCustomLastBytes', 'error');
-					procSetText('StatusCustomAge', 'error');
-					procSetText('DashboardRaw', String(objErr));
-					procSetText('StatusRaw', String(objErr));
-					procSetText('HealthRaw', String(objErr));
-					procSetText('CheckConfigResult', String(objErr));
-					procSetText('CheckConfigRaw', String(objErr));
-				});
-			};
-			var procLoadHealth = function()
-			{
-				return;
-			};
-			var procLoadJson = function()
-			{
-				fetch('/json')
-				.then(function(objResp){
-					return objResp.text();
-				})
-				.then(function(sText){
-					procSetText('JsonRaw', sText || '');
-				})
-				.catch(function(objErr){
-					procSetText('JsonRaw', String(objErr));
-				});
-			};
-			var procLoadBus = function()
-			{
-				if ( !g_bBusManageAvailable ) {
-					procDisableBusManage(g_sBusManageDisabledText);
-					return;
-				}
-				fetch('/__xs/bus/status')
-				.then(function(objResp){
-					return objResp.text()
-					.then(function(sText){
-						return {
-							status: objResp.status,
-							text: sText || ''
+							body: sBody
 						};
 					});
 				})
 				.then(function(tblResp){
-					var tblData = procParseJSONText(tblResp.text || '');
+					procSetText(tblItem.id, "status=" + tblResp.status + "\n\n" + (tblResp.body || ""));
+				})
+				.catch(function(objErr){
+					procSetText(tblItem.id, "fetch failed\n\n" + String(objErr));
+				});
+			};
 
-					if ( tblResp.status === 403 && procBusManageDisabled(tblData) ) {
-						procDisableBusManage(procMessage(tblData));
-						return;
-					}
-					procSetText('BusRaw', tblResp.text || '');
-				})
-				.catch(function(objErr){
-					procSetText('BusRaw', String(objErr));
-				});
-			};
-			var procLoadBusRegistry = function()
+			var procRefreshAll = function()
 			{
-				if ( !g_bBusManageAvailable ) {
-					procSetText('BusRegistryRaw', g_sBusManageDisabledText);
-					return;
-				}
-				var objNamespace = document.getElementById('BusNamespaceInput');
-				var objTag = document.getElementById('BusTagInput');
-				var sURL = '/__xs/bus/registry';
-				var arrQuery = [];
-				
-				if ( objNamespace && objNamespace.value ) {
-					arrQuery.push('namespace=' + encodeURIComponent(objNamespace.value));
-				}
-				if ( objTag && objTag.value ) {
-					arrQuery.push('tag=' + encodeURIComponent(objTag.value));
-				}
-				if ( arrQuery.length > 0 ) {
-					sURL += '?' + arrQuery.join('&');
-				}
-				
-				fetch(sURL)
-				.then(function(objResp){
-					return objResp.text();
-				})
-				.then(function(sText){
-					procSetText('BusRegistryRaw', sText || '');
-				})
-				.catch(function(objErr){
-					procSetText('BusRegistryRaw', String(objErr));
-				});
-			};
-			var procLoadBusNamespaces = function()
-			{
-				if ( !g_bBusManageAvailable ) {
-					procDisableBusManage(g_sBusManageDisabledText);
-					return;
-				}
-				fetch('/__xs/bus/namespaces')
-				.then(function(objResp){
-					return objResp.text()
-					.then(function(sText){
-						return {
-							status: objResp.status,
-							text: sText || ''
-						};
-					});
-				})
-				.then(function(tblResp){
-					var tblData = procParseJSONText(tblResp.text || '');
+				var i;
 
-					if ( tblResp.status === 403 && procBusManageDisabled(tblData) ) {
-						procDisableBusManage(procMessage(tblData));
-						return;
-					}
-					procRenderBusNamespaces(tblData);
-					procSetText('BusNamespaceRaw', tblResp.text || '');
-				})
-				.catch(function(objErr){
-					procSetText('BusNamespaceCount', 'error');
-					procSetText('BusNamespaceLimit', 'error');
-					procSetText('BusNamespacePressure', 'error');
-					procSetText('BusNamespaceWindow', 'error');
-					procSetHTML(
-						'BusNamespaceList',
-						'<div class="namespace-card"><div class="namespace-card-line">error</div></div>'
-					);
-					procSetText('BusNamespaceRaw', String(objErr));
-				});
+				for ( i = 0; i < arrTargets.length; i++ ) {
+					procLoadOne(arrTargets[i]);
+				}
 			};
-			var procResetBusStats = function()
-			{
-				procSetText('BusSendResult', '正在清空 bus 统计...');
-				fetch('/__xs/bus/reset')
-				.then(function(objResp){
-					return objResp.text();
-				})
-			.then(function(sResp){
-				procSetText('BusSendResult', sResp || '');
-				window.setTimeout(function(){
-					procRefreshPortal(FALSE);
-				}, 300);
-			})
-				.catch(function(objErr){
-					procSetText('BusSendResult', String(objErr));
-				});
-			};
-			var procSweepBus = function()
-			{
-				procSetText('BusSendResult', '正在执行 bus 过期清理...');
-				fetch('/__xs/bus/sweep?all=true')
-				.then(function(objResp){
-					return objResp.text();
-				})
-				.then(function(sResp){
-					procSetText('BusSendResult', sResp || '');
-					window.setTimeout(function(){
-						procRefreshPortal(FALSE);
-					}, 300);
-				})
-				.catch(function(objErr){
-					procSetText('BusSendResult', String(objErr));
-				});
-			};
-			var procUpdateBusNamespacePolicy = function()
-			{
-				var objReadonly = document.getElementById('BusReadonlyNamespacesInput');
-				var objDisabled = document.getElementById('BusDisabledNamespacesInput');
-				var objTTLRequired = document.getElementById('BusTTLRequiredNamespacesInput');
-				var objTagRequired = document.getElementById('BusTagRequiredNamespacesInput');
-				var sReadonly = objReadonly ? objReadonly.value : '';
-				var sDisabled = objDisabled ? objDisabled.value : '';
-				var sTTLRequired = objTTLRequired ? objTTLRequired.value : '';
-				var sTagRequired = objTagRequired ? objTagRequired.value : '';
-				var sURL = '/__xs/bus/limits?readonly_namespaces=' + encodeURIComponent(sReadonly || '') + '&disabled_namespaces=' + encodeURIComponent(sDisabled || '') + '&ttl_required_namespaces=' + encodeURIComponent(sTTLRequired || '') + '&tag_required_namespaces=' + encodeURIComponent(sTagRequired || '');
 
-				procSetText('BusSendResult', '正在更新 namespace policy...');
-				fetch(sURL)
-				.then(function(objResp){
-					return objResp.text();
-				})
-				.then(function(sResp){
-					procSetText('BusSendResult', sResp || '');
-					window.setTimeout(function(){
-						procRefreshPortal(FALSE);
-					}, 300);
-				})
-				.catch(function(objErr){
-					procSetText('BusSendResult', String(objErr));
-				});
-			};
-			var procRefreshPortal = function(bReloadTable)
-			{
-				procLoadStatus();
-				procLoadJson();
-				procLoadBus();
-				procLoadBusRegistry();
-				procLoadBusPayload();
-				procLoadBusNamespaces();
-				procLoadReloadStatus();
-				if ( bReloadTable ) {
-					table.reloadData('DataList', {
-						scrollPos: 'fixed'
-					});
-				}
-			};
-			var procLoadBusPayload = function()
-			{
-				if ( !g_bBusManageAvailable ) {
-					procSetText('BusPayloadRaw', g_sBusManageDisabledText);
-					return;
-				}
-				var objDataID = document.getElementById('BusDataIDInput');
-				var objNamespace = document.getElementById('BusNamespaceInput');
-				var objTag = document.getElementById('BusTagInput');
-				var sRegistry = document.getElementById('BusRegistryRaw').textContent || '';
-				var sURL = '/__xs/bus/get';
-				var arrQuery = [];
-				var tblData;
-				var arrItems;
-				var iDataID;
-
-				if ( objDataID && objDataID.value ) {
-					arrQuery.push('id=' + encodeURIComponent(objDataID.value));
-				}
-				if ( objNamespace && objNamespace.value ) {
-					arrQuery.push('namespace=' + encodeURIComponent(objNamespace.value));
-				}
-				if ( objTag && objTag.value ) {
-					arrQuery.push('tag=' + encodeURIComponent(objTag.value));
-				}
-				if ( arrQuery.length > 0 && !(objDataID && objDataID.value) ) {
-					sURL = '/__xs/bus/values';
-				}
-				if ( arrQuery.length === 0 ) {
-					try {
-						tblData = JSON.parse(sRegistry);
-						arrItems = tblData.items || [];
-						if ( arrItems.length > 0 && arrItems[arrItems.length - 1].id ) {
-							iDataID = arrItems[arrItems.length - 1].id;
-							arrQuery.push('id=' + encodeURIComponent(String(iDataID)));
-						}
-					} catch (objErr) {
-					}
-				}
-				if ( arrQuery.length > 0 ) {
-					sURL += '?' + arrQuery.join('&');
-				}
-
-				fetch(sURL)
-				.then(function(objResp){
-					return objResp.text();
-				})
-				.then(function(sText){
-					procSetText('BusPayloadRaw', sText || '');
-				})
-				.catch(function(objErr){
-					procSetText('BusPayloadRaw', String(objErr));
-				});
-			};
-			var procDoReload = function()
-			{
-				var objBtn = document.getElementById('ReloadBtn');
-				var objForce = document.getElementById('ReloadForce');
-				var sURL = '/__xs/reload_json';
-				
-				if ( objForce && objForce.checked ) {
-					sURL += '?force=true';
-				}
-				if ( objBtn ) {
-					objBtn.disabled = true;
-					objBtn.textContent = '重载中...';
-				}
-				procSetText('ReloadResult', '正在请求热重载...');
-				
-				fetch(sURL)
-				.then(function(objResp){
-					return objResp.text();
-				})
-				.then(function(sText){
-					var tblData = {};
-					var sSummary;
-					try {
-						tblData = JSON.parse(sText || '{}') || {};
-					} catch ( objErr ) {
-						tblData = {};
-					}
-					sSummary = 'result=' + String(tblData.result) +
-						' | message=' + (tblData.message || '(none)') +
-						' | server=' + (tblData.server || '(none)') +
-						' | host=' + (tblData.host || '(none)') +
-						' | force=' + String(tblData.force) +
-						' | code=' + String(tblData.code) +
-						' | reload_time=' + (tblData.reload_time || '(none)') +
-						' | reload_age_ms=' + String((tblData.reload_age_ms !== undefined) ? tblData.reload_age_ms : -1) +
-						' | total=' + String((tblData.reload_total_count !== undefined) ? tblData.reload_total_count : 0) +
-						' | success_count=' + String((tblData.reload_success_count !== undefined) ? tblData.reload_success_count : 0) +
-						' | failure_count=' + String((tblData.reload_failure_count !== undefined) ? tblData.reload_failure_count : 0);
-					procSetText('ReloadResult', sSummary);
-					procRefreshPortal(TRUE);
-				})
-				.catch(function(objErr){
-					procSetText('ReloadResult', String(objErr));
-				})
-				.finally(function(){
-					if ( objBtn ) {
-						objBtn.disabled = false;
-						objBtn.textContent = '立即热重载';
-					}
-				});
-			};
-			var procLoadReloadStatus = function()
-			{
-				fetch('/__xs/reload_status_json')
-				.then(function(objResp){
-					return objResp.text();
-				})
-				.then(function(sText){
-					var tblData = {};
-					var sSummary;
-					try {
-						tblData = JSON.parse(sText || '{}') || {};
-					} catch ( objErr ) {
-						tblData = {};
-					}
-					sSummary = 'busy=' + String(tblData.busy) +
-						' | has_result=' + String(tblData.has_result) +
-						' | success=' + String(tblData.success) +
-						' | server=' + (tblData.server || '(all)') +
-						' | host=' + (tblData.host || '(all)') +
-						' | message=' + (tblData.message || '(none)') +
-						' | reload_time=' + (tblData.reload_time || '(none)') +
-						' | reload_age_ms=' + String(tblData.reload_age_ms) +
-						' | total=' + String(tblData.reload_total_count) +
-						' | success_count=' + String(tblData.reload_success_count) +
-						' | failure_count=' + String(tblData.reload_failure_count);
-					procSetText('ReloadConfigResult', sSummary);
-					procSetText('ReloadConfigRaw', sText || '');
-				})
-				.catch(function(objErr){
-					procSetText('ReloadConfigResult', String(objErr));
-					procSetText('ReloadConfigRaw', String(objErr));
-				});
-			};
-			var procClearReloadStatus = function()
-			{
-				if ( !g_bDebugManageActionAvailable ) {
-					procSetText('ReloadConfigResult', g_sDebugManageDisabledText);
-					procSetText('ReloadConfigRaw', g_sDebugManageDisabledText);
-					return;
-				}
-				fetch('/__xs/reload_clear')
-				.then(function(objResp){
-					return objResp.text();
-				})
-				.then(function(sText){
-					procSetText('ReloadConfigResult', sText || '');
-					procSetText('ReloadConfigRaw', sText || '');
-					window.setTimeout(function(){
-						procRefreshPortal(FALSE);
-					}, 200);
-				})
-				.catch(function(objErr){
-					procSetText('ReloadConfigResult', String(objErr));
-					procSetText('ReloadConfigRaw', String(objErr));
-				});
-			};
-			var procResetReloadStats = function()
-			{
-				if ( !g_bDebugManageActionAvailable ) {
-					procSetText('ReloadConfigResult', g_sDebugManageDisabledText);
-					procSetText('ReloadConfigRaw', g_sDebugManageDisabledText);
-					return;
-				}
-				fetch('/__xs/reload_reset')
-				.then(function(objResp){
-					return objResp.text();
-				})
-				.then(function(sText){
-					procSetText('ReloadConfigResult', sText || '');
-					procSetText('ReloadConfigRaw', sText || '');
-					window.setTimeout(function(){
-						procRefreshPortal(FALSE);
-					}, 200);
-				})
-				.catch(function(objErr){
-					procSetText('ReloadConfigResult', String(objErr));
-					procSetText('ReloadConfigRaw', String(objErr));
-				});
-			};
-			var procDoCheckConfig = function()
-			{
-				var objBtn = document.getElementById('CheckConfigBtn');
-				var objFile = document.getElementById('CheckConfigFileInput');
-				var arrQuery = [];
-				var sURL = '/__xs/check_config_json';
-
-				if ( objFile && objFile.value ) {
-					arrQuery.push('file=' + encodeURIComponent(objFile.value));
-				}
-				if ( arrQuery.length > 0 ) {
-					sURL += '?' + arrQuery.join('&');
-				}
-				if ( objBtn ) {
-					objBtn.disabled = true;
-					objBtn.textContent = '校验中...';
-				}
-				procSetText('CheckConfigResult', '正在校验配置...');
-				procSetText('CheckConfigRaw', '正在校验配置...');
-
-				fetch(sURL)
-				.then(function(objResp){
-					return objResp.text();
-				})
-				.then(function(sText){
-					var tblData = {};
-					var sSummary;
-					try {
-						tblData = JSON.parse(sText || '{}') || {};
-					} catch ( objErr ) {
-						tblData = {};
-					}
-					sSummary = 'result=' + String(tblData.result) +
-						' | file=' + (tblData.file || '(none)') +
-						' | base=' + (tblData.base || '(none)') +
-						' | server_count=' + String(tblData.server_count) +
-							' | total=' + String(tblData.check_total_count) +
-							' | success_count=' + String(tblData.check_success_count) +
-							' | failure_count=' + String(tblData.check_failure_count) +
-							' | last_time=' + (tblData.check_last_time || '(none)') +
-							' | last_age_ms=' + String((tblData.check_last_age_ms !== undefined) ? tblData.check_last_age_ms : -1) +
-							' | message=' + (tblData.message || '(none)');
-					procSetText('StatusConfigCheck', (tblData.result !== undefined) ? String(tblData.result) : '-');
-					procSetText('CheckConfigResult', sSummary);
-					procSetText('CheckConfigRaw', sText || '');
-					window.setTimeout(function(){
-						procRefreshPortal(FALSE);
-					}, 200);
-				})
-				.catch(function(objErr){
-					procSetText('StatusConfigCheck', 'error');
-					procSetText('CheckConfigResult', String(objErr));
-					procSetText('CheckConfigRaw', String(objErr));
-				})
-				.finally(function(){
-					if ( objBtn ) {
-						objBtn.disabled = false;
-						objBtn.textContent = '校验配置';
-					}
-				});
-			};
-			var procClearCheckConfigStats = function()
-			{
-				if ( !g_bDebugManageActionAvailable ) {
-					procSetText('CheckConfigResult', g_sDebugManageDisabledText);
-					procSetText('CheckConfigRaw', g_sDebugManageDisabledText);
-					return;
-				}
-				fetch('/__xs/check_config_clear')
-				.then(function(objResp){
-					return objResp.text();
-				})
-				.then(function(sText){
-					procSetText('CheckConfigResult', sText || '');
-					procSetText('CheckConfigRaw', sText || '');
-					window.setTimeout(procRefreshPortal, 200);
-				})
-				.catch(function(objErr){
-					procSetText('CheckConfigResult', String(objErr));
-					procSetText('CheckConfigRaw', String(objErr));
-				});
-			};
-			var procDoReloadConfig = function()
-			{
-				var objBtn = document.getElementById('ReloadConfigBtn');
-				var objServer = document.getElementById('ReloadServerInput');
-				var objHost = document.getElementById('ReloadHostInput');
-				var arrQuery = [];
-				var sURL = '/__xs/reload_config_json';
-
-				if ( objServer && objServer.value ) {
-					arrQuery.push('server=' + encodeURIComponent(objServer.value));
-				}
-				if ( objHost && objHost.value ) {
-					arrQuery.push('host=' + encodeURIComponent(objHost.value));
-				}
-				if ( arrQuery.length > 0 ) {
-					sURL += '?' + arrQuery.join('&');
-				}
-				if ( objBtn ) {
-					objBtn.disabled = true;
-					objBtn.textContent = '提交中...';
-				}
-				procSetText('ReloadConfigResult', '正在请求配置热加载...');
-				procSetText('ReloadConfigRaw', '正在请求配置热加载...');
-
-				fetch(sURL)
-				.then(function(objResp){
-					return objResp.text();
-				})
-				.then(function(sText){
-					var tblData = {};
-					var sSummary;
-					try {
-						tblData = JSON.parse(sText || '{}') || {};
-					} catch ( objErr ) {
-						tblData = {};
-					}
-					sSummary = 'result=' + String(tblData.result) +
-						' | message=' + (tblData.message || '(none)') +
-						' | server=' + (tblData.target_server || '(all)') +
-						' | host=' + (tblData.target_host || '(all)') +
-						' | force=' + String(tblData.force);
-					procSetText('ReloadConfigResult', sSummary);
-					procSetText('ReloadConfigRaw', sText || '');
-					window.setTimeout(function(){
-						procRefreshPortal(FALSE);
-					}, 600);
-				})
-				.catch(function(objErr){
-					procSetText('ReloadConfigResult', String(objErr));
-				})
-				.finally(function(){
-					if ( objBtn ) {
-						objBtn.disabled = false;
-						objBtn.textContent = '重载配置';
-					}
-				});
-			};
-			var procDoBusSend = function(sTarget)
-			{
-				var objDataID = document.getElementById('BusDataIDInput');
-				var objTopic = document.getElementById('BusTopicInput');
-				var objServer = document.getElementById('BusTargetServerInput');
-				var objHost = document.getElementById('BusTargetHostInput');
-				var objText = document.getElementById('BusTextInput');
-				var objJson = document.getElementById('BusJsonInput');
-				var objPersist = document.getElementById('BusPersistInput');
-				var objTTL = document.getElementById('BusTTLInput');
-				var objNamespace = document.getElementById('BusNamespaceInput');
-				var objTag = document.getElementById('BusTagInput');
-				var arrQuery = ['target=' + encodeURIComponent(sTarget || 'server')];
-				var sURL = '/__xs/bus/send';
-				var sTopic = (objTopic && objTopic.value) ? objTopic.value : ('demo.portal.' + (sTarget || 'server'));
-
-				arrQuery.push('topic=' + encodeURIComponent(sTopic));
-				if ( objServer && objServer.value ) {
-					arrQuery.push('server=' + encodeURIComponent(objServer.value));
-				}
-				if ( objHost && objHost.value ) {
-					arrQuery.push('host=' + encodeURIComponent(objHost.value));
-				}
-				if ( objDataID && objDataID.value ) {
-					arrQuery.push('data_id=' + encodeURIComponent(objDataID.value));
-				}
-				if ( objText && objText.value ) {
-					arrQuery.push('text=' + encodeURIComponent(objText.value));
-				}
-				if ( objJson && objJson.value ) {
-					arrQuery.push('json=' + encodeURIComponent(objJson.value));
-				}
-				if ( objPersist && objPersist.checked ) {
-					arrQuery.push('persist=true');
-				}
-				if ( objNamespace && objNamespace.value ) {
-					arrQuery.push('namespace=' + encodeURIComponent(objNamespace.value));
-				}
-				if ( objTag && objTag.value ) {
-					arrQuery.push('tag=' + encodeURIComponent(objTag.value));
-				}
-				if ( objTTL && objTTL.value ) {
-					arrQuery.push('ttl=' + encodeURIComponent(objTTL.value));
-				}
-				sURL += '?' + arrQuery.join('&');
-				
-				procSetText('BusSendResult', '正在投递消息...');
-				fetch(sURL)
-				.then(function(objResp){
-					return objResp.text();
-				})
-				.then(function(sText){
-					var tblRet;
-					procSetText('BusSendResult', sText || '');
-					try {
-						tblRet = JSON.parse(sText);
-						if ( tblRet && tblRet.data_id ) {
-							procSetBusDataID(tblRet.data_id);
-						}
-					} catch (objErr) {
-					}
-					window.setTimeout(function(){
-						procRefreshPortal(FALSE);
-					}, 300);
-				})
-				.catch(function(objErr){
-					procSetText('BusSendResult', String(objErr));
-				});
-			};
-			var procDoBusRegister = function()
-			{
-				var objDataID = document.getElementById('BusDataIDInput');
-				var objNamespace = document.getElementById('BusNamespaceInput');
-				var objTag = document.getElementById('BusTagInput');
-				var objTTL = document.getElementById('BusTTLInput');
-				var sURL = '/__xs/bus/register';
-				var arrQuery = [];
-				
-				if ( objNamespace && objNamespace.value ) {
-					arrQuery.push('namespace=' + encodeURIComponent(objNamespace.value));
-				}
-				if ( objTag && objTag.value ) {
-					arrQuery.push('tag=' + encodeURIComponent(objTag.value));
-				}
-				if ( objTTL && objTTL.value ) {
-					arrQuery.push('ttl=' + encodeURIComponent(objTTL.value));
-				}
-				if ( arrQuery.length > 0 ) {
-					sURL += '?' + arrQuery.join('&');
-				}
-				procSetText('BusSendResult', '正在注册共享数据...');
-				fetch(sURL)
-				.then(function(objResp){
-					return objResp.text();
-				})
-				.then(function(sText){
-					var tblRet;
-					procSetText('BusSendResult', sText || '');
-					try {
-						tblRet = JSON.parse(sText);
-						if ( tblRet && tblRet.data_id && objDataID ) {
-							objDataID.value = String(tblRet.data_id);
-						}
-					} catch (objErr) {
-					}
-					window.setTimeout(function(){
-						procRefreshPortal(FALSE);
-					}, 300);
-				})
-				.catch(function(objErr){
-					procSetText('BusSendResult', String(objErr));
-				});
-			};
-			var procDoBusSet = function()
-			{
-				var objDataID = document.getElementById('BusDataIDInput');
-				var objNamespace = document.getElementById('BusNamespaceInput');
-				var objTag = document.getElementById('BusTagInput');
-				var objTTL = document.getElementById('BusTTLInput');
-				var objText = document.getElementById('BusTextInput');
-				var objJson = document.getElementById('BusJsonInput');
-				var arrQuery = [];
-				var sURL = '/__xs/bus/set';
-
-				if ( objDataID && objDataID.value ) {
-					arrQuery.push('id=' + encodeURIComponent(objDataID.value));
-				}
-				if ( objNamespace && objNamespace.value ) {
-					arrQuery.push('namespace=' + encodeURIComponent(objNamespace.value));
-				}
-				if ( objTag && objTag.value ) {
-					arrQuery.push('tag=' + encodeURIComponent(objTag.value));
-				}
-				if ( objTTL && objTTL.value !== '' ) {
-					arrQuery.push('ttl=' + encodeURIComponent(objTTL.value));
-				}
-				if ( objText && objText.value ) {
-					arrQuery.push('text=' + encodeURIComponent(objText.value));
-				}
-				if ( objJson && objJson.value ) {
-					arrQuery.push('json=' + encodeURIComponent(objJson.value));
-				}
-				if ( arrQuery.length === 0 || (!((objText && objText.value) || (objJson && objJson.value))) ) {
-					procSetText('BusSendResult', '请先提供 data_id 或 namespace/tag，并填写 text 或 json payload。');
-					return;
-				}
-				sURL += '?' + arrQuery.join('&');
-				procSetText('BusSendResult', '正在更新共享数据...');
-				fetch(sURL)
-				.then(function(objResp){
-					return objResp.text();
-				})
-				.then(function(sText){
-					var tblRet;
-					procSetText('BusSendResult', sText || '');
-					try {
-						tblRet = JSON.parse(sText);
-						if ( tblRet && tblRet.data_id ) {
-							procSetBusDataID(tblRet.data_id);
-						}
-					} catch ( objErr ) {
-					}
-					window.setTimeout(function(){
-						procRefreshPortal(FALSE);
-					}, 300);
-				})
-				.catch(function(objErr){
-					procSetText('BusSendResult', String(objErr));
-				});
-			};
-			var procDoBusFind = function()
-			{
-				var objDataID = document.getElementById('BusDataIDInput');
-				var objNamespace = document.getElementById('BusNamespaceInput');
-				var objTag = document.getElementById('BusTagInput');
-				var sURL = '/__xs/bus/find';
-				var arrQuery = [];
-				
-				if ( objNamespace && objNamespace.value ) {
-					arrQuery.push('namespace=' + encodeURIComponent(objNamespace.value));
-				}
-				if ( objTag && objTag.value ) {
-					arrQuery.push('tag=' + encodeURIComponent(objTag.value));
-				}
-				if ( arrQuery.length > 0 ) {
-					sURL += '?' + arrQuery.join('&');
-				}
-				procSetText('BusSendResult', '正在查找共享数据...');
-				fetch(sURL)
-				.then(function(objResp){
-					return objResp.text();
-				})
-				.then(function(sText){
-					var tblRet;
-					procSetText('BusSendResult', sText || '');
-					try {
-						tblRet = JSON.parse(sText);
-						if ( tblRet && tblRet.data_id && objDataID ) {
-							objDataID.value = String(tblRet.data_id);
-						}
-					} catch (objErr) {
-					}
-					window.setTimeout(procLoadBusRegistry, 300);
-					window.setTimeout(procLoadBusPayload, 300);
-					window.setTimeout(procLoadBusNamespaces, 300);
-				})
-				.catch(function(objErr){
-					procSetText('BusSendResult', String(objErr));
-				});
-			};
-			var procDoBusExists = function()
-			{
-				var objDataID = document.getElementById('BusDataIDInput');
-				var objNamespace = document.getElementById('BusNamespaceInput');
-				var objTag = document.getElementById('BusTagInput');
-				var sURL = '/__xs/bus/exists';
-				var arrQuery = [];
-
-				if ( objDataID && objDataID.value ) {
-					arrQuery.push('id=' + encodeURIComponent(objDataID.value));
-				}
-				if ( objNamespace && objNamespace.value ) {
-					arrQuery.push('namespace=' + encodeURIComponent(objNamespace.value));
-				}
-				if ( objTag && objTag.value ) {
-					arrQuery.push('tag=' + encodeURIComponent(objTag.value));
-				}
-				if ( arrQuery.length > 0 ) {
-					sURL += '?' + arrQuery.join('&');
-				}
-				procSetText('BusSendResult', '正在检查共享数据是否存在...');
-				fetch(sURL)
-				.then(function(objResp){
-					return objResp.text();
-				})
-				.then(function(sText){
-					var tblRet;
-					procSetText('BusSendResult', sText || '');
-					try {
-						tblRet = JSON.parse(sText);
-						if ( tblRet && tblRet.data_id ) {
-							procSetBusDataID(tblRet.data_id);
-						}
-					} catch ( objErr ) {
-					}
-				})
-				.catch(function(objErr){
-					procSetText('BusSendResult', String(objErr));
-				});
-			};
-			var procDoBusGet = function()
-			{
-				procSetText('BusSendResult', '正在读取共享数据 payload...');
-				procLoadBusPayload();
-			};
-			var procDoBusRetain = function()
-			{
-				var objDataID = document.getElementById('BusDataIDInput');
-				var objNamespace = document.getElementById('BusNamespaceInput');
-				var objTag = document.getElementById('BusTagInput');
-				var iDataID = objDataID ? parseInt(objDataID.value, 10) || 0 : 0;
-				var arrQuery = [];
-
-				if ( iDataID > 0 ) {
-					arrQuery.push('id=' + encodeURIComponent(String(iDataID)));
-				}
-				if ( objNamespace && objNamespace.value ) {
-					arrQuery.push('namespace=' + encodeURIComponent(objNamespace.value));
-				}
-				if ( objTag && objTag.value ) {
-					arrQuery.push('tag=' + encodeURIComponent(objTag.value));
-				}
-				if ( arrQuery.length === 0 ) {
-					procSetText('BusSendResult', '请先输入 data_id，或填写 namespace/tag。');
-					return;
-				}
-				procSetText('BusSendResult', '正在 retain 共享数据...');
-				fetch('/__xs/bus/retain?' + arrQuery.join('&'))
-				.then(function(objResp){
-					return objResp.text();
-				})
-				.then(function(sResp){
-					procSetText('BusSendResult', sResp || '');
-					window.setTimeout(function(){
-						procRefreshPortal(FALSE);
-					}, 300);
-				})
-				.catch(function(objErr){
-					procSetText('BusSendResult', String(objErr));
-				});
-			};
-			var procDoBusRelease = function()
-			{
-				var objDataID = document.getElementById('BusDataIDInput');
-				var objNamespace = document.getElementById('BusNamespaceInput');
-				var objTag = document.getElementById('BusTagInput');
-				var iDataID = objDataID ? parseInt(objDataID.value, 10) || 0 : 0;
-				var arrQuery = [];
-
-				if ( iDataID > 0 ) {
-					arrQuery.push('id=' + encodeURIComponent(String(iDataID)));
-				}
-				if ( objNamespace && objNamespace.value ) {
-					arrQuery.push('namespace=' + encodeURIComponent(objNamespace.value));
-				}
-				if ( objTag && objTag.value ) {
-					arrQuery.push('tag=' + encodeURIComponent(objTag.value));
-				}
-				if ( arrQuery.length === 0 ) {
-					procSetText('BusSendResult', '请先输入 data_id，或填写 namespace/tag。');
-					return;
-				}
-				procSetText('BusSendResult', '正在 release 共享数据...');
-				fetch('/__xs/bus/release?' + arrQuery.join('&'))
-				.then(function(objResp){
-					return objResp.text();
-				})
-				.then(function(sResp){
-					procSetText('BusSendResult', sResp || '');
-					window.setTimeout(function(){
-						procRefreshPortal(FALSE);
-					}, 300);
-				})
-				.catch(function(objErr){
-					procSetText('BusSendResult', String(objErr));
-				});
-			};
-			var procDoBusTouch = function()
-			{
-				var objDataID = document.getElementById('BusDataIDInput');
-				var objNamespace = document.getElementById('BusNamespaceInput');
-				var objTag = document.getElementById('BusTagInput');
-				var objTTL = document.getElementById('BusTTLInput');
-				var iDataID = objDataID ? parseInt(objDataID.value, 10) || 0 : 0;
-				var sTTL = objTTL ? objTTL.value : '';
-				var arrQuery = [];
-
-				if ( iDataID > 0 ) {
-					arrQuery.push('id=' + encodeURIComponent(String(iDataID)));
-				}
-				if ( objNamespace && objNamespace.value ) {
-					arrQuery.push('namespace=' + encodeURIComponent(objNamespace.value));
-				}
-				if ( objTag && objTag.value ) {
-					arrQuery.push('tag=' + encodeURIComponent(objTag.value));
-				}
-				if ( arrQuery.length === 0 ) {
-					procSetText('BusSendResult', '请先输入 data_id，或填写 namespace/tag。');
-					return;
-				}
-				arrQuery.push('ttl=' + encodeURIComponent(sTTL || '0'));
-				procSetText('BusSendResult', '正在更新共享数据 TTL ...');
-				fetch('/__xs/bus/touch?' + arrQuery.join('&'))
-				.then(function(objResp){
-					return objResp.text();
-				})
-				.then(function(sResp){
-					procSetText('BusSendResult', sResp || '');
-					window.setTimeout(function(){
-						procRefreshPortal(FALSE);
-					}, 300);
-				})
-				.catch(function(objErr){
-					procSetText('BusSendResult', String(objErr));
-				});
-			};
-			var procDoBusRemove = function()
-			{
-				var objDataIDInput = document.getElementById('BusDataIDInput');
-				var objNamespace = document.getElementById('BusNamespaceInput');
-				var objTag = document.getElementById('BusTagInput');
-				var sText = document.getElementById('BusRegistryRaw').textContent || '';
-				var tblData;
-				var arrItems;
-				var iDataID;
-				
-				if ( objDataIDInput && objDataIDInput.value ) {
-					iDataID = parseInt(objDataIDInput.value, 10) || 0;
-					if ( iDataID <= 0 ) {
-						procSetText('BusSendResult', 'data_id 不是有效整数。');
-						return;
-					}
-					procSetText('BusSendResult', '正在移除共享数据 #' + iDataID + ' ...');
-					fetch('/__xs/bus/remove?id=' + encodeURIComponent(String(iDataID)))
-					.then(function(objResp){
-						return objResp.text();
-					})
-					.then(function(sResp){
-						procSetText('BusSendResult', sResp || '');
-						procSetBusDataID('');
-						window.setTimeout(function(){
-							procRefreshPortal(FALSE);
-						}, 300);
-					})
-					.catch(function(objErr){
-						procSetText('BusSendResult', String(objErr));
-					});
-					return;
-				}
-
-				if ( ((objNamespace && objNamespace.value) || (objTag && objTag.value)) ) {
-					var sURL = '/__xs/bus/remove';
-					var arrQuery = [];
-					
-					if ( objNamespace && objNamespace.value ) {
-						arrQuery.push('namespace=' + encodeURIComponent(objNamespace.value));
-					}
-					if ( objTag && objTag.value ) {
-						arrQuery.push('tag=' + encodeURIComponent(objTag.value));
-					}
-					if ( arrQuery.length > 0 ) {
-						sURL += '?' + arrQuery.join('&');
-					}
-					procSetText('BusSendResult', '正在按 namespace/tag 移除共享数据...');
-					fetch(sURL)
-					.then(function(objResp){
-						return objResp.text();
-					})
-					.then(function(sResp){
-						procSetText('BusSendResult', sResp || '');
-						window.setTimeout(function(){
-							procRefreshPortal(FALSE);
-						}, 300);
-					})
-					.catch(function(objErr){
-						procSetText('BusSendResult', String(objErr));
-					});
-					return;
-				}
-				
-				try {
-					tblData = JSON.parse(sText);
-				} catch (objErr) {
-					procSetText('BusSendResult', 'registry 不是合法 JSON，无法移除。');
-					return;
-				}
-				arrItems = tblData.items || [];
-				if ( arrItems.length === 0 ) {
-					procSetText('BusSendResult', '当前 registry 为空。');
-					return;
-				}
-				iDataID = arrItems[arrItems.length - 1].id;
-				procSetText('BusSendResult', '正在移除共享数据 #' + iDataID + ' ...');
-				fetch('/__xs/bus/remove?id=' + encodeURIComponent(String(iDataID)))
-				.then(function(objResp){
-					return objResp.text();
-				})
-				.then(function(sResp){
-					procSetText('BusSendResult', sResp || '');
-					procSetBusDataID('');
-					window.setTimeout(function(){
-						procRefreshPortal(FALSE);
-					}, 300);
-				})
-				.catch(function(objErr){
-					procSetText('BusSendResult', String(objErr));
-				});
-			};
-			var procDoBusRemoveAll = function()
-			{
-				var objNamespace = document.getElementById('BusNamespaceInput');
-				var objTag = document.getElementById('BusTagInput');
-				var sURL = '/__xs/bus/remove?all=true';
-				var arrQuery = ['all=true'];
-				
-				if ( objNamespace && objNamespace.value ) {
-					arrQuery.push('namespace=' + encodeURIComponent(objNamespace.value));
-				}
-				if ( objTag && objTag.value ) {
-					arrQuery.push('tag=' + encodeURIComponent(objTag.value));
-				}
-				sURL = '/__xs/bus/remove?' + arrQuery.join('&');
-				procSetText('BusSendResult', '正在批量清理共享数据...');
-				fetch(sURL)
-				.then(function(objResp){
-					return objResp.text();
-				})
-				.then(function(sResp){
-					procSetText('BusSendResult', sResp || '');
-					procSetBusDataID('');
-					window.setTimeout(function(){
-						procRefreshPortal(FALSE);
-					}, 300);
-				})
-				.catch(function(objErr){
-					procSetText('BusSendResult', String(objErr));
-				});
-			};
-			
-			table.render({
-				elem: '#DataList',
-				url: '/app/list',
-				toolbar: '#DeviceToolbar',
-				defaultToolbar: ['filter', 'exports', 'print'],
-				height: 520,
-				cellMinWidth: 60,
-				totalRow: false,
-				page: true,
-				parseData: function(res)
-				{
-					procSetText('CapCount', String(res.count || 0));
-					procSetText('CapMsg', procMessage(res) || '-');
-					return {
-						code: res.code || 0,
-						msg: procMessage(res),
-						count: res.count || 0,
-						data: res.data || []
-					};
-				},
-				cols: [[
-					{type: 'checkbox', fixed: 'left'},
-					{field:'id', fixed: 'left', width:70, title: 'ID', sort: true, unresize: true},
-					{field:'name', width:140, title: '姓名', sort: true, edit: 'text'},
-					{field:'age', width:90, title: '年龄', sort: true, edit: 'text'},
-					{field:'mail', width:260, title: '邮箱', sort: true, edit: 'text'},
-					{field:'desc', minWidth:180, title: '备注', sort: true, edit: 'text'}
-				]],
-				done: function(res){
-					procSetText('CapCount', String(res.count || 0));
-					procRefreshPortal(FALSE);
-				},
-				error: function(res, msg){
-					console.log(res, msg);
-				}
-			});
-			
-			table.on('toolbar(DataList)', function(obj){
-				var id = obj.config.id;
-				var checkStatus = table.checkStatus(id);
-				switch(obj.event){
-					case 'AddRow':
-						layer.open({
-							title: '添加数据',
-							type: 2,
-							shadeClose: true,
-							maxmin: true,
-							area: ['640px', '420px'],
-							content: '/add.html',
-							end: function(){
-								table.reloadData('DataList', {
-									scrollPos: 'fixed'
-								});
-								procRefreshPortal(FALSE);
-							}
-						});
-					break;
-					case 'DelRow':
-						var arrData = checkStatus.data;
-						if ( arrData.length == 0 ) {
-							layer.msg('请先选择要删除的数据！', {icon: 2});
-						} else {
-							var arrID = [];
-							var i;
-							for ( i = 0; i < arrData.length; i++ ) {
-								arrID.push(arrData[i].id);
-							}
-							fetch('/app/del', {
-								method: 'POST',
-								headers: {
-									'Content-Type': 'application/json'
-								},
-								body: JSON.stringify(arrID)
-							})
-							.then(function(objResp){
-								return objResp.json();
-							})
-							.then(function(tblData){
-								if ( tblData.result ) {
-									table.reloadData('DataList', {
-										scrollPos: 'fixed'
-									});
-									layer.msg(procMessage(tblData), {icon: 1});
-								} else {
-									layer.msg('请求服务报错：' + procMessage(tblData), {icon: 2});
-								}
-							})
-							.catch(function(objErr){
-								layer.msg('请求出错，请查看开发者工具检查原因', {icon: 2});
-								console.error('Error:', objErr);
-							});
-						}
-					break;
-					case 'RefreshList':
-						table.reloadData('DataList', {
-							scrollPos: 'fixed'
-						});
-						procRefreshPortal(FALSE);
-					break;
-				}
-			});
-			
-			table.on('edit(DataList)', function(obj){
-				var sField = obj.field;
-				var sValue = obj.value;
-				var sOldValue = obj.oldValue;
-				var tblRow = obj.data;
-				var tblData = { id: tblRow.id, field: sField, value: sValue };
-				
-				fetch('/app/edit', {
-					method: 'POST',
-					headers: {
-						'Content-Type': 'application/json'
-					},
-					body: JSON.stringify(tblData)
-				})
-				.then(function(objResp){
-					return objResp.json();
-				})
-				.then(function(tblRet){
-					if ( tblRet.result ) {
-						layer.msg(procMessage(tblRet), {icon: 1});
-						table.reloadData('DataList', {
-							scrollPos: 'fixed'
-						});
-					} else {
-						var tblUpdate = {};
-						tblUpdate[sField] = sOldValue;
-						obj.update(tblUpdate, true);
-						layer.msg('请求服务报错：' + procMessage(tblRet), {icon: 2});
-					}
-				})
-				.catch(function(objErr){
-					var tblUpdate = {};
-					tblUpdate[sField] = sOldValue;
-					obj.update(tblUpdate, true);
-					layer.msg('请求出错，请查看开发者工具检查原因', {icon: 2});
-					console.error('Error:', objErr);
-				});
-			});
-			
-			document.getElementById('ReloadBtn').addEventListener('click', procDoReload);
-			document.getElementById('ReloadConfigBtn').addEventListener('click', procDoReloadConfig);
-			document.getElementById('CheckConfigBtn').addEventListener('click', procDoCheckConfig);
-			document.getElementById('CheckConfigClearBtn').addEventListener('click', procClearCheckConfigStats);
-			document.getElementById('ReloadStatusBtn').addEventListener('click', function(){
-				procRefreshPortal(FALSE);
-			});
-			document.getElementById('ReloadClearBtn').addEventListener('click', procClearReloadStatus);
-			document.getElementById('ReloadResetBtn').addEventListener('click', procResetReloadStats);
-			document.getElementById('BusSendServerBtn').addEventListener('click', function(){
-				procDoBusSend('server');
-			});
-			document.getElementById('BusSendHostBtn').addEventListener('click', function(){
-				procDoBusSend('host');
-			});
-			document.getElementById('BusSendBroadcastBtn').addEventListener('click', function(){
-				procDoBusSend('broadcast');
-			});
-			document.getElementById('BusSweepBtn').addEventListener('click', procSweepBus);
-			document.getElementById('BusRegisterBtn').addEventListener('click', procDoBusRegister);
-			document.getElementById('BusSetBtn').addEventListener('click', procDoBusSet);
-			document.getElementById('BusFindBtn').addEventListener('click', procDoBusFind);
-			document.getElementById('BusExistsBtn').addEventListener('click', procDoBusExists);
-			document.getElementById('BusGetBtn').addEventListener('click', procDoBusGet);
-			document.getElementById('BusRetainBtn').addEventListener('click', procDoBusRetain);
-			document.getElementById('BusReleaseBtn').addEventListener('click', procDoBusRelease);
-			document.getElementById('BusTouchBtn').addEventListener('click', procDoBusTouch);
-			document.getElementById('BusRemoveBtn').addEventListener('click', procDoBusRemove);
-			document.getElementById('BusRemoveAllBtn').addEventListener('click', procDoBusRemoveAll);
-			document.getElementById('BusPolicyBtn').addEventListener('click', procUpdateBusNamespacePolicy);
-			document.getElementById('BusResetStatsBtn').addEventListener('click', procResetBusStats);
-			procRefreshPortal(FALSE);
-		});
+			document.getElementById("RefreshBtn").addEventListener("click", procRefreshAll);
+			procRefreshAll();
+		})();
 	</script>
 </body>
 </html>

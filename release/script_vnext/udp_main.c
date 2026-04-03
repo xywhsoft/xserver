@@ -1,4 +1,4 @@
-#include <xs_vnext_full.h>
+#include <xsbase.h>
 #include <string.h>
 
 bool EventDgramProc(XS_ServerObject objServer, void* pSock, const void* pFromAddr, const void* pData, size_t iLen)

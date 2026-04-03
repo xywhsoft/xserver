@@ -725,7 +725,7 @@ static inline bool XS_HttpStartServer(XS_ServerConfig* objServer)
 		XS_ReportError("http start failed: xrtHttpdStart returned error");
 		return FALSE;
 	}
-	if ( objHandle && XS_RuntimeGovernEnabled() && objServer->IdleTimeout > 0 ) {
+	if ( objHandle && objServer->IdleTimeout > 0 ) {
 		objHandle->bStopping = FALSE;
 		objHandle->bStopThread = FALSE;
 		objHandle->hIdleThread = xrtThreadCreate(XS_HttpIdleThread, objHandle, 0);

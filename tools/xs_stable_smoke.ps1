@@ -1,4 +1,4 @@
-param(
+﻿param(
 	[string]$sConfig = "xs_manage_test.json"
 )
 
@@ -17,6 +17,8 @@ $script:sWsClientExe = $null
 $script:sCustomClientExe = $null
 $script:sUdpClientExe = $null
 $script:sPortProbeExe = $null
+$script:sIdleClientExe = $null
+$script:sWinHelperExe = $null
 
 function procCleanupGeneratedFiles()
 {
@@ -26,6 +28,8 @@ function procCleanupGeneratedFiles()
 		"ws_smoke_client*.exe",
 		"udp_smoke_client*.exe",
 		"custom_smoke_client*.exe",
+		"idle_socket_client*.exe",
+		"win_console_group_helper*.exe",
 		".xs_stable_smoke_body.tmp"
 	) ) {
 		Get-ChildItem -Path $sToolDir -Filter $sPattern -File -ErrorAction SilentlyContinue | ForEach-Object {
@@ -87,6 +91,8 @@ function procAppendArtifactCleanupCheck(
 		"ws_smoke_client*.exe",
 		"udp_smoke_client*.exe",
 		"custom_smoke_client*.exe",
+		"idle_socket_client*.exe",
+		"win_console_group_helper*.exe",
 		".xs_stable_smoke_body.tmp"
 	) ) {
 		$arrHelper += @(Get-ChildItem -Path $sToolDir -Filter $sPattern -File -ErrorAction SilentlyContinue)
@@ -108,14 +114,27 @@ function procAppendProcessCleanupCheck([System.Collections.Generic.List[string]]
 {
 	$arrOut.Add("[cleanup]") | Out-Null
 
-	$arrProc = @(Get-Process xs, xsdbg -ErrorAction SilentlyContinue)
+	$arrProc = @(Get-Process xs, xsdbg -ErrorAction SilentlyContinue | Where-Object {
+		$sProcPath = ""
+		try {
+			$sProcPath = [string]$_.Path
+		} catch {
+			$sProcPath = ""
+		}
+
+		if ( [string]::IsNullOrEmpty($sProcPath) ) {
+			return $false
+		}
+
+		return $sProcPath.StartsWith($sReleaseDir, [System.StringComparison]::OrdinalIgnoreCase)
+	})
 	if ( $arrProc.Count -le 0 ) {
 		$arrOut.Add("OK   cleanup_processes : none") | Out-Null
 		return 0
 	}
 
 	foreach ( $objProc in $arrProc ) {
-		$arrOut.Add(("FAIL cleanup_processes : {0} pid={1}" -f $objProc.ProcessName, $objProc.Id)) | Out-Null
+		$arrOut.Add(("FAIL cleanup_processes : {0} pid={1} path={2}" -f $objProc.ProcessName, $objProc.Id, $objProc.Path)) | Out-Null
 	}
 
 	return 1
@@ -126,7 +145,7 @@ function procFetch([string]$sUrl)
 	return procFetchEx "GET" $sUrl
 }
 
-function procFetchEx([string]$sMethod, [string]$sUrl)
+function procFetchExOnce([string]$sMethod, [string]$sUrl)
 {
 	$iStatus = 0
 	$sBody = ""
@@ -172,7 +191,22 @@ function procFetchEx([string]$sMethod, [string]$sUrl)
 	}
 }
 
-function procFetchHost([string]$sUrl, [string]$sHost)
+function procFetchEx([string]$sMethod, [string]$sUrl)
+{
+	$objResp = procFetchExOnce $sMethod $sUrl
+
+	if ( $objResp.status -eq 0 ) {
+		Start-Sleep -Milliseconds 100
+		$objRetry = procFetchExOnce $sMethod $sUrl
+		if ( ($objRetry.status -ne 0) -or (-not [string]::IsNullOrEmpty($objRetry.body)) -or (-not [string]::IsNullOrEmpty($objRetry.headers)) ) {
+			$objResp = $objRetry
+		}
+	}
+
+	return $objResp
+}
+
+function procFetchHostOnce([string]$sUrl, [string]$sHost)
 {
 	$iStatus = 0
 	$sBody = ""
@@ -210,19 +244,24 @@ function procFetchHost([string]$sUrl, [string]$sHost)
 	}
 }
 
-function procFetchStatusMethod([string]$sMethod, [string]$sUrl)
+function procFetchHost([string]$sUrl, [string]$sHost)
 {
-	$arrArgs = @("-s", "-o", "NUL", "-w", "%{http_code}")
+	$objResp = procFetchHostOnce $sUrl $sHost
 
-	if ( $sMethod -eq "HEAD" ) {
-		$arrArgs += "-I"
-	} else {
-		$arrArgs += @("-X", $sMethod)
+	if ( $objResp.status -eq 0 ) {
+		Start-Sleep -Milliseconds 100
+		$objRetry = procFetchHostOnce $sUrl $sHost
+		if ( ($objRetry.status -ne 0) -or (-not [string]::IsNullOrEmpty($objRetry.body)) -or (-not [string]::IsNullOrEmpty($objRetry.headers)) ) {
+			$objResp = $objRetry
+		}
 	}
 
-	$arrArgs += $sUrl
-	$sStatus = (& curl.exe @arrArgs 2>$null).Trim()
-	return [int]$sStatus
+	return $objResp
+}
+
+function procFetchStatusMethod([string]$sMethod, [string]$sUrl)
+{
+	return (procFetchEx $sMethod $sUrl).status
 }
 
 function procFetchAllowMethod([string]$sMethod, [string]$sUrl)
@@ -246,16 +285,7 @@ function procHeaderValueFromText([string]$sHeaderText, [string]$sHeaderName)
 
 function procFetchHeaderMethod([string]$sMethod, [string]$sUrl, [string]$sHeaderName)
 {
-	$arrArgs = @("-s", "-D", "-", "-o", "NUL")
-
-	if ( $sMethod -eq "HEAD" ) {
-		$arrArgs += "-I"
-	} else {
-		$arrArgs += @("-X", $sMethod)
-	}
-
-	$arrArgs += $sUrl
-	$sHeaderText = (& curl.exe @arrArgs 2>$null) -join "`n"
+	$sHeaderText = [string](procFetchEx $sMethod $sUrl).headers
 	$arrLines = $sHeaderText -split "`r?`n"
 
 	foreach ( $sLine in $arrLines ) {
@@ -269,14 +299,7 @@ function procFetchHeaderMethod([string]$sMethod, [string]$sUrl, [string]$sHeader
 
 function procFetchBodyMethod([string]$sMethod, [string]$sUrl)
 {
-	$arrArgs = @("-s")
-
-	if ( $sMethod -ne "GET" ) {
-		$arrArgs += @("-X", $sMethod)
-	}
-
-	$arrArgs += $sUrl
-	return ((& curl.exe @arrArgs 2>$null) -join "`n")
+	return [string](procFetchEx $sMethod $sUrl).body
 }
 
 function procCheckBodyContains([System.Collections.Generic.List[string]]$arrResults, [string]$sName, [string]$sBody, [string]$sExpectText)
@@ -287,6 +310,16 @@ function procCheckBodyContains([System.Collections.Generic.List[string]]$arrResu
 	}
 
 	$arrResults.Add("FAIL $sName : missing text '$sExpectText'")
+}
+
+function procCheckBodyNotContains([System.Collections.Generic.List[string]]$arrResults, [string]$sName, [string]$sBody, [string]$sUnexpectedText)
+{
+	if ( $sBody -like "*$sUnexpectedText*" ) {
+		$arrResults.Add("FAIL $sName : unexpected text '$sUnexpectedText'")
+		return
+	}
+
+	$arrResults.Add("OK   $sName : absent")
 }
 
 function procCheckSecurityHeaders([System.Collections.Generic.List[string]]$arrResults, [string]$sName, [string]$sMethod, [string]$sUrl)
@@ -303,6 +336,90 @@ function procCheckSecurityHeadersFromText([System.Collections.Generic.List[strin
 	procCheckBodyContains $arrResults "$sName frame" (procHeaderValueFromText $sHeaderText "X-Frame-Options") 'DENY'
 	procCheckBodyContains $arrResults "$sName referrer" (procHeaderValueFromText $sHeaderText "Referrer-Policy") 'no-referrer'
 	procCheckBodyContains $arrResults "$sName nosniff" (procHeaderValueFromText $sHeaderText "X-Content-Type-Options") 'nosniff'
+}
+
+function procFetchDataFileEx([string]$sMethod, [string]$sUrl, [string]$sDataFile)
+{
+	$iStatus = 0
+	$sBody = ""
+	$sHeaders = ""
+	$sBodyFile = [System.IO.Path]::GetTempFileName()
+	$sHeaderFile = [System.IO.Path]::GetTempFileName()
+	$arrArgs = @("-s", "--max-time", "5", "-D", $sHeaderFile, "-o", $sBodyFile, "-w", "%{http_code}", "-X", $sMethod, "--data-binary", ("@" + $sDataFile), $sUrl)
+
+	try {
+		$sStatus = (& curl.exe @arrArgs 2>$null) -join ""
+
+		if ( Test-Path $sBodyFile ) {
+			$sBody = [string](Get-Content -Raw -Path $sBodyFile -Encoding UTF8)
+		}
+		if ( Test-Path $sHeaderFile ) {
+			$sHeaders = [string](Get-Content -Raw -Path $sHeaderFile -Encoding UTF8)
+		}
+
+		if ( ![int]::TryParse($sStatus.Trim(), [ref]$iStatus) ) {
+			$iStatus = 0
+		}
+	} finally {
+		if ( Test-Path $sBodyFile ) {
+			Remove-Item $sBodyFile -Force -ErrorAction SilentlyContinue
+		}
+		if ( Test-Path $sHeaderFile ) {
+			Remove-Item $sHeaderFile -Force -ErrorAction SilentlyContinue
+		}
+	}
+
+	return @{
+		status = $iStatus
+		body = $sBody
+		headers = $sHeaders
+	}
+}
+
+function procRunHttpInvalidInputChecks(
+	[System.Collections.Generic.List[string]]$arrResults,
+	[string]$sExeName,
+	[bool]$bDebug,
+	[int]$iPort
+)
+{
+	$sLongQuery = "a" * 260
+	$sBodyFile = [System.IO.Path]::GetTempFileName()
+	$objResp = $null
+	$sMetricsText = ""
+	$sMetricsJson = ""
+
+	try {
+		if ( $bDebug ) {
+			$objResp = procFetch ("http://127.0.0.1:$iPort/__xs/http_metrics_clear")
+			procCheck $arrResults "$sExeName http_invalid_input_clear" $objResp.status 200 $objResp.body
+			procCheckBodyContains $arrResults "$sExeName http_invalid_input_clear path" $objResp.body 'http_path_limit_reject_count=0'
+			procCheckBodyContains $arrResults "$sExeName http_invalid_input_clear body" $objResp.body 'http_body_limit_reject_count=0'
+		}
+
+		$objResp = procFetch ("http://127.0.0.1:$iPort/json?" + $sLongQuery)
+		procCheck $arrResults "$sExeName http_path_limit" $objResp.status 414 $objResp.body
+		procCheckBodyContains $arrResults "$sExeName http_path_limit body" $objResp.body 'request path limit exceeded'
+
+		[System.IO.File]::WriteAllText($sBodyFile, ("b" * 270000), [System.Text.UTF8Encoding]::new($false))
+		$objResp = procFetchDataFileEx "POST" ("http://127.0.0.1:$iPort/json") $sBodyFile
+		procCheck $arrResults "$sExeName http_body_limit" $objResp.status 413 $objResp.body
+		procCheckBodyContains $arrResults "$sExeName http_body_limit body" $objResp.body 'request body limit exceeded'
+
+		if ( $bDebug ) {
+			$sMetricsText = procFetchBodyMethod "GET" ("http://127.0.0.1:$iPort/__xs/http_metrics")
+			procCheckBodyContains $arrResults "$sExeName http_invalid_input_metrics path" $sMetricsText 'http_path_limit_reject_count=1'
+			procCheckBodyContains $arrResults "$sExeName http_invalid_input_metrics body" $sMetricsText 'http_body_limit_reject_count=1'
+
+			$sMetricsJson = procFetchBodyMethod "GET" ("http://127.0.0.1:$iPort/__xs/http_metrics_json")
+			procCheckBodyContains $arrResults "$sExeName http_invalid_input_metrics_json path" $sMetricsJson '"http_path_limit_reject_count":1'
+			procCheckBodyContains $arrResults "$sExeName http_invalid_input_metrics_json body" $sMetricsJson '"http_body_limit_reject_count":1'
+		}
+	} finally {
+		if ( Test-Path $sBodyFile ) {
+			Remove-Item $sBodyFile -Force -ErrorAction SilentlyContinue
+		}
+	}
 }
 
 function procCheckDisabledEndpoint([System.Collections.Generic.List[string]]$arrResults, [string]$sExeName, [string]$sName, [string]$sMethod, [string]$sPath, [int]$iExpectStatus, [string]$sContentType, [string]$sBodyText)
@@ -363,9 +480,102 @@ function procRunProductionAppPassThroughChecks([System.Collections.Generic.List[
 	procCheck $arrResults "$sCaseName passthrough_reload_json" $objResp.status 200 $objResp.body 'path=/__xs/reload_json'
 	procCheckBodyContains $arrResults "$sCaseName passthrough_reload_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
 
+	$objResp = procFetch "http://127.0.0.1:$iPort/__xs/dashboard"
+	procCheck $arrResults "$sCaseName passthrough_dashboard" $objResp.status 200 $objResp.body 'path=/__xs/dashboard'
+	procCheckBodyContains $arrResults "$sCaseName passthrough_dashboard method" $objResp.body 'method=GET'
+	procCheckBodyContains $arrResults "$sCaseName passthrough_dashboard type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
+	$objResp = procFetchEx "HEAD" "http://127.0.0.1:$iPort/__xs/dashboard"
+	procCheck $arrResults "$sCaseName passthrough_dashboard_head" $objResp.status 200 ""
+	procCheckBodyContains $arrResults "$sCaseName passthrough_dashboard_head type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
+	$objResp = procFetchEx "POST" "http://127.0.0.1:$iPort/__xs/dashboard"
+	procCheck $arrResults "$sCaseName passthrough_dashboard_post" $objResp.status 200 $objResp.body 'path=/__xs/dashboard'
+	procCheckBodyContains $arrResults "$sCaseName passthrough_dashboard_post method" $objResp.body 'method=POST'
+	procCheckBodyContains $arrResults "$sCaseName passthrough_dashboard_post type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
+	$objResp = procFetch "http://127.0.0.1:$iPort/__xs/dashboard_json"
+	procCheck $arrResults "$sCaseName passthrough_dashboard_json" $objResp.status 200 $objResp.body 'path=/__xs/dashboard_json'
+	procCheckBodyContains $arrResults "$sCaseName passthrough_dashboard_json method" $objResp.body 'method=GET'
+	procCheckBodyContains $arrResults "$sCaseName passthrough_dashboard_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
+	$objResp = procFetchEx "HEAD" "http://127.0.0.1:$iPort/__xs/dashboard_json"
+	procCheck $arrResults "$sCaseName passthrough_dashboard_json_head" $objResp.status 200 ""
+	procCheckBodyContains $arrResults "$sCaseName passthrough_dashboard_json_head type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
+	$objResp = procFetchEx "POST" "http://127.0.0.1:$iPort/__xs/dashboard_json"
+	procCheck $arrResults "$sCaseName passthrough_dashboard_json_post" $objResp.status 200 $objResp.body 'path=/__xs/dashboard_json'
+	procCheckBodyContains $arrResults "$sCaseName passthrough_dashboard_json_post method" $objResp.body 'method=POST'
+	procCheckBodyContains $arrResults "$sCaseName passthrough_dashboard_json_post type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
 	$objResp = procFetch "http://127.0.0.1:$iPort/__xs/bus/status"
 	procCheck $arrResults "$sCaseName passthrough_bus_status" $objResp.status 200 $objResp.body 'path=/__xs/bus/status'
+	procCheckBodyContains $arrResults "$sCaseName passthrough_bus_status method" $objResp.body 'method=GET'
 	procCheckBodyContains $arrResults "$sCaseName passthrough_bus_status type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
+	$objResp = procFetchEx "HEAD" "http://127.0.0.1:$iPort/__xs/bus/status"
+	procCheck $arrResults "$sCaseName passthrough_bus_status_head" $objResp.status 200 ""
+	procCheckBodyContains $arrResults "$sCaseName passthrough_bus_status_head type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
+	$objResp = procFetchEx "POST" "http://127.0.0.1:$iPort/__xs/bus/status"
+	procCheck $arrResults "$sCaseName passthrough_bus_status_post" $objResp.status 200 $objResp.body 'path=/__xs/bus/status'
+	procCheckBodyContains $arrResults "$sCaseName passthrough_bus_status_post method" $objResp.body 'method=POST'
+	procCheckBodyContains $arrResults "$sCaseName passthrough_bus_status_post type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+}
+
+
+
+
+
+function procRunDebugAppPassThroughChecks([System.Collections.Generic.List[string]]$arrResults, [string]$sExeName, [string]$sNamePrefix = "")
+{
+	$sCaseName = $sExeName
+
+	if ( -not [string]::IsNullOrEmpty($sNamePrefix) ) {
+		$sCaseName += " " + $sNamePrefix
+	}
+
+	$objResp = procFetch "http://127.0.0.1:$iPort/__xs/dashboard"
+	procCheck $arrResults "$sCaseName debug_passthrough_dashboard" $objResp.status 200 $objResp.body 'path=/__xs/dashboard'
+	procCheckBodyContains $arrResults "$sCaseName debug_passthrough_dashboard method" $objResp.body 'method=GET'
+	procCheckBodyContains $arrResults "$sCaseName debug_passthrough_dashboard type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
+	$objResp = procFetchEx "HEAD" "http://127.0.0.1:$iPort/__xs/dashboard"
+	procCheck $arrResults "$sCaseName debug_passthrough_dashboard_head" $objResp.status 200 ""
+	procCheckBodyContains $arrResults "$sCaseName debug_passthrough_dashboard_head type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
+	$objResp = procFetchEx "POST" "http://127.0.0.1:$iPort/__xs/dashboard"
+	procCheck $arrResults "$sCaseName debug_passthrough_dashboard_post" $objResp.status 200 $objResp.body 'path=/__xs/dashboard'
+	procCheckBodyContains $arrResults "$sCaseName debug_passthrough_dashboard_post method" $objResp.body 'method=POST'
+	procCheckBodyContains $arrResults "$sCaseName debug_passthrough_dashboard_post type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
+	$objResp = procFetch "http://127.0.0.1:$iPort/__xs/dashboard_json"
+	procCheck $arrResults "$sCaseName debug_passthrough_dashboard_json" $objResp.status 200 $objResp.body 'path=/__xs/dashboard_json'
+	procCheckBodyContains $arrResults "$sCaseName debug_passthrough_dashboard_json method" $objResp.body 'method=GET'
+	procCheckBodyContains $arrResults "$sCaseName debug_passthrough_dashboard_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
+	$objResp = procFetchEx "HEAD" "http://127.0.0.1:$iPort/__xs/dashboard_json"
+	procCheck $arrResults "$sCaseName debug_passthrough_dashboard_json_head" $objResp.status 200 ""
+	procCheckBodyContains $arrResults "$sCaseName debug_passthrough_dashboard_json_head type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
+	$objResp = procFetchEx "POST" "http://127.0.0.1:$iPort/__xs/dashboard_json"
+	procCheck $arrResults "$sCaseName debug_passthrough_dashboard_json_post" $objResp.status 200 $objResp.body 'path=/__xs/dashboard_json'
+	procCheckBodyContains $arrResults "$sCaseName debug_passthrough_dashboard_json_post method" $objResp.body 'method=POST'
+	procCheckBodyContains $arrResults "$sCaseName debug_passthrough_dashboard_json_post type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
+	$objResp = procFetch "http://127.0.0.1:$iPort/__xs/bus/status"
+	procCheck $arrResults "$sCaseName debug_passthrough_bus_status" $objResp.status 200 $objResp.body 'path=/__xs/bus/status'
+	procCheckBodyContains $arrResults "$sCaseName debug_passthrough_bus_status method" $objResp.body 'method=GET'
+	procCheckBodyContains $arrResults "$sCaseName debug_passthrough_bus_status type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
+	$objResp = procFetchEx "HEAD" "http://127.0.0.1:$iPort/__xs/bus/status"
+	procCheck $arrResults "$sCaseName debug_passthrough_bus_status_head" $objResp.status 200 ""
+	procCheckBodyContains $arrResults "$sCaseName debug_passthrough_bus_status_head type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
+	$objResp = procFetchEx "POST" "http://127.0.0.1:$iPort/__xs/bus/status"
+	procCheck $arrResults "$sCaseName debug_passthrough_bus_status_post" $objResp.status 200 $objResp.body 'path=/__xs/bus/status'
+	procCheckBodyContains $arrResults "$sCaseName debug_passthrough_bus_status_post method" $objResp.body 'method=POST'
+	procCheckBodyContains $arrResults "$sCaseName debug_passthrough_bus_status_post type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
 }
 
 function procCheckLineWithMarker([System.Collections.Generic.List[string]]$arrResults, [string[]]$arrLines, [string]$sName, [string]$sPathText, [string]$sMarkerText)
@@ -437,6 +647,41 @@ function procWaitBodyContains([string]$sUrl, [string]$sExpectText)
 	}
 
 	return $null
+}
+
+function procWaitFile([string]$sPath)
+{
+	$tEnd = [DateTime]::UtcNow.AddMilliseconds($iWaitMS)
+
+	while ( [DateTime]::UtcNow -lt $tEnd ) {
+		if ( Test-Path $sPath ) {
+			return $true
+		}
+
+		Start-Sleep -Milliseconds 200
+	}
+
+	return $false
+}
+
+function procWaitUrlNotReady([string]$sUrl)
+{
+	$tEnd = [DateTime]::UtcNow.AddMilliseconds($iWaitMS)
+
+	while ( [DateTime]::UtcNow -lt $tEnd ) {
+		try {
+			$objResp = procFetch $sUrl
+			if ( $objResp.status -ne 200 ) {
+				return $true
+			}
+		} catch {
+			return $true
+		}
+
+		Start-Sleep -Milliseconds 200
+	}
+
+	return $false
 }
 
 function procJsonStringField([string]$sJson, [string]$sField)
@@ -624,12 +869,147 @@ function procRunTargetedConfigReloadChecks([System.Collections.Generic.List[stri
 		}
 	}
 
+	if ( -not (procRunTargetedServerScriptLoadRollbackCheck $arrResults $sExeName $iPort $sConfigPath $sServerName $sServerQuery) ) {
+		return
+	}
+
 	procRunManageHttpListenerSoftReloadCheck `
 		$arrResults `
 		$sExeName `
 		$sConfig `
 		$sServerName `
 		$iPort
+}
+
+function procRunTargetedServerScriptLoadRollbackCheck(
+	[System.Collections.Generic.List[string]]$arrResults,
+	[string]$sExeName,
+	[int]$iPort,
+	[string]$sConfigPath,
+	[string]$sServerName,
+	[string]$sServerQuery
+)
+{
+	$sConfigBody = ""
+	$objConfig = $null
+	$objService = $null
+	$objResp = $null
+	$sBadScriptName = "_smoke_bad_reload_" + $sRunTag + ".c"
+	$sBadScriptRel = "script_vnext/" + $sBadScriptName
+	$sBadScriptPath = Join-Path $sReleaseDir ("script_vnext\\" + $sBadScriptName)
+	$arrBadScript = @(
+		'#include <xs_vnext.h>',
+		'bool RequestProc(XS_ServerObject objServer, XS_HostObject objHost, XS_RequestObject objReq, XS_ResponseObject objResp)',
+		'{',
+		"`treturn",
+		'}'
+	)
+
+	if ( -not (Test-Path $sConfigPath) ) {
+		$arrResults.Add("FAIL $sExeName targeted_server_script_load_rollback config_path : missing")
+		return $false
+	}
+
+	$sConfigBody = [System.IO.File]::ReadAllText($sConfigPath, [System.Text.UTF8Encoding]::new($false))
+	try {
+		$objConfig = $sConfigBody | ConvertFrom-Json
+	} catch {
+		$arrResults.Add("FAIL $sExeName targeted_server_script_load_rollback config_parse : $($_.Exception.Message)")
+		return $false
+	}
+
+	if ( $null -eq $objConfig -or $null -eq $objConfig.services ) {
+		$arrResults.Add("FAIL $sExeName targeted_server_script_load_rollback config_services : missing")
+		return $false
+	}
+
+	$objService = @($objConfig.services) | Where-Object { $_.name -eq $sServerName } | Select-Object -First 1
+	if ( $null -eq $objService ) {
+		$arrResults.Add("FAIL $sExeName targeted_server_script_load_rollback target_server : missing")
+		return $false
+	}
+
+	if ( $null -eq $objService.PSObject.Properties["host_default"] ) {
+		$arrResults.Add("FAIL $sExeName targeted_server_script_load_rollback host_default : missing")
+		return $false
+	}
+	if ( $null -eq $objService.host_default.PSObject.Properties["devfile"] ) {
+		$arrResults.Add("FAIL $sExeName targeted_server_script_load_rollback devfile : missing")
+		return $false
+	}
+
+	try {
+		[System.IO.File]::WriteAllLines($sBadScriptPath, $arrBadScript, [System.Text.UTF8Encoding]::new($false))
+		$objService.host_default.PSObject.Properties["devfile"].Value = $sBadScriptRel
+		[System.IO.File]::WriteAllText($sConfigPath, ($objConfig | ConvertTo-Json -Depth 64), [System.Text.UTF8Encoding]::new($false))
+
+		if ( -not (procWaitReloadIdle) ) {
+			$arrResults.Add("FAIL $sExeName targeted_server_script_load_rollback idle_wait_before : timeout")
+			return $false
+		}
+
+		$objResp = procFetch ("http://127.0.0.1:$iPort/__xs/reload_config_json?server=" + $sServerQuery)
+		procCheck $arrResults "$sExeName targeted_server_script_load_rollback reload_config_json" $objResp.status 200 $objResp.body '"result":true'
+		procCheckBodyContains $arrResults "$sExeName targeted_server_script_load_rollback reload_config_json body" $objResp.body 'config reload queued'
+		procCheckSecurityHeadersFromText $arrResults "$sExeName targeted_server_script_load_rollback reload_config_json" $objResp.headers
+
+		if ( -not (procWaitReloadIdle) ) {
+			$arrResults.Add("FAIL $sExeName targeted_server_script_load_rollback idle_after : timeout")
+			return $false
+		}
+
+		$objResp = procWaitBodyContains "http://127.0.0.1:$iPort/__xs/reload_status_json" '"message":"target server soft reload script load error"'
+		if ( $null -eq $objResp ) {
+			$arrResults.Add("FAIL $sExeName targeted_server_script_load_rollback status : missing text '""message"":""target server soft reload script load error""'")
+			return $false
+		}
+
+		procCheck $arrResults "$sExeName targeted_server_script_load_rollback status" $objResp.status 200 $objResp.body '"message":"target server soft reload script load error"'
+		procCheckBodyContains $arrResults "$sExeName targeted_server_script_load_rollback status success" $objResp.body '"success":false'
+		procCheckSecurityHeadersFromText $arrResults "$sExeName targeted_server_script_load_rollback status" $objResp.headers
+
+		$objResp = procFetch "http://127.0.0.1:$iPort/json"
+		procCheck $arrResults "$sExeName targeted_server_script_load_rollback json_route" $objResp.status 200 $objResp.body '"path":"/json"'
+
+		[System.IO.File]::WriteAllText($sConfigPath, $sConfigBody, [System.Text.UTF8Encoding]::new($false))
+
+		if ( -not (procWaitReloadIdle) ) {
+			$arrResults.Add("FAIL $sExeName targeted_server_script_load_rollback restore_idle_wait_before : timeout")
+			return $false
+		}
+
+		$objResp = procFetch ("http://127.0.0.1:$iPort/__xs/reload_config_json?server=" + $sServerQuery)
+		procCheck $arrResults "$sExeName targeted_server_script_load_rollback restore_reload_config_json" $objResp.status 200 $objResp.body '"result":true'
+		procCheckBodyContains $arrResults "$sExeName targeted_server_script_load_rollback restore_reload_config_json body" $objResp.body 'config reload queued'
+		procCheckSecurityHeadersFromText $arrResults "$sExeName targeted_server_script_load_rollback restore_reload_config_json" $objResp.headers
+
+		if ( -not (procWaitReloadIdle) ) {
+			$arrResults.Add("FAIL $sExeName targeted_server_script_load_rollback restore_idle_after : timeout")
+			return $false
+		}
+
+		$objResp = procWaitBodyContains "http://127.0.0.1:$iPort/__xs/reload_status_json" '"message":"target server unchanged"'
+		if ( $null -eq $objResp ) {
+			$arrResults.Add("FAIL $sExeName targeted_server_script_load_rollback restore_status : missing text '""message"":""target server unchanged""'")
+			return $false
+		}
+
+		procCheck $arrResults "$sExeName targeted_server_script_load_rollback restore_status" $objResp.status 200 $objResp.body '"message":"target server unchanged"'
+		procCheckBodyContains $arrResults "$sExeName targeted_server_script_load_rollback restore_status success" $objResp.body '"success":true'
+		procCheckSecurityHeadersFromText $arrResults "$sExeName targeted_server_script_load_rollback restore_status" $objResp.headers
+
+		$objResp = procFetch "http://127.0.0.1:$iPort/json"
+		procCheck $arrResults "$sExeName targeted_server_script_load_rollback restore_json_route" $objResp.status 200 $objResp.body '"path":"/json"'
+	} finally {
+		if ( Test-Path $sBadScriptPath ) {
+			Remove-Item -LiteralPath $sBadScriptPath -Force -ErrorAction SilentlyContinue
+		}
+		if ( [System.IO.File]::Exists($sConfigPath) ) {
+			[System.IO.File]::WriteAllText($sConfigPath, $sConfigBody, [System.Text.UTF8Encoding]::new($false))
+		}
+	}
+
+	return $true
 }
 
 function procRunTargetedServerHostTopologySoftReloadCheck(
@@ -1547,6 +1927,16 @@ function procBuildXtpSmokeClient()
 	return $script:sXtpClientExe
 }
 
+function procBuildWsSmokeClient()
+{
+	if ( $script:sWsClientExe -and (Test-Path $script:sWsClientExe) ) {
+		return $script:sWsClientExe
+	}
+
+	$script:sWsClientExe = procBuildCClient "ws_smoke_client.c" "ws_smoke_client"
+	return $script:sWsClientExe
+}
+
 function procBuildPortProbeClient()
 {
 	if ( $script:sPortProbeExe -and (Test-Path $script:sPortProbeExe) ) {
@@ -1582,6 +1972,26 @@ function procBuildCClient([string]$sSourceName, [string]$sOutputName)
 	}
 
 	return $sOutput
+}
+
+function procBuildWinHelper()
+{
+	if ( $script:sWinHelperExe -and (Test-Path $script:sWinHelperExe) ) {
+		return $script:sWinHelperExe
+	}
+
+	$script:sWinHelperExe = procBuildCClient "win_console_group_helper.c" "win_console_group_helper"
+	return $script:sWinHelperExe
+}
+
+function procBuildIdleSocketClient()
+{
+	if ( $script:sIdleClientExe -and (Test-Path $script:sIdleClientExe) ) {
+		return $script:sIdleClientExe
+	}
+
+	$script:sIdleClientExe = procBuildCClient "idle_socket_client.c" "idle_socket_client"
+	return $script:sIdleClientExe
 }
 
 function procRunXtpHelper([string]$sClientExe, [string[]]$arrArgs)
@@ -1637,112 +2047,10 @@ function procAppendLines([System.Collections.Generic.List[string]]$arrTarget, $a
 	}
 }
 
-function procRunBusGovernanceScenario([System.Collections.Generic.List[string]]$arrResults, [string]$sExeName, [int]$iPort, [string]$sNamePrefix = "")
-{
-	$sCasePrefix = $sExeName
-	$sBaseUrl = "http://127.0.0.1:$iPort"
-	$sReadonlyNamespace = "stable.readonly.$sRunTag"
-	$sDisabledNamespace = "stable.disabled.$sRunTag"
-	$sTTLNamespace = "stable.ttl.$sRunTag"
-	$sTagNamespace = "stable.tag.$sRunTag"
-	$sDataTag = "item1"
-	$sTagDataTag = "item2"
-	$objResp = $null
-
-	if ( -not [string]::IsNullOrEmpty($sNamePrefix) ) {
-		$sCasePrefix = "$sExeName $sNamePrefix"
-	}
-
-	$objResp = procFetch "$sBaseUrl/__xs/bus/remove?all=true"
-	procCheck $arrResults "$sCasePrefix bus_policy_remove_all_pre" $objResp.status 200 $objResp.body '"result":true'
-
-	$objResp = procFetch "$sBaseUrl/__xs/bus/reset"
-	procCheck $arrResults "$sCasePrefix bus_policy_reset_pre" $objResp.status 200 $objResp.body '"sweep_count"'
-
-	$objResp = procFetch "$sBaseUrl/__xs/bus/limits?readonly_namespaces=&disabled_namespaces=&ttl_required_namespaces=&tag_required_namespaces=&data_limit=0&queue_limit=0&namespace_limit=0&namespace_data_limit=0"
-	procCheck $arrResults "$sCasePrefix bus_policy_limits_clear_pre" $objResp.status 200 $objResp.body '"updated":true'
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_clear_pre readonly" $objResp.body '"readonly_namespaces":""'
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_clear_pre disabled" $objResp.body '"disabled_namespaces":""'
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_clear_pre ttl" $objResp.body '"ttl_required_namespaces":""'
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_clear_pre tag" $objResp.body '"tag_required_namespaces":""'
-
-	$objResp = procFetch "$sBaseUrl/__xs/bus/register?namespace=$sReadonlyNamespace&tag=$sDataTag"
-	procCheck $arrResults "$sCasePrefix bus_policy_seed_register" $objResp.status 200 $objResp.body '"result":true'
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_seed_register namespace" $objResp.body ('"namespace":"' + $sReadonlyNamespace + '"')
-
-	$objResp = procFetch "$sBaseUrl/__xs/bus/limits?readonly_namespaces=$sReadonlyNamespace&disabled_namespaces=$sDisabledNamespace&ttl_required_namespaces=$sTTLNamespace&tag_required_namespaces=$sTagNamespace"
-	procCheck $arrResults "$sCasePrefix bus_policy_limits_set" $objResp.status 200 $objResp.body '"updated":true'
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_set readonly" $objResp.body ('"readonly_namespaces":"' + $sReadonlyNamespace + '"')
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_set disabled" $objResp.body ('"disabled_namespaces":"' + $sDisabledNamespace + '"')
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_set ttl" $objResp.body ('"ttl_required_namespaces":"' + $sTTLNamespace + '"')
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_set tag" $objResp.body ('"tag_required_namespaces":"' + $sTagNamespace + '"')
-
-	$objResp = procFetch "$sBaseUrl/__xs/bus/set?namespace=$sReadonlyNamespace&tag=$sDataTag&text=hello"
-	procCheck $arrResults "$sCasePrefix bus_policy_readonly_set" $objResp.status 409 $objResp.body
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_readonly_set body" $objResp.body '"bus_error":"namespace readonly"'
-
-	$objResp = procFetch "$sBaseUrl/__xs/bus/register?namespace=$sDisabledNamespace&tag=$sDataTag"
-	procCheck $arrResults "$sCasePrefix bus_policy_disabled_register" $objResp.status 409 $objResp.body
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_disabled_register body" $objResp.body '"bus_error":"namespace disabled"'
-
-	$objResp = procFetch "$sBaseUrl/__xs/bus/register?namespace=$sTTLNamespace&tag=$sDataTag"
-	procCheck $arrResults "$sCasePrefix bus_policy_ttl_missing" $objResp.status 409 $objResp.body
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_ttl_missing body" $objResp.body '"bus_error":"namespace ttl required"'
-
-	$objResp = procFetch "$sBaseUrl/__xs/bus/register?namespace=$sTTLNamespace&tag=$sDataTag&ttl=60"
-	procCheck $arrResults "$sCasePrefix bus_policy_ttl_register" $objResp.status 200 $objResp.body '"result":true'
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_ttl_register ttl" $objResp.body '"ttl":60'
-
-	$objResp = procFetch "$sBaseUrl/__xs/bus/register?namespace=$sTagNamespace"
-	procCheck $arrResults "$sCasePrefix bus_policy_tag_missing" $objResp.status 409 $objResp.body
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_tag_missing body" $objResp.body '"bus_error":"namespace tag required"'
-
-	$objResp = procFetch "$sBaseUrl/__xs/bus/register?namespace=$sTagNamespace&tag=$sTagDataTag"
-	procCheck $arrResults "$sCasePrefix bus_policy_tag_register" $objResp.status 200 $objResp.body '"result":true'
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_tag_register tag" $objResp.body ('"tag":"' + $sTagDataTag + '"')
-
-	$objResp = procFetch "$sBaseUrl/__xs/bus/limits"
-	procCheck $arrResults "$sCasePrefix bus_policy_limits_verify" $objResp.status 200 $objResp.body
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_verify readonly_count" $objResp.body '"readonly_namespace_reject_count":1'
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_verify readonly_namespace" $objResp.body ('"last_readonly_namespace":"' + $sReadonlyNamespace + '"')
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_verify readonly_action" $objResp.body '"last_readonly_namespace_action":"set"'
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_verify disabled_count" $objResp.body '"disabled_namespace_reject_count":1'
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_verify disabled_namespace" $objResp.body ('"last_disabled_namespace":"' + $sDisabledNamespace + '"')
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_verify ttl_count" $objResp.body '"ttl_required_namespace_reject_count":1'
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_verify ttl_namespace" $objResp.body ('"last_ttl_required_namespace":"' + $sTTLNamespace + '"')
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_verify tag_count" $objResp.body '"tag_required_namespace_reject_count":1'
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_verify tag_namespace" $objResp.body ('"last_tag_required_namespace":"' + $sTagNamespace + '"')
-
-	$objResp = procFetch "$sBaseUrl/__xs/bus/namespaces"
-	procCheck $arrResults "$sCasePrefix bus_policy_namespaces_verify" $objResp.status 200 $objResp.body
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_namespaces_verify readonly_namespace" $objResp.body ('"namespace":"' + $sReadonlyNamespace + '"')
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_namespaces_verify readonly_state" $objResp.body '"policy_state":"readonly"'
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_namespaces_verify readonly_action" $objResp.body '"last_policy_reject_action":"set"'
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_namespaces_verify ttl_state" $objResp.body '"policy_state":"ttl_required"'
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_namespaces_verify tag_state" $objResp.body '"policy_state":"tag_required"'
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_namespaces_verify tag_persistent" $objResp.body '"persistent_count":1'
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_namespaces_verify disabled_state" $objResp.body '"policy_state":"disabled"'
-
-	$objResp = procFetch "$sBaseUrl/__xs/bus/remove?all=true"
-	procCheck $arrResults "$sCasePrefix bus_policy_remove_all_post" $objResp.status 200 $objResp.body '"result":true'
-
-	$objResp = procFetch "$sBaseUrl/__xs/bus/limits?readonly_namespaces=&disabled_namespaces=&ttl_required_namespaces=&tag_required_namespaces=&data_limit=0&queue_limit=0&namespace_limit=0&namespace_data_limit=0"
-	procCheck $arrResults "$sCasePrefix bus_policy_limits_clear_post" $objResp.status 200 $objResp.body '"updated":true'
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_clear_post readonly" $objResp.body '"readonly_namespaces":""'
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_clear_post disabled" $objResp.body '"disabled_namespaces":""'
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_clear_post ttl" $objResp.body '"ttl_required_namespaces":""'
-	procCheckBodyContains $arrResults "$sCasePrefix bus_policy_limits_clear_post tag" $objResp.body '"tag_required_namespaces":""'
-
-	$objResp = procFetch "$sBaseUrl/__xs/bus/reset"
-	procCheck $arrResults "$sCasePrefix bus_policy_reset_post" $objResp.status 200 $objResp.body '"sweep_count"'
-}
-
 function procRunStaticHomepageAudit()
 {
 	$arrResults = New-Object 'System.Collections.Generic.List[string]'
 	$arrAudit = @(
-		@{ name = 'homepage dashboard link'; path = '/__xs/dashboard'; marker = 'data-debug-manage="true"' },
-		@{ name = 'homepage dashboard_json link'; path = '/__xs/dashboard_json'; marker = 'data-debug-manage="true"' },
 		@{ name = 'homepage http_metrics_json link'; path = '/__xs/http_metrics_json'; marker = 'data-debug-manage="true"' },
 		@{ name = 'homepage http_metrics_clear link'; path = '/__xs/http_metrics_clear'; marker = 'data-debug-manage="true"' },
 		@{ name = 'homepage ws_metrics_json link'; path = '/__xs/ws_metrics_json'; marker = 'data-debug-manage="true"' },
@@ -1753,7 +2061,6 @@ function procRunStaticHomepageAudit()
 		@{ name = 'homepage udp_metrics_clear link'; path = '/__xs/udp_metrics_clear'; marker = 'data-debug-manage="true"' },
 		@{ name = 'homepage custom_metrics_json link'; path = '/__xs/custom_metrics_json'; marker = 'data-debug-manage="true"' },
 		@{ name = 'homepage custom_metrics_clear link'; path = '/__xs/custom_metrics_clear'; marker = 'data-debug-manage="true"' },
-		@{ name = 'homepage bus_status link'; path = '/__xs/bus/status'; marker = 'data-bus-manage="true"' },
 		@{ name = 'homepage reload_reset link'; path = '/__xs/reload_reset'; marker = 'data-debug-manage="true"' },
 		@{ name = 'homepage check_config_clear link'; path = '/__xs/check_config_clear'; marker = 'data-debug-manage="true"' }
 	)
@@ -1890,7 +2197,6 @@ function procRunCase([string]$sExeName, [bool]$bDebug)
 		@{ name = 'custom_metrics_clear'; path = '/__xs/custom_metrics_clear'; token = 'custom_recv_limit_reject_count=0' }
 	)
 	$arrDebugDisabledText = @(
-		@{ name = 'dashboard'; path = '/__xs/dashboard'; prod = 'dashboard api only available in xsdbg' },
 		@{ name = 'http_metrics'; path = '/__xs/http_metrics'; prod = 'http metrics api only available in xsdbg' },
 		@{ name = 'ws_metrics'; path = '/__xs/ws_metrics'; prod = 'ws metrics api only available in xsdbg' },
 		@{ name = 'xtp_metrics'; path = '/__xs/xtp_metrics'; prod = 'xtp metrics api only available in xsdbg' },
@@ -1906,7 +2212,6 @@ function procRunCase([string]$sExeName, [bool]$bDebug)
 		@{ name = 'check_config_clear'; path = '/__xs/check_config_clear'; prod = 'check config clear api only available in xsdbg' }
 	)
 	$arrDebugDisabledJson = @(
-		@{ name = 'dashboard_json'; path = '/__xs/dashboard_json'; prod = 'dashboard json api only available in xsdbg' },
 		@{ name = 'http_metrics_json'; path = '/__xs/http_metrics_json'; prod = 'http metrics json api only available in xsdbg' },
 		@{ name = 'ws_metrics_json'; path = '/__xs/ws_metrics_json'; prod = 'ws metrics json api only available in xsdbg' },
 		@{ name = 'xtp_metrics_json'; path = '/__xs/xtp_metrics_json'; prod = 'xtp metrics json api only available in xsdbg' },
@@ -1914,7 +2219,6 @@ function procRunCase([string]$sExeName, [bool]$bDebug)
 		@{ name = 'custom_metrics_json'; path = '/__xs/custom_metrics_json'; prod = 'custom metrics json api only available in xsdbg' }
 	)
 	$arrDebugReadOnlyText = @(
-		@{ name = 'dashboard'; path = '/__xs/dashboard'; allow = 'GET, HEAD'; type = 'text/plain' },
 		@{ name = 'http_metrics'; path = '/__xs/http_metrics'; allow = 'GET, HEAD'; type = 'text/plain' },
 		@{ name = 'ws_metrics'; path = '/__xs/ws_metrics'; allow = 'GET, HEAD'; type = 'text/plain' },
 		@{ name = 'xtp_metrics'; path = '/__xs/xtp_metrics'; allow = 'GET, HEAD'; type = 'text/plain' },
@@ -1922,7 +2226,6 @@ function procRunCase([string]$sExeName, [bool]$bDebug)
 		@{ name = 'custom_metrics'; path = '/__xs/custom_metrics'; allow = 'GET, HEAD'; type = 'text/plain' }
 	)
 	$arrDebugReadOnlyJson = @(
-		@{ name = 'dashboard_json'; path = '/__xs/dashboard_json'; allow = 'GET, HEAD'; type = 'application/json' },
 		@{ name = 'http_metrics_json'; path = '/__xs/http_metrics_json'; allow = 'GET, HEAD'; type = 'application/json' },
 		@{ name = 'ws_metrics_json'; path = '/__xs/ws_metrics_json'; allow = 'GET, HEAD'; type = 'application/json' },
 		@{ name = 'xtp_metrics_json'; path = '/__xs/xtp_metrics_json'; allow = 'GET, HEAD'; type = 'application/json' },
@@ -1991,8 +2294,12 @@ function procRunCase([string]$sExeName, [bool]$bDebug)
 			}
 		}
 
+		procRunDebugAppPassThroughChecks $arrResults $sExeName
+
 		$objResp = procFetch "http://127.0.0.1:$iPort/__xs/status_json"
 		procCheck $arrResults "$sExeName status_json" $objResp.status 200 $objResp.body '"manage_api":true'
+		procCheckBodyNotContains $arrResults "$sExeName status_json no_bus_governance_namespaces" $objResp.body '"bus_readonly_namespaces"'
+		procCheckBodyNotContains $arrResults "$sExeName status_json no_bus_governance_limits" $objResp.body '"bus_data_limit"'
 		procCheckBodyContains $arrResults "$sExeName status_json type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/status_json" "Content-Type") 'application/json'
 		procCheckBodyContains $arrResults "$sExeName status_json cache" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/status_json" "Cache-Control") 'no-store'
 		procCheckBodyContains $arrResults "$sExeName status_json frame" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/status_json" "X-Frame-Options") 'DENY'
@@ -2001,6 +2308,8 @@ function procRunCase([string]$sExeName, [bool]$bDebug)
 
 		$objResp = procFetch "http://127.0.0.1:$iPort/__xs/status"
 		procCheck $arrResults "$sExeName status" $objResp.status 200 $objResp.body 'manage_api=true'
+		procCheckBodyNotContains $arrResults "$sExeName status no_bus_governance_namespaces" $objResp.body 'bus_readonly_namespaces='
+		procCheckBodyNotContains $arrResults "$sExeName status no_bus_governance_limits" $objResp.body 'bus_data_limit='
 		procCheckBodyContains $arrResults "$sExeName status type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/status" "Content-Type") 'text/plain'
 		procCheckBodyContains $arrResults "$sExeName status cache" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/status" "Cache-Control") 'no-store'
 		procCheckBodyContains $arrResults "$sExeName status frame" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/status" "X-Frame-Options") 'DENY'
@@ -2009,6 +2318,9 @@ function procRunCase([string]$sExeName, [bool]$bDebug)
 
 		$objResp = procFetch "http://127.0.0.1:$iPort/__xs/health_json"
 		procCheck $arrResults "$sExeName health_json" $objResp.status 200 $objResp.body '"ok":true'
+		procCheckBodyContains $arrResults "$sExeName health_json bus_summary" $objResp.body '"bus_queue_count":'
+		procCheckBodyNotContains $arrResults "$sExeName health_json no_bus_governance_namespaces" $objResp.body '"bus_readonly_namespaces"'
+		procCheckBodyNotContains $arrResults "$sExeName health_json no_bus_governance_limits" $objResp.body '"bus_data_limit"'
 		procCheckBodyContains $arrResults "$sExeName health_json type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/health_json" "Content-Type") 'application/json'
 		procCheckBodyContains $arrResults "$sExeName health_json cache" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/health_json" "Cache-Control") 'no-store'
 		procCheckBodyContains $arrResults "$sExeName health_json frame" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/health_json" "X-Frame-Options") 'DENY'
@@ -2017,6 +2329,9 @@ function procRunCase([string]$sExeName, [bool]$bDebug)
 
 		$objResp = procFetch "http://127.0.0.1:$iPort/__xs/health"
 		procCheck $arrResults "$sExeName health" $objResp.status 200 $objResp.body 'ok=true'
+		procCheckBodyContains $arrResults "$sExeName health bus_summary" $objResp.body 'bus_queue_count='
+		procCheckBodyNotContains $arrResults "$sExeName health no_bus_governance_namespaces" $objResp.body 'bus_readonly_namespaces='
+		procCheckBodyNotContains $arrResults "$sExeName health no_bus_governance_limits" $objResp.body 'bus_data_limit='
 		procCheckBodyContains $arrResults "$sExeName health type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/health" "Content-Type") 'text/plain'
 		procCheckBodyContains $arrResults "$sExeName health cache" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/health" "Cache-Control") 'no-store'
 		procCheckBodyContains $arrResults "$sExeName health frame" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/health" "X-Frame-Options") 'DENY'
@@ -2241,29 +2556,54 @@ function procRunCase([string]$sExeName, [bool]$bDebug)
 		procCheckBodyContains $arrResults "$sExeName head_reload_config type" (procFetchHeaderMethod "HEAD" "http://127.0.0.1:$iPort/__xs/reload_config" "Content-Type") 'text/plain'
 		procCheckSecurityHeaders $arrResults "$sExeName head_reload_config" "HEAD" "http://127.0.0.1:$iPort/__xs/reload_config"
 
-		$objResp = procFetch "http://127.0.0.1:$iPort/__xs/unknown"
-		procCheck $arrResults "$sExeName unknown_manage" $objResp.status 404 $objResp.body
+	$objResp = procFetch "http://127.0.0.1:$iPort/__xs/unknown"
+	procCheck $arrResults "$sExeName unknown_manage" $objResp.status 200 $objResp.body 'path=/__xs/unknown'
+	procCheckBodyContains $arrResults "$sExeName unknown_manage method" $objResp.body 'method=GET'
 	procCheckBodyContains $arrResults "$sExeName unknown_manage type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/unknown" "Content-Type") 'text/plain'
-	procCheckSecurityHeaders $arrResults "$sExeName unknown_manage" "GET" "http://127.0.0.1:$iPort/__xs/unknown"
 
-		$objResp = procFetch "http://127.0.0.1:$iPort/__xs/unknown_json"
-		procCheck $arrResults "$sExeName unknown_manage_json" $objResp.status 404 $objResp.body
-	procCheckBodyContains $arrResults "$sExeName unknown_manage_json type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/unknown_json" "Content-Type") 'application/json'
-	procCheckSecurityHeaders $arrResults "$sExeName unknown_manage_json" "GET" "http://127.0.0.1:$iPort/__xs/unknown_json"
+	$objResp = procFetch "http://127.0.0.1:$iPort/__xs/unknown_json"
+	procCheck $arrResults "$sExeName unknown_manage_json" $objResp.status 200 $objResp.body 'path=/__xs/unknown_json'
+	procCheckBodyContains $arrResults "$sExeName unknown_manage_json method" $objResp.body 'method=GET'
+	procCheckBodyContains $arrResults "$sExeName unknown_manage_json type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/unknown_json" "Content-Type") 'text/plain'
 
-		procCheckDisabledEndpoint $arrResults $sExeName "manage_root" "GET" "/__xs" 404 'text/plain' 'manage api not found'
-		procCheckDisabledEndpoint $arrResults $sExeName "head_manage_root" "HEAD" "/__xs" 404 'text/plain' $null
-		procCheckDisabledEndpoint $arrResults $sExeName "post_manage_root" "POST" "/__xs" 404 'text/plain' 'manage api not found'
-		procCheckDisabledEndpoint $arrResults $sExeName "head_unknown_manage" "HEAD" "/__xs/unknown" 404 'text/plain' $null
-		procCheckDisabledEndpoint $arrResults $sExeName "post_unknown_manage" "POST" "/__xs/unknown" 404 'text/plain' 'manage api not found'
-		procCheckDisabledEndpoint $arrResults $sExeName "head_unknown_manage_json" "HEAD" "/__xs/unknown_json" 404 'application/json' $null
-		procCheckDisabledEndpoint $arrResults $sExeName "post_unknown_manage_json" "POST" "/__xs/unknown_json" 404 'application/json' 'manage api not found'
+	$objResp = procFetch "http://127.0.0.1:$iPort/__xs"
+	procCheck $arrResults "$sExeName manage_root" $objResp.status 200 $objResp.body 'path=/__xs'
+	procCheckBodyContains $arrResults "$sExeName manage_root method" $objResp.body 'method=GET'
+	procCheckBodyContains $arrResults "$sExeName manage_root type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs" "Content-Type") 'text/plain'
+
+	$objResp = procFetchEx "HEAD" "http://127.0.0.1:$iPort/__xs"
+	procCheck $arrResults "$sExeName head_manage_root" $objResp.status 200 ""
+	procCheckBodyContains $arrResults "$sExeName head_manage_root type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
+	$objResp = procFetchEx "POST" "http://127.0.0.1:$iPort/__xs"
+	procCheck $arrResults "$sExeName post_manage_root" $objResp.status 200 $objResp.body 'path=/__xs'
+	procCheckBodyContains $arrResults "$sExeName post_manage_root method" $objResp.body 'method=POST'
+	procCheckBodyContains $arrResults "$sExeName post_manage_root type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
+	$objResp = procFetchEx "HEAD" "http://127.0.0.1:$iPort/__xs/unknown"
+	procCheck $arrResults "$sExeName head_unknown_manage" $objResp.status 200 ""
+	procCheckBodyContains $arrResults "$sExeName head_unknown_manage type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
+	$objResp = procFetchEx "POST" "http://127.0.0.1:$iPort/__xs/unknown"
+	procCheck $arrResults "$sExeName post_unknown_manage" $objResp.status 200 $objResp.body 'path=/__xs/unknown'
+	procCheckBodyContains $arrResults "$sExeName post_unknown_manage method" $objResp.body 'method=POST'
+	procCheckBodyContains $arrResults "$sExeName post_unknown_manage type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
+	$objResp = procFetchEx "HEAD" "http://127.0.0.1:$iPort/__xs/unknown_json"
+	procCheck $arrResults "$sExeName head_unknown_manage_json" $objResp.status 200 ""
+	procCheckBodyContains $arrResults "$sExeName head_unknown_manage_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
+	$objResp = procFetchEx "POST" "http://127.0.0.1:$iPort/__xs/unknown_json"
+	procCheck $arrResults "$sExeName post_unknown_manage_json" $objResp.status 200 $objResp.body 'path=/__xs/unknown_json'
+	procCheckBodyContains $arrResults "$sExeName post_unknown_manage_json method" $objResp.body 'method=POST'
+	procCheckBodyContains $arrResults "$sExeName post_unknown_manage_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
 
 		$objResp = procFetch "http://127.0.0.1:$iPort/"
 		procCheck $arrResults "$sExeName root" $objResp.status 200 $objResp.body
 
 		$objResp = procFetch "http://127.0.0.1:$iPort/json"
 		procCheck $arrResults "$sExeName json_route" $objResp.status 200 $objResp.body '"path":"/json"'
+		procRunHttpInvalidInputChecks $arrResults $sExeName $bDebug $iPort
 
 		if ( -not (procWaitReloadIdle) ) {
 			$arrResults.Add("FAIL $sExeName reload_idle_wait : timeout")
@@ -2415,151 +2755,13 @@ function procRunCase([string]$sExeName, [bool]$bDebug)
 		$objResp = procFetch "http://127.0.0.1:$iPort/json"
 		procCheck $arrResults "$sExeName json_route_after_config_reload" $objResp.status 200 $objResp.body '"path":"/json"'
 		if ( $bDebug ) {
-			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/dashboard"
-			procCheck $arrResults "$sExeName dashboard" $objResp.status 200 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName dashboard body" $objResp.body 'http_req_count='
-			procCheckBodyContains $arrResults "$sExeName dashboard type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
-			procCheckSecurityHeadersFromText $arrResults "$sExeName dashboard" $objResp.headers
-
-			$objResp = procFetchEx "HEAD" "http://127.0.0.1:$iPort/__xs/dashboard"
-			procCheck $arrResults "$sExeName head_dashboard" $objResp.status 200 ""
-			procCheckBodyContains $arrResults "$sExeName head_dashboard type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
-			procCheckSecurityHeadersFromText $arrResults "$sExeName head_dashboard" $objResp.headers
-
-			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/dashboard_json"
-			procCheck $arrResults "$sExeName dashboard_json" $objResp.status 200 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName dashboard_json body" $objResp.body '"status"'
-			procCheckBodyContains $arrResults "$sExeName dashboard_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'application/json'
-			procCheckSecurityHeadersFromText $arrResults "$sExeName dashboard_json" $objResp.headers
-
-			$objResp = procFetchEx "HEAD" "http://127.0.0.1:$iPort/__xs/dashboard_json"
-			procCheck $arrResults "$sExeName head_dashboard_json" $objResp.status 200 ""
-			procCheckBodyContains $arrResults "$sExeName head_dashboard_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'application/json'
-			procCheckSecurityHeadersFromText $arrResults "$sExeName head_dashboard_json" $objResp.headers
-
-			procCheckDisabledEndpoint $arrResults $sExeName "bus_root" "GET" "/__xs/bus" 404 'application/json' 'manage api not found'
-			procCheckDisabledEndpoint $arrResults $sExeName "head_bus_root" "HEAD" "/__xs/bus" 404 'application/json' $null
-			procCheckDisabledEndpoint $arrResults $sExeName "post_bus_root" "POST" "/__xs/bus" 404 'application/json' 'manage api not found'
-
-			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/bus/status"
-			procCheck $arrResults "$sExeName bus_status" $objResp.status 200 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName bus_status body" $objResp.body '"data_count"'
-			procCheckBodyContains $arrResults "$sExeName bus_status type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/status" "Content-Type") 'application/json'
-			procCheckBodyContains $arrResults "$sExeName bus_status cache" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/status" "Cache-Control") 'no-store'
-			procCheckBodyContains $arrResults "$sExeName bus_status frame" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/status" "X-Frame-Options") 'DENY'
-			procCheckBodyContains $arrResults "$sExeName bus_status referrer" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/status" "Referrer-Policy") 'no-referrer'
-			procCheckBodyContains $arrResults "$sExeName bus_status nosniff" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/status" "X-Content-Type-Options") 'nosniff'
-
-			$iStatus = procFetchStatusMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/status"
-			procCheck $arrResults "$sExeName head_bus_status" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName head_bus_status allow" (procFetchAllowMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/status") 'GET'
-			procCheckBodyContains $arrResults "$sExeName head_bus_status type" (procFetchHeaderMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/status" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName head_bus_status" "HEAD" "http://127.0.0.1:$iPort/__xs/bus/status"
-
-			$iStatus = procFetchStatusMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/status"
-			procCheck $arrResults "$sExeName post_bus_status" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName post_bus_status allow" (procFetchAllowMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/status") 'GET'
-			procCheckBodyContains $arrResults "$sExeName post_bus_status type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/status" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName post_bus_status" "POST" "http://127.0.0.1:$iPort/__xs/bus/status"
-
-			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/bus/namespaces"
-			procCheck $arrResults "$sExeName bus_namespaces" $objResp.status 200 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName bus_namespaces body" $objResp.body '"items"'
-			procCheckBodyContains $arrResults "$sExeName bus_namespaces type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/namespaces" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName bus_namespaces" "GET" "http://127.0.0.1:$iPort/__xs/bus/namespaces"
-
-			$iStatus = procFetchStatusMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/namespaces"
-			procCheck $arrResults "$sExeName head_bus_namespaces" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName head_bus_namespaces allow" (procFetchAllowMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/namespaces") 'GET'
-			procCheckBodyContains $arrResults "$sExeName head_bus_namespaces type" (procFetchHeaderMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/namespaces" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName head_bus_namespaces" "HEAD" "http://127.0.0.1:$iPort/__xs/bus/namespaces"
-
-			$iStatus = procFetchStatusMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/namespaces"
-			procCheck $arrResults "$sExeName post_bus_namespaces" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName post_bus_namespaces allow" (procFetchAllowMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/namespaces") 'GET'
-			procCheckBodyContains $arrResults "$sExeName post_bus_namespaces type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/namespaces" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName post_bus_namespaces" "POST" "http://127.0.0.1:$iPort/__xs/bus/namespaces"
-
-			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/bus/registry"
-			procCheck $arrResults "$sExeName bus_registry" $objResp.status 200 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName bus_registry body" $objResp.body '"items"'
-			procCheckBodyContains $arrResults "$sExeName bus_registry type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/registry" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName bus_registry" "GET" "http://127.0.0.1:$iPort/__xs/bus/registry"
-
-			$iStatus = procFetchStatusMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/registry"
-			procCheck $arrResults "$sExeName head_bus_registry" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName head_bus_registry allow" (procFetchAllowMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/registry") 'GET'
-			procCheckBodyContains $arrResults "$sExeName head_bus_registry type" (procFetchHeaderMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/registry" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName head_bus_registry" "HEAD" "http://127.0.0.1:$iPort/__xs/bus/registry"
-
-			$iStatus = procFetchStatusMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/registry"
-			procCheck $arrResults "$sExeName post_bus_registry" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName post_bus_registry allow" (procFetchAllowMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/registry") 'GET'
-			procCheckBodyContains $arrResults "$sExeName post_bus_registry type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/registry" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName post_bus_registry" "POST" "http://127.0.0.1:$iPort/__xs/bus/registry"
-
-			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/bus/limits"
-			procCheck $arrResults "$sExeName bus_limits" $objResp.status 200 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName bus_limits body" $objResp.body '"data_limit"'
-			procCheckBodyContains $arrResults "$sExeName bus_limits type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/limits" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName bus_limits" "GET" "http://127.0.0.1:$iPort/__xs/bus/limits"
-
-			$iStatus = procFetchStatusMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/limits"
-			procCheck $arrResults "$sExeName head_bus_limits" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName head_bus_limits allow" (procFetchAllowMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/limits") 'GET'
-			procCheckBodyContains $arrResults "$sExeName head_bus_limits type" (procFetchHeaderMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/limits" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName head_bus_limits" "HEAD" "http://127.0.0.1:$iPort/__xs/bus/limits"
-
-			$iStatus = procFetchStatusMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/limits"
-			procCheck $arrResults "$sExeName post_bus_limits" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName post_bus_limits allow" (procFetchAllowMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/limits") 'GET'
-			procCheckBodyContains $arrResults "$sExeName post_bus_limits type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/limits" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName post_bus_limits" "POST" "http://127.0.0.1:$iPort/__xs/bus/limits"
-
-			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello"
-			procCheck $arrResults "$sExeName bus_send" $objResp.status 200 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName bus_send body" $objResp.body '"result":true'
-			procCheckBodyContains $arrResults "$sExeName bus_send type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName bus_send" "GET" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello"
-
-			$iStatus = procFetchStatusMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello"
-			procCheck $arrResults "$sExeName head_bus_send" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName head_bus_send allow" (procFetchAllowMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello") 'GET'
-			procCheckBodyContains $arrResults "$sExeName head_bus_send type" (procFetchHeaderMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName head_bus_send" "HEAD" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello"
-
-			$iStatus = procFetchStatusMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello"
-			procCheck $arrResults "$sExeName post_bus_send" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName post_bus_send allow" (procFetchAllowMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello") 'GET'
-			procCheckBodyContains $arrResults "$sExeName post_bus_send type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName post_bus_send" "POST" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello"
-
-			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/bus/reset"
-			procCheck $arrResults "$sExeName bus_reset" $objResp.status 200 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName bus_reset body" $objResp.body '"sweep_count"'
-			procCheckBodyContains $arrResults "$sExeName bus_reset type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/reset" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName bus_reset" "GET" "http://127.0.0.1:$iPort/__xs/bus/reset"
-
-			$iStatus = procFetchStatusMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/reset"
-			procCheck $arrResults "$sExeName head_bus_reset" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName head_bus_reset allow" (procFetchAllowMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/reset") 'GET'
-			procCheckBodyContains $arrResults "$sExeName head_bus_reset type" (procFetchHeaderMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/reset" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName head_bus_reset" "HEAD" "http://127.0.0.1:$iPort/__xs/bus/reset"
-
-			$iStatus = procFetchStatusMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/reset"
-			procCheck $arrResults "$sExeName post_bus_reset" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName post_bus_reset allow" (procFetchAllowMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/reset") 'GET'
-			procCheckBodyContains $arrResults "$sExeName post_bus_reset type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/reset" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName post_bus_reset" "POST" "http://127.0.0.1:$iPort/__xs/bus/reset"
-			procRunBusGovernanceScenario $arrResults $sExeName $iPort
-
 			for ( $i = 0; $i -lt $arrMetricsClearText.Length; $i++ ) {
 				$tblMetric = $arrMetricsClearText[$i]
 				$objResp = procFetch ("http://127.0.0.1:$iPort" + $tblMetric.path)
 				procCheck $arrResults "$sExeName $($tblMetric.name)" $objResp.status 200 $objResp.body
 				procCheckBodyContains $arrResults "$sExeName $($tblMetric.name) body" $objResp.body $tblMetric.token
-				procCheckBodyContains $arrResults "$sExeName $($tblMetric.name) type" (procFetchHeaderMethod "GET" ("http://127.0.0.1:$iPort" + $tblMetric.path) "Content-Type") 'text/plain'
-				procCheckSecurityHeaders $arrResults "$sExeName $($tblMetric.name)" "GET" ("http://127.0.0.1:$iPort" + $tblMetric.path)
+				procCheckBodyContains $arrResults "$sExeName $($tblMetric.name) type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+				procCheckSecurityHeadersFromText $arrResults "$sExeName $($tblMetric.name)" $objResp.headers
 			}
 
 			for ( $i = 0; $i -lt $arrMetricsText.Length; $i++ ) {
@@ -2593,20 +2795,20 @@ function procRunCase([string]$sExeName, [bool]$bDebug)
 			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/reload_clear"
 			procCheck $arrResults "$sExeName reload_clear" $objResp.status 200 $objResp.body
 			procCheckBodyContains $arrResults "$sExeName reload_clear body" $objResp.body 'reload_total_count='
-			procCheckBodyContains $arrResults "$sExeName reload_clear type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/reload_clear" "Content-Type") 'text/plain'
-			procCheckSecurityHeaders $arrResults "$sExeName reload_clear" "GET" "http://127.0.0.1:$iPort/__xs/reload_clear"
+			procCheckBodyContains $arrResults "$sExeName reload_clear type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+			procCheckSecurityHeadersFromText $arrResults "$sExeName reload_clear" $objResp.headers
 
 			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/reload_reset"
 			procCheck $arrResults "$sExeName reload_reset" $objResp.status 200 $objResp.body
 			procCheckBodyContains $arrResults "$sExeName reload_reset body" $objResp.body 'reload_total_count='
-			procCheckBodyContains $arrResults "$sExeName reload_reset type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/reload_reset" "Content-Type") 'text/plain'
-			procCheckSecurityHeaders $arrResults "$sExeName reload_reset" "GET" "http://127.0.0.1:$iPort/__xs/reload_reset"
+			procCheckBodyContains $arrResults "$sExeName reload_reset type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+			procCheckSecurityHeadersFromText $arrResults "$sExeName reload_reset" $objResp.headers
 
 			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/check_config_clear"
 			procCheck $arrResults "$sExeName check_config_clear" $objResp.status 200 $objResp.body
 			procCheckBodyContains $arrResults "$sExeName check_config_clear body" $objResp.body 'check_total_count='
-			procCheckBodyContains $arrResults "$sExeName check_config_clear type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/check_config_clear" "Content-Type") 'text/plain'
-			procCheckSecurityHeaders $arrResults "$sExeName check_config_clear" "GET" "http://127.0.0.1:$iPort/__xs/check_config_clear"
+			procCheckBodyContains $arrResults "$sExeName check_config_clear type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+			procCheckSecurityHeadersFromText $arrResults "$sExeName check_config_clear" $objResp.headers
 
 			$iStatus = procFetchStatusMethod "HEAD" "http://127.0.0.1:$iPort/__xs/reload_clear"
 			procCheck $arrResults "$sExeName head_reload_clear" $iStatus 405 ""
@@ -2636,117 +2838,6 @@ function procRunCase([string]$sExeName, [bool]$bDebug)
 				procCheckMethodReject $arrResults $sExeName ("post_" + $tblAPI.name) "POST" $tblAPI.path 405 $tblAPI.allow $tblAPI.type
 			}
 		} else {
-			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/dashboard"
-			procCheck $arrResults "$sExeName dashboard" $objResp.status 403 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName dashboard body" $objResp.body 'dashboard api only available in xsdbg'
-			procCheckBodyContains $arrResults "$sExeName dashboard type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
-			procCheckSecurityHeadersFromText $arrResults "$sExeName dashboard" $objResp.headers
-
-			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/dashboard_json"
-			procCheck $arrResults "$sExeName dashboard_json" $objResp.status 403 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName dashboard_json body" $objResp.body 'dashboard json api only available in xsdbg'
-			procCheckBodyContains $arrResults "$sExeName dashboard_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'application/json'
-			procCheckSecurityHeadersFromText $arrResults "$sExeName dashboard_json" $objResp.headers
-
-			procCheckDisabledEndpoint $arrResults $sExeName "bus_root" "GET" "/__xs/bus" 403 'application/json' 'bus api not included in production xs'
-			procCheckDisabledEndpoint $arrResults $sExeName "head_bus_root_disabled" "HEAD" "/__xs/bus" 403 'application/json' $null
-			procCheckDisabledEndpoint $arrResults $sExeName "post_bus_root_disabled" "POST" "/__xs/bus" 403 'application/json' 'bus api not included in production xs'
-
-			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/bus/status"
-			procCheck $arrResults "$sExeName bus_status" $objResp.status 403 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName bus_status body" (procFetchBodyMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/status") 'bus api not included in production xs'
-			procCheckBodyContains $arrResults "$sExeName bus_status type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/status" "Content-Type") 'application/json'
-			procCheckBodyContains $arrResults "$sExeName bus_status cache" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/status" "Cache-Control") 'no-store'
-			procCheckBodyContains $arrResults "$sExeName bus_status frame" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/status" "X-Frame-Options") 'DENY'
-			procCheckBodyContains $arrResults "$sExeName bus_status referrer" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/status" "Referrer-Policy") 'no-referrer'
-			procCheckBodyContains $arrResults "$sExeName bus_status nosniff" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/status" "X-Content-Type-Options") 'nosniff'
-
-			$iStatus = procFetchStatusMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/status"
-			procCheck $arrResults "$sExeName head_bus_status_disabled" $iStatus 403 ""
-			procCheckBodyContains $arrResults "$sExeName head_bus_status_disabled type" (procFetchHeaderMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/status" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName head_bus_status_disabled" "HEAD" "http://127.0.0.1:$iPort/__xs/bus/status"
-
-			$iStatus = procFetchStatusMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/status"
-			procCheck $arrResults "$sExeName post_bus_status_disabled" $iStatus 403 ""
-			procCheckBodyContains $arrResults "$sExeName post_bus_status_disabled body" (procFetchBodyMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/status") 'bus api not included in production xs'
-			procCheckBodyContains $arrResults "$sExeName post_bus_status_disabled type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/status" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName post_bus_status_disabled" "POST" "http://127.0.0.1:$iPort/__xs/bus/status"
-
-			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/bus/namespaces"
-			procCheck $arrResults "$sExeName bus_namespaces" $objResp.status 403 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName bus_namespaces body" (procFetchBodyMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/namespaces") 'bus api not included in production xs'
-
-			$iStatus = procFetchStatusMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/namespaces"
-			procCheck $arrResults "$sExeName head_bus_namespaces_disabled" $iStatus 403 ""
-			procCheckBodyContains $arrResults "$sExeName head_bus_namespaces_disabled type" (procFetchHeaderMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/namespaces" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName head_bus_namespaces_disabled" "HEAD" "http://127.0.0.1:$iPort/__xs/bus/namespaces"
-
-			$iStatus = procFetchStatusMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/namespaces"
-			procCheck $arrResults "$sExeName post_bus_namespaces_disabled" $iStatus 403 ""
-			procCheckBodyContains $arrResults "$sExeName post_bus_namespaces_disabled body" (procFetchBodyMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/namespaces") 'bus api not included in production xs'
-			procCheckBodyContains $arrResults "$sExeName post_bus_namespaces_disabled type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/namespaces" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName post_bus_namespaces_disabled" "POST" "http://127.0.0.1:$iPort/__xs/bus/namespaces"
-
-			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/bus/registry"
-			procCheck $arrResults "$sExeName bus_registry" $objResp.status 403 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName bus_registry body" (procFetchBodyMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/registry") 'bus api not included in production xs'
-
-			$iStatus = procFetchStatusMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/registry"
-			procCheck $arrResults "$sExeName head_bus_registry_disabled" $iStatus 403 ""
-			procCheckBodyContains $arrResults "$sExeName head_bus_registry_disabled type" (procFetchHeaderMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/registry" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName head_bus_registry_disabled" "HEAD" "http://127.0.0.1:$iPort/__xs/bus/registry"
-
-			$iStatus = procFetchStatusMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/registry"
-			procCheck $arrResults "$sExeName post_bus_registry_disabled" $iStatus 403 ""
-			procCheckBodyContains $arrResults "$sExeName post_bus_registry_disabled body" (procFetchBodyMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/registry") 'bus api not included in production xs'
-			procCheckBodyContains $arrResults "$sExeName post_bus_registry_disabled type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/registry" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName post_bus_registry_disabled" "POST" "http://127.0.0.1:$iPort/__xs/bus/registry"
-
-			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/bus/limits"
-			procCheck $arrResults "$sExeName bus_limits" $objResp.status 403 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName bus_limits body" (procFetchBodyMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/limits") 'bus api not included in production xs'
-
-			$iStatus = procFetchStatusMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/limits"
-			procCheck $arrResults "$sExeName head_bus_limits_disabled" $iStatus 403 ""
-			procCheckBodyContains $arrResults "$sExeName head_bus_limits_disabled type" (procFetchHeaderMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/limits" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName head_bus_limits_disabled" "HEAD" "http://127.0.0.1:$iPort/__xs/bus/limits"
-
-			$iStatus = procFetchStatusMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/limits"
-			procCheck $arrResults "$sExeName post_bus_limits_disabled" $iStatus 403 ""
-			procCheckBodyContains $arrResults "$sExeName post_bus_limits_disabled body" (procFetchBodyMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/limits") 'bus api not included in production xs'
-			procCheckBodyContains $arrResults "$sExeName post_bus_limits_disabled type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/limits" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName post_bus_limits_disabled" "POST" "http://127.0.0.1:$iPort/__xs/bus/limits"
-
-			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello"
-			procCheck $arrResults "$sExeName bus_send" $objResp.status 403 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName bus_send body" (procFetchBodyMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello") 'bus api not included in production xs'
-
-			$iStatus = procFetchStatusMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello"
-			procCheck $arrResults "$sExeName head_bus_send_disabled" $iStatus 403 ""
-			procCheckBodyContains $arrResults "$sExeName head_bus_send_disabled type" (procFetchHeaderMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName head_bus_send_disabled" "HEAD" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello"
-
-			$iStatus = procFetchStatusMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello"
-			procCheck $arrResults "$sExeName post_bus_send_disabled" $iStatus 403 ""
-			procCheckBodyContains $arrResults "$sExeName post_bus_send_disabled body" (procFetchBodyMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello") 'bus api not included in production xs'
-			procCheckBodyContains $arrResults "$sExeName post_bus_send_disabled type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName post_bus_send_disabled" "POST" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello"
-
-			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/bus/reset"
-			procCheck $arrResults "$sExeName bus_reset" $objResp.status 403 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName bus_reset body" (procFetchBodyMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/reset") 'bus api not included in production xs'
-
-			$iStatus = procFetchStatusMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/reset"
-			procCheck $arrResults "$sExeName head_bus_reset_disabled" $iStatus 403 ""
-			procCheckBodyContains $arrResults "$sExeName head_bus_reset_disabled type" (procFetchHeaderMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/reset" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName head_bus_reset_disabled" "HEAD" "http://127.0.0.1:$iPort/__xs/bus/reset"
-
-			$iStatus = procFetchStatusMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/reset"
-			procCheck $arrResults "$sExeName post_bus_reset_disabled" $iStatus 403 ""
-			procCheckBodyContains $arrResults "$sExeName post_bus_reset_disabled body" (procFetchBodyMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/reset") 'bus api not included in production xs'
-			procCheckBodyContains $arrResults "$sExeName post_bus_reset_disabled type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/reset" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName post_bus_reset_disabled" "POST" "http://127.0.0.1:$iPort/__xs/bus/reset"
-
 			for ( $i = 0; $i -lt $arrMetricsClear.Length; $i++ ) {
 				$tblMetric = $arrMetricsClear[$i]
 				$objResp = procFetch ("http://127.0.0.1:$iPort" + $tblMetric.path)
@@ -2937,6 +3028,8 @@ function procRunRepoRootCase([string]$sExeName, [bool]$bDebug)
 			return @{ code = $iCode; lines = $arrResults }
 		}
 
+		procRunDebugAppPassThroughChecks $arrResults $sExeName "repo_root"
+
 		$objResp = procFetch "http://127.0.0.1:$iPort/__xs/status_json"
 		procCheck $arrResults "$sExeName repo_root status_json" $objResp.status 200 $objResp.body '"manage_api":true'
 		procCheckBodyContains $arrResults "$sExeName repo_root status_json type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/status_json" "Content-Type") 'application/json'
@@ -3081,17 +3174,47 @@ function procRunRepoRootCase([string]$sExeName, [bool]$bDebug)
 			procCheckMethodReject $arrResults $sExeName ("repo_root " + $tblAPI.name) $tblAPI.method $tblAPI.path $tblAPI.status $tblAPI.allow $tblAPI.type
 		}
 
-		procCheckDisabledEndpoint $arrResults $sExeName "repo_root manage_root" "GET" "/__xs" 404 'text/plain' 'manage api not found'
-		procCheckDisabledEndpoint $arrResults $sExeName "repo_root head_manage_root" "HEAD" "/__xs" 404 'text/plain' $null
-		procCheckDisabledEndpoint $arrResults $sExeName "repo_root post_manage_root" "POST" "/__xs" 404 'text/plain' 'manage api not found'
+	$objResp = procFetch "http://127.0.0.1:$iPort/__xs"
+	procCheck $arrResults "$sExeName repo_root manage_root" $objResp.status 200 $objResp.body 'path=/__xs'
+	procCheckBodyContains $arrResults "$sExeName repo_root manage_root method" $objResp.body 'method=GET'
+	procCheckBodyContains $arrResults "$sExeName repo_root manage_root type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs" "Content-Type") 'text/plain'
 
-		procCheckDisabledEndpoint $arrResults $sExeName "repo_root unknown_manage" "GET" "/__xs/unknown" 404 'text/plain' $null
-		procCheckDisabledEndpoint $arrResults $sExeName "repo_root head_unknown_manage" "HEAD" "/__xs/unknown" 404 'text/plain' $null
-		procCheckDisabledEndpoint $arrResults $sExeName "repo_root post_unknown_manage" "POST" "/__xs/unknown" 404 'text/plain' 'manage api not found'
+	$objResp = procFetchEx "HEAD" "http://127.0.0.1:$iPort/__xs"
+	procCheck $arrResults "$sExeName repo_root head_manage_root" $objResp.status 200 ""
+	procCheckBodyContains $arrResults "$sExeName repo_root head_manage_root type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
 
-		procCheckDisabledEndpoint $arrResults $sExeName "repo_root unknown_manage_json" "GET" "/__xs/unknown_json" 404 'application/json' $null
-		procCheckDisabledEndpoint $arrResults $sExeName "repo_root head_unknown_manage_json" "HEAD" "/__xs/unknown_json" 404 'application/json' $null
-		procCheckDisabledEndpoint $arrResults $sExeName "repo_root post_unknown_manage_json" "POST" "/__xs/unknown_json" 404 'application/json' 'manage api not found'
+	$objResp = procFetchEx "POST" "http://127.0.0.1:$iPort/__xs"
+	procCheck $arrResults "$sExeName repo_root post_manage_root" $objResp.status 200 $objResp.body 'path=/__xs'
+	procCheckBodyContains $arrResults "$sExeName repo_root post_manage_root method" $objResp.body 'method=POST'
+	procCheckBodyContains $arrResults "$sExeName repo_root post_manage_root type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
+	$objResp = procFetch "http://127.0.0.1:$iPort/__xs/unknown"
+	procCheck $arrResults "$sExeName repo_root unknown_manage" $objResp.status 200 $objResp.body 'path=/__xs/unknown'
+	procCheckBodyContains $arrResults "$sExeName repo_root unknown_manage method" $objResp.body 'method=GET'
+	procCheckBodyContains $arrResults "$sExeName repo_root unknown_manage type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/unknown" "Content-Type") 'text/plain'
+
+	$objResp = procFetchEx "HEAD" "http://127.0.0.1:$iPort/__xs/unknown"
+	procCheck $arrResults "$sExeName repo_root head_unknown_manage" $objResp.status 200 ""
+	procCheckBodyContains $arrResults "$sExeName repo_root head_unknown_manage type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
+	$objResp = procFetchEx "POST" "http://127.0.0.1:$iPort/__xs/unknown"
+	procCheck $arrResults "$sExeName repo_root post_unknown_manage" $objResp.status 200 $objResp.body 'path=/__xs/unknown'
+	procCheckBodyContains $arrResults "$sExeName repo_root post_unknown_manage method" $objResp.body 'method=POST'
+	procCheckBodyContains $arrResults "$sExeName repo_root post_unknown_manage type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
+	$objResp = procFetch "http://127.0.0.1:$iPort/__xs/unknown_json"
+	procCheck $arrResults "$sExeName repo_root unknown_manage_json" $objResp.status 200 $objResp.body 'path=/__xs/unknown_json'
+	procCheckBodyContains $arrResults "$sExeName repo_root unknown_manage_json method" $objResp.body 'method=GET'
+	procCheckBodyContains $arrResults "$sExeName repo_root unknown_manage_json type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/unknown_json" "Content-Type") 'text/plain'
+
+	$objResp = procFetchEx "HEAD" "http://127.0.0.1:$iPort/__xs/unknown_json"
+	procCheck $arrResults "$sExeName repo_root head_unknown_manage_json" $objResp.status 200 ""
+	procCheckBodyContains $arrResults "$sExeName repo_root head_unknown_manage_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+
+	$objResp = procFetchEx "POST" "http://127.0.0.1:$iPort/__xs/unknown_json"
+	procCheck $arrResults "$sExeName repo_root post_unknown_manage_json" $objResp.status 200 $objResp.body 'path=/__xs/unknown_json'
+	procCheckBodyContains $arrResults "$sExeName repo_root post_unknown_manage_json method" $objResp.body 'method=POST'
+	procCheckBodyContains $arrResults "$sExeName repo_root post_unknown_manage_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
 
 		$objResp = procFetch "http://127.0.0.1:$iPort/json"
 		procCheck $arrResults "$sExeName repo_root json_route" $objResp.status 200 $objResp.body '"path":"/json"'
@@ -3228,47 +3351,12 @@ function procRunRepoRootCase([string]$sExeName, [bool]$bDebug)
 		procCheck $arrResults "$sExeName repo_root json_after_config_reload" $objResp.status 200 $objResp.body '"path":"/json"'
 
 		if ( $bDebug ) {
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root bus_root" "GET" "/__xs/bus" 404 'application/json' 'manage api not found'
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root head_bus_root" "HEAD" "/__xs/bus" 404 'application/json' $null
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root post_bus_root" "POST" "/__xs/bus" 404 'application/json' 'manage api not found'
-
-			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/dashboard"
-			procCheck $arrResults "$sExeName repo_root dashboard" $objResp.status 200 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName repo_root dashboard body" $objResp.body 'http_req_count='
-			procCheckBodyContains $arrResults "$sExeName repo_root dashboard type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
-			procCheckSecurityHeadersFromText $arrResults "$sExeName repo_root dashboard" $objResp.headers
-
-			$objResp = procFetchEx "HEAD" "http://127.0.0.1:$iPort/__xs/dashboard"
-			procCheck $arrResults "$sExeName repo_root head_dashboard" $objResp.status 200 ""
-			procCheckBodyContains $arrResults "$sExeName repo_root head_dashboard type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
-			procCheckSecurityHeadersFromText $arrResults "$sExeName repo_root head_dashboard" $objResp.headers
-
-			$iStatus = procFetchStatusMethod "POST" "http://127.0.0.1:$iPort/__xs/dashboard"
-			procCheck $arrResults "$sExeName repo_root post_dashboard" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName repo_root post_dashboard allow" (procFetchAllowMethod "POST" "http://127.0.0.1:$iPort/__xs/dashboard") 'GET, HEAD'
-			procCheckBodyContains $arrResults "$sExeName repo_root post_dashboard type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/dashboard" "Content-Type") 'text/plain'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root post_dashboard" "POST" "http://127.0.0.1:$iPort/__xs/dashboard"
-
-			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/dashboard_json"
-			procCheck $arrResults "$sExeName repo_root dashboard_json" $objResp.status 200 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName repo_root dashboard_json body" $objResp.body '"status"'
-			procCheckBodyContains $arrResults "$sExeName repo_root dashboard_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'application/json'
-			procCheckSecurityHeadersFromText $arrResults "$sExeName repo_root dashboard_json" $objResp.headers
-
-			$objResp = procFetchEx "HEAD" "http://127.0.0.1:$iPort/__xs/dashboard_json"
-			procCheck $arrResults "$sExeName repo_root head_dashboard_json" $objResp.status 200 ""
-			procCheckBodyContains $arrResults "$sExeName repo_root head_dashboard_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'application/json'
-			procCheckSecurityHeadersFromText $arrResults "$sExeName repo_root head_dashboard_json" $objResp.headers
-
-			$iStatus = procFetchStatusMethod "POST" "http://127.0.0.1:$iPort/__xs/dashboard_json"
-			procCheck $arrResults "$sExeName repo_root post_dashboard_json" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName repo_root post_dashboard_json allow" (procFetchAllowMethod "POST" "http://127.0.0.1:$iPort/__xs/dashboard_json") 'GET, HEAD'
-			procCheckBodyContains $arrResults "$sExeName repo_root post_dashboard_json type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/dashboard_json" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root post_dashboard_json" "POST" "http://127.0.0.1:$iPort/__xs/dashboard_json"
-
 			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/http_metrics"
 			procCheck $arrResults "$sExeName repo_root http_metrics" $objResp.status 200 $objResp.body
 			procCheckBodyContains $arrResults "$sExeName repo_root http_metrics body" $objResp.body 'http_req_count='
+			procCheckBodyNotContains $arrResults "$sExeName repo_root http_metrics no_bus_reject" $objResp.body 'http_bus_bad_request_reject_count='
+			procCheckBodyNotContains $arrResults "$sExeName repo_root http_metrics no_manage_reject" $objResp.body 'http_api_disabled_reject_count='
+			procCheckBodyNotContains $arrResults "$sExeName repo_root http_metrics no_reload_reject" $objResp.body 'http_reload_busy_reject_count='
 			procCheckBodyContains $arrResults "$sExeName repo_root http_metrics type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/http_metrics" "Content-Type") 'text/plain'
 			procCheckSecurityHeaders $arrResults "$sExeName repo_root http_metrics" "GET" "http://127.0.0.1:$iPort/__xs/http_metrics"
 
@@ -3286,6 +3374,9 @@ function procRunRepoRootCase([string]$sExeName, [bool]$bDebug)
 			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/http_metrics_json"
 			procCheck $arrResults "$sExeName repo_root http_metrics_json" $objResp.status 200 $objResp.body
 			procCheckBodyContains $arrResults "$sExeName repo_root http_metrics_json body" $objResp.body '"http_req_count"'
+			procCheckBodyNotContains $arrResults "$sExeName repo_root http_metrics_json no_bus_reject" $objResp.body '"http_bus_bad_request_reject_count"'
+			procCheckBodyNotContains $arrResults "$sExeName repo_root http_metrics_json no_manage_reject" $objResp.body '"http_api_disabled_reject_count"'
+			procCheckBodyNotContains $arrResults "$sExeName repo_root http_metrics_json no_reload_reject" $objResp.body '"http_reload_busy_reject_count"'
 			procCheckBodyContains $arrResults "$sExeName repo_root http_metrics_json type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/http_metrics_json" "Content-Type") 'application/json'
 			procCheckSecurityHeaders $arrResults "$sExeName repo_root http_metrics_json" "GET" "http://127.0.0.1:$iPort/__xs/http_metrics_json"
 
@@ -3447,8 +3538,8 @@ function procRunRepoRootCase([string]$sExeName, [bool]$bDebug)
 				$objResp = procFetch ("http://127.0.0.1:$iPort" + $tblMetric.path)
 				procCheck $arrResults "$sExeName repo_root $($tblMetric.name)" $objResp.status 200 $objResp.body
 				procCheckBodyContains $arrResults "$sExeName repo_root $($tblMetric.name) body" $objResp.body $tblMetric.token
-				procCheckBodyContains $arrResults "$sExeName repo_root $($tblMetric.name) type" (procFetchHeaderMethod "GET" ("http://127.0.0.1:$iPort" + $tblMetric.path) "Content-Type") 'text/plain'
-				procCheckSecurityHeaders $arrResults "$sExeName repo_root $($tblMetric.name)" "GET" ("http://127.0.0.1:$iPort" + $tblMetric.path)
+				procCheckBodyContains $arrResults "$sExeName repo_root $($tblMetric.name) type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+				procCheckSecurityHeadersFromText $arrResults "$sExeName repo_root $($tblMetric.name)" $objResp.headers
 
 				$iStatus = procFetchStatusMethod "HEAD" ("http://127.0.0.1:$iPort" + $tblMetric.path)
 				procCheck $arrResults "$sExeName repo_root head_$($tblMetric.name)" $iStatus 405 ""
@@ -3466,20 +3557,20 @@ function procRunRepoRootCase([string]$sExeName, [bool]$bDebug)
 			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/reload_clear"
 			procCheck $arrResults "$sExeName repo_root reload_clear" $objResp.status 200 $objResp.body
 			procCheckBodyContains $arrResults "$sExeName repo_root reload_clear body" $objResp.body 'reload_total_count='
-			procCheckBodyContains $arrResults "$sExeName repo_root reload_clear type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/reload_clear" "Content-Type") 'text/plain'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root reload_clear" "GET" "http://127.0.0.1:$iPort/__xs/reload_clear"
+			procCheckBodyContains $arrResults "$sExeName repo_root reload_clear type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+			procCheckSecurityHeadersFromText $arrResults "$sExeName repo_root reload_clear" $objResp.headers
 
 			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/reload_reset"
 			procCheck $arrResults "$sExeName repo_root reload_reset" $objResp.status 200 $objResp.body
 			procCheckBodyContains $arrResults "$sExeName repo_root reload_reset body" $objResp.body 'reload_total_count='
-			procCheckBodyContains $arrResults "$sExeName repo_root reload_reset type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/reload_reset" "Content-Type") 'text/plain'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root reload_reset" "GET" "http://127.0.0.1:$iPort/__xs/reload_reset"
+			procCheckBodyContains $arrResults "$sExeName repo_root reload_reset type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+			procCheckSecurityHeadersFromText $arrResults "$sExeName repo_root reload_reset" $objResp.headers
 
 			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/check_config_clear"
 			procCheck $arrResults "$sExeName repo_root check_config_clear" $objResp.status 200 $objResp.body
 			procCheckBodyContains $arrResults "$sExeName repo_root check_config_clear body" $objResp.body 'check_total_count='
-			procCheckBodyContains $arrResults "$sExeName repo_root check_config_clear type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/check_config_clear" "Content-Type") 'text/plain'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root check_config_clear" "GET" "http://127.0.0.1:$iPort/__xs/check_config_clear"
+			procCheckBodyContains $arrResults "$sExeName repo_root check_config_clear type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+			procCheckSecurityHeadersFromText $arrResults "$sExeName repo_root check_config_clear" $objResp.headers
 
 			$iStatus = procFetchStatusMethod "HEAD" "http://127.0.0.1:$iPort/__xs/reload_clear"
 			procCheck $arrResults "$sExeName repo_root head_reload_clear" $iStatus 405 ""
@@ -3516,128 +3607,7 @@ function procRunRepoRootCase([string]$sExeName, [bool]$bDebug)
 			procCheckBodyContains $arrResults "$sExeName repo_root post_check_config_clear allow" (procFetchAllowMethod "POST" "http://127.0.0.1:$iPort/__xs/check_config_clear") 'GET'
 			procCheckBodyContains $arrResults "$sExeName repo_root post_check_config_clear type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/check_config_clear" "Content-Type") 'text/plain'
 			procCheckSecurityHeaders $arrResults "$sExeName repo_root post_check_config_clear" "POST" "http://127.0.0.1:$iPort/__xs/check_config_clear"
-
-			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/bus/status"
-			procCheck $arrResults "$sExeName repo_root bus_status" $objResp.status 200 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName repo_root bus_status body" $objResp.body '"data_count"'
-			procCheckBodyContains $arrResults "$sExeName repo_root bus_status type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/status" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root bus_status" "GET" "http://127.0.0.1:$iPort/__xs/bus/status"
-
-			$iStatus = procFetchStatusMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/status"
-			procCheck $arrResults "$sExeName repo_root head_bus_status" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName repo_root head_bus_status allow" (procFetchAllowMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/status") 'GET'
-			procCheckBodyContains $arrResults "$sExeName repo_root head_bus_status type" (procFetchHeaderMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/status" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root head_bus_status" "HEAD" "http://127.0.0.1:$iPort/__xs/bus/status"
-
-			$iStatus = procFetchStatusMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/status"
-			procCheck $arrResults "$sExeName repo_root post_bus_status" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName repo_root post_bus_status allow" (procFetchAllowMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/status") 'GET'
-			procCheckBodyContains $arrResults "$sExeName repo_root post_bus_status type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/status" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root post_bus_status" "POST" "http://127.0.0.1:$iPort/__xs/bus/status"
-
-			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/bus/namespaces"
-			procCheck $arrResults "$sExeName repo_root bus_namespaces" $objResp.status 200 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName repo_root bus_namespaces body" $objResp.body '"namespace_count"'
-			procCheckBodyContains $arrResults "$sExeName repo_root bus_namespaces type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/namespaces" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root bus_namespaces" "GET" "http://127.0.0.1:$iPort/__xs/bus/namespaces"
-
-			$iStatus = procFetchStatusMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/namespaces"
-			procCheck $arrResults "$sExeName repo_root head_bus_namespaces" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName repo_root head_bus_namespaces allow" (procFetchAllowMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/namespaces") 'GET'
-			procCheckBodyContains $arrResults "$sExeName repo_root head_bus_namespaces type" (procFetchHeaderMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/namespaces" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root head_bus_namespaces" "HEAD" "http://127.0.0.1:$iPort/__xs/bus/namespaces"
-
-			$iStatus = procFetchStatusMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/namespaces"
-			procCheck $arrResults "$sExeName repo_root post_bus_namespaces" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName repo_root post_bus_namespaces allow" (procFetchAllowMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/namespaces") 'GET'
-			procCheckBodyContains $arrResults "$sExeName repo_root post_bus_namespaces type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/namespaces" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root post_bus_namespaces" "POST" "http://127.0.0.1:$iPort/__xs/bus/namespaces"
-
-			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/bus/registry"
-			procCheck $arrResults "$sExeName repo_root bus_registry" $objResp.status 200 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName repo_root bus_registry body" $objResp.body '"items"'
-			procCheckBodyContains $arrResults "$sExeName repo_root bus_registry type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/registry" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root bus_registry" "GET" "http://127.0.0.1:$iPort/__xs/bus/registry"
-
-			$iStatus = procFetchStatusMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/registry"
-			procCheck $arrResults "$sExeName repo_root head_bus_registry" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName repo_root head_bus_registry allow" (procFetchAllowMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/registry") 'GET'
-			procCheckBodyContains $arrResults "$sExeName repo_root head_bus_registry type" (procFetchHeaderMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/registry" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root head_bus_registry" "HEAD" "http://127.0.0.1:$iPort/__xs/bus/registry"
-
-			$iStatus = procFetchStatusMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/registry"
-			procCheck $arrResults "$sExeName repo_root post_bus_registry" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName repo_root post_bus_registry allow" (procFetchAllowMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/registry") 'GET'
-			procCheckBodyContains $arrResults "$sExeName repo_root post_bus_registry type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/registry" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root post_bus_registry" "POST" "http://127.0.0.1:$iPort/__xs/bus/registry"
-
-			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/bus/limits"
-			procCheck $arrResults "$sExeName repo_root bus_limits" $objResp.status 200 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName repo_root bus_limits body" $objResp.body '"data_limit"'
-			procCheckBodyContains $arrResults "$sExeName repo_root bus_limits type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/limits" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root bus_limits" "GET" "http://127.0.0.1:$iPort/__xs/bus/limits"
-
-			$iStatus = procFetchStatusMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/limits"
-			procCheck $arrResults "$sExeName repo_root head_bus_limits" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName repo_root head_bus_limits allow" (procFetchAllowMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/limits") 'GET'
-			procCheckBodyContains $arrResults "$sExeName repo_root head_bus_limits type" (procFetchHeaderMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/limits" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root head_bus_limits" "HEAD" "http://127.0.0.1:$iPort/__xs/bus/limits"
-
-			$iStatus = procFetchStatusMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/limits"
-			procCheck $arrResults "$sExeName repo_root post_bus_limits" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName repo_root post_bus_limits allow" (procFetchAllowMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/limits") 'GET'
-			procCheckBodyContains $arrResults "$sExeName repo_root post_bus_limits type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/limits" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root post_bus_limits" "POST" "http://127.0.0.1:$iPort/__xs/bus/limits"
-
-			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello"
-			procCheck $arrResults "$sExeName repo_root bus_send" $objResp.status 200 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName repo_root bus_send body" $objResp.body '"result":true'
-			procCheckBodyContains $arrResults "$sExeName repo_root bus_send type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root bus_send" "GET" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello"
-
-			$iStatus = procFetchStatusMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello"
-			procCheck $arrResults "$sExeName repo_root head_bus_send" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName repo_root head_bus_send allow" (procFetchAllowMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello") 'GET'
-			procCheckBodyContains $arrResults "$sExeName repo_root head_bus_send type" (procFetchHeaderMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root head_bus_send" "HEAD" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello"
-
-			$iStatus = procFetchStatusMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello"
-			procCheck $arrResults "$sExeName repo_root post_bus_send" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName repo_root post_bus_send allow" (procFetchAllowMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello") 'GET'
-			procCheckBodyContains $arrResults "$sExeName repo_root post_bus_send type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root post_bus_send" "POST" "http://127.0.0.1:$iPort/__xs/bus/send?topic=stable.smoke&text=hello"
-
-			$objResp = procFetch "http://127.0.0.1:$iPort/__xs/bus/reset"
-			procCheck $arrResults "$sExeName repo_root bus_reset" $objResp.status 200 $objResp.body
-			procCheckBodyContains $arrResults "$sExeName repo_root bus_reset body" $objResp.body '"sweep_count"'
-			procCheckBodyContains $arrResults "$sExeName repo_root bus_reset type" (procFetchHeaderMethod "GET" "http://127.0.0.1:$iPort/__xs/bus/reset" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root bus_reset" "GET" "http://127.0.0.1:$iPort/__xs/bus/reset"
-
-			$iStatus = procFetchStatusMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/reset"
-			procCheck $arrResults "$sExeName repo_root head_bus_reset" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName repo_root head_bus_reset allow" (procFetchAllowMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/reset") 'GET'
-			procCheckBodyContains $arrResults "$sExeName repo_root head_bus_reset type" (procFetchHeaderMethod "HEAD" "http://127.0.0.1:$iPort/__xs/bus/reset" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root head_bus_reset" "HEAD" "http://127.0.0.1:$iPort/__xs/bus/reset"
-
-			$iStatus = procFetchStatusMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/reset"
-			procCheck $arrResults "$sExeName repo_root post_bus_reset" $iStatus 405 ""
-			procCheckBodyContains $arrResults "$sExeName repo_root post_bus_reset allow" (procFetchAllowMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/reset") 'GET'
-			procCheckBodyContains $arrResults "$sExeName repo_root post_bus_reset type" (procFetchHeaderMethod "POST" "http://127.0.0.1:$iPort/__xs/bus/reset" "Content-Type") 'application/json'
-			procCheckSecurityHeaders $arrResults "$sExeName repo_root post_bus_reset" "POST" "http://127.0.0.1:$iPort/__xs/bus/reset"
-			procRunBusGovernanceScenario $arrResults $sExeName $iPort "repo_root"
 		} else {
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root bus_root" "GET" "/__xs/bus" 403 'application/json' 'bus api not included in production xs'
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root head_bus_root_disabled" "HEAD" "/__xs/bus" 403 'application/json' $null
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root post_bus_root_disabled" "POST" "/__xs/bus" 403 'application/json' 'bus api not included in production xs'
-
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root dashboard" "GET" "/__xs/dashboard" 403 'text/plain' 'dashboard api only available in xsdbg'
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root head_dashboard_disabled" "HEAD" "/__xs/dashboard" 403 'text/plain' $null
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root post_dashboard_disabled" "POST" "/__xs/dashboard" 403 'text/plain' 'dashboard api only available in xsdbg'
-
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root dashboard_json" "GET" "/__xs/dashboard_json" 403 'application/json' 'dashboard json api only available in xsdbg'
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root head_dashboard_json_disabled" "HEAD" "/__xs/dashboard_json" 403 'application/json' $null
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root post_dashboard_json_disabled" "POST" "/__xs/dashboard_json" 403 'application/json' 'dashboard json api only available in xsdbg'
-
 			procCheckDisabledEndpoint $arrResults $sExeName "repo_root http_metrics" "GET" "/__xs/http_metrics" 403 'text/plain' 'http metrics api only available in xsdbg'
 			procCheckDisabledEndpoint $arrResults $sExeName "repo_root head_http_metrics_disabled" "HEAD" "/__xs/http_metrics" 403 'text/plain' $null
 			procCheckDisabledEndpoint $arrResults $sExeName "repo_root post_http_metrics_disabled" "POST" "/__xs/http_metrics" 403 'text/plain' 'http metrics api only available in xsdbg'
@@ -3709,30 +3679,6 @@ function procRunRepoRootCase([string]$sExeName, [bool]$bDebug)
 			procCheckDisabledEndpoint $arrResults $sExeName "repo_root check_config_clear" "GET" "/__xs/check_config_clear" 403 'text/plain' 'check config clear api only available in xsdbg'
 			procCheckDisabledEndpoint $arrResults $sExeName "repo_root head_check_config_clear_disabled" "HEAD" "/__xs/check_config_clear" 403 'text/plain' $null
 			procCheckDisabledEndpoint $arrResults $sExeName "repo_root post_check_config_clear_disabled" "POST" "/__xs/check_config_clear" 403 'text/plain' 'check config clear api only available in xsdbg'
-
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root bus_status" "GET" "/__xs/bus/status" 403 'application/json' 'bus api not included in production xs'
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root head_bus_status_disabled" "HEAD" "/__xs/bus/status" 403 'application/json' $null
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root post_bus_status_disabled" "POST" "/__xs/bus/status" 403 'application/json' 'bus api not included in production xs'
-
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root bus_namespaces" "GET" "/__xs/bus/namespaces" 403 'application/json' 'bus api not included in production xs'
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root head_bus_namespaces_disabled" "HEAD" "/__xs/bus/namespaces" 403 'application/json' $null
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root post_bus_namespaces_disabled" "POST" "/__xs/bus/namespaces" 403 'application/json' 'bus api not included in production xs'
-
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root bus_registry" "GET" "/__xs/bus/registry" 403 'application/json' 'bus api not included in production xs'
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root head_bus_registry_disabled" "HEAD" "/__xs/bus/registry" 403 'application/json' $null
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root post_bus_registry_disabled" "POST" "/__xs/bus/registry" 403 'application/json' 'bus api not included in production xs'
-
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root bus_limits" "GET" "/__xs/bus/limits" 403 'application/json' 'bus api not included in production xs'
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root head_bus_limits_disabled" "HEAD" "/__xs/bus/limits" 403 'application/json' $null
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root post_bus_limits_disabled" "POST" "/__xs/bus/limits" 403 'application/json' 'bus api not included in production xs'
-
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root bus_send" "GET" "/__xs/bus/send?topic=stable.smoke&text=hello" 403 'application/json' 'bus api not included in production xs'
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root head_bus_send_disabled" "HEAD" "/__xs/bus/send?topic=stable.smoke&text=hello" 403 'application/json' $null
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root post_bus_send_disabled" "POST" "/__xs/bus/send?topic=stable.smoke&text=hello" 403 'application/json' 'bus api not included in production xs'
-
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root bus_reset" "GET" "/__xs/bus/reset" 403 'application/json' 'bus api not included in production xs'
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root head_bus_reset_disabled" "HEAD" "/__xs/bus/reset" 403 'application/json' $null
-			procCheckDisabledEndpoint $arrResults $sExeName "repo_root post_bus_reset_disabled" "POST" "/__xs/bus/reset" 403 'application/json' 'bus api not included in production xs'
 		}
 
 		$iCode = 0
@@ -3748,6 +3694,118 @@ function procRunRepoRootCase([string]$sExeName, [bool]$bDebug)
 		Stop-Process -Id $objProc.Id -Force -ErrorAction SilentlyContinue
 		Start-Sleep -Milliseconds 500
 	}
+}
+
+function procRunGracefulStopCase([string]$sExeName)
+{
+	$sExePath = Join-Path $sReleaseDir $sExeName
+	$sConfigPath = Join-Path $sReleaseDir $sConfig
+	$arrResults = New-Object 'System.Collections.Generic.List[string]'
+	$sHelperExe = $null
+	$sRunDir = Join-Path ([System.IO.Path]::GetTempPath()) ("xs_graceful_stop_" + [System.IO.Path]::GetFileNameWithoutExtension($sExeName) + "_" + $sRunTag)
+	$sLogPath = Join-Path $sRunDir "server.log"
+	$sPidPath = Join-Path $sRunDir "server.pid"
+	$sLogText = ""
+	$iPid = 0
+	$objResp = $null
+	$bExited = $false
+	$tEnd = [DateTime]::UtcNow
+
+	if ( -not (Test-Path $sExePath) ) {
+		$arrResults.Add("FAIL $sExeName graceful_stop : executable not found")
+		return @{ code = 1; lines = $arrResults }
+	}
+	if ( -not (Test-Path $sConfigPath) ) {
+		$arrResults.Add("FAIL $sExeName graceful_stop : config not found")
+		return @{ code = 1; lines = $arrResults }
+	}
+
+	try {
+		$sHelperExe = procBuildWinHelper
+	} catch {
+		$arrResults.Add("FAIL $sExeName graceful_stop helper_build : $($_.Exception.Message)")
+		return @{ code = 1; lines = $arrResults }
+	}
+
+	try {
+		Remove-Item $sRunDir -Recurse -Force -ErrorAction SilentlyContinue
+		New-Item -ItemType Directory -Path $sRunDir | Out-Null
+		Remove-Item $sPidPath -Force -ErrorAction SilentlyContinue
+
+		& $sHelperExe spawn $sRunDir $sLogPath $sPidPath $sExePath $sConfigPath 2>$null | Out-Null
+		if ( $LASTEXITCODE -ne 0 ) {
+			$arrResults.Add("FAIL $sExeName graceful_stop spawn : helper exit $LASTEXITCODE")
+			return @{ code = 1; lines = $arrResults }
+		}
+
+		if ( -not (procWaitFile $sPidPath) ) {
+			$arrResults.Add("FAIL $sExeName graceful_stop pid_file : timeout")
+			return @{ code = 1; lines = $arrResults }
+		}
+
+		if ( -not [int]::TryParse(([string](Get-Content -Raw -Path $sPidPath -Encoding UTF8)).Trim(), [ref]$iPid) ) {
+			$arrResults.Add("FAIL $sExeName graceful_stop pid_file : invalid")
+			return @{ code = 1; lines = $arrResults }
+		}
+
+		$objResp = procWaitBodyContains "http://127.0.0.1:$iPort/json" '"path":"/json"'
+		if ( $null -eq $objResp ) {
+			$arrResults.Add("FAIL $sExeName graceful_stop ready : timeout")
+			return @{ code = 1; lines = $arrResults }
+		}
+
+		procCheck $arrResults "$sExeName graceful_stop route_before" $objResp.status 200 $objResp.body '"path":"/json"'
+
+		& $sHelperExe signal "$iPid" 2>$null | Out-Null
+		if ( $LASTEXITCODE -ne 0 ) {
+			$arrResults.Add("FAIL $sExeName graceful_stop signal : helper exit $LASTEXITCODE")
+			return @{ code = 1; lines = $arrResults }
+		}
+
+		$tEnd = [DateTime]::UtcNow.AddMilliseconds($iWaitMS)
+		while ( [DateTime]::UtcNow -lt $tEnd ) {
+			$objProc = Get-Process -Id $iPid -ErrorAction SilentlyContinue
+			if ( $null -eq $objProc ) {
+				$bExited = $true
+				break
+			}
+
+			Start-Sleep -Milliseconds 200
+		}
+
+		if ( -not $bExited ) {
+			$arrResults.Add("FAIL $sExeName graceful_stop exit : timeout")
+			return @{ code = 1; lines = $arrResults }
+		}
+
+		$arrResults.Add("OK   $sExeName graceful_stop exit : 0")
+
+		if ( procWaitUrlNotReady "http://127.0.0.1:$iPort/json" ) {
+			$arrResults.Add("OK   $sExeName graceful_stop route_closed : 0")
+		} else {
+			$arrResults.Add("FAIL $sExeName graceful_stop route_closed : timeout")
+		}
+
+		if ( Test-Path $sLogPath ) {
+			$sLogText = [string](Get-Content -Raw -Path $sLogPath -Encoding UTF8)
+		}
+		procCheckBodyContains $arrResults "$sExeName graceful_stop log" $sLogText 'stop signal received'
+	} finally {
+		if ( $iPid -gt 0 ) {
+			Get-Process -Id $iPid -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+		}
+		Remove-Item $sRunDir -Recurse -Force -ErrorAction SilentlyContinue
+	}
+
+	$iCode = 0
+	foreach ( $sLine in $arrResults ) {
+		if ( $sLine.StartsWith("FAIL ") ) {
+			$iCode = 1
+			break
+		}
+	}
+
+	return @{ code = $iCode; lines = $arrResults }
 }
 
 function procRunXtpCase([string]$sExeName, [bool]$bDebug)
@@ -4025,6 +4083,556 @@ function procRunCustomCase([string]$sExeName)
 	}
 }
 
+function procRunHttpIdleCleanupCase([string]$sExeName, [bool]$bDebug)
+{
+	$sExePath = Join-Path $sReleaseDir $sExeName
+	$arrResults = New-Object 'System.Collections.Generic.List[string]'
+	$sIdleClientExe = $null
+	$objProc = $null
+	$objResp = $null
+	$tblRun = $null
+
+	if ( -not (Test-Path $sExePath) ) {
+		$arrResults.Add("FAIL $sExeName http_idle_cleanup : executable not found")
+		return @{ code = 1; lines = $arrResults }
+	}
+
+	try {
+		$sIdleClientExe = procBuildIdleSocketClient
+	} catch {
+		$arrResults.Add("FAIL $sExeName http_idle_cleanup_build : $($_.Exception.Message)")
+		return @{ code = 1; lines = $arrResults }
+	}
+
+	$objProc = Start-Process -FilePath $sExePath -ArgumentList "xs_manage_http_idle_test.json" -WorkingDirectory $sReleaseDir -PassThru -WindowStyle Hidden
+
+	try {
+		$objResp = procWaitBodyContains "http://127.0.0.1:8185/json" '"path":"/json"'
+		if ( $null -eq $objResp ) {
+			$arrResults.Add("FAIL $sExeName http_idle_cleanup ready : timeout")
+			return @{ code = 1; lines = $arrResults }
+		}
+
+		$objResp = procWaitBodyContains "http://127.0.0.1:8186/json" '"path":"/json"'
+		if ( $null -eq $objResp ) {
+			$arrResults.Add("FAIL $sExeName http_idle_cleanup target_ready : timeout")
+			return @{ code = 1; lines = $arrResults }
+		}
+
+		$tblRun = procRunClientRetry $sIdleClientExe @("127.0.0.1", "8186", "2200", "http_partial") 10
+		procCheckClientTokens $arrResults "$sExeName http_idle_cleanup client" $tblRun @("status=closed", "phase=", "mode=http_partial")
+
+		$objResp = procWaitBodyContains "http://127.0.0.1:8186/json" '"path":"/json"'
+		if ( $null -eq $objResp ) {
+			$arrResults.Add("FAIL $sExeName http_idle_cleanup service_alive : timeout")
+		} else {
+			procCheck $arrResults "$sExeName http_idle_cleanup service_alive" $objResp.status 200 $objResp.body '"path":"/json"'
+		}
+
+		if ( $bDebug ) {
+			$objResp = procFetch "http://127.0.0.1:8185/__xs/http_metrics"
+			procCheck $arrResults "$sExeName http_idle_cleanup http_metrics" $objResp.status 200 $objResp.body 'http_idle_close_count='
+			procCheckBodyContains $arrResults "$sExeName http_idle_cleanup http_metrics idle" $objResp.body 'http_idle_close_count=1'
+
+			$objResp = procFetch "http://127.0.0.1:8185/__xs/http_metrics_json"
+			procCheck $arrResults "$sExeName http_idle_cleanup http_metrics_json" $objResp.status 200 $objResp.body '"http_idle_close_count"'
+			procCheckBodyContains $arrResults "$sExeName http_idle_cleanup http_metrics_json idle" $objResp.body '"http_idle_close_count":1'
+		}
+
+		$iCode = 0
+		foreach ( $sLine in $arrResults ) {
+			if ( $sLine.StartsWith("FAIL ") ) {
+				$iCode = 1
+				break
+			}
+		}
+
+		return @{ code = $iCode; lines = $arrResults }
+	} finally {
+		if ( $objProc -and (-not $objProc.HasExited) ) {
+			Stop-Process -Id $objProc.Id -Force -ErrorAction SilentlyContinue
+			Start-Sleep -Milliseconds 500
+		}
+	}
+}
+
+function procRunCustomIdleCleanupCase([string]$sExeName, [bool]$bDebug)
+{
+	$sExePath = Join-Path $sReleaseDir $sExeName
+	$arrResults = New-Object 'System.Collections.Generic.List[string]'
+	$sIdleClientExe = $null
+	$sCustomClientExe = $null
+	$objProc = $null
+	$objResp = $null
+	$tblRun = $null
+
+	if ( -not (Test-Path $sExePath) ) {
+		$arrResults.Add("FAIL $sExeName custom_idle_cleanup : executable not found")
+		return @{ code = 1; lines = $arrResults }
+	}
+
+	try {
+		$sIdleClientExe = procBuildIdleSocketClient
+		if ( $script:sCustomClientExe -and (Test-Path $script:sCustomClientExe) ) {
+			$sCustomClientExe = $script:sCustomClientExe
+		} else {
+			$script:sCustomClientExe = procBuildCClient "custom_smoke_client.c" "custom_smoke_client.exe"
+			$sCustomClientExe = $script:sCustomClientExe
+		}
+	} catch {
+		$arrResults.Add("FAIL $sExeName custom_idle_cleanup_build : $($_.Exception.Message)")
+		return @{ code = 1; lines = $arrResults }
+	}
+
+	$objProc = Start-Process -FilePath $sExePath -ArgumentList "xs_manage_custom_idle_test.json" -WorkingDirectory $sReleaseDir -PassThru -WindowStyle Hidden
+
+	try {
+		$objResp = procWaitBodyContains "http://127.0.0.1:8186/json" '"path":"/json"'
+		if ( $null -eq $objResp ) {
+			$arrResults.Add("FAIL $sExeName custom_idle_cleanup ready : timeout")
+			return @{ code = 1; lines = $arrResults }
+		}
+
+		$tblRun = procRunClientRetry $sCustomClientExe @("127.0.0.1", "9198", "smoke custom idle ready") 10
+		procCheckClientTokens $arrResults "$sExeName custom_idle_cleanup target_ready" $tblRun @("custom demo", "data=smoke custom idle ready")
+
+		$tblRun = procRunClientRetry $sIdleClientExe @("127.0.0.1", "9198", "2200", "none") 10
+		procCheckClientTokens $arrResults "$sExeName custom_idle_cleanup client" $tblRun @("status=closed", "phase=", "mode=none")
+
+		$tblRun = procRunClientRetry $sCustomClientExe @("127.0.0.1", "9198", "smoke custom idle") 10
+		procCheckClientTokens $arrResults "$sExeName custom_idle_cleanup service_alive" $tblRun @("custom demo", "data=smoke custom idle")
+
+		if ( $bDebug ) {
+			$objResp = procFetch "http://127.0.0.1:8186/__xs/custom_metrics"
+			procCheck $arrResults "$sExeName custom_idle_cleanup custom_metrics" $objResp.status 200 $objResp.body 'custom_idle_close_count='
+			procCheckBodyContains $arrResults "$sExeName custom_idle_cleanup custom_metrics idle" $objResp.body 'custom_idle_close_count=1'
+
+			$objResp = procFetch "http://127.0.0.1:8186/__xs/custom_metrics_json"
+			procCheck $arrResults "$sExeName custom_idle_cleanup custom_metrics_json" $objResp.status 200 $objResp.body '"custom_idle_close_count"'
+			procCheckBodyContains $arrResults "$sExeName custom_idle_cleanup custom_metrics_json idle" $objResp.body '"custom_idle_close_count":1'
+		}
+
+		$iCode = 0
+		foreach ( $sLine in $arrResults ) {
+			if ( $sLine.StartsWith("FAIL ") ) {
+				$iCode = 1
+				break
+			}
+		}
+
+		return @{ code = $iCode; lines = $arrResults }
+	} finally {
+		if ( $objProc -and (-not $objProc.HasExited) ) {
+			Stop-Process -Id $objProc.Id -Force -ErrorAction SilentlyContinue
+			Start-Sleep -Milliseconds 500
+		}
+	}
+}
+
+function procRunWsIdleCleanupCase([string]$sExeName, [bool]$bDebug)
+{
+	$sExePath = Join-Path $sReleaseDir $sExeName
+	$arrResults = New-Object 'System.Collections.Generic.List[string]'
+	$sIdleClientExe = $null
+	$sWsClientExe = $null
+	$objProc = $null
+	$objResp = $null
+	$tblRun = $null
+
+	if ( -not (Test-Path $sExePath) ) {
+		$arrResults.Add("FAIL $sExeName ws_idle_cleanup : executable not found")
+		return @{ code = 1; lines = $arrResults }
+	}
+
+	try {
+		$sIdleClientExe = procBuildIdleSocketClient
+		$sWsClientExe = procBuildWsSmokeClient
+	} catch {
+		$arrResults.Add("FAIL $sExeName ws_idle_cleanup_build : $($_.Exception.Message)")
+		return @{ code = 1; lines = $arrResults }
+	}
+
+	$objProc = Start-Process -FilePath $sExePath -ArgumentList "xs_manage_ws_idle_test.json" -WorkingDirectory $sReleaseDir -PassThru -WindowStyle Hidden
+
+	try {
+		$objResp = procWaitBodyContains "http://127.0.0.1:8187/json" '"path":"/json"'
+		if ( $null -eq $objResp ) {
+			$arrResults.Add("FAIL $sExeName ws_idle_cleanup ready : timeout")
+			return @{ code = 1; lines = $arrResults }
+		}
+
+		$tblRun = procRunClientRetry $sWsClientExe @("127.0.0.1", "8281", "smoke ws idle ready") 10
+		procCheckClientTokens $arrResults "$sExeName ws_idle_cleanup target_ready" $tblRun @("ws demo", "text=smoke ws idle ready", "protocol=xs-demo")
+
+		$tblRun = procRunClientRetry $sIdleClientExe @("127.0.0.1", "8281", "2200", "ws_handshake") 10
+		procCheckClientTokens $arrResults "$sExeName ws_idle_cleanup client" $tblRun @("status=closed", "phase=", "mode=ws_handshake")
+
+		$tblRun = procRunClientRetry $sWsClientExe @("127.0.0.1", "8281", "smoke ws idle") 10
+		procCheckClientTokens $arrResults "$sExeName ws_idle_cleanup service_alive" $tblRun @("ws demo", "text=smoke ws idle", "protocol=xs-demo")
+
+		if ( $bDebug ) {
+			$objResp = procFetch "http://127.0.0.1:8187/__xs/ws_metrics"
+			procCheck $arrResults "$sExeName ws_idle_cleanup ws_metrics" $objResp.status 200 $objResp.body 'ws_idle_close_count='
+			procCheckBodyContains $arrResults "$sExeName ws_idle_cleanup ws_metrics idle" $objResp.body 'ws_idle_close_count=1'
+
+			$objResp = procFetch "http://127.0.0.1:8187/__xs/ws_metrics_json"
+			procCheck $arrResults "$sExeName ws_idle_cleanup ws_metrics_json" $objResp.status 200 $objResp.body '"ws_idle_close_count"'
+			procCheckBodyContains $arrResults "$sExeName ws_idle_cleanup ws_metrics_json idle" $objResp.body '"ws_idle_close_count":1'
+		}
+
+		$iCode = 0
+		foreach ( $sLine in $arrResults ) {
+			if ( $sLine.StartsWith("FAIL ") ) {
+				$iCode = 1
+				break
+			}
+		}
+
+		return @{ code = $iCode; lines = $arrResults }
+	} finally {
+		if ( $objProc -and (-not $objProc.HasExited) ) {
+			Stop-Process -Id $objProc.Id -Force -ErrorAction SilentlyContinue
+			Start-Sleep -Milliseconds 500
+		}
+	}
+}
+
+function procRunXtpIdleCleanupCase([string]$sExeName, [bool]$bDebug)
+{
+	$sExePath = Join-Path $sReleaseDir $sExeName
+	$arrResults = New-Object 'System.Collections.Generic.List[string]'
+	$sIdleClientExe = $null
+	$sXtpClientExe = $null
+	$objProc = $null
+	$objResp = $null
+	$tblRun = $null
+
+	if ( -not (Test-Path $sExePath) ) {
+		$arrResults.Add("FAIL $sExeName xtp_idle_cleanup : executable not found")
+		return @{ code = 1; lines = $arrResults }
+	}
+
+	try {
+		$sIdleClientExe = procBuildIdleSocketClient
+		$sXtpClientExe = procBuildXtpSmokeClient
+	} catch {
+		$arrResults.Add("FAIL $sExeName xtp_idle_cleanup_build : $($_.Exception.Message)")
+		return @{ code = 1; lines = $arrResults }
+	}
+
+	$objProc = Start-Process -FilePath $sExePath -ArgumentList "xs_manage_xtp_idle_test.json" -WorkingDirectory $sReleaseDir -PassThru -WindowStyle Hidden
+
+	try {
+		$objResp = procWaitBodyContains "http://127.0.0.1:8185/json" '"path":"/json"'
+		if ( $null -eq $objResp ) {
+			$arrResults.Add("FAIL $sExeName xtp_idle_cleanup ready : timeout")
+			return @{ code = 1; lines = $arrResults }
+		}
+
+		$tblRun = procRunClientRetry $sXtpClientExe @("127.0.0.1", "9196", "demo.callself", "tag=smoke-idle-ready") 10
+		procCheckClientTokens $arrResults "$sExeName xtp_idle_cleanup target_ready" $tblRun @("status=0", "cmd=xtp.reply", "self call ok")
+
+		$tblRun = procRunClientRetry $sIdleClientExe @("127.0.0.1", "9196", "2200", "xtp_ping") 10
+		procCheckClientTokens $arrResults "$sExeName xtp_idle_cleanup client" $tblRun @("status=closed", "phase=", "mode=xtp_ping")
+
+		$tblRun = procRunClientRetry $sXtpClientExe @("127.0.0.1", "9196", "demo.callself", "tag=smoke-idle") 10
+		procCheckClientTokens $arrResults "$sExeName xtp_idle_cleanup service_alive" $tblRun @("status=0", "cmd=xtp.reply", "self call ok")
+
+		if ( $bDebug ) {
+			$objResp = procFetch "http://127.0.0.1:8185/__xs/xtp_metrics"
+			procCheck $arrResults "$sExeName xtp_idle_cleanup xtp_metrics" $objResp.status 200 $objResp.body 'xtp_idle_close_count='
+			procCheckBodyContains $arrResults "$sExeName xtp_idle_cleanup xtp_metrics idle" $objResp.body 'xtp_idle_close_count=1'
+
+			$objResp = procFetch "http://127.0.0.1:8185/__xs/xtp_metrics_json"
+			procCheck $arrResults "$sExeName xtp_idle_cleanup xtp_metrics_json" $objResp.status 200 $objResp.body '"xtp_idle_close_count"'
+			procCheckBodyContains $arrResults "$sExeName xtp_idle_cleanup xtp_metrics_json idle" $objResp.body '"xtp_idle_close_count":1'
+		}
+
+		$iCode = 0
+		foreach ( $sLine in $arrResults ) {
+			if ( $sLine.StartsWith("FAIL ") ) {
+				$iCode = 1
+				break
+			}
+		}
+
+		return @{ code = $iCode; lines = $arrResults }
+	} finally {
+		if ( $objProc -and (-not $objProc.HasExited) ) {
+			Stop-Process -Id $objProc.Id -Force -ErrorAction SilentlyContinue
+			Start-Sleep -Milliseconds 500
+		}
+	}
+}
+
+function procRunWsInvalidHandshakeCase([string]$sExeName, [bool]$bDebug)
+{
+	$sExePath = Join-Path $sReleaseDir $sExeName
+	$arrResults = New-Object 'System.Collections.Generic.List[string]'
+	$sIdleClientExe = $null
+	$sWsClientExe = $null
+	$objProc = $null
+	$objResp = $null
+	$tblRun = $null
+
+	if ( -not (Test-Path $sExePath) ) {
+		$arrResults.Add("FAIL $sExeName ws_invalid_handshake : executable not found")
+		return @{ code = 1; lines = $arrResults }
+	}
+
+	try {
+		$sIdleClientExe = procBuildIdleSocketClient
+		$sWsClientExe = procBuildWsSmokeClient
+	} catch {
+		$arrResults.Add("FAIL $sExeName ws_invalid_handshake_build : $($_.Exception.Message)")
+		return @{ code = 1; lines = $arrResults }
+	}
+
+	$objProc = Start-Process -FilePath $sExePath -ArgumentList "xs_manage_ws_idle_test.json" -WorkingDirectory $sReleaseDir -PassThru -WindowStyle Hidden
+
+	try {
+		$objResp = procWaitBodyContains "http://127.0.0.1:8187/json" '"path":"/json"'
+		if ( $null -eq $objResp ) {
+			$arrResults.Add("FAIL $sExeName ws_invalid_handshake ready : timeout")
+			return @{ code = 1; lines = $arrResults }
+		}
+
+		$tblRun = procRunClientRetry $sIdleClientExe @("127.0.0.1", "8281", "300", "ws_bad_handshake") 10
+		procCheckClientTokens $arrResults "$sExeName ws_invalid_handshake client" $tblRun @("status=closed", "phase=", "mode=ws_bad_handshake")
+
+		$tblRun = procRunClientRetry $sWsClientExe @("127.0.0.1", "8281", "smoke ws invalid") 10
+		procCheckClientTokens $arrResults "$sExeName ws_invalid_handshake service_alive" $tblRun @("ws demo", "text=smoke ws invalid", "protocol=xs-demo")
+
+		if ( $bDebug ) {
+			$objResp = procFetch "http://127.0.0.1:8187/__xs/ws_metrics"
+			procCheck $arrResults "$sExeName ws_invalid_handshake ws_metrics" $objResp.status 200 $objResp.body 'ws_invalid_count='
+			procCheckBodyContains $arrResults "$sExeName ws_invalid_handshake ws_metrics invalid" $objResp.body 'ws_invalid_count=1'
+			procCheckBodyContains $arrResults "$sExeName ws_invalid_handshake ws_metrics reason" $objResp.body 'ws_last_invalid_reason=invalid handshake'
+
+			$objResp = procFetch "http://127.0.0.1:8187/__xs/ws_metrics_json"
+			procCheck $arrResults "$sExeName ws_invalid_handshake ws_metrics_json" $objResp.status 200 $objResp.body '"ws_invalid_count"'
+			procCheckBodyContains $arrResults "$sExeName ws_invalid_handshake ws_metrics_json invalid" $objResp.body '"ws_invalid_count":1'
+			procCheckBodyContains $arrResults "$sExeName ws_invalid_handshake ws_metrics_json reason" $objResp.body '"ws_last_invalid_reason":"invalid handshake"'
+		}
+
+		$iCode = 0
+		foreach ( $sLine in $arrResults ) {
+			if ( $sLine.StartsWith("FAIL ") ) {
+				$iCode = 1
+				break
+			}
+		}
+
+		return @{ code = $iCode; lines = $arrResults }
+	} finally {
+		if ( $objProc -and (-not $objProc.HasExited) ) {
+			Stop-Process -Id $objProc.Id -Force -ErrorAction SilentlyContinue
+			Start-Sleep -Milliseconds 500
+		}
+	}
+}
+
+function procRunWsInvalidFrameCase([string]$sExeName, [bool]$bDebug)
+{
+	$sExePath = Join-Path $sReleaseDir $sExeName
+	$arrResults = New-Object 'System.Collections.Generic.List[string]'
+	$sIdleClientExe = $null
+	$sWsClientExe = $null
+	$objProc = $null
+	$objResp = $null
+	$tblRun = $null
+
+	if ( -not (Test-Path $sExePath) ) {
+		$arrResults.Add("FAIL $sExeName ws_invalid_frame : executable not found")
+		return @{ code = 1; lines = $arrResults }
+	}
+
+	try {
+		$sIdleClientExe = procBuildIdleSocketClient
+		$sWsClientExe = procBuildWsSmokeClient
+	} catch {
+		$arrResults.Add("FAIL $sExeName ws_invalid_frame_build : $($_.Exception.Message)")
+		return @{ code = 1; lines = $arrResults }
+	}
+
+	$objProc = Start-Process -FilePath $sExePath -ArgumentList "xs_manage_ws_idle_test.json" -WorkingDirectory $sReleaseDir -PassThru -WindowStyle Hidden
+
+	try {
+		$objResp = procWaitBodyContains "http://127.0.0.1:8187/json" '"path":"/json"'
+		if ( $null -eq $objResp ) {
+			$arrResults.Add("FAIL $sExeName ws_invalid_frame ready : timeout")
+			return @{ code = 1; lines = $arrResults }
+		}
+
+		$tblRun = procRunClientRetry $sIdleClientExe @("127.0.0.1", "8281", "300", "ws_bad_frame") 10
+		procCheckClientTokens $arrResults "$sExeName ws_invalid_frame client" $tblRun @("status=closed", "phase=", "mode=ws_bad_frame")
+
+		if ( $bDebug ) {
+			$objResp = procFetch "http://127.0.0.1:8187/__xs/ws_metrics"
+			procCheck $arrResults "$sExeName ws_invalid_frame ws_metrics" $objResp.status 200 $objResp.body 'ws_close_count='
+			procCheckBodyContains $arrResults "$sExeName ws_invalid_frame ws_metrics close" $objResp.body 'ws_close_count=1'
+			procCheckBodyContains $arrResults "$sExeName ws_invalid_frame ws_metrics current" $objResp.body 'ws_conn_current=0'
+
+			$objResp = procFetch "http://127.0.0.1:8187/__xs/ws_metrics_json"
+			procCheck $arrResults "$sExeName ws_invalid_frame ws_metrics_json" $objResp.status 200 $objResp.body '"ws_close_count"'
+			procCheckBodyContains $arrResults "$sExeName ws_invalid_frame ws_metrics_json close" $objResp.body '"ws_close_count":1'
+			procCheckBodyContains $arrResults "$sExeName ws_invalid_frame ws_metrics_json current" $objResp.body '"ws_conn_current":0'
+		}
+
+		$tblRun = procRunClientRetry $sWsClientExe @("127.0.0.1", "8281", "smoke ws bad frame") 10
+		procCheckClientTokens $arrResults "$sExeName ws_invalid_frame service_alive" $tblRun @("ws demo", "text=smoke ws bad frame", "protocol=xs-demo")
+
+		$iCode = 0
+		foreach ( $sLine in $arrResults ) {
+			if ( $sLine.StartsWith("FAIL ") ) {
+				$iCode = 1
+				break
+			}
+		}
+
+		return @{ code = $iCode; lines = $arrResults }
+	} finally {
+		if ( $objProc -and (-not $objProc.HasExited) ) {
+			Stop-Process -Id $objProc.Id -Force -ErrorAction SilentlyContinue
+			Start-Sleep -Milliseconds 500
+		}
+	}
+}
+
+function procRunXtpInvalidHeaderCase([string]$sExeName, [bool]$bDebug)
+{
+	$sExePath = Join-Path $sReleaseDir $sExeName
+	$arrResults = New-Object 'System.Collections.Generic.List[string]'
+	$sIdleClientExe = $null
+	$sXtpClientExe = $null
+	$objProc = $null
+	$objResp = $null
+	$tblRun = $null
+
+	if ( -not (Test-Path $sExePath) ) {
+		$arrResults.Add("FAIL $sExeName xtp_invalid_header : executable not found")
+		return @{ code = 1; lines = $arrResults }
+	}
+
+	try {
+		$sIdleClientExe = procBuildIdleSocketClient
+		$sXtpClientExe = procBuildXtpSmokeClient
+	} catch {
+		$arrResults.Add("FAIL $sExeName xtp_invalid_header_build : $($_.Exception.Message)")
+		return @{ code = 1; lines = $arrResults }
+	}
+
+	$objProc = Start-Process -FilePath $sExePath -ArgumentList "xs_manage_xtp_idle_test.json" -WorkingDirectory $sReleaseDir -PassThru -WindowStyle Hidden
+
+	try {
+		$objResp = procWaitBodyContains "http://127.0.0.1:8185/json" '"path":"/json"'
+		if ( $null -eq $objResp ) {
+			$arrResults.Add("FAIL $sExeName xtp_invalid_header ready : timeout")
+			return @{ code = 1; lines = $arrResults }
+		}
+
+		$tblRun = procRunClientRetry $sIdleClientExe @("127.0.0.1", "9196", "300", "xtp_bad_header") 10
+		procCheckClientTokens $arrResults "$sExeName xtp_invalid_header client" $tblRun @("status=closed", "phase=", "mode=xtp_bad_header")
+
+		$tblRun = procRunClientRetry $sXtpClientExe @("127.0.0.1", "9196", "demo.callself", "tag=smoke-invalid") 10
+		procCheckClientTokens $arrResults "$sExeName xtp_invalid_header service_alive" $tblRun @("status=0", "cmd=xtp.reply", "self call ok")
+
+		if ( $bDebug ) {
+			$objResp = procFetch "http://127.0.0.1:8185/__xs/xtp_metrics"
+			procCheck $arrResults "$sExeName xtp_invalid_header xtp_metrics" $objResp.status 200 $objResp.body 'xtp_invalid_count='
+			procCheckBodyContains $arrResults "$sExeName xtp_invalid_header xtp_metrics invalid" $objResp.body 'xtp_invalid_count=1'
+			procCheckBodyContains $arrResults "$sExeName xtp_invalid_header xtp_metrics reason" $objResp.body 'xtp_last_invalid_reason=invalid header'
+
+			$objResp = procFetch "http://127.0.0.1:8185/__xs/xtp_metrics_json"
+			procCheck $arrResults "$sExeName xtp_invalid_header xtp_metrics_json" $objResp.status 200 $objResp.body '"xtp_invalid_count"'
+			procCheckBodyContains $arrResults "$sExeName xtp_invalid_header xtp_metrics_json invalid" $objResp.body '"xtp_invalid_count":1'
+			procCheckBodyContains $arrResults "$sExeName xtp_invalid_header xtp_metrics_json reason" $objResp.body '"xtp_last_invalid_reason":"invalid header"'
+		}
+
+		$iCode = 0
+		foreach ( $sLine in $arrResults ) {
+			if ( $sLine.StartsWith("FAIL ") ) {
+				$iCode = 1
+				break
+			}
+		}
+
+		return @{ code = $iCode; lines = $arrResults }
+	} finally {
+		if ( $objProc -and (-not $objProc.HasExited) ) {
+			Stop-Process -Id $objProc.Id -Force -ErrorAction SilentlyContinue
+			Start-Sleep -Milliseconds 500
+		}
+	}
+}
+
+function procRunXtpInvalidSizeCase([string]$sExeName, [bool]$bDebug)
+{
+	$sExePath = Join-Path $sReleaseDir $sExeName
+	$arrResults = New-Object 'System.Collections.Generic.List[string]'
+	$sIdleClientExe = $null
+	$sXtpClientExe = $null
+	$objProc = $null
+	$objResp = $null
+	$tblRun = $null
+
+	if ( -not (Test-Path $sExePath) ) {
+		$arrResults.Add("FAIL $sExeName xtp_invalid_size : executable not found")
+		return @{ code = 1; lines = $arrResults }
+	}
+
+	try {
+		$sIdleClientExe = procBuildIdleSocketClient
+		$sXtpClientExe = procBuildXtpSmokeClient
+	} catch {
+		$arrResults.Add("FAIL $sExeName xtp_invalid_size_build : $($_.Exception.Message)")
+		return @{ code = 1; lines = $arrResults }
+	}
+
+	$objProc = Start-Process -FilePath $sExePath -ArgumentList "xs_manage_xtp_idle_test.json" -WorkingDirectory $sReleaseDir -PassThru -WindowStyle Hidden
+
+	try {
+		$objResp = procWaitBodyContains "http://127.0.0.1:8185/json" '"path":"/json"'
+		if ( $null -eq $objResp ) {
+			$arrResults.Add("FAIL $sExeName xtp_invalid_size ready : timeout")
+			return @{ code = 1; lines = $arrResults }
+		}
+
+		$tblRun = procRunClientRetry $sIdleClientExe @("127.0.0.1", "9196", "300", "xtp_bad_size") 10
+		procCheckClientTokens $arrResults "$sExeName xtp_invalid_size client" $tblRun @("status=closed", "phase=", "mode=xtp_bad_size")
+
+		$tblRun = procRunClientRetry $sXtpClientExe @("127.0.0.1", "9196", "demo.callself", "tag=smoke-bad-size") 10
+		procCheckClientTokens $arrResults "$sExeName xtp_invalid_size service_alive" $tblRun @("status=0", "cmd=xtp.reply", "self call ok")
+
+		if ( $bDebug ) {
+			$objResp = procFetch "http://127.0.0.1:8185/__xs/xtp_metrics"
+			procCheck $arrResults "$sExeName xtp_invalid_size xtp_metrics" $objResp.status 200 $objResp.body 'xtp_invalid_count='
+			procCheckBodyContains $arrResults "$sExeName xtp_invalid_size xtp_metrics invalid" $objResp.body 'xtp_invalid_count=1'
+			procCheckBodyContains $arrResults "$sExeName xtp_invalid_size xtp_metrics reason" $objResp.body 'xtp_last_invalid_reason=size mismatch'
+
+			$objResp = procFetch "http://127.0.0.1:8185/__xs/xtp_metrics_json"
+			procCheck $arrResults "$sExeName xtp_invalid_size xtp_metrics_json" $objResp.status 200 $objResp.body '"xtp_invalid_count"'
+			procCheckBodyContains $arrResults "$sExeName xtp_invalid_size xtp_metrics_json invalid" $objResp.body '"xtp_invalid_count":1'
+			procCheckBodyContains $arrResults "$sExeName xtp_invalid_size xtp_metrics_json reason" $objResp.body '"xtp_last_invalid_reason":"size mismatch"'
+		}
+
+		$iCode = 0
+		foreach ( $sLine in $arrResults ) {
+			if ( $sLine.StartsWith("FAIL ") ) {
+				$iCode = 1
+				break
+			}
+		}
+
+		return @{ code = $iCode; lines = $arrResults }
+	} finally {
+		if ( $objProc -and (-not $objProc.HasExited) ) {
+			Stop-Process -Id $objProc.Id -Force -ErrorAction SilentlyContinue
+			Start-Sleep -Milliseconds 500
+		}
+	}
+}
+
 procCleanupGeneratedFiles
 
 $arrOut = New-Object 'System.Collections.Generic.List[string]'
@@ -4055,6 +4663,69 @@ if ( $tblCase.code -ne 0 ) {
 
 $tblCase = procRunRepoRootCase "xs.exe" $false
 $arrOut.Add("[xs-root]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
+$tblCase = procRunGracefulStopCase "xs.exe"
+$arrOut.Add("[xs-stop]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
+$tblCase = procRunHttpIdleCleanupCase "xs.exe" $false
+$arrOut.Add("[xs-http-idle]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
+$tblCase = procRunCustomIdleCleanupCase "xs.exe" $false
+$arrOut.Add("[xs-custom-idle]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
+$tblCase = procRunWsIdleCleanupCase "xs.exe" $false
+$arrOut.Add("[xs-ws-idle]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
+$tblCase = procRunXtpIdleCleanupCase "xs.exe" $false
+$arrOut.Add("[xs-xtp-idle]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
+$tblCase = procRunWsInvalidHandshakeCase "xs.exe" $false
+$arrOut.Add("[xs-ws-invalid]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
+$tblCase = procRunWsInvalidFrameCase "xs.exe" $false
+$arrOut.Add("[xs-ws-frame]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
+$tblCase = procRunXtpInvalidHeaderCase "xs.exe" $false
+$arrOut.Add("[xs-xtp-invalid]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
+$tblCase = procRunXtpInvalidSizeCase "xs.exe" $false
+$arrOut.Add("[xs-xtp-size]")
 procAppendLines $arrOut $tblCase.lines
 if ( $tblCase.code -ne 0 ) {
 	$iExit = $tblCase.code
@@ -4109,6 +4780,69 @@ if ( $tblCase.code -ne 0 ) {
 	$iExit = $tblCase.code
 }
 
+$tblCase = procRunGracefulStopCase "xsdbg.exe"
+$arrOut.Add("[xsdbg-stop]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
+$tblCase = procRunHttpIdleCleanupCase "xsdbg.exe" $true
+$arrOut.Add("[xsdbg-http-idle]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
+$tblCase = procRunCustomIdleCleanupCase "xsdbg.exe" $true
+$arrOut.Add("[xsdbg-custom-idle]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
+$tblCase = procRunWsIdleCleanupCase "xsdbg.exe" $true
+$arrOut.Add("[xsdbg-ws-idle]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
+$tblCase = procRunXtpIdleCleanupCase "xsdbg.exe" $true
+$arrOut.Add("[xsdbg-xtp-idle]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
+$tblCase = procRunWsInvalidHandshakeCase "xsdbg.exe" $true
+$arrOut.Add("[xsdbg-ws-invalid]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
+$tblCase = procRunWsInvalidFrameCase "xsdbg.exe" $true
+$arrOut.Add("[xsdbg-ws-frame]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
+$tblCase = procRunXtpInvalidHeaderCase "xsdbg.exe" $true
+$arrOut.Add("[xsdbg-xtp-invalid]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
+$tblCase = procRunXtpInvalidSizeCase "xsdbg.exe" $true
+$arrOut.Add("[xsdbg-xtp-size]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
 $tblCase = procRunXtpCase "xsdbg.exe" $true
 $arrOut.Add("[xsdbg-xtp]")
 procAppendLines $arrOut $tblCase.lines
@@ -4137,7 +4871,7 @@ if ( $tblCase.code -ne 0 ) {
 	$iExit = $tblCase.code
 }
 
-foreach ( $sPath in @($script:sXtpClientExe, $script:sWsClientExe, $script:sCustomClientExe) ) {
+foreach ( $sPath in @($script:sXtpClientExe, $script:sWsClientExe, $script:sCustomClientExe, $script:sUdpClientExe, $script:sPortProbeExe, $script:sIdleClientExe, $script:sWinHelperExe) ) {
 	if ( $sPath -and (Test-Path $sPath) ) {
 		Remove-Item $sPath -Force -ErrorAction SilentlyContinue
 	}
@@ -4156,3 +4890,4 @@ if ( (procAppendProcessCleanupCheck $arrOut) -ne 0 ) {
 $arrOut | ForEach-Object { Write-Output $_ }
 
 exit $iExit
+
