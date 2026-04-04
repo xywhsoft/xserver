@@ -9,6 +9,7 @@
 #ifdef XRT_BUILD_CORE
 	#undef XRT_BUILD_CORE
 #endif
+#include "lib/xsmtp.h"
 
 // vNext 支撑层
 #include "src/support/log.h"
