@@ -156,6 +156,7 @@ static inline void ImportXRT(TCCState* s)
 		tcc_add_symbol(s, "xrtFSMemPoolInitDbg", xrtFSMemPoolInitDbg);
 		tcc_add_symbol(s, "xrtFSMemPoolDestroyDbg", xrtFSMemPoolDestroyDbg);
 		tcc_add_symbol(s, "xrtFSMemPoolUnitDbg", xrtFSMemPoolUnitDbg);
+		tcc_add_symbol(s, "xrtMemDebugReset", xrtMemDebugReset);
 	#endif
 	tcc_add_symbol(s, "xrtTempMemory", xrtTempMemory);
 	tcc_add_symbol(s, "xrtFreeTempMemory", xrtFreeTempMemory);
@@ -1202,7 +1203,266 @@ static inline void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xrtNetProxyConfigInit", xrtNetProxyConfigInit);
 	tcc_add_symbol(s, "xrtNetProxyCreate", xrtNetProxyCreate);
 	tcc_add_symbol(s, "xrtNetProxyRelease", xrtNetProxyRelease);
-	
+
+	// 添加函数 - Queue (SPSC)
+	tcc_add_symbol(s, "xrtSPSCQCreate", xrtSPSCQCreate);
+	tcc_add_symbol(s, "xrtSPSCQDestroy", xrtSPSCQDestroy);
+	tcc_add_symbol(s, "xrtSPSCQInit", xrtSPSCQInit);
+	tcc_add_symbol(s, "xrtSPSCQUnit", xrtSPSCQUnit);
+	tcc_add_symbol(s, "xrtSPSCQTryPush", xrtSPSCQTryPush);
+	tcc_add_symbol(s, "xrtSPSCQTryPop", xrtSPSCQTryPop);
+	tcc_add_symbol(s, "xrtSPSCQClose", xrtSPSCQClose);
+	tcc_add_symbol(s, "xrtSPSCQDrain", xrtSPSCQDrain);
+	tcc_add_symbol(s, "xrtSPSCQReset", xrtSPSCQReset);
+	tcc_add_symbol(s, "xrtSPSCQApproxCount", xrtSPSCQApproxCount);
+
+	// 添加函数 - Queue (MPSC)
+	tcc_add_symbol(s, "xrtMPSCQCreate", xrtMPSCQCreate);
+	tcc_add_symbol(s, "xrtMPSCQDestroy", xrtMPSCQDestroy);
+	tcc_add_symbol(s, "xrtMPSCQInit", xrtMPSCQInit);
+	tcc_add_symbol(s, "xrtMPSCQUnit", xrtMPSCQUnit);
+	tcc_add_symbol(s, "xrtMPSCQTryPush", xrtMPSCQTryPush);
+	tcc_add_symbol(s, "xrtMPSCQTryPop", xrtMPSCQTryPop);
+	tcc_add_symbol(s, "xrtMPSCQClose", xrtMPSCQClose);
+	tcc_add_symbol(s, "xrtMPSCQDrain", xrtMPSCQDrain);
+	tcc_add_symbol(s, "xrtMPSCQReset", xrtMPSCQReset);
+	tcc_add_symbol(s, "xrtMPSCQApproxCount", xrtMPSCQApproxCount);
+	tcc_add_symbol(s, "xrtMPSCQPushBatch", xrtMPSCQPushBatch);
+	tcc_add_symbol(s, "xrtMPSCQPopBatch", xrtMPSCQPopBatch);
+
+	// 添加函数 - Queue (MPMC)
+	tcc_add_symbol(s, "xrtMPMCQCreate", xrtMPMCQCreate);
+	tcc_add_symbol(s, "xrtMPMCQDestroy", xrtMPMCQDestroy);
+	tcc_add_symbol(s, "xrtMPMCQInit", xrtMPMCQInit);
+	tcc_add_symbol(s, "xrtMPMCQUnit", xrtMPMCQUnit);
+	tcc_add_symbol(s, "xrtMPMCQTryPush", xrtMPMCQTryPush);
+	tcc_add_symbol(s, "xrtMPMCQTryPop", xrtMPMCQTryPop);
+	tcc_add_symbol(s, "xrtMPMCQClose", xrtMPMCQClose);
+	tcc_add_symbol(s, "xrtMPMCQDrain", xrtMPMCQDrain);
+	tcc_add_symbol(s, "xrtMPMCQReset", xrtMPMCQReset);
+	tcc_add_symbol(s, "xrtMPMCQApproxCount", xrtMPMCQApproxCount);
+	tcc_add_symbol(s, "xrtMPMCQPushBatch", xrtMPMCQPushBatch);
+	tcc_add_symbol(s, "xrtMPMCQPopBatch", xrtMPMCQPopBatch);
+
+	// 添加函数 - Queue (MPSC Wait)
+	tcc_add_symbol(s, "xrtMPSCQWaitCreate", xrtMPSCQWaitCreate);
+	tcc_add_symbol(s, "xrtMPSCQWaitDestroy", xrtMPSCQWaitDestroy);
+	tcc_add_symbol(s, "xrtMPSCQWaitInit", xrtMPSCQWaitInit);
+	tcc_add_symbol(s, "xrtMPSCQWaitUnit", xrtMPSCQWaitUnit);
+	tcc_add_symbol(s, "xrtMPSCQWaitTryPush", xrtMPSCQWaitTryPush);
+	tcc_add_symbol(s, "xrtMPSCQWaitTryPop", xrtMPSCQWaitTryPop);
+	tcc_add_symbol(s, "xrtMPSCQWaitPop", xrtMPSCQWaitPop);
+	tcc_add_symbol(s, "xrtMPSCQWaitPopTimeout", xrtMPSCQWaitPopTimeout);
+	tcc_add_symbol(s, "xrtMPSCQWaitClose", xrtMPSCQWaitClose);
+	tcc_add_symbol(s, "xrtMPSCQWaitApproxCount", xrtMPSCQWaitApproxCount);
+
+	// 添加函数 - Queue (通用)
+	tcc_add_symbol(s, "xrtQueueIsClosed", xrtQueueIsClosed);
+	tcc_add_symbol(s, "xrtQueueIsDrained", xrtQueueIsDrained);
+
+	// 添加函数 - Process (子进程)
+	tcc_add_symbol(s, "xrtProcessConfigInit", xrtProcessConfigInit);
+	tcc_add_symbol(s, "xrtProcessSpawn", xrtProcessSpawn);
+	tcc_add_symbol(s, "xrtProcessDestroy", xrtProcessDestroy);
+	tcc_add_symbol(s, "xrtProcessState", xrtProcessState);
+	tcc_add_symbol(s, "xrtProcessIsRunning", xrtProcessIsRunning);
+	tcc_add_symbol(s, "xrtProcessExitCode", xrtProcessExitCode);
+	tcc_add_symbol(s, "xrtProcessGetExitInfo", xrtProcessGetExitInfo);
+	tcc_add_symbol(s, "xrtProcessTerminalSupported", xrtProcessTerminalSupported);
+	tcc_add_symbol(s, "xrtProcessWrite", xrtProcessWrite);
+	tcc_add_symbol(s, "xrtProcessWriteText", xrtProcessWriteText);
+	tcc_add_symbol(s, "xrtProcessCloseStdin", xrtProcessCloseStdin);
+	tcc_add_symbol(s, "xrtProcessWait", xrtProcessWait);
+	tcc_add_symbol(s, "xrtProcessWaitTimeout", xrtProcessWaitTimeout);
+	tcc_add_symbol(s, "xrtProcessWaitFuture", xrtProcessWaitFuture);
+	tcc_add_symbol(s, "xrtProcessInterrupt", xrtProcessInterrupt);
+	tcc_add_symbol(s, "xrtProcessTerminate", xrtProcessTerminate);
+	tcc_add_symbol(s, "xrtProcessKill", xrtProcessKill);
+	tcc_add_symbol(s, "xrtProcessKillTree", xrtProcessKillTree);
+	tcc_add_symbol(s, "xrtProcessResizeTerminal", xrtProcessResizeTerminal);
+	tcc_add_symbol(s, "xrtProcessGetStdout", xrtProcessGetStdout);
+	tcc_add_symbol(s, "xrtProcessGetStderr", xrtProcessGetStderr);
+	tcc_add_symbol(s, "xrtProcessReadStdoutSince", xrtProcessReadStdoutSince);
+	tcc_add_symbol(s, "xrtProcessReadStderrSince", xrtProcessReadStderrSince);
+	tcc_add_symbol(s, "xrtProcessReadEventsSince", xrtProcessReadEventsSince);
+	tcc_add_symbol(s, "xrtProcessResultUnit", xrtProcessResultUnit);
+	tcc_add_symbol(s, "xrtExecCapture", xrtExecCapture);
+
+	// 添加函数 - Async File (异步文件)
+	tcc_add_symbol(s, "xrtAsyncFileConfigInit", xrtAsyncFileConfigInit);
+	tcc_add_symbol(s, "xrtAsyncFileOpen", xrtAsyncFileOpen);
+	tcc_add_symbol(s, "xrtAsyncFileClose", xrtAsyncFileClose);
+	tcc_add_symbol(s, "xrtAsyncFileReadAt", xrtAsyncFileReadAt);
+	tcc_add_symbol(s, "xrtAsyncFileWriteAt", xrtAsyncFileWriteAt);
+	tcc_add_symbol(s, "xrtAsyncFileFlush", xrtAsyncFileFlush);
+	tcc_add_symbol(s, "xrtAsyncFileGetSize", xrtAsyncFileGetSize);
+	tcc_add_symbol(s, "xrtAsyncFileSetSize", xrtAsyncFileSetSize);
+	tcc_add_symbol(s, "xrtAsyncFileBufDestroy", xrtAsyncFileBufDestroy);
+	tcc_add_symbol(s, "xrtAsyncFileIoDestroy", xrtAsyncFileIoDestroy);
+	tcc_add_symbol(s, "xrtFileAppendAsync", xrtFileAppendAsync);
+	tcc_add_symbol(s, "xrtFileWriteAllAsync", xrtFileWriteAllAsync);
+	tcc_add_symbol(s, "xrtFileReadAllAsync", xrtFileReadAllAsync);
+	tcc_add_symbol(s, "xrtFilePutAllAsync", xrtFilePutAllAsync);
+	tcc_add_symbol(s, "xrtFileGetAllAsync", xrtFileGetAllAsync);
+	tcc_add_symbol(s, "xrtFileCopyAsync", xrtFileCopyAsync);
+	tcc_add_symbol(s, "xrtFileMoveAsync", xrtFileMoveAsync);
+	tcc_add_symbol(s, "xrtFileDeleteAsync", xrtFileDeleteAsync);
+	tcc_add_symbol(s, "xrtDirCreateAsync", xrtDirCreateAsync);
+	tcc_add_symbol(s, "xrtDirCreateAllAsync", xrtDirCreateAllAsync);
+	tcc_add_symbol(s, "xrtDirDeleteAsync", xrtDirDeleteAsync);
+	tcc_add_symbol(s, "xrtDirCopyAsync", xrtDirCopyAsync);
+	tcc_add_symbol(s, "xrtDirMoveAsync", xrtDirMoveAsync);
+
+	// 添加函数 - Coroutine 增强
+	tcc_add_symbol(s, "xrtCoCreateEx", xrtCoCreateEx);
+	tcc_add_symbol(s, "xrtCoCancel", xrtCoCancel);
+	tcc_add_symbol(s, "xrtCoClose", xrtCoClose);
+	tcc_add_symbol(s, "xrtCoExit", xrtCoExit);
+	tcc_add_symbol(s, "xrtCoJoin", xrtCoJoin);
+	tcc_add_symbol(s, "xrtCoGetResult", xrtCoGetResult);
+	tcc_add_symbol(s, "xrtCoSetResult", xrtCoSetResult);
+	tcc_add_symbol(s, "xrtCoGetExitCode", xrtCoGetExitCode);
+	tcc_add_symbol(s, "xrtCoGetBackendName", xrtCoGetBackendName);
+	tcc_add_symbol(s, "xrtCoGetBackendStyle", xrtCoGetBackendStyle);
+	tcc_add_symbol(s, "xrtCoGetBackendTier", xrtCoGetBackendTier);
+	tcc_add_symbol(s, "xrtCoIsCancelRequested", xrtCoIsCancelRequested);
+	tcc_add_symbol(s, "xrtCoWasCancelled", xrtCoWasCancelled);
+	tcc_add_symbol(s, "xrtCoPushCleanup", xrtCoPushCleanup);
+	tcc_add_symbol(s, "xrtCoPopCleanup", xrtCoPopCleanup);
+	tcc_add_symbol(s, "xrtCoEventCreate", xrtCoEventCreate);
+	tcc_add_symbol(s, "xrtCoEventDestroy", xrtCoEventDestroy);
+	tcc_add_symbol(s, "xrtCoEventSet", xrtCoEventSet);
+	tcc_add_symbol(s, "xrtCoEventReset", xrtCoEventReset);
+	tcc_add_symbol(s, "xrtCoSchedCurrent", xrtCoSchedCurrent);
+	tcc_add_symbol(s, "xrtCoSchedPollOnce", xrtCoSchedPollOnce);
+	tcc_add_symbol(s, "xrtCoSchedPost", xrtCoSchedPost);
+	tcc_add_symbol(s, "xrtCoSleepUntil", xrtCoSleepUntil);
+	tcc_add_symbol(s, "xrtCoWaitDeadline", xrtCoWaitDeadline);
+	tcc_add_symbol(s, "xrtCoWaitEvent", xrtCoWaitEvent);
+	tcc_add_symbol(s, "xrtCoWaitEventTimeout", xrtCoWaitEventTimeout);
+	tcc_add_symbol(s, "xrtCoWaitEventUntil", xrtCoWaitEventUntil);
+
+	// 添加函数 - Future Co 变体
+	tcc_add_symbol(s, "xFutureThenCo", xFutureThenCo);
+	tcc_add_symbol(s, "xFutureCatchCo", xFutureCatchCo);
+	tcc_add_symbol(s, "xFutureFinallyCo", xFutureFinallyCo);
+	tcc_add_symbol(s, "xFutureWaitCo", xFutureWaitCo);
+	tcc_add_symbol(s, "xFutureWaitCoTimeout", xFutureWaitCoTimeout);
+	tcc_add_symbol(s, "xFutureWaitCoUntil", xFutureWaitCoUntil);
+	tcc_add_symbol(s, "xFutureWaitCoValue", xFutureWaitCoValue);
+	tcc_add_symbol(s, "xFutureWaitCoValueTimeout", xFutureWaitCoValueTimeout);
+	tcc_add_symbol(s, "xFutureWaitCoValueUntil", xFutureWaitCoValueUntil);
+
+	// 添加函数 - Task Co 变体
+	tcc_add_symbol(s, "xTaskRunCo", xTaskRunCo);
+	tcc_add_symbol(s, "xTaskGroupRunCo", xTaskGroupRunCo);
+
+	// 添加函数 - WaitSource Co 变体
+	tcc_add_symbol(s, "xWaitSourceWaitCo", xWaitSourceWaitCo);
+	tcc_add_symbol(s, "xWaitSourceWaitCoTimeout", xWaitSourceWaitCoTimeout);
+	tcc_add_symbol(s, "xWaitSourceWaitCoUntil", xWaitSourceWaitCoUntil);
+	tcc_add_symbol(s, "xWaitSourceWaitCoValue", xWaitSourceWaitCoValue);
+	tcc_add_symbol(s, "xWaitSourceWaitCoValueTimeout", xWaitSourceWaitCoValueTimeout);
+	tcc_add_symbol(s, "xWaitSourceWaitCoValueUntil", xWaitSourceWaitCoValueUntil);
+
+	// 添加函数 - Net Future Co 变体
+	tcc_add_symbol(s, "xrtNetFutureWaitCo", xrtNetFutureWaitCo);
+	tcc_add_symbol(s, "xrtNetFutureWaitCoTimeout", xrtNetFutureWaitCoTimeout);
+	tcc_add_symbol(s, "xrtNetFutureWaitCoUntil", xrtNetFutureWaitCoUntil);
+
+	// 添加函数 - Net Listener Co 变体
+	tcc_add_symbol(s, "xrtNetListenerAcceptCo", xrtNetListenerAcceptCo);
+	tcc_add_symbol(s, "xrtNetListenerAcceptCoTimeout", xrtNetListenerAcceptCoTimeout);
+	tcc_add_symbol(s, "xrtNetListenerAcceptCoUntil", xrtNetListenerAcceptCoUntil);
+
+	// 添加函数 - Net Dgram Co 变体
+	tcc_add_symbol(s, "xrtNetDgramRecvCo", xrtNetDgramRecvCo);
+	tcc_add_symbol(s, "xrtNetDgramRecvCoTimeout", xrtNetDgramRecvCoTimeout);
+	tcc_add_symbol(s, "xrtNetDgramRecvCoUntil", xrtNetDgramRecvCoUntil);
+
+	// 添加函数 - Net Stream Co 变体
+	tcc_add_symbol(s, "xrtNetStreamWaitCoEx", xrtNetStreamWaitCoEx);
+	tcc_add_symbol(s, "xrtNetStreamWaitCoTimeoutEx", xrtNetStreamWaitCoTimeoutEx);
+	tcc_add_symbol(s, "xrtNetStreamWaitCoUntilEx", xrtNetStreamWaitCoUntilEx);
+	tcc_add_symbol(s, "xrtNetStreamWaitReadableCo", xrtNetStreamWaitReadableCo);
+	tcc_add_symbol(s, "xrtNetStreamWaitReadableCoTimeout", xrtNetStreamWaitReadableCoTimeout);
+	tcc_add_symbol(s, "xrtNetStreamWaitReadableCoUntil", xrtNetStreamWaitReadableCoUntil);
+	tcc_add_symbol(s, "xrtNetStreamWaitWritableCo", xrtNetStreamWaitWritableCo);
+	tcc_add_symbol(s, "xrtNetStreamWaitWritableCoTimeout", xrtNetStreamWaitWritableCoTimeout);
+	tcc_add_symbol(s, "xrtNetStreamWaitWritableCoUntil", xrtNetStreamWaitWritableCoUntil);
+	tcc_add_symbol(s, "xrtNetStreamWaitDrainCo", xrtNetStreamWaitDrainCo);
+	tcc_add_symbol(s, "xrtNetStreamWaitDrainCoTimeout", xrtNetStreamWaitDrainCoTimeout);
+	tcc_add_symbol(s, "xrtNetStreamWaitDrainCoUntil", xrtNetStreamWaitDrainCoUntil);
+	tcc_add_symbol(s, "xrtNetStreamWaitCloseCo", xrtNetStreamWaitCloseCo);
+	tcc_add_symbol(s, "xrtNetStreamWaitCloseCoTimeout", xrtNetStreamWaitCloseCoTimeout);
+	tcc_add_symbol(s, "xrtNetStreamWaitCloseCoUntil", xrtNetStreamWaitCloseCoUntil);
+
+	// 添加函数 - Net WaitSource Co 变体
+	tcc_add_symbol(s, "xrtNetWaitSourceWaitCo", xrtNetWaitSourceWaitCo);
+	tcc_add_symbol(s, "xrtNetWaitSourceWaitCoTimeout", xrtNetWaitSourceWaitCoTimeout);
+	tcc_add_symbol(s, "xrtNetWaitSourceWaitCoUntil", xrtNetWaitSourceWaitCoUntil);
+	tcc_add_symbol(s, "xrtNetWaitSourceWaitCoValue", xrtNetWaitSourceWaitCoValue);
+	tcc_add_symbol(s, "xrtNetWaitSourceWaitCoValueTimeout", xrtNetWaitSourceWaitCoValueTimeout);
+	tcc_add_symbol(s, "xrtNetWaitSourceWaitCoValueUntil", xrtNetWaitSourceWaitCoValueUntil);
+
+	// 添加函数 - HTTP Server 扩展
+	tcc_add_symbol(s, "xrtHttpdConnClose", xrtHttpdConnClose);
+	tcc_add_symbol(s, "xrtHttpdConnIsOpen", xrtHttpdConnIsOpen);
+	tcc_add_symbol(s, "xrtHttpdConnRespond", xrtHttpdConnRespond);
+	tcc_add_symbol(s, "xrtHttpdResponseCreate", xrtHttpdResponseCreate);
+	tcc_add_symbol(s, "xrtHttpdResponseDestroy", xrtHttpdResponseDestroy);
+
+	// 添加函数 - XSON
+	tcc_add_symbol(s, "xrtParseXSON", xrtParseXSON);
+	tcc_add_symbol(s, "xrtParseXSONEx", xrtParseXSONEx);
+	tcc_add_symbol(s, "xrtParseXSON_File", xrtParseXSON_File);
+	tcc_add_symbol(s, "xrtParseXSON_FileEx", xrtParseXSON_FileEx);
+	tcc_add_symbol(s, "xrtStringifyXSON", xrtStringifyXSON);
+	tcc_add_symbol(s, "xrtStringifyXSON_File", xrtStringifyXSON_File);
+
+	// 添加函数 - Template 扩展
+	tcc_add_symbol(s, "xteArgCount", xteArgCount);
+	tcc_add_symbol(s, "xteArgExprType", xteArgExprType);
+	tcc_add_symbol(s, "xteEvalArgBool", xteEvalArgBool);
+	tcc_add_symbol(s, "xteEvalArgBoolStrict", xteEvalArgBoolStrict);
+	tcc_add_symbol(s, "xteEvalArgInt", xteEvalArgInt);
+	tcc_add_symbol(s, "xteEvalArgIntStrict", xteEvalArgIntStrict);
+	tcc_add_symbol(s, "xteEvalArgFloat", xteEvalArgFloat);
+	tcc_add_symbol(s, "xteEvalArgFloatStrict", xteEvalArgFloatStrict);
+	tcc_add_symbol(s, "xteEvalArgText", xteEvalArgText);
+	tcc_add_symbol(s, "xteEvalArgTextStrict", xteEvalArgTextStrict);
+	tcc_add_symbol(s, "xteEvalArgValue", xteEvalArgValue);
+	tcc_add_symbol(s, "xteFuncSetError", xteFuncSetError);
+	tcc_add_symbol(s, "xteFuncRequireBoolStrict", xteFuncRequireBoolStrict);
+	tcc_add_symbol(s, "xteFuncRequireIntStrict", xteFuncRequireIntStrict);
+	tcc_add_symbol(s, "xteFuncRequireFloatStrict", xteFuncRequireFloatStrict);
+	tcc_add_symbol(s, "xteFuncRequireTextStrict", xteFuncRequireTextStrict);
+	tcc_add_symbol(s, "xteFuncRequireNamedBoolStrict", xteFuncRequireNamedBoolStrict);
+	tcc_add_symbol(s, "xteFuncRequireNamedIntStrict", xteFuncRequireNamedIntStrict);
+	tcc_add_symbol(s, "xteFuncRequireNamedFloatStrict", xteFuncRequireNamedFloatStrict);
+	tcc_add_symbol(s, "xteFuncRequireNamedTextStrict", xteFuncRequireNamedTextStrict);
+	tcc_add_symbol(s, "xteStmtSetError", xteStmtSetError);
+	tcc_add_symbol(s, "xteStmtParseSetError", xteStmtParseSetError);
+	tcc_add_symbol(s, "xteStmtWrite", xteStmtWrite);
+	tcc_add_symbol(s, "xteStmtRenderBody", xteStmtRenderBody);
+	tcc_add_symbol(s, "xteStmtRenderBodyWithScope", xteStmtRenderBodyWithScope);
+	tcc_add_symbol(s, "xteStmtRequireBoolStrict", xteStmtRequireBoolStrict);
+	tcc_add_symbol(s, "xteStmtRequireIntStrict", xteStmtRequireIntStrict);
+	tcc_add_symbol(s, "xteStmtRequireFloatStrict", xteStmtRequireFloatStrict);
+	tcc_add_symbol(s, "xteStmtRequireTextStrict", xteStmtRequireTextStrict);
+	tcc_add_symbol(s, "xteStmtRequireNamedBoolStrict", xteStmtRequireNamedBoolStrict);
+	tcc_add_symbol(s, "xteStmtRequireNamedIntStrict", xteStmtRequireNamedIntStrict);
+	tcc_add_symbol(s, "xteStmtRequireNamedFloatStrict", xteStmtRequireNamedFloatStrict);
+	tcc_add_symbol(s, "xteStmtRequireNamedTextStrict", xteStmtRequireNamedTextStrict);
+	tcc_add_symbol(s, "xteTemplateLoadFile", xteTemplateLoadFile);
+	tcc_add_symbol(s, "xteTemplateSaveFile", xteTemplateSaveFile);
+	tcc_add_symbol(s, "xteTemplateGetArgCount", xteTemplateGetArgCount);
+	tcc_add_symbol(s, "xteTemplateGetRootSpan", xteTemplateGetRootSpan);
+	tcc_add_symbol(s, "xteTemplateGetStringPoolSize", xteTemplateGetStringPoolSize);
+
+	// 添加函数 - 其他遗漏
+	tcc_add_symbol(s, "xrtGetBuffer", xrtGetBuffer);
+
 }
 
 

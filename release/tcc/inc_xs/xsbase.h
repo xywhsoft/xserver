@@ -9,6 +9,7 @@
 
 
 #include "inline_xrt.h"
+#include "inline_xsmtp.h"
 #include "inline_libtcc.h"
 #include "inline_sqlite3.h"
 //#include "inline_xdo.h"
@@ -262,9 +263,6 @@ int xsReloadHostByName(XS_ServerObject objServer, const char* sHostName, int bFo
 
 
 
-// xCore
-xrtGlobalData* g_pXCore = NULL;
-
 // 全局事件循环
 void* g_pXsLoop = NULL;
 
@@ -279,7 +277,7 @@ static inline void XS_SetGlobalDate(int idx, void* ptr)
 	} else if ( idx == 2 ) {
 		g_arrXsServerList = (xarray)ptr;
 	} else if ( idx == 3 ) {
-		g_pXCore = (xrtGlobalData*)ptr;
+		xCore = (xrtGlobalData*)ptr;
 	}
 }
 
