@@ -500,6 +500,84 @@ static inline int XS_ScriptHttpJson(void* pResp, uint32 iStatus, const char* sRe
 	) ? 1 : 0;
 }
 
+typedef struct {
+	xbuffer_struct tBuf;
+	int bOK;
+} XS_ScriptMarkdownRenderContext;
+
+static inline void XS_ScriptMarkdownProcessOutput(const MD_CHAR* sText, MD_SIZE iSize, void* pUserData)
+{
+	XS_ScriptMarkdownRenderContext* pCtx = (XS_ScriptMarkdownRenderContext*)pUserData;
+
+	if ( pCtx == NULL || !pCtx->bOK || sText == NULL || iSize == 0 ) {
+		return;
+	}
+
+	if ( !xrtBufferAppend(&pCtx->tBuf, (ptr)sText, (uint32)iSize, XBUF_BINARY) ) {
+		pCtx->bOK = 0;
+	}
+}
+
+static inline char* XS_ScriptMarkdownToHtmlEx(const char* sMarkdown, unsigned iParserFlags, unsigned iRendererFlags)
+{
+	XS_ScriptMarkdownRenderContext tCtx = { 0 };
+	char chZero = '\0';
+	int iRet;
+
+	if ( sMarkdown == NULL ) {
+		sMarkdown = "";
+	}
+
+	xrtBufferInit(&tCtx.tBuf, 1024u);
+	tCtx.bOK = 1;
+
+	iRet = md_html(
+		sMarkdown,
+		(MD_SIZE)strlen(sMarkdown),
+		XS_ScriptMarkdownProcessOutput,
+		&tCtx,
+		iParserFlags,
+		iRendererFlags
+	);
+	if ( iRet != 0 || !tCtx.bOK || !xrtBufferAppend(&tCtx.tBuf, &chZero, 1, XBUF_BINARY) ) {
+		xrtBufferUnit(&tCtx.tBuf);
+		return NULL;
+	}
+
+	return (char*)tCtx.tBuf.Buffer;
+}
+
+static inline char* XS_ScriptMarkdownToHtml(const char* sMarkdown)
+{
+	return XS_ScriptMarkdownToHtmlEx(sMarkdown, MD_DIALECT_GITHUB, 0u);
+}
+
+static inline int XS_ScriptHttpMarkdown(void* pResp, uint32 iStatus, const char* sReason, const char* sMarkdown)
+{
+	xhttpdresponse* pHttpResp = (xhttpdresponse*)pResp;
+	char* sHtml;
+	int iRet;
+
+	if ( pHttpResp == NULL ) {
+		return 0;
+	}
+
+	sHtml = XS_ScriptMarkdownToHtml(sMarkdown);
+	if ( sHtml == NULL ) {
+		return 0;
+	}
+
+	xrtHttpdResponseSetStatus(pHttpResp, iStatus, sReason);
+	iRet = xrtHttpdResponseSetBodyCopy(
+		pHttpResp,
+		sHtml,
+		strlen(sHtml),
+		"text/html; charset=utf-8"
+	) ? 1 : 0;
+	xrtFree(sHtml);
+	return iRet;
+}
+
 static inline int XS_ScriptRet403(void* pServer, void* pHost, const void* pReq, void* pResp, const char* sMessage, xvalue objData)
 {
 	return XS_HttpRet403Ex(
@@ -2537,6 +2615,42 @@ static inline int xsReloadDefaultHost(ptr objServer)
 	}
 
 	return XS_ReloadServerHostScript(objServerConfig, &objServerConfig->DefaultHost, TRUE);
+}
+
+static inline int xsRequestReloadCurrentHost(ptr objServer, ptr objHost, int bForce)
+{
+	XS_ServerConfig* objServerConfig = (XS_ServerConfig*)objServer;
+	XS_HostConfig* objHostConfig = (XS_HostConfig*)objHost;
+
+	if ( objServerConfig == NULL || objHostConfig == NULL ) {
+		return -100;
+	}
+
+	return XS_RequestConfigReloadEx(
+		(objServerConfig->Name && objServerConfig->Name[0]) ? objServerConfig->Name : NULL,
+		(objHostConfig->Name && objHostConfig->Name[0]) ? objHostConfig->Name : NULL,
+		bForce ? TRUE : FALSE
+	) ? 0 : -1;
+}
+
+static inline int xsRequestReloadServer(ptr objServer, int bForce)
+{
+	XS_ServerConfig* objServerConfig = (XS_ServerConfig*)objServer;
+
+	if ( objServerConfig == NULL ) {
+		return -100;
+	}
+
+	return XS_RequestConfigReloadEx(
+		(objServerConfig->Name && objServerConfig->Name[0]) ? objServerConfig->Name : NULL,
+		NULL,
+		bForce ? TRUE : FALSE
+	) ? 0 : -1;
+}
+
+static inline int xsRequestReloadAllServer(int bForce)
+{
+	return XS_RequestConfigReload(bForce ? TRUE : FALSE) ? 0 : -1;
 }
 
 static inline int xsReloadServer(ptr objServer)

@@ -20,6 +20,8 @@
 #include "lib/lzma/LzmaDec.h"
 #include "lib/lzma/Lzma2Dec.h"
 #include "lib/lzma/Lzma2Enc.h"
+#include "lib/md4c/src/md4c.h"
+#include "lib/md4c/src/md4c-html.h"
 
 #define XPACK_IMPLEMENTATION
 #include "lib/xpack.h"
@@ -34,6 +36,27 @@
 #include "lib/lzma/Lzma2Dec.c"
 #include "lib/lzma/LzmaEnc.c"
 #include "lib/lzma/Lzma2Enc.c"
+#include "lib/md4c/src/entity.c"
+#ifdef MAX
+	#undef MAX
+#endif
+#ifdef MIN
+	#undef MIN
+#endif
+#include "lib/md4c/src/md4c.c"
+#ifdef ISDIGIT
+	#undef ISDIGIT
+#endif
+#ifdef ISLOWER
+	#undef ISLOWER
+#endif
+#ifdef ISUPPER
+	#undef ISUPPER
+#endif
+#ifdef ISALNUM
+	#undef ISALNUM
+#endif
+#include "lib/md4c/src/md4c-html.c"
 
 // vNext 支撑层
 #include "src/support/log.h"

@@ -7,6 +7,7 @@
 #include "import_zstd.h"
 #include "import_lzma.h"
 #include "import_xpack.h"
+#include "import_md4c.h"
 #include "import_libtcc.h"
 #include "import_sqlite.h"
 
@@ -22,6 +23,7 @@ static inline void XS_ImportThirdPartyAPI(TCCState* s)
 	ImportZSTD(s);
 	ImportLZMA(s);
 	ImportXPack(s);
+	ImportMD4C(s);
 	ImportLibTCC(s);
 	ImportSQLite(s);
 

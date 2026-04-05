@@ -333,10 +333,14 @@ static inline bool XS_ReloadHostScript(XS_ServerConfig* objServer, XS_HostConfig
 	procOldHttpRequest = objHost->procHttpRequest;
 	
 	if ( procOldServiceStop ) {
+		XS_LogInfo("reload host: procServiceStop begin");
 		procOldServiceStop(objServer, objHost);
+		XS_LogInfo("reload host: procServiceStop done");
 	}
 	if ( procOldServiceUnit ) {
+		XS_LogInfo("reload host: procServiceUnit begin");
 		procOldServiceUnit(objServer, objHost);
+		XS_LogInfo("reload host: procServiceUnit done");
 	}
 	
 	XS_AttachHostScriptState(objServer, objHost, sNew);
@@ -349,7 +353,9 @@ static inline bool XS_ReloadHostScript(XS_ServerConfig* objServer, XS_HostConfig
 	}
 	
 	if ( sOld ) {
+		XS_LogInfo("reload host: XS_DestroyTCC(old) begin");
 		XS_DestroyTCC(sOld);
+		XS_LogInfo("reload host: XS_DestroyTCC(old) done");
 	}
 	
 	(void)procOldServiceInit;
@@ -368,12 +374,16 @@ static inline void XS_UnloadHostScript(XS_ServerConfig* objServer, XS_HostConfig
 	
 	s = (TCCState*)objHost->pScriptState;
 	if ( objHost->procServiceUnit ) {
+		XS_LogInfo("unload host: procServiceUnit begin");
 		objHost->procServiceUnit(objServer, objHost);
+		XS_LogInfo("unload host: procServiceUnit done");
 	}
-	
+
 	XS_ResetHostScriptState(objHost);
 	if ( s ) {
+		XS_LogInfo("unload host: XS_DestroyTCC begin");
 		XS_DestroyTCC(s);
+		XS_LogInfo("unload host: XS_DestroyTCC done");
 	}
 }
 

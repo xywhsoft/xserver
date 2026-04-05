@@ -16,9 +16,7 @@
 #include "inline_xpack.h"
 #include "inline_libtcc.h"
 #include "inline_sqlite3.h"
-//#include "inline_xdo.h"
-//#include "inline_md4c.h"
-//#include "inline_xtp.h"
+#include "inline_md4c.h"
 
 
 
@@ -68,6 +66,9 @@ int xsHttpHeader(XS_ResponseObject objResp, const char* sName, const char* sValu
 int xsHttpText(XS_ResponseObject objResp, unsigned iStatus, const char* sReason, const char* sText);
 int xsHttpBody(XS_ResponseObject objResp, const void* pData, size_t iLen, const char* sContentType);
 int xsHttpJson(XS_ResponseObject objResp, unsigned iStatus, const char* sReason, const char* sJson);
+int xsHttpMarkdown(XS_ResponseObject objResp, unsigned iStatus, const char* sReason, const char* sMarkdown);
+char* xsMarkdownToHtml(const char* sMarkdown);
+char* xsMarkdownToHtmlEx(const char* sMarkdown, unsigned iParserFlags, unsigned iRendererFlags);
 int xsWsIsOpen(void* pConn);
 int xsWsSendText(void* pConn, const char* sText, size_t iLen);
 int xsWsSendBinary(void* pConn, const void* pData, size_t iLen);

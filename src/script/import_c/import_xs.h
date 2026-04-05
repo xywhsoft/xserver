@@ -33,6 +33,9 @@ static inline void XS_ImportXSSymbols(TCCState* s)
 	tcc_add_symbol(s, "xsReloadAllServer", xsReloadAllServer);
 	tcc_add_symbol(s, "xsReloadCurrentHost", XS_ScriptReloadCurrentHost);
 	tcc_add_symbol(s, "xsReloadHostByName", XS_ScriptReloadHostByName);
+	tcc_add_symbol(s, "xsRequestReloadCurrentHost", xsRequestReloadCurrentHost);
+	tcc_add_symbol(s, "xsRequestReloadServer", xsRequestReloadServer);
+	tcc_add_symbol(s, "xsRequestReloadAllServer", xsRequestReloadAllServer);
 
 	/* request */
 	tcc_add_symbol(s, "xsReqMethod", XS_ScriptRequestMethod);
@@ -50,6 +53,9 @@ static inline void XS_ImportXSSymbols(TCCState* s)
 	tcc_add_symbol(s, "xsHttpText", XS_ScriptHttpText);
 	tcc_add_symbol(s, "xsHttpBody", XS_ScriptHttpBody);
 	tcc_add_symbol(s, "xsHttpJson", XS_ScriptHttpJson);
+	tcc_add_symbol(s, "xsHttpMarkdown", XS_ScriptHttpMarkdown);
+	tcc_add_symbol(s, "xsMarkdownToHtml", XS_ScriptMarkdownToHtml);
+	tcc_add_symbol(s, "xsMarkdownToHtmlEx", XS_ScriptMarkdownToHtmlEx);
 	tcc_add_symbol(s, "xsRet403", XS_ScriptRet403);
 	tcc_add_symbol(s, "xsRet404", XS_ScriptRet404);
 	tcc_add_symbol(s, "xsRet500", XS_ScriptRet500);
