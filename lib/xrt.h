@@ -75921,6 +75921,10 @@ static xtetemplate xte_private_template_create(xteengine hEngine, int bOwnEngine
 	xrtArrayInit(&hTemplate->arrExpr, sizeof(XTE_ExprNode), XRT_OBJMODE_LOCAL);
 	xrtArrayInit(&hTemplate->arrArg, sizeof(XTE_ArgItem), XRT_OBJMODE_LOCAL);
 	xrtArrayInit(&hTemplate->arrSubTemplate, sizeof(XTE_PrivateSubTemplateItem), XRT_OBJMODE_LOCAL);
+	xrtOwnerActivateShared(&hTemplate->arrNode.Owner);
+	xrtOwnerActivateShared(&hTemplate->arrExpr.Owner);
+	xrtOwnerActivateShared(&hTemplate->arrArg.Owner);
+	xrtOwnerActivateShared(&hTemplate->arrSubTemplate.Owner);
 	return hTemplate;
 }
 static int xte_private_compile_ast_list(xtetemplate hTemplate, XTE_PrivateAstList* pList, XTE_NodeSpan* pSpan);
@@ -76982,6 +76986,8 @@ XXAPI xteengine xteCreateEngine(void)
 	}
 	xrtArrayInit(&hEngine->arrStatement, sizeof(XTE_PrivateStatementReg), XRT_OBJMODE_LOCAL);
 	xrtArrayInit(&hEngine->arrFunction, sizeof(XTE_PrivateFunctionReg), XRT_OBJMODE_LOCAL);
+	xrtOwnerActivateShared(&hEngine->arrStatement.Owner);
+	xrtOwnerActivateShared(&hEngine->arrFunction.Owner);
 	if ( !xteRegisterBuiltinStatements(hEngine) ) {
 		xrtArrayUnit(&hEngine->arrStatement);
 		xrtArrayUnit(&hEngine->arrFunction);

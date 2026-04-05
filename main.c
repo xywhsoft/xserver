@@ -11,6 +11,29 @@
 	#undef XRT_BUILD_CORE
 #endif
 #include "lib/xsmtp.h"
+#include "lib/lz4/lz4.h"
+#include "lib/lz4/lz4hc.h"
+#include "lib/zstd/zstd.h"
+#define Z7_ST
+#include "lib/lzma/Alloc.h"
+#include "lib/lzma/LzmaEnc.h"
+#include "lib/lzma/LzmaDec.h"
+#include "lib/lzma/Lzma2Dec.h"
+#include "lib/lzma/Lzma2Enc.h"
+
+#define XPACK_IMPLEMENTATION
+#include "lib/xpack.h"
+
+#include "lib/lz4/lz4.c"
+#include "lib/lz4/lz4hc.c"
+#include "lib/zstd/zstd.c"
+#include "lib/lzma/Alloc.c"
+#include "lib/lzma/CpuArch.c"
+#include "lib/lzma/LzFind.c"
+#include "lib/lzma/LzmaDec.c"
+#include "lib/lzma/Lzma2Dec.c"
+#include "lib/lzma/LzmaEnc.c"
+#include "lib/lzma/Lzma2Enc.c"
 
 // vNext 支撑层
 #include "src/support/log.h"

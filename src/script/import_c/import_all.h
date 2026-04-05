@@ -3,6 +3,10 @@
 
 #include "import_xrt.h"
 #include "import_xsmtp.h"
+#include "import_lz4.h"
+#include "import_zstd.h"
+#include "import_lzma.h"
+#include "import_xpack.h"
 #include "import_libtcc.h"
 #include "import_sqlite.h"
 
@@ -14,6 +18,10 @@ static inline void XS_ImportThirdPartyAPI(TCCState* s)
 
 	ImportXRT(s);
 	ImportXSMTP(s);
+	ImportLZ4(s);
+	ImportZSTD(s);
+	ImportLZMA(s);
+	ImportXPack(s);
 	ImportLibTCC(s);
 	ImportSQLite(s);
 

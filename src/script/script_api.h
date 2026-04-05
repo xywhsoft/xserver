@@ -7,6 +7,9 @@
 typedef struct XTP_Message XTP_Message;
 typedef XTP_Message* XTP_MessageObject;
 
+static inline void XS_ImportScriptAPI(TCCState* s);
+static inline bool XS_RequestConfigReload(bool bForce);
+
 static inline int XS_XtpSend(
 	void* pStream,
 	const char* sCmd,
@@ -2392,6 +2395,100 @@ static inline void XS_ScriptLog(const char* sText)
 	XS_LogInfo("script: %s", sText ? sText : "");
 }
 
+static inline void ImportAll(TCCState* s)
+{
+	XS_ImportScriptAPI(s);
+}
+
+static inline TCCState* xsCreateTCC(const char* sWorkPath)
+{
+	return XS_CreateTCC(sWorkPath, ImportAll);
+}
+
+static inline void xsDestroyTCC(TCCState* s)
+{
+	XS_DestroyTCC(s);
+}
+
+static inline XS_HostConfig* XS_CompatFindHostByDomain(XS_ServerConfig* objServer, const char* sDomain)
+{
+	uint32 i;
+	size_t iDomainLen;
+
+	if ( objServer == NULL || sDomain == NULL || sDomain[0] == '\0' ) {
+		return NULL;
+	}
+
+	iDomainLen = strlen(sDomain);
+
+	if ( objServer->EnableDefaultHost && objServer->DefaultHost.Host ) {
+		char* sHosts = xrtCopyStr(objServer->DefaultHost.Host, 0);
+		char* sCursor = sHosts ? strtok(sHosts, ";") : NULL;
+
+		while ( sCursor ) {
+			while ( *sCursor == ' ' || *sCursor == '\t' ) {
+				sCursor++;
+			}
+			if ( strncmp(sCursor, sDomain, iDomainLen) == 0 ) {
+				size_t iTokenLen = strlen(sCursor);
+
+				while ( iTokenLen > 0 && (sCursor[iTokenLen - 1] == ' ' || sCursor[iTokenLen - 1] == '\t') ) {
+					iTokenLen--;
+				}
+				if ( iTokenLen == iDomainLen ) {
+					xrtFree(sHosts);
+					return &objServer->DefaultHost;
+				}
+			}
+			sCursor = strtok(NULL, ";");
+		}
+
+		if ( sHosts ) {
+			xrtFree(sHosts);
+		}
+	}
+
+	for ( i = 1; i <= objServer->Hosts->Count; i++ ) {
+		XS_HostConfig* objHost = xrtArrayGet_Inline(objServer->Hosts, i);
+		char* sHosts;
+		char* sCursor;
+
+		if ( objHost == NULL || objHost->Host == NULL || objHost->Host[0] == '\0' ) {
+			continue;
+		}
+
+		sHosts = xrtCopyStr(objHost->Host, 0);
+		if ( sHosts == NULL ) {
+			continue;
+		}
+
+		sCursor = strtok(sHosts, ";");
+		while ( sCursor ) {
+			size_t iTokenLen;
+
+			while ( *sCursor == ' ' || *sCursor == '\t' ) {
+				sCursor++;
+			}
+
+			iTokenLen = strlen(sCursor);
+			while ( iTokenLen > 0 && (sCursor[iTokenLen - 1] == ' ' || sCursor[iTokenLen - 1] == '\t') ) {
+				iTokenLen--;
+			}
+
+			if ( iTokenLen == iDomainLen && strncmp(sCursor, sDomain, iDomainLen) == 0 ) {
+				xrtFree(sHosts);
+				return objHost;
+			}
+
+			sCursor = strtok(NULL, ";");
+		}
+
+		xrtFree(sHosts);
+	}
+
+	return NULL;
+}
+
 static inline int XS_ScriptReloadCurrentHost(ptr objServer, ptr objHost, int bForce)
 {
 	return XS_ReloadServerHostScript((XS_ServerConfig*)objServer, (XS_HostConfig*)objHost, bForce ? TRUE : FALSE);
@@ -2400,6 +2497,78 @@ static inline int XS_ScriptReloadCurrentHost(ptr objServer, ptr objHost, int bFo
 static inline int XS_ScriptReloadHostByName(ptr objServer, const char* sHostName, int bForce)
 {
 	return XS_ReloadServerHostScriptByName((XS_ServerConfig*)objServer, sHostName, bForce ? TRUE : FALSE);
+}
+
+static inline int xsReloadHost(ptr objServer, ptr objHost)
+{
+	if ( objServer == NULL || objHost == NULL ) {
+		return -100;
+	}
+
+	return XS_ReloadServerHostScript((XS_ServerConfig*)objServer, (XS_HostConfig*)objHost, TRUE);
+}
+
+static inline int xsReloadHostByDomain(ptr objServer, const char* sDomain)
+{
+	XS_HostConfig* objHost;
+
+	if ( objServer == NULL || sDomain == NULL || sDomain[0] == '\0' ) {
+		return -100;
+	}
+
+	objHost = XS_CompatFindHostByDomain((XS_ServerConfig*)objServer, sDomain);
+	if ( objHost == NULL ) {
+		return -101;
+	}
+
+	return XS_ReloadServerHostScript((XS_ServerConfig*)objServer, objHost, TRUE);
+}
+
+static inline int xsReloadDefaultHost(ptr objServer)
+{
+	XS_ServerConfig* objServerConfig = (XS_ServerConfig*)objServer;
+
+	if ( objServer == NULL ) {
+		return -100;
+	}
+
+	if ( !objServerConfig->EnableDefaultHost ) {
+		return -102;
+	}
+
+	return XS_ReloadServerHostScript(objServerConfig, &objServerConfig->DefaultHost, TRUE);
+}
+
+static inline int xsReloadServer(ptr objServer)
+{
+	XS_ServerConfig* objServerConfig = (XS_ServerConfig*)objServer;
+	int iSuccessCount = 0;
+	uint32 i;
+
+	if ( objServerConfig == NULL ) {
+		return -100;
+	}
+
+	if ( objServerConfig->EnableDefaultHost ) {
+		if ( xsReloadDefaultHost(objServer) == 0 ) {
+			iSuccessCount++;
+		}
+	}
+
+	for ( i = 1; i <= objServerConfig->Hosts->Count; i++ ) {
+		XS_HostConfig* objHost = xrtArrayGet_Inline(objServerConfig->Hosts, i);
+
+		if ( objHost && xsReloadHost(objServer, objHost) == 0 ) {
+			iSuccessCount++;
+		}
+	}
+
+	return iSuccessCount;
+}
+
+static inline int xsReloadAllServer(int bForce)
+{
+	return XS_RequestConfigReload(bForce ? TRUE : FALSE) ? 0 : -1;
 }
 
 static inline int64 XS_ScriptDataRegister(xvalue objValue)

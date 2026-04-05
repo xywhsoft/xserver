@@ -11,6 +11,9 @@ static inline void XS_ImportXSSymbols(TCCState* s)
 
 	/* runtime */
 	tcc_add_symbol(s, "xsLog", XS_ScriptLog);
+	tcc_add_symbol(s, "xsCreateTCC", xsCreateTCC);
+	tcc_add_symbol(s, "xsDestroyTCC", xsDestroyTCC);
+	tcc_add_symbol(s, "ImportAll", ImportAll);
 	tcc_add_symbol(s, "xsServerName", XS_ScriptServerName);
 	tcc_add_symbol(s, "xsServerClass", XS_ScriptServerClass);
 	tcc_add_symbol(s, "xsServerDebug", XS_ScriptServerDebug);
@@ -23,6 +26,11 @@ static inline void XS_ImportXSSymbols(TCCState* s)
 	tcc_add_symbol(s, "xsHostDevFile", XS_ScriptHostDevFile);
 	tcc_add_symbol(s, "xsHostDebug", XS_ScriptHostDebug);
 	tcc_add_symbol(s, "xsHostDevMode", XS_ScriptHostDevMode);
+	tcc_add_symbol(s, "xsReloadHost", xsReloadHost);
+	tcc_add_symbol(s, "xsReloadHostByDomain", xsReloadHostByDomain);
+	tcc_add_symbol(s, "xsReloadDefaultHost", xsReloadDefaultHost);
+	tcc_add_symbol(s, "xsReloadServer", xsReloadServer);
+	tcc_add_symbol(s, "xsReloadAllServer", xsReloadAllServer);
 	tcc_add_symbol(s, "xsReloadCurrentHost", XS_ScriptReloadCurrentHost);
 	tcc_add_symbol(s, "xsReloadHostByName", XS_ScriptReloadHostByName);
 
