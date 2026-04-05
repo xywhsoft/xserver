@@ -9,6 +9,7 @@
 
 
 #include "inline_xrt.h"
+#include "inline_xsmtp.h"
 #include "inline_lz4.h"
 #include "inline_zstd.h"
 #include "inline_lzma.h"
@@ -261,21 +262,60 @@ xvalue xsXtpClientCallSimpleBodyValue(
 int xsDgramSendTo(void* pSock, const char* sIP, unsigned short iPort, const void* pData, size_t iLen);
 int xsDgramReply(void* pSock, const void* pFromAddr, const void* pData, size_t iLen);
 const char* xsAddrText(const void* pAddr);
-TCCState* xsCreateTCC(const char* sWorkPath);
-void xsDestroyTCC(TCCState* s);
-void ImportAll(TCCState* s);
-int xsReloadHost(XS_ServerObject objServer, XS_HostObject objHost);
-int xsReloadHostByDomain(XS_ServerObject objServer, const char* sDomain);
-int xsReloadDefaultHost(XS_ServerObject objServer);
-int xsReloadServer(XS_ServerObject objServer);
-int xsReloadAllServer(int bForce);
 int xsReloadCurrentHost(XS_ServerObject objServer, XS_HostObject objHost, int bForce);
 int xsReloadHostByName(XS_ServerObject objServer, const char* sHostName, int bForce);
 
 
 
-// xCore
-xrtGlobalData* g_pXCore = NULL;
+// ==================== TCC 状态机管理 ====================
+
+// 动态创建 TCC 状态机（与 xs 主程序一样的配置）
+// sWorkPath: 工作目录（会添加到 include 和 library 路径），可为 NULL
+// 返回创建好的 TCCState，失败返回 NULL
+TCCState* xsCreateTCC(const char* sWorkPath);
+
+// 销毁 TCC 状态机
+void xsDestroyTCC(TCCState* s);
+
+// 将函数映射到 TCC 执行环境
+void ImportAll(TCCState* s);
+
+
+
+// ==================== 热加载函数 ====================
+
+// 热加载指定 Host 的脚本
+// 参数:
+//   objServer - 服务器对象
+//   objHost   - Host 对象
+// 返回: 0=成功, 负数=失败
+//   -1=非 C 语言, -2=文件不存在, -3=TCC 创建失败, -4=编译失败, -5=重定位失败
+//   -100=参数无效
+int xsReloadHost(XS_ServerObject objServer, XS_HostObject objHost);
+
+// 通过域名热加载 Host 的脚本
+// 参数:
+//   objServer - 服务器对象
+//   sDomain   - 域名（Host 配置中的 host 字段）
+// 返回: 0=成功, 负数=失败
+//   -101=域名未找到
+int xsReloadHostByDomain(XS_ServerObject objServer, const char* sDomain);
+
+// 热加载 DefaultHost 的脚本
+// 参数:
+//   objServer - 服务器对象
+// 返回: 0=成功, 负数=失败
+//   -102=DefaultHost 未启用
+int xsReloadDefaultHost(XS_ServerObject objServer);
+
+// 热加载整个 Server 的所有 Host
+// 参数:
+//   objServer - 服务器对象
+// 返回: 成功加载的 Host 数量，负数=失败
+int xsReloadServer(XS_ServerObject objServer);
+int xsReloadAllServer(int bForce);
+
+
 
 // 全局事件循环
 void* g_pXsLoop = NULL;
@@ -291,7 +331,7 @@ static inline void XS_SetGlobalDate(int idx, void* ptr)
 	} else if ( idx == 2 ) {
 		g_arrXsServerList = (xarray)ptr;
 	} else if ( idx == 3 ) {
-		g_pXCore = (xrtGlobalData*)ptr;
+		xCore = (xrtGlobalData*)ptr;
 	}
 }
 
