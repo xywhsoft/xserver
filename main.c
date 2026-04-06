@@ -11,6 +11,7 @@
 	#undef XRT_BUILD_CORE
 #endif
 #include "lib/xsmtp.h"
+#define LZ4_DISABLE_DEPRECATE_WARNINGS
 #include "lib/lz4/lz4.h"
 #include "lib/lz4/lz4hc.h"
 #include "lib/zstd/zstd.h"
@@ -28,6 +29,12 @@
 
 #include "lib/lz4/lz4.c"
 #include "lib/lz4/lz4hc.c"
+#ifdef DEBUGLOG
+	#undef DEBUGLOG
+#endif
+#ifdef MINMATCH
+	#undef MINMATCH
+#endif
 #include "lib/zstd/zstd.c"
 #include "lib/lzma/Alloc.c"
 #include "lib/lzma/CpuArch.c"
