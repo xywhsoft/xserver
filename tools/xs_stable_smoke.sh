@@ -126,6 +126,76 @@ proc_wait_not_ready() {
 	return 1
 }
 
+proc_wait_pid_exit() {
+	i_pid="$1"
+	i=0
+
+	if [ -z "$i_pid" ]; then
+		return 0
+	fi
+
+	while [ "$i" -lt $((WAIT_SECS * 5)) ]; do
+		if ! kill -0 "$i_pid" >/dev/null 2>&1; then
+			return 0
+		fi
+		i=$((i + 1))
+		sleep 0.2
+	done
+
+	return 1
+}
+
+proc_is_release_server_pid() {
+	s_pid="$1"
+	s_name="$2"
+	s_args=""
+	s_cwd=""
+
+	if [ -z "$s_pid" ] || [ -z "$s_name" ]; then
+		return 1
+	fi
+
+	s_args=$(ps -p "$s_pid" -o args= 2>/dev/null | sed 's/^[[:space:]]*//')
+	if [ -z "$s_args" ]; then
+		return 1
+	fi
+
+	if printf "%s" "$s_args" | grep -F "$RELEASE_DIR/$s_name" >/dev/null 2>&1; then
+		return 0
+	fi
+
+	if [ -d "/proc/$s_pid" ]; then
+		s_cwd=$(readlink "/proc/$s_pid/cwd" 2>/dev/null || true)
+	fi
+	if [ "$s_cwd" != "$RELEASE_DIR" ]; then
+		return 1
+	fi
+
+	case "$s_args" in
+		"./$s_name"| "./$s_name "*) return 0 ;;
+		"$s_name"| "$s_name "*) return 0 ;;
+		"$RELEASE_DIR/$s_name"| "$RELEASE_DIR/$s_name "*) return 0 ;;
+	esac
+
+	return 1
+}
+
+proc_kill_release_servers() {
+	for s_name in "$XS_BIN" "$XSDBG_BIN"; do
+		for s_pid in $(pgrep -x "$s_name" 2>/dev/null || true); do
+			if ! proc_is_release_server_pid "$s_pid" "$s_name"; then
+				continue
+			fi
+
+			kill "$s_pid" >/dev/null 2>&1 || true
+			if ! proc_wait_pid_exit "$s_pid" >/dev/null 2>&1; then
+				kill -KILL "$s_pid" >/dev/null 2>&1 || true
+				proc_wait_pid_exit "$s_pid" >/dev/null 2>&1 || true
+			fi
+		done
+	done
+}
+
 proc_wait_reload_idle() {
 	i=0
 	while [ "$i" -lt $((WAIT_SECS * 5)) ]; do
@@ -2275,6 +2345,8 @@ proc_cleanup_servers() {
 	if [ -n "$CLIENT_EXT" ]; then
 		taskkill //F //T //IM "$XS_BIN" >/dev/null 2>&1 || true
 		taskkill //F //T //IM "$XSDBG_BIN" >/dev/null 2>&1 || true
+	else
+		proc_kill_release_servers
 	fi
 
 	proc_wait_not_ready >/dev/null 2>&1 || sleep 1
@@ -2308,6 +2380,14 @@ proc_stop_server() {
 		taskkill //F //T //IM "$XSDBG_BIN" >/dev/null 2>&1 || true
 	elif [ -n "$i_pid" ]; then
 		kill "$i_pid" >/dev/null 2>&1 || true
+		if ! proc_wait_pid_exit "$i_pid" >/dev/null 2>&1; then
+			kill -KILL "$i_pid" >/dev/null 2>&1 || true
+			proc_wait_pid_exit "$i_pid" >/dev/null 2>&1 || true
+		fi
+	fi
+
+	if [ -z "$CLIENT_EXT" ]; then
+		proc_kill_release_servers
 	fi
 
 	proc_wait_not_ready >/dev/null 2>&1 || sleep 1
@@ -5776,7 +5856,7 @@ proc_check_process_cleanup() {
 		if [ -n "$s_pids" ]; then
 			for s_pid in $s_pids; do
 				s_args=$(ps -p "$s_pid" -o args= 2>/dev/null | sed 's/^[[:space:]]*//')
-				if ! printf "%s" "$s_args" | grep -F "$RELEASE_DIR/$s_name" >/dev/null 2>&1; then
+				if ! proc_is_release_server_pid "$s_pid" "$s_name"; then
 					continue
 				fi
 				i_found=1

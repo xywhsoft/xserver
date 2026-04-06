@@ -86,6 +86,7 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <ctype.h>
 #include <wctype.h>
 #include <math.h>
@@ -174,6 +175,12 @@
 	#endif
 #else
 	#include <unistd.h>
+	#ifndef _stricmp
+		#define _stricmp strcasecmp
+	#endif
+	#ifndef _strnicmp
+		#define _strnicmp strncasecmp
+	#endif
 #endif
 // 跨平台头文件
 #if defined(_WIN32) || defined(_WIN64)
@@ -587,6 +594,9 @@
 	typedef uintptr_t uintptr;
 	
 	typedef int64 xtime;
+	#ifndef XPK_XTIME_DEFINED
+		#define XPK_XTIME_DEFINED
+	#endif
 	
 	/*
 	#ifndef bool
@@ -29973,13 +29983,11 @@ static xnet_result xrtNetPortCancelTimer(xnetport* pPort, uint64 iTimerId)
 		__xnetPortUringArmTimer,
 		__xnetPortUringCancelTimer
 	};
-	#if defined(XRT_INTERNAL_TEST_ENV)
 	// 网络端口 io_uring ops相关处理
 	static const xnetportops* xrtNetPortUringOps(void)
 	{
 		return &__g_xnetPortUringOps;
 	}
-	#endif
 #else
 	// 内部函数：判断是否存在端口 io_uring 原生 ring
 	static bool UNUSED_ATTR __xnetPortUringHasNativeRing(const xnetport* pPort)
@@ -29987,13 +29995,11 @@ static xnet_result xrtNetPortCancelTimer(xnetport* pPort, uint64 iTimerId)
 		(void)pPort;
 		return false;
 	}
-	#if defined(XRT_INTERNAL_TEST_ENV)
 	// 网络端口 io_uring ops相关处理
 	static const xnetportops* xrtNetPortUringOps(void)
 	{
 		return NULL;
 	}
-	#endif
 #endif
 #endif
 #ifndef XRT_NO_XCODEC
