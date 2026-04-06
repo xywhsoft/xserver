@@ -29,12 +29,15 @@
 
 
 
-#define _GNU_SOURCE
+#ifndef _GNU_SOURCE
+	#define _GNU_SOURCE
+#endif
 #include <stdio.h>
 #include <stdint.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <ctype.h>
 #include <wctype.h>
 #include <math.h>
@@ -129,6 +132,12 @@
 	#endif
 #else
 	#include <unistd.h>
+	#ifndef _stricmp
+		#define _stricmp strcasecmp
+	#endif
+	#ifndef _strnicmp
+		#define _strnicmp strncasecmp
+	#endif
 #endif
 
 
@@ -582,6 +591,9 @@
 	typedef uintptr_t uintptr;
 	
 	typedef int64 xtime;
+	#ifndef XPK_XTIME_DEFINED
+		#define XPK_XTIME_DEFINED
+	#endif
 	
 	/*
 	#ifndef bool
