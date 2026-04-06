@@ -1616,6 +1616,8 @@ static inline void procXpkResetLookup(xpkObject objXpk)
 {
 	xrtListUnit(&objXpk->lstEntry);
 	xrtDictUnit(&objXpk->tblEntry);
+	memset(&objXpk->lstEntry, 0, sizeof(objXpk->lstEntry));
+	memset(&objXpk->tblEntry, 0, sizeof(objXpk->tblEntry));
 
 	xrtListInit(&objXpk->lstEntry, sizeof(xpkEntry), XRT_OBJMODE_LOCAL);
 	xrtDictInit(&objXpk->tblEntry, sizeof(xpkEntry), XRT_OBJMODE_LOCAL);
@@ -1629,9 +1631,6 @@ static inline int procXpkRebuildLookup(xpkObject objXpk)
 	char* sKey;
 	xpkEntry* pEntry;
 	xpkEntry* pMap;
-	xlist_struct lstNew;
-	xdict_struct tblNew;
-
 	if ( objXpk == NULL ) {
 		return XPK_ERR_PARAM;
 	}
@@ -1639,13 +1638,11 @@ static inline int procXpkRebuildLookup(xpkObject objXpk)
 		return xpkLastError(objXpk);
 	}
 
-	xrtListInit(&lstNew, sizeof(xpkEntry), XRT_OBJMODE_LOCAL);
-	xrtDictInit(&tblNew, sizeof(xpkEntry), XRT_OBJMODE_LOCAL);
+	procXpkResetLookup(objXpk);
 	for ( iPos = 1; iPos <= objXpk->iEntryCount; iPos++ ) {
 		pEntry = (xpkEntry*)xrtArrayGet(&objXpk->arrEntry, iPos);
 		if ( pEntry == NULL ) {
-			xrtListUnit(&lstNew);
-			xrtDictUnit(&tblNew);
+			procXpkResetLookup(objXpk);
 			return procXpkSetError(objXpk, XPK_ERR_STATE, sXpkErrorBadFormat);
 		}
 
@@ -1654,49 +1651,39 @@ static inline int procXpkRebuildLookup(xpkObject objXpk)
 			continue;
 		}
 		if ( objXpk->objHead.packType == XPK_PACK_INDEX ) {
-			pMap = (xpkEntry*)xrtListSet(&lstNew, pEntry->iFileIndex, &bNew);
+			pMap = (xpkEntry*)xrtListSet(&objXpk->lstEntry, pEntry->iFileIndex, &bNew);
 			if ( (pMap == NULL) || !bNew ) {
-				xrtListUnit(&lstNew);
-				xrtDictUnit(&tblNew);
+				procXpkResetLookup(objXpk);
 				return procXpkSetError(objXpk, XPK_ERR_FORMAT, sXpkErrorBadFormat);
 			}
 			*pMap = *pEntry;
 		} else if ( (objXpk->objHead.packType == XPK_PACK_LINUX) || (objXpk->objHead.packType == XPK_PACK_WIN32) ) {
 			if ( pEntry->sPath == NULL || pEntry->sPath[0] == '\0' ) {
-				xrtListUnit(&lstNew);
-				xrtDictUnit(&tblNew);
+				procXpkResetLookup(objXpk);
 				return procXpkSetError(objXpk, XPK_ERR_FORMAT, sXpkErrorBadFormat);
 			}
 			if ( strlen(pEntry->sPath) >= XPK_PATH_BYTES ) {
-				xrtListUnit(&lstNew);
-				xrtDictUnit(&tblNew);
+				procXpkResetLookup(objXpk);
 				return procXpkSetError(objXpk, XPK_ERR_FORMAT, sXpkErrorBadFormat);
 			}
 
 			sKey = procXpkDupPathKey(objXpk, pEntry->sPath);
 			if ( sKey == NULL ) {
-				xrtListUnit(&lstNew);
-				xrtDictUnit(&tblNew);
+				procXpkResetLookup(objXpk);
 				return procXpkSetError(objXpk, XPK_ERR_MEMORY, sXpkErrorOutOfMemory);
 			}
 
-			pMap = (xpkEntry*)xrtDictSet(&tblNew, (ptr)sKey, (uint32_t)strlen(sKey), &bNew);
+			pMap = (xpkEntry*)xrtDictSet(&objXpk->tblEntry, (ptr)sKey, (uint32_t)strlen(sKey), &bNew);
 			if ( sKey != NULL ) {
 				xpkFreeInternal(sKey);
 			}
 			if ( (pMap == NULL) || !bNew ) {
-				xrtListUnit(&lstNew);
-				xrtDictUnit(&tblNew);
+				procXpkResetLookup(objXpk);
 				return procXpkSetError(objXpk, XPK_ERR_FORMAT, sXpkErrorBadFormat);
 			}
 			*pMap = *pEntry;
 		}
 	}
-
-	xrtListUnit(&objXpk->lstEntry);
-	xrtDictUnit(&objXpk->tblEntry);
-	objXpk->lstEntry = lstNew;
-	objXpk->tblEntry = tblNew;
 	return XPK_OK;
 }
 
@@ -1708,6 +1695,9 @@ static inline void procXpkResetEntries(xpkObject objXpk)
 	xrtArrayUnit(&objXpk->arrEntry);
 	xrtListUnit(&objXpk->lstEntry);
 	xrtDictUnit(&objXpk->tblEntry);
+	memset(&objXpk->arrEntry, 0, sizeof(objXpk->arrEntry));
+	memset(&objXpk->lstEntry, 0, sizeof(objXpk->lstEntry));
+	memset(&objXpk->tblEntry, 0, sizeof(objXpk->tblEntry));
 
 	xrtArrayInit(&objXpk->arrEntry, sizeof(xpkEntry), XRT_OBJMODE_LOCAL);
 	xrtListInit(&objXpk->lstEntry, sizeof(xpkEntry), XRT_OBJMODE_LOCAL);
@@ -1928,6 +1918,9 @@ static inline void procXpkUnitObject(xpkObject objXpk)
 	xrtArrayUnit(&objXpk->arrEntry);
 	xrtListUnit(&objXpk->lstEntry);
 	xrtDictUnit(&objXpk->tblEntry);
+	memset(&objXpk->arrEntry, 0, sizeof(objXpk->arrEntry));
+	memset(&objXpk->lstEntry, 0, sizeof(objXpk->lstEntry));
+	memset(&objXpk->tblEntry, 0, sizeof(objXpk->tblEntry));
 }
 
 
