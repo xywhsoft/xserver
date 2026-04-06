@@ -21,7 +21,9 @@
 #ifndef _TCC_H
 #define _TCC_H
 
-#define _GNU_SOURCE
+#ifndef _GNU_SOURCE
+	#define _GNU_SOURCE
+#endif
 #define _DARWIN_C_SOURCE
 #include "config.h"
 

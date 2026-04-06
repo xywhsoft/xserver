@@ -80,7 +80,9 @@
 	SOFTWARE.
 	
 */
-#define _GNU_SOURCE
+#ifndef _GNU_SOURCE
+	#define _GNU_SOURCE
+#endif
 #include <stdio.h>
 #include <stdint.h>
 #include <stdarg.h>
@@ -7554,7 +7556,9 @@
 // ========================================
 
 
-#define XRT_BUILD_CORE
+#ifndef XRT_BUILD_CORE
+	#define XRT_BUILD_CORE
+#endif
 #if defined(XRT_MEM_DEBUG)
 
 // ========================================
