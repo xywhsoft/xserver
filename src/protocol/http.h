@@ -12,6 +12,7 @@ typedef struct {
 
 typedef struct {
 	xhttpdserver* pServer;
+	xhttpdserver* pServerTLS;
 	XS_ServerConfig* pOwner;
 	xthread hIdleThread;
 	volatile bool bStopThread;
@@ -626,11 +627,71 @@ static inline bool XS_BuildBindAddr(const XS_ServerConfig* objServer, bool bTLS,
 	return XS_ParseBindAddr(sLegacyAddr, pAddr);
 }
 
-static inline bool XS_HttpInitServer(xnetengine* pEngine, XS_ServerConfig* objServer)
+static inline void XS_HttpInitEvents(xhttpdevents* pEvents)
+{
+	memset(pEvents, 0, sizeof(xhttpdevents));
+	pEvents->OnOpen = XS_HttpOnOpen;
+	pEvents->OnRequest = XS_HttpOnRequest;
+	pEvents->OnClose = XS_HttpOnClose;
+	pEvents->OnError = XS_HttpOnError;
+}
+
+static inline bool XS_HttpBuildRuntimeConfigEx(XS_ServerConfig* objServer, bool bTLS, xhttpdconfig* pCfg)
+{
+	if ( objServer == NULL || pCfg == NULL ) {
+		return FALSE;
+	}
+
+	xrtHttpdConfigInit(pCfg);
+	if ( bTLS ) {
+		if ( !objServer->EnableTLS ) {
+			return FALSE;
+		}
+		if ( objServer->BindPortTLS == 0 ) {
+			XS_ReportError("http tls init failed: missing port_tls server=%s", objServer->Name ? objServer->Name : "(null)");
+			return FALSE;
+		}
+		if ( objServer->TlsConfig.sCertFile == NULL || objServer->TlsConfig.sKeyFile == NULL ) {
+			XS_ReportError("http tls init failed: missing tls cert/key server=%s", objServer->Name ? objServer->Name : "(null)");
+			return FALSE;
+		}
+	}
+	if ( !XS_BuildBindAddr(objServer, bTLS, &pCfg->tBindAddr) ) {
+		return FALSE;
+	}
+	pCfg->iBacklog = objServer->Backlog;
+	pCfg->iRecvLimit = objServer->RecvLimit;
+	if ( bTLS ) {
+		pCfg->pTlsConfig = &objServer->TlsConfig;
+	}
+
+	return TRUE;
+}
+
+static inline xhttpdserver* XS_HttpCreateListener(xnetengine* pEngine, XS_ServerConfig* objServer, bool bTLS)
 {
 	xhttpdconfig tConfig;
 	xhttpdevents tEvents;
+
+	if ( pEngine == NULL || objServer == NULL ) {
+		return NULL;
+	}
+	if ( !XS_HttpBuildRuntimeConfigEx(objServer, bTLS, &tConfig) ) {
+		XS_ReportError(
+			bTLS ? "http tls init failed: invalid addr: %s" : "http init failed: invalid addr: %s",
+			bTLS ? (objServer->AddrTLS ? objServer->AddrTLS : "(null)") : (objServer->Addr ? objServer->Addr : "(null)")
+		);
+		return NULL;
+	}
+
+	XS_HttpInitEvents(&tEvents);
+	return xrtHttpdCreate(pEngine, &tConfig, &tEvents, objServer);
+}
+
+static inline bool XS_HttpInitServer(xnetengine* pEngine, XS_ServerConfig* objServer)
+{
 	xhttpdserver* pServer;
+	xhttpdserver* pServerTLS;
 	XS_HttpHandle* objHandle;
 	
 	if ( objServer == NULL ) {
@@ -659,33 +720,33 @@ static inline bool XS_HttpInitServer(xnetengine* pEngine, XS_ServerConfig* objSe
 		);
 	}
 	
-	xrtHttpdConfigInit(&tConfig);
-	if ( !XS_BuildBindAddr(objServer, FALSE, &tConfig.tBindAddr) ) {
-		XS_ReportError("http init failed: invalid addr: %s", objServer->Addr ? objServer->Addr : "(null)");
-		return FALSE;
-	}
-	tConfig.iBacklog = objServer->Backlog;
-	tConfig.iRecvLimit = objServer->RecvLimit;
-	
-	memset(&tEvents, 0, sizeof(tEvents));
-	tEvents.OnOpen = XS_HttpOnOpen;
-	tEvents.OnRequest = XS_HttpOnRequest;
-	tEvents.OnClose = XS_HttpOnClose;
-	tEvents.OnError = XS_HttpOnError;
-	
-	pServer = xrtHttpdCreate(pEngine, &tConfig, &tEvents, objServer);
+	pServer = XS_HttpCreateListener(pEngine, objServer, FALSE);
 	if ( pServer == NULL ) {
 		XS_ReportError("http init failed: xrtHttpdCreate returned null");
 		return FALSE;
 	}
+
+	pServerTLS = NULL;
+	if ( objServer->EnableTLS ) {
+		pServerTLS = XS_HttpCreateListener(pEngine, objServer, TRUE);
+		if ( pServerTLS == NULL ) {
+			xrtHttpdDestroy(pServer);
+			XS_ReportError("http tls init failed: xrtHttpdCreate returned null");
+			return FALSE;
+		}
+	}
 	
 	objHandle = (XS_HttpHandle*)xrtCalloc(1, sizeof(XS_HttpHandle));
 	if ( objHandle == NULL ) {
+		if ( pServerTLS ) {
+			xrtHttpdDestroy(pServerTLS);
+		}
 		xrtHttpdDestroy(pServer);
 		XS_ReportError("http init failed: handle alloc failed");
 		return FALSE;
 	}
 	objHandle->pServer = pServer;
+	objHandle->pServerTLS = pServerTLS;
 	objHandle->pOwner = objServer;
 	objHandle->pConnLock = xrtMutexCreate();
 	objHandle->arrConn = xrtArrayCreate(sizeof(XS_HttpConnContext*), XRT_OBJMODE_SHARED);
@@ -695,6 +756,9 @@ static inline bool XS_HttpInitServer(xnetengine* pEngine, XS_ServerConfig* objSe
 		}
 		if ( objHandle->pConnLock ) {
 			xrtMutexDestroy(objHandle->pConnLock);
+		}
+		if ( pServerTLS ) {
+			xrtHttpdDestroy(pServerTLS);
 		}
 		xrtHttpdDestroy(pServer);
 		xrtFree(objHandle);
@@ -711,12 +775,14 @@ static inline bool XS_HttpStartServer(XS_ServerConfig* objServer)
 {
 	XS_HttpHandle* objHandle;
 	xhttpdserver* pServer;
+	xhttpdserver* pServerTLS;
 	
 	if ( objServer == NULL ) {
 		return FALSE;
 	}
 	objHandle = (XS_HttpHandle*)objServer->pHandle;
 	pServer = objHandle ? objHandle->pServer : NULL;
+	pServerTLS = objHandle ? objHandle->pServerTLS : NULL;
 	if ( pServer == NULL ) {
 		XS_ReportError("http start failed: server handle is null");
 		return FALSE;
@@ -725,11 +791,21 @@ static inline bool XS_HttpStartServer(XS_ServerConfig* objServer)
 		XS_ReportError("http start failed: xrtHttpdStart returned error");
 		return FALSE;
 	}
+	if ( pServerTLS ) {
+		if ( xrtHttpdStart(pServerTLS) != XRT_NET_OK ) {
+			xrtHttpdStop(pServer);
+			XS_ReportError("http tls start failed: xrtHttpdStart returned error");
+			return FALSE;
+		}
+	}
 	if ( objHandle && objServer->IdleTimeout > 0 ) {
 		objHandle->bStopping = FALSE;
 		objHandle->bStopThread = FALSE;
 		objHandle->hIdleThread = xrtThreadCreate(XS_HttpIdleThread, objHandle, 0);
 		if ( objHandle->hIdleThread == NULL ) {
+			if ( pServerTLS ) {
+				xrtHttpdStop(pServerTLS);
+			}
 			xrtHttpdStop(pServer);
 			XS_ReportError("http start failed: idle thread create failed");
 			return FALSE;
@@ -744,6 +820,14 @@ static inline bool XS_HttpStartServer(XS_ServerConfig* objServer)
 		objServer->Addr ? objServer->Addr : "(null)",
 		(unsigned)xrtHttpdBoundPort(pServer)
 	);
+	if ( pServerTLS ) {
+		XS_LogInfo(
+			"http tls start: server=%s addr=%s bound_port=%u",
+			objServer->Name ? objServer->Name : "(null)",
+			objServer->AddrTLS ? objServer->AddrTLS : "(null)",
+			(unsigned)xrtHttpdBoundPort(pServerTLS)
+		);
+	}
 	
 	return TRUE;
 }
@@ -752,6 +836,7 @@ static inline void XS_HttpStopServer(XS_ServerConfig* objServer)
 {
 	XS_HttpHandle* objHandle;
 	xhttpdserver* pServer;
+	xhttpdserver* pServerTLS;
 	int64 iClosedConn;
 	int64 iRemainConn;
 	
@@ -761,6 +846,7 @@ static inline void XS_HttpStopServer(XS_ServerConfig* objServer)
 	
 	objHandle = (XS_HttpHandle*)objServer->pHandle;
 	pServer = objHandle ? objHandle->pServer : NULL;
+	pServerTLS = objHandle ? objHandle->pServerTLS : NULL;
 	if ( objHandle ) {
 		objHandle->bStopping = TRUE;
 		objHandle->bStopThread = TRUE;
@@ -774,6 +860,11 @@ static inline void XS_HttpStopServer(XS_ServerConfig* objServer)
 		xrtNetListenerStop(pServer->pListener);
 		xrtNetListenerDestroy(pServer->pListener);
 		pServer->pListener = NULL;
+	}
+	if ( pServerTLS && pServerTLS->pListener ) {
+		xrtNetListenerStop(pServerTLS->pListener);
+		xrtNetListenerDestroy(pServerTLS->pListener);
+		pServerTLS->pListener = NULL;
 	}
 	iClosedConn = XS_HttpCloseTrackedConns(objHandle);
 	iRemainConn = XS_HttpWaitTrackedConnDrain(objHandle, 500u);
@@ -798,6 +889,9 @@ static inline void XS_HttpStopServer(XS_ServerConfig* objServer)
 	if ( pServer ) {
 		xrtHttpdDestroy(pServer);
 	}
+	if ( pServerTLS ) {
+		xrtHttpdDestroy(pServerTLS);
+	}
 	if ( objHandle ) {
 		if ( objHandle->arrConn ) {
 			xrtArrayDestroy(objHandle->arrConn);
@@ -814,6 +908,13 @@ static inline void XS_HttpStopServer(XS_ServerConfig* objServer)
 		objServer->Name ? objServer->Name : "(null)",
 		objServer->Addr ? objServer->Addr : "(null)"
 	);
+	if ( objServer->EnableTLS ) {
+		XS_LogInfo(
+			"http tls stop: server=%s addr=%s",
+			objServer->Name ? objServer->Name : "(null)",
+			objServer->AddrTLS ? objServer->AddrTLS : "(null)"
+		);
+	}
 }
 
 #endif

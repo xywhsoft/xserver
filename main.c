@@ -147,6 +147,36 @@ static bool XS_TextEquals(const char* sLeft, const char* sRight)
 	return strcmp(sLeft, sRight) == 0;
 }
 
+static bool XS_TlsBytesEquals(const void* pLeft, size_t iLeftLen, const void* pRight, size_t iRightLen)
+{
+	if ( pLeft == pRight ) {
+		return TRUE;
+	}
+	if ( pLeft == NULL || pRight == NULL ) {
+		return FALSE;
+	}
+	if ( iLeftLen != iRightLen ) {
+		return FALSE;
+	}
+
+	return memcmp(pLeft, pRight, iLeftLen) == 0;
+}
+
+static bool XS_TlsConfigHasIdentity(const xtlsconfig* pCfg)
+{
+	if ( pCfg == NULL ) {
+		return FALSE;
+	}
+	if ( pCfg->pCertData && pCfg->iCertDataLen > 0 && pCfg->pKeyData && pCfg->iKeyDataLen > 0 ) {
+		return TRUE;
+	}
+	if ( pCfg->sCertFile && pCfg->sCertFile[0] && pCfg->sKeyFile && pCfg->sKeyFile[0] ) {
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
 static bool XS_TlsConfigEquals(const xtlsconfig* pLeft, const xtlsconfig* pRight)
 {
 	if ( pLeft == pRight ) {
@@ -162,6 +192,15 @@ static bool XS_TlsConfigEquals(const xtlsconfig* pLeft, const xtlsconfig* pRight
 		return FALSE;
 	}
 	if ( !XS_TextEquals(pLeft->sCaFile, pRight->sCaFile) ) {
+		return FALSE;
+	}
+	if ( !XS_TlsBytesEquals(pLeft->pCertData, pLeft->iCertDataLen, pRight->pCertData, pRight->iCertDataLen) ) {
+		return FALSE;
+	}
+	if ( !XS_TlsBytesEquals(pLeft->pKeyData, pLeft->iKeyDataLen, pRight->pKeyData, pRight->iKeyDataLen) ) {
+		return FALSE;
+	}
+	if ( !XS_TlsBytesEquals(pLeft->pCaData, pLeft->iCaDataLen, pRight->pCaData, pRight->iCaDataLen) ) {
 		return FALSE;
 	}
 	if ( !XS_TextEquals(pLeft->sHostName, pRight->sHostName) ) {
@@ -540,19 +579,9 @@ static bool XS_NetAddrEquals(const xnetaddr* pLeft, const xnetaddr* pRight)
 	return memcmp(pLeft, pRight, sizeof(xnetaddr)) == 0;
 }
 
-static bool XS_HttpBuildRuntimeConfig(XS_ServerConfig* objServer, xhttpdconfig* pCfg)
+static bool XS_HttpBuildRuntimeConfig(XS_ServerConfig* objServer, bool bTLS, xhttpdconfig* pCfg)
 {
-	if ( objServer == NULL || pCfg == NULL ) {
-		return FALSE;
-	}
-
-	xrtHttpdConfigInit(pCfg);
-	if ( !XS_BuildBindAddr(objServer, FALSE, &pCfg->tBindAddr) ) {
-		return FALSE;
-	}
-	pCfg->iBacklog = objServer->Backlog;
-	pCfg->iRecvLimit = objServer->RecvLimit;
-	return TRUE;
+	return XS_HttpBuildRuntimeConfigEx(objServer, bTLS, pCfg);
 }
 
 static bool XS_HttpRuntimeConfigEquals(const xhttpdconfig* pLeft, const xhttpdconfig* pRight)
@@ -575,15 +604,356 @@ static bool XS_HttpRuntimeConfigEquals(const xhttpdconfig* pLeft, const xhttpdco
 	if ( pLeft->iRecvLimit != pRight->iRecvLimit ) {
 		return FALSE;
 	}
+	if ( !XS_TlsConfigEquals(pLeft->pTlsConfig, pRight->pTlsConfig) ) {
+		return FALSE;
+	}
 
 	return TRUE;
+}
+
+static void XS_TlsConfigFreeCachedData(xtlsconfig* pCfg)
+{
+	if ( pCfg == NULL ) {
+		return;
+	}
+
+	__xrt_tls_config_lock(pCfg);
+	if ( pCfg->pCertData ) {
+		xrtFree((void*)pCfg->pCertData);
+		pCfg->pCertData = NULL;
+		pCfg->iCertDataLen = 0;
+	}
+	if ( pCfg->pKeyData ) {
+		xrtFree((void*)pCfg->pKeyData);
+		pCfg->pKeyData = NULL;
+		pCfg->iKeyDataLen = 0;
+	}
+	if ( pCfg->pCaData ) {
+		xrtFree((void*)pCfg->pCaData);
+		pCfg->pCaData = NULL;
+		pCfg->iCaDataLen = 0;
+	}
+	__xrt_tls_config_unlock(pCfg);
+}
+
+static bool XS_TlsConfigCloneBytes(const void* pSrc, size_t iSrcLen, const void** ppDst, size_t* piDstLen)
+{
+	void* pCopy;
+
+	if ( ppDst == NULL || piDstLen == NULL ) {
+		return FALSE;
+	}
+	*ppDst = NULL;
+	*piDstLen = 0;
+	if ( pSrc == NULL || iSrcLen == 0 ) {
+		return TRUE;
+	}
+
+	pCopy = xrtMalloc(iSrcLen);
+	if ( pCopy == NULL ) {
+		return FALSE;
+	}
+	memcpy(pCopy, pSrc, iSrcLen);
+	*ppDst = pCopy;
+	*piDstLen = iSrcLen;
+	return TRUE;
+}
+
+static bool XS_TlsConfigReadFileData(const char* sPath, const void** ppData, size_t* piLen, const char* sScope, const char* sLabel)
+{
+	void* pData;
+	size_t iLen = 0;
+
+	if ( ppData == NULL || piLen == NULL ) {
+		return FALSE;
+	}
+	*ppData = NULL;
+	*piLen = 0;
+	if ( sPath == NULL || sPath[0] == '\0' ) {
+		return TRUE;
+	}
+
+	pData = xrtFileGetAll((str)sPath, &iLen);
+	if ( pData == NULL || pData == xCore.sNull ) {
+		XS_LogError("tls cache load failed: scope=%s type=%s path=%s", sScope ? sScope : "(null)", sLabel ? sLabel : "(null)", sPath);
+		return FALSE;
+	}
+
+	*ppData = pData;
+	*piLen = iLen;
+	return TRUE;
+}
+
+static bool XS_TlsConfigPreloadCachedData(xtlsconfig* pCfg, const char* sScope)
+{
+	const void* pCertData = NULL;
+	size_t iCertDataLen = 0;
+	const void* pKeyData = NULL;
+	size_t iKeyDataLen = 0;
+	const void* pCaData = NULL;
+	size_t iCaDataLen = 0;
+	const void* pOldCertData;
+	const void* pOldKeyData;
+	const void* pOldCaData;
+
+	if ( pCfg == NULL ) {
+		return TRUE;
+	}
+	if ( !XS_TlsConfigReadFileData(pCfg->sCertFile, &pCertData, &iCertDataLen, sScope, "cert") ) {
+		return FALSE;
+	}
+	if ( !XS_TlsConfigReadFileData(pCfg->sKeyFile, &pKeyData, &iKeyDataLen, sScope, "key") ) {
+		if ( pCertData ) xrtFree((void*)pCertData);
+		return FALSE;
+	}
+	if ( !XS_TlsConfigReadFileData(pCfg->sCaFile, &pCaData, &iCaDataLen, sScope, "ca") ) {
+		if ( pCertData ) xrtFree((void*)pCertData);
+		if ( pKeyData ) xrtFree((void*)pKeyData);
+		return FALSE;
+	}
+
+	__xrt_tls_config_lock(pCfg);
+	pOldCertData = pCfg->pCertData;
+	pOldKeyData = pCfg->pKeyData;
+	pOldCaData = pCfg->pCaData;
+	pCfg->pCertData = pCertData;
+	pCfg->iCertDataLen = iCertDataLen;
+	pCfg->pKeyData = pKeyData;
+	pCfg->iKeyDataLen = iKeyDataLen;
+	pCfg->pCaData = pCaData;
+	pCfg->iCaDataLen = iCaDataLen;
+	__xrt_tls_config_unlock(pCfg);
+
+	if ( pOldCertData ) xrtFree((void*)pOldCertData);
+	if ( pOldKeyData ) xrtFree((void*)pOldKeyData);
+	if ( pOldCaData ) xrtFree((void*)pOldCaData);
+	return TRUE;
+}
+
+static bool XS_TlsHostEqualsToken(const char* sHostValue, const char* sToken)
+{
+	size_t iHostLen;
+	size_t iTokenLen;
+	size_t i;
+
+	if ( sHostValue == NULL || sToken == NULL ) {
+		return FALSE;
+	}
+	iHostLen = strlen(sHostValue);
+	iTokenLen = strlen(sToken);
+	if ( iHostLen == 0 || iTokenLen == 0 || iHostLen != iTokenLen ) {
+		return FALSE;
+	}
+	for ( i = 0; i < iHostLen; i++ ) {
+		if ( tolower((unsigned char)sHostValue[i]) != tolower((unsigned char)sToken[i]) ) {
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
+static XS_HostConfig* XS_FindServerHostBySNI(XS_ServerConfig* objServer, const char* sHostName)
+{
+	uint32 i;
+
+	if ( objServer == NULL || sHostName == NULL || sHostName[0] == '\0' || objServer->Hosts == NULL ) {
+		return NULL;
+	}
+
+	for ( i = 1; i <= objServer->Hosts->Count; i++ ) {
+		XS_HostConfig* objHost = xrtArrayGet_Inline(objServer->Hosts, i);
+		char* sHosts;
+		char* sCursor;
+
+		if ( objHost == NULL || !objHost->Enabled || objHost->Host == NULL || objHost->Host[0] == '\0' ) {
+			continue;
+		}
+
+		sHosts = xrtCopyStr(objHost->Host, 0);
+		if ( sHosts == NULL ) {
+			continue;
+		}
+
+		sCursor = strtok(sHosts, ";");
+		while ( sCursor ) {
+			while ( *sCursor == ' ' || *sCursor == '\t' ) {
+				sCursor++;
+			}
+			if ( XS_TlsHostEqualsToken(sHostName, sCursor) ) {
+				xrtFree(sHosts);
+				return objHost;
+			}
+			sCursor = strtok(NULL, ";");
+		}
+
+		xrtFree(sHosts);
+	}
+
+	return NULL;
+}
+
+static const xtlsconfig* XS_ServerResolveTlsBySNI(XS_ServerConfig* objServer, const char* sHostName)
+{
+	XS_HostConfig* objHost;
+
+	if ( objServer == NULL ) {
+		return NULL;
+	}
+	if ( objServer->HostAware && sHostName && sHostName[0] ) {
+		objHost = XS_FindServerHostBySNI(objServer, sHostName);
+		if ( objHost && XS_TlsConfigHasIdentity(&objHost->TlsConfig) ) {
+			return &objHost->TlsConfig;
+		}
+		if ( objServer->EnableDefaultHost && XS_TlsConfigHasIdentity(&objServer->DefaultHost.TlsConfig) ) {
+			return &objServer->DefaultHost.TlsConfig;
+		}
+	}
+	if ( XS_TlsConfigHasIdentity(&objServer->TlsConfig) ) {
+		return &objServer->TlsConfig;
+	}
+
+	return NULL;
+}
+
+static void XS_ServerTlsOnSNI(xtlssession* pSession, const char* sHostName, ptr pUserData)
+{
+	XS_ServerConfig* objServer = (XS_ServerConfig*)pUserData;
+	const xtlsconfig* pCfg = XS_ServerResolveTlsBySNI(objServer, sHostName);
+
+	if ( pSession == NULL || pCfg == NULL ) {
+		return;
+	}
+
+	__xrt_tls_config_lock(pCfg);
+	if ( pCfg->pCertData && pCfg->iCertDataLen > 0 && pCfg->pKeyData && pCfg->iKeyDataLen > 0 ) {
+		(void)xrtNetTlsSessionSetCertData(pSession, pCfg->pCertData, pCfg->iCertDataLen, pCfg->pKeyData, pCfg->iKeyDataLen);
+	} else if ( pCfg->sCertFile && pCfg->sCertFile[0] && pCfg->sKeyFile && pCfg->sKeyFile[0] ) {
+		(void)xrtNetTlsSessionSetCert(pSession, pCfg->sCertFile, pCfg->sKeyFile);
+	}
+	__xrt_tls_config_unlock(pCfg);
+}
+
+static void XS_ServerBindTlsCallback(XS_ServerConfig* objServer)
+{
+	if ( objServer == NULL ) {
+		return;
+	}
+	if ( objServer->EnableTLS && objServer->HostAware ) {
+		objServer->TlsConfig.OnSNI = XS_ServerTlsOnSNI;
+		objServer->TlsConfig.pSNIUserData = objServer;
+	} else {
+		objServer->TlsConfig.OnSNI = NULL;
+		objServer->TlsConfig.pSNIUserData = NULL;
+	}
+}
+
+static bool XS_PreloadServerTlsCaches(XS_ServerConfig* objServer)
+{
+	uint32 i;
+	char sScope[256];
+
+	if ( objServer == NULL ) {
+		return TRUE;
+	}
+
+	snprintf(sScope, sizeof(sScope), "server:%s", objServer->Name ? objServer->Name : "(null)");
+	if ( !XS_TlsConfigPreloadCachedData(&objServer->TlsConfig, sScope) ) {
+		return FALSE;
+	}
+	snprintf(sScope, sizeof(sScope), "server:%s default_host", objServer->Name ? objServer->Name : "(null)");
+	if ( !XS_TlsConfigPreloadCachedData(&objServer->DefaultHost.TlsConfig, sScope) ) {
+		return FALSE;
+	}
+	for ( i = 1; objServer->Hosts && i <= objServer->Hosts->Count; i++ ) {
+		XS_HostConfig* objHost = xrtArrayGet_Inline(objServer->Hosts, i);
+		snprintf(sScope, sizeof(sScope), "server:%s host:%s", objServer->Name ? objServer->Name : "(null)", (objHost && objHost->Name) ? objHost->Name : "(null)");
+		if ( objHost && !XS_TlsConfigPreloadCachedData(&objHost->TlsConfig, sScope) ) {
+			return FALSE;
+		}
+	}
+
+	XS_ServerBindTlsCallback(objServer);
+	return TRUE;
+}
+
+static bool XS_PreloadConfigTlsCaches(XS_Config* objCfg)
+{
+	uint32 i;
+
+	if ( objCfg == NULL || objCfg->Servers == NULL ) {
+		return TRUE;
+	}
+
+	for ( i = 1; i <= objCfg->Servers->Count; i++ ) {
+		XS_ServerConfig* objServer = xrtArrayGet_Inline(objCfg->Servers, i);
+		if ( objServer && !XS_PreloadServerTlsCaches(objServer) ) {
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
+static int XS_ReloadHostTlsCache(XS_ServerConfig* objServer, XS_HostConfig* objHost)
+{
+	char sScope[256];
+
+	if ( objServer == NULL || objHost == NULL ) {
+		return -1;
+	}
+
+	snprintf(sScope, sizeof(sScope), "server:%s host:%s", objServer->Name ? objServer->Name : "(null)", objHost->Name ? objHost->Name : "(null)");
+	return XS_TlsConfigPreloadCachedData(&objHost->TlsConfig, sScope) ? 0 : -2;
+}
+
+static int XS_ReloadServerTlsCache(XS_ServerConfig* objServer)
+{
+	uint32 i;
+
+	if ( objServer == NULL ) {
+		return -1;
+	}
+	if ( !XS_PreloadServerTlsCaches(objServer) ) {
+		return -2;
+	}
+	for ( i = 1; objServer->Hosts && i <= objServer->Hosts->Count; i++ ) {
+		XS_HostConfig* objHost = xrtArrayGet_Inline(objServer->Hosts, i);
+		if ( objHost && !XS_TlsConfigHasIdentity(&objHost->TlsConfig) && (objHost->TlsConfig.sCertFile || objHost->TlsConfig.sKeyFile || objHost->TlsConfig.sCaFile) ) {
+			return -3;
+		}
+	}
+
+	return 0;
+}
+
+static int XS_ReloadAllServerTlsCache(XS_Runtime* objRuntime)
+{
+	uint32 i;
+
+	if ( objRuntime == NULL || objRuntime->Servers == NULL ) {
+		return -1;
+	}
+
+	for ( i = 1; i <= objRuntime->Servers->Count; i++ ) {
+		XS_ServerConfig* objServer = xrtArrayGet_Inline(objRuntime->Servers, i);
+		if ( objServer && XS_ReloadServerTlsCache(objServer) != 0 ) {
+			return -2;
+		}
+	}
+
+	return 0;
 }
 
 static bool XS_HttpSoftReloadRestartListener(XS_ServerConfig* objServer)
 {
 	XS_HttpHandle* objHandle;
 	xhttpdserver* pServer;
+	xhttpdserver* pServerTLS;
 	xhttpdconfig tConfig;
+	xhttpdconfig tConfigTLS;
+	bool bRestartPlain;
+	bool bRestartTLS;
 	int64 iClosedConn;
 	int64 iRemainConn;
 
@@ -596,10 +966,11 @@ static bool XS_HttpSoftReloadRestartListener(XS_ServerConfig* objServer)
 		return TRUE;
 	}
 	pServer = objHandle->pServer;
+	pServerTLS = objHandle->pServerTLS;
 	if ( pServer == NULL ) {
 		return FALSE;
 	}
-	if ( !XS_HttpBuildRuntimeConfig(objServer, &tConfig) ) {
+	if ( !XS_HttpBuildRuntimeConfig(objServer, FALSE, &tConfig) ) {
 		XS_LogError(
 			"config reload failed: http soft reload invalid addr: server=%s addr=%s",
 			objServer->Name ? objServer->Name : "(null)",
@@ -607,10 +978,30 @@ static bool XS_HttpSoftReloadRestartListener(XS_ServerConfig* objServer)
 		);
 		return FALSE;
 	}
+	if ( objServer->EnableTLS ) {
+		if ( !XS_HttpBuildRuntimeConfig(objServer, TRUE, &tConfigTLS) ) {
+			XS_LogError(
+				"config reload failed: http tls soft reload invalid addr: server=%s addr=%s",
+				objServer->Name ? objServer->Name : "(null)",
+				objServer->AddrTLS ? objServer->AddrTLS : "(null)"
+			);
+			return FALSE;
+		}
+	}
 
 	objHandle->pOwner = objServer;
 	pServer->pUserData = objServer;
-	if ( XS_HttpRuntimeConfigEquals(&pServer->tConfig, &tConfig) ) {
+	if ( pServerTLS ) {
+		pServerTLS->pUserData = objServer;
+	}
+
+	bRestartPlain = !XS_HttpRuntimeConfigEquals(&pServer->tConfig, &tConfig);
+	if ( objServer->EnableTLS ) {
+		bRestartTLS = (pServerTLS == NULL) || (!XS_HttpRuntimeConfigEquals(&pServerTLS->tConfig, &tConfigTLS));
+	} else {
+		bRestartTLS = (pServerTLS != NULL);
+	}
+	if ( !bRestartPlain && !bRestartTLS ) {
 		return TRUE;
 	}
 
@@ -643,25 +1034,74 @@ static bool XS_HttpSoftReloadRestartListener(XS_ServerConfig* objServer)
 		);
 	}
 
-	xrtHttpdStop(pServer);
-	pServer->tConfig = tConfig;
-	if ( xrtHttpdStart(pServer) != XRT_NET_OK ) {
-		XS_LogError(
-			"config reload failed: http soft reload start error: server=%s addr=%s",
-			objServer->Name ? objServer->Name : "(null)",
-			objServer->Addr ? objServer->Addr : "(null)"
-		);
-		return FALSE;
+	if ( bRestartPlain ) {
+		xrtHttpdStop(pServer);
+		pServer->tConfig = tConfig;
+		if ( xrtHttpdStart(pServer) != XRT_NET_OK ) {
+			XS_LogError(
+				"config reload failed: http soft reload start error: server=%s addr=%s",
+				objServer->Name ? objServer->Name : "(null)",
+				objServer->Addr ? objServer->Addr : "(null)"
+			);
+			return FALSE;
+		}
+	}
+	if ( objServer->EnableTLS ) {
+		if ( pServerTLS == NULL ) {
+			xhttpdevents tEvents;
+
+			XS_HttpInitEvents(&tEvents);
+			pServerTLS = xrtHttpdCreate(pServer->pEngine, &tConfigTLS, &tEvents, objServer);
+			if ( pServerTLS == NULL ) {
+				XS_LogError(
+					"config reload failed: http tls soft reload create error: server=%s addr=%s",
+					objServer->Name ? objServer->Name : "(null)",
+					objServer->AddrTLS ? objServer->AddrTLS : "(null)"
+				);
+				return FALSE;
+			}
+			objHandle->pServerTLS = pServerTLS;
+		} else if ( bRestartTLS ) {
+			xrtHttpdStop(pServerTLS);
+			pServerTLS->tConfig = tConfigTLS;
+		}
+		if ( bRestartTLS ) {
+			if ( xrtHttpdStart(pServerTLS) != XRT_NET_OK ) {
+				XS_LogError(
+					"config reload failed: http tls soft reload start error: server=%s addr=%s",
+					objServer->Name ? objServer->Name : "(null)",
+					objServer->AddrTLS ? objServer->AddrTLS : "(null)"
+				);
+				if ( objHandle->pServerTLS == pServerTLS && pServerTLS->pListener == NULL ) {
+					xrtHttpdDestroy(pServerTLS);
+					objHandle->pServerTLS = NULL;
+				}
+				return FALSE;
+			}
+		}
+	} else if ( pServerTLS ) {
+		xrtHttpdDestroy(pServerTLS);
+		objHandle->pServerTLS = NULL;
 	}
 
 	objHandle->bStopThread = FALSE;
 	objHandle->bStopping = FALSE;
-	XS_LogInfo(
-		"http soft reload listener: server=%s addr=%s bound_port=%u",
-		objServer->Name ? objServer->Name : "(null)",
-		objServer->Addr ? objServer->Addr : "(null)",
-		(unsigned)xrtHttpdBoundPort(pServer)
-	);
+	if ( bRestartPlain ) {
+		XS_LogInfo(
+			"http soft reload listener: server=%s addr=%s bound_port=%u",
+			objServer->Name ? objServer->Name : "(null)",
+			objServer->Addr ? objServer->Addr : "(null)",
+			(unsigned)xrtHttpdBoundPort(pServer)
+		);
+	}
+	if ( objHandle->pServerTLS && bRestartTLS ) {
+		XS_LogInfo(
+			"http tls soft reload listener: server=%s addr=%s bound_port=%u",
+			objServer->Name ? objServer->Name : "(null)",
+			objServer->AddrTLS ? objServer->AddrTLS : "(null)",
+			(unsigned)xrtHttpdBoundPort(objHandle->pServerTLS)
+		);
+	}
 	return TRUE;
 }
 
@@ -973,14 +1413,23 @@ static bool XS_TlsConfigClone(const xtlsconfig* pSrc, xtlsconfig* pDst)
 	if ( pSrc->sCaFile && pDst->sCaFile == NULL ) {
 		goto fail;
 	}
+	if ( !XS_TlsConfigCloneBytes(pSrc->pCertData, pSrc->iCertDataLen, &pDst->pCertData, &pDst->iCertDataLen) ) {
+		goto fail;
+	}
+	if ( !XS_TlsConfigCloneBytes(pSrc->pKeyData, pSrc->iKeyDataLen, &pDst->pKeyData, &pDst->iKeyDataLen) ) {
+		goto fail;
+	}
+	if ( !XS_TlsConfigCloneBytes(pSrc->pCaData, pSrc->iCaDataLen, &pDst->pCaData, &pDst->iCaDataLen) ) {
+		goto fail;
+	}
 	pDst->sHostName = XS_CopyText(pSrc->sHostName);
 	if ( pSrc->sHostName && pDst->sHostName == NULL ) {
 		goto fail;
 	}
 
 	pDst->bVerifyPeer = pSrc->bVerifyPeer;
-	pDst->OnSNI = pSrc->OnSNI;
-	pDst->pSNIUserData = pSrc->pSNIUserData;
+	pDst->OnSNI = NULL;
+	pDst->pSNIUserData = NULL;
 	pDst->bAllowTLS12Ed25519 = pSrc->bAllowTLS12Ed25519;
 	pDst->iMaxVersion = pSrc->iMaxVersion;
 	pDst->pResume = pSrc->pResume;
@@ -991,6 +1440,9 @@ fail:
 	if ( pDst->sKeyFile ) xrtFree((void*)pDst->sKeyFile);
 	if ( pDst->sCaFile ) xrtFree((void*)pDst->sCaFile);
 	if ( pDst->sHostName ) xrtFree((void*)pDst->sHostName);
+	if ( pDst->pCertData ) xrtFree((void*)pDst->pCertData);
+	if ( pDst->pKeyData ) xrtFree((void*)pDst->pKeyData);
+	if ( pDst->pCaData ) xrtFree((void*)pDst->pCaData);
 	memset(pDst, 0, sizeof(xtlsconfig));
 	return FALSE;
 }
@@ -1170,6 +1622,7 @@ static bool XS_ServerConfigCloneForRuntime(const XS_ServerConfig* objSrc, XS_Ser
 		}
 	}
 
+	XS_ServerBindTlsCallback(objDst);
 	return TRUE;
 
 fail:
@@ -1722,6 +2175,7 @@ static bool XS_PerformTargetServerSoftReload(XS_Runtime* objRuntime, XS_ServerCo
 	memcpy(objServerOld, objServerNewSrc, sizeof(XS_ServerConfig));
 	memset(objServerNewSrc, 0, sizeof(XS_ServerConfig));
 	objServerOld->pHandle = pHandleKeep;
+	XS_ServerBindTlsCallback(objServerOld);
 
 	if ( !XS_InitServerScripts(objServerOld) ) {
 		XS_LogError("config reload failed: target server soft reload init error");
@@ -1764,6 +2218,7 @@ rollback:
 	memcpy(objServerOld, &objServerBackup, sizeof(XS_ServerConfig));
 	memset(&objServerBackup, 0, sizeof(XS_ServerConfig));
 	bBackupValid = FALSE;
+	XS_ServerBindTlsCallback(objServerOld);
 
 	if ( bOldScriptsStopped ) {
 		if ( XS_StartServerScripts(objServerOld) ) {
@@ -1852,6 +2307,7 @@ static bool XS_PerformTargetServerReload(XS_Config* objCfg, XS_Runtime* objRunti
 	
 	memcpy(objServerOld, objServerNewSrc, sizeof(XS_ServerConfig));
 	memset(objServerNewSrc, 0, sizeof(XS_ServerConfig));
+	XS_ServerBindTlsCallback(objServerOld);
 	
 	if ( !XS_RuntimeInitOneServer(objRuntime, objServerOld) ) {
 		XS_LogError("config reload failed: target server init error");
@@ -1862,6 +2318,7 @@ static bool XS_PerformTargetServerReload(XS_Config* objCfg, XS_Runtime* objRunti
 		memcpy(objServerOld, &objServerBackup, sizeof(XS_ServerConfig));
 		memset(&objServerBackup, 0, sizeof(XS_ServerConfig));
 		bBackupValid = FALSE;
+		XS_ServerBindTlsCallback(objServerOld);
 		
 		if ( XS_RuntimeInitOneServer(objRuntime, objServerOld) && XS_RuntimeStartOneServer(objServerOld) ) {
 			XS_LogWarn(
@@ -1885,6 +2342,7 @@ static bool XS_PerformTargetServerReload(XS_Config* objCfg, XS_Runtime* objRunti
 		memcpy(objServerOld, &objServerBackup, sizeof(XS_ServerConfig));
 		memset(&objServerBackup, 0, sizeof(XS_ServerConfig));
 		bBackupValid = FALSE;
+		XS_ServerBindTlsCallback(objServerOld);
 		
 		if ( XS_RuntimeInitOneServer(objRuntime, objServerOld) && XS_RuntimeStartOneServer(objServerOld) ) {
 			XS_LogWarn(
@@ -1933,6 +2391,12 @@ static bool XS_PerformConfigReload(XS_Config* objCfg, XS_Runtime* objRuntime, co
 	if ( !XS_LoadConfig(&objCfgNew, sCfgFile) ) {
 		XS_LogError("config reload failed: load error");
 		XS_SetConfigReloadStatus(FALSE, pReq, "config load error");
+		XS_FreeConfig(&objCfgNew);
+		return FALSE;
+	}
+	if ( !XS_PreloadConfigTlsCaches(&objCfgNew) ) {
+		XS_LogError("config reload failed: tls cache preload error");
+		XS_SetConfigReloadStatus(FALSE, pReq, "tls cache preload error");
 		XS_FreeConfig(&objCfgNew);
 		return FALSE;
 	}
@@ -2060,6 +2524,11 @@ int main(int argc, char** argv)
 		XS_LogError("config load failed");
 		iExitCode = 1;
 		goto ExitMain;
+	}
+	if ( !XS_PreloadConfigTlsCaches(&objCfg) ) {
+		XS_LogError("tls cache preload failed");
+		iExitCode = 1;
+		goto ExitConfig;
 	}
 	
 	XS_PrintConfigSummary(&objCfg);

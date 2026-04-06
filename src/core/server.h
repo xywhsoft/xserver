@@ -135,6 +135,9 @@ static inline void XS_FreeServerConfig(XS_ServerConfig* objServer)
 	if ( objServer->TlsConfig.sCaFile ) xrtFree((void*)objServer->TlsConfig.sCaFile);
 	if ( objServer->TlsConfig.sCertFile ) xrtFree((void*)objServer->TlsConfig.sCertFile);
 	if ( objServer->TlsConfig.sKeyFile ) xrtFree((void*)objServer->TlsConfig.sKeyFile);
+	if ( objServer->TlsConfig.pCaData ) xrtFree((void*)objServer->TlsConfig.pCaData);
+	if ( objServer->TlsConfig.pCertData ) xrtFree((void*)objServer->TlsConfig.pCertData);
+	if ( objServer->TlsConfig.pKeyData ) xrtFree((void*)objServer->TlsConfig.pKeyData);
 	if ( objServer->Path ) xrtFree(objServer->Path);
 	XS_FreeHttpPageConfig(&objServer->Pages);
 	if ( objServer->DevFile ) xrtFree(objServer->DevFile);

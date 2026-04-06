@@ -103,6 +103,9 @@ static inline void XS_FreeHostConfig(XS_HostConfig* objHost)
 	if ( objHost->TlsConfig.sCaFile ) xrtFree((void*)objHost->TlsConfig.sCaFile);
 	if ( objHost->TlsConfig.sCertFile ) xrtFree((void*)objHost->TlsConfig.sCertFile);
 	if ( objHost->TlsConfig.sKeyFile ) xrtFree((void*)objHost->TlsConfig.sKeyFile);
+	if ( objHost->TlsConfig.pCaData ) xrtFree((void*)objHost->TlsConfig.pCaData);
+	if ( objHost->TlsConfig.pCertData ) xrtFree((void*)objHost->TlsConfig.pCertData);
+	if ( objHost->TlsConfig.pKeyData ) xrtFree((void*)objHost->TlsConfig.pKeyData);
 	
 	memset(objHost, 0, sizeof(XS_HostConfig));
 }
