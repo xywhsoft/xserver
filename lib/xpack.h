@@ -96,7 +96,7 @@
 
 
 // 统一时间类型，和 xrt 的 xtime 保持兼容
-#ifndef XPK_XTIME_DEFINED
+#if !defined(XPK_XTIME_DEFINED) && !defined(XRT_XTIME_DEFINED)
 #define XPK_XTIME_DEFINED
 typedef int64_t xtime;
 #endif

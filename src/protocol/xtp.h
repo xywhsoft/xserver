@@ -2257,10 +2257,10 @@ static inline bool XS_XtpParamBool(const void* pMsg, const char* sKey, bool bDef
 	memcpy(sBuf, pVal, iValLen);
 	sBuf[iValLen] = '\0';
 
-	if ( _stricmp(sBuf, "1") == 0 || _stricmp(sBuf, "true") == 0 || _stricmp(sBuf, "yes") == 0 || _stricmp(sBuf, "on") == 0 ) {
+	if ( strcasecmp(sBuf, "1") == 0 || strcasecmp(sBuf, "true") == 0 || strcasecmp(sBuf, "yes") == 0 || strcasecmp(sBuf, "on") == 0 ) {
 		return TRUE;
 	}
-	if ( _stricmp(sBuf, "0") == 0 || _stricmp(sBuf, "false") == 0 || _stricmp(sBuf, "no") == 0 || _stricmp(sBuf, "off") == 0 ) {
+	if ( strcasecmp(sBuf, "0") == 0 || strcasecmp(sBuf, "false") == 0 || strcasecmp(sBuf, "no") == 0 || strcasecmp(sBuf, "off") == 0 ) {
 		return FALSE;
 	}
 

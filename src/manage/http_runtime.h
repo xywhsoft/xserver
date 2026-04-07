@@ -46,16 +46,16 @@ static inline const char* XS_BuildVariant(void)
 		}
 	}
 
-	if ( sFileName && _stricmp(sFileName, "xsdbg.exe") == 0 ) {
+	if ( sFileName && strcasecmp(sFileName, "xsdbg.exe") == 0 ) {
 		return "xsdbg";
 	}
-	if ( sFileName && _stricmp(sFileName, "xsdbg") == 0 ) {
+	if ( sFileName && strcasecmp(sFileName, "xsdbg") == 0 ) {
 		return "xsdbg";
 	}
-	if ( sFileName && _stricmp(sFileName, "xs.exe") == 0 ) {
+	if ( sFileName && strcasecmp(sFileName, "xs.exe") == 0 ) {
 		return "xs";
 	}
-	if ( sFileName && _stricmp(sFileName, "xs") == 0 ) {
+	if ( sFileName && strcasecmp(sFileName, "xs") == 0 ) {
 		return "xs";
 	}
 
@@ -306,13 +306,13 @@ static inline bool XS_HttpParseBoolText(const char* sText, size_t iTextLen, bool
 		}
 		return TRUE;
 	}
-	if ( iTextLen == 4 && _strnicmp(sText, "true", 4) == 0 ) {
+	if ( iTextLen == 4 && strncasecmp(sText, "true", 4) == 0 ) {
 		if ( pbValue ) {
 			*pbValue = TRUE;
 		}
 		return TRUE;
 	}
-	if ( iTextLen == 3 && _strnicmp(sText, "yes", 3) == 0 ) {
+	if ( iTextLen == 3 && strncasecmp(sText, "yes", 3) == 0 ) {
 		if ( pbValue ) {
 			*pbValue = TRUE;
 		}
@@ -324,13 +324,13 @@ static inline bool XS_HttpParseBoolText(const char* sText, size_t iTextLen, bool
 		}
 		return TRUE;
 	}
-	if ( iTextLen == 5 && _strnicmp(sText, "false", 5) == 0 ) {
+	if ( iTextLen == 5 && strncasecmp(sText, "false", 5) == 0 ) {
 		if ( pbValue ) {
 			*pbValue = FALSE;
 		}
 		return TRUE;
 	}
-	if ( iTextLen == 2 && _strnicmp(sText, "no", 2) == 0 ) {
+	if ( iTextLen == 2 && strncasecmp(sText, "no", 2) == 0 ) {
 		if ( pbValue ) {
 			*pbValue = FALSE;
 		}
@@ -1545,13 +1545,13 @@ static inline void XS_HttpRecordMethodMetrics(const xhttpdrequest* pReq)
 		return;
 	}
 
-	if ( _stricmp(pReq->sMethod, "GET") == 0 ) {
+	if ( strcasecmp(pReq->sMethod, "GET") == 0 ) {
 		XS_HttpMetricAdd(&g_iXsHttpMethodGetCount, 1);
 		g_iXsHttpLastMethodType = 1;
-	} else if ( _stricmp(pReq->sMethod, "POST") == 0 ) {
+	} else if ( strcasecmp(pReq->sMethod, "POST") == 0 ) {
 		XS_HttpMetricAdd(&g_iXsHttpMethodPostCount, 1);
 		g_iXsHttpLastMethodType = 2;
-	} else if ( _stricmp(pReq->sMethod, "HEAD") == 0 ) {
+	} else if ( strcasecmp(pReq->sMethod, "HEAD") == 0 ) {
 		XS_HttpMetricAdd(&g_iXsHttpMethodHeadCount, 1);
 		g_iXsHttpLastMethodType = 3;
 	} else {

@@ -1,7 +1,7 @@
 /*
 
     XRT Single Header File
-    Generated: 2026-04-07 04:31:51
+    Generated: 2026-04-07 04:54:26
 
     MIT License
 
@@ -589,6 +589,7 @@
 	typedef uintptr_t uintptr;
 	
 	typedef int64 xtime;
+	#define XRT_XTIME_DEFINED
 	
 	/*
 	#ifndef bool
@@ -27807,6 +27808,8 @@ XXAPI void xrtNetChainConsume(xnetchain* pChain, size_t iLen)
 /* ============================== Opaque handles ============================== */
 typedef struct xrt_net_port xnetport;
 typedef struct xrt_net_port_ops xnetportops;
+static const xnetportops* xrtNetPortIOCPOps(void);
+static const xnetportops* xrtNetPortUringOps(void);
 /* ============================== Backend and op identifiers ============================== */
 #define XNET_PORT_BACKEND_AUTO    0u
 #define XNET_PORT_BACKEND_IOCP    1u
@@ -29986,13 +29989,11 @@ static xnet_result xrtNetPortCancelTimer(xnetport* pPort, uint64 iTimerId)
 		__xnetPortUringArmTimer,
 		__xnetPortUringCancelTimer
 	};
-	#if defined(XRT_INTERNAL_TEST_ENV)
 	// 网络端口 io_uring ops相关处理
 	static const xnetportops* xrtNetPortUringOps(void)
 	{
 		return &__g_xnetPortUringOps;
 	}
-	#endif
 #else
 	// 内部函数：判断是否存在端口 io_uring 原生 ring
 	static bool UNUSED_ATTR __xnetPortUringHasNativeRing(const xnetport* pPort)
@@ -30000,13 +30001,11 @@ static xnet_result xrtNetPortCancelTimer(xnetport* pPort, uint64 iTimerId)
 		(void)pPort;
 		return false;
 	}
-	#if defined(XRT_INTERNAL_TEST_ENV)
 	// 网络端口 io_uring ops相关处理
 	static const xnetportops* xrtNetPortUringOps(void)
 	{
 		return NULL;
 	}
-	#endif
 #endif
 #endif
 #ifndef XRT_NO_XCODEC

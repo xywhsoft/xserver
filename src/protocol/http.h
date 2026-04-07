@@ -125,19 +125,19 @@ static inline const char* XS_HttpMimeTypeByPath(const char* sPath)
 		return "application/octet-stream";
 	}
 	
-	if ( _stricmp(sExt, ".html") == 0 || _stricmp(sExt, ".htm") == 0 ) return "text/html; charset=utf-8";
-	if ( _stricmp(sExt, ".css") == 0 ) return "text/css; charset=utf-8";
-	if ( _stricmp(sExt, ".js") == 0 ) return "application/javascript; charset=utf-8";
-	if ( _stricmp(sExt, ".json") == 0 ) return "application/json; charset=utf-8";
-	if ( _stricmp(sExt, ".txt") == 0 ) return "text/plain; charset=utf-8";
-	if ( _stricmp(sExt, ".svg") == 0 ) return "image/svg+xml";
-	if ( _stricmp(sExt, ".png") == 0 ) return "image/png";
-	if ( _stricmp(sExt, ".jpg") == 0 || _stricmp(sExt, ".jpeg") == 0 ) return "image/jpeg";
-	if ( _stricmp(sExt, ".gif") == 0 ) return "image/gif";
-	if ( _stricmp(sExt, ".woff") == 0 ) return "font/woff";
-	if ( _stricmp(sExt, ".woff2") == 0 ) return "font/woff2";
-	if ( _stricmp(sExt, ".ttf") == 0 ) return "font/ttf";
-	if ( _stricmp(sExt, ".eot") == 0 ) return "application/vnd.ms-fontobject";
+	if ( strcasecmp(sExt, ".html") == 0 || strcasecmp(sExt, ".htm") == 0 ) return "text/html; charset=utf-8";
+	if ( strcasecmp(sExt, ".css") == 0 ) return "text/css; charset=utf-8";
+	if ( strcasecmp(sExt, ".js") == 0 ) return "application/javascript; charset=utf-8";
+	if ( strcasecmp(sExt, ".json") == 0 ) return "application/json; charset=utf-8";
+	if ( strcasecmp(sExt, ".txt") == 0 ) return "text/plain; charset=utf-8";
+	if ( strcasecmp(sExt, ".svg") == 0 ) return "image/svg+xml";
+	if ( strcasecmp(sExt, ".png") == 0 ) return "image/png";
+	if ( strcasecmp(sExt, ".jpg") == 0 || strcasecmp(sExt, ".jpeg") == 0 ) return "image/jpeg";
+	if ( strcasecmp(sExt, ".gif") == 0 ) return "image/gif";
+	if ( strcasecmp(sExt, ".woff") == 0 ) return "font/woff";
+	if ( strcasecmp(sExt, ".woff2") == 0 ) return "font/woff2";
+	if ( strcasecmp(sExt, ".ttf") == 0 ) return "font/ttf";
+	if ( strcasecmp(sExt, ".eot") == 0 ) return "application/vnd.ms-fontobject";
 	
 	return "application/octet-stream";
 }

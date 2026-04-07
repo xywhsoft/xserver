@@ -7,7 +7,7 @@ static inline bool XS_HttpIsHeadRequest(const xhttpdrequest* pReq)
 		return FALSE;
 	}
 
-	return _stricmp(pReq->sMethod, "HEAD") == 0;
+	return strcasecmp(pReq->sMethod, "HEAD") == 0;
 }
 
 static inline bool XS_HttpRespondBodyEx(
@@ -60,7 +60,7 @@ static inline bool XS_HttpIsTemplatePage(const char* sFilePath)
 		return FALSE;
 	}
 
-	return _stricmp(sExt, ".xtl") == 0;
+	return strcasecmp(sExt, ".xtl") == 0;
 }
 
 static inline const char* XS_HttpSelectErrorPageFile(const XS_HttpPageConfig* objPages, uint32 iStatus)
@@ -264,7 +264,7 @@ static inline bool XS_HttpTryConfiguredErrorPage(
 	if (
 		sFallback &&
 		sFallback[0] &&
-		((sPrimary == NULL) || (_stricmp(sPrimary, sFallback) != 0))
+		((sPrimary == NULL) || (strcasecmp(sPrimary, sFallback) != 0))
 	) {
 		if ( XS_HttpRespondErrorPageFile(objServer, objHost, pReq, pResp, sRemote, iStatus, sReason, sMessage, sFallback, objData) ) {
 			return TRUE;
