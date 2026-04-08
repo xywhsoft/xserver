@@ -102,6 +102,7 @@ static inline char* XS_WsLastCloseTimeText(void);
 static inline int64 XS_WsLastCloseAgeMS(void);
 static inline char* XS_WsLastErrorTimeText(void);
 static inline int64 XS_WsLastErrorAgeMS(void);
+static void XS_ServerBindTlsCallback(XS_ServerConfig* objServer);
 
 // vNext 脚本层
 #include "src/script/tcc_host.h"
@@ -1895,6 +1896,7 @@ static bool XS_TryConfigReloadServiceAddRemoveOnly(XS_Config* objCfg, XS_Runtime
 
 		objServerNewRuntime = xrtArrayGet_Inline(objRuntime->Servers, iPos);
 		memcpy(objServerNewRuntime, &objServerClone, sizeof(XS_ServerConfig));
+		XS_ServerBindTlsCallback(objServerNewRuntime);
 		memset(&objServerClone, 0, sizeof(XS_ServerConfig));
 
 		if ( !XS_RuntimeInitOneServer(objRuntime, objServerNewRuntime) ) {

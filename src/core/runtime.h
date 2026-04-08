@@ -216,6 +216,7 @@ static inline bool XS_RuntimeBuild(XS_Runtime* objRuntime, XS_Config* objCfg)
 		XS_ServerConfig* objDst = xrtArrayGet_Inline(objRuntime->Servers, idx);
 		
 		memcpy(objDst, objSrc, sizeof(XS_ServerConfig));
+		XS_ServerBindTlsCallback(objDst);
 		memset(objSrc, 0, sizeof(XS_ServerConfig));
 	}
 	
