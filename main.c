@@ -731,6 +731,26 @@ static bool XS_TlsConfigPreloadCachedData(xtlsconfig* pCfg, const char* sScope)
 	return TRUE;
 }
 
+static void XS_ClearServerTlsCaches(XS_ServerConfig* objServer)
+{
+	uint32 i;
+
+	if ( objServer == NULL ) {
+		return;
+	}
+
+	XS_TlsConfigFreeCachedData(&objServer->TlsConfig);
+	XS_TlsConfigFreeCachedData(&objServer->DefaultHost.TlsConfig);
+	for ( i = 1; objServer->Hosts && i <= objServer->Hosts->Count; i++ ) {
+		XS_HostConfig* objHost = xrtArrayGet_Inline(objServer->Hosts, i);
+		if ( objHost ) {
+			XS_TlsConfigFreeCachedData(&objHost->TlsConfig);
+		}
+	}
+
+	XS_ServerBindTlsCallback(objServer);
+}
+
 static bool XS_TlsHostEqualsToken(const char* sHostValue, const char* sToken)
 {
 	size_t iHostLen;
@@ -857,11 +877,27 @@ static bool XS_PreloadServerTlsCaches(XS_ServerConfig* objServer)
 	if ( objServer == NULL ) {
 		return TRUE;
 	}
+	if ( !objServer->EnableTLS ) {
+		XS_ClearServerTlsCaches(objServer);
+		return TRUE;
+	}
 
 	snprintf(sScope, sizeof(sScope), "server:%s", objServer->Name ? objServer->Name : "(null)");
 	if ( !XS_TlsConfigPreloadCachedData(&objServer->TlsConfig, sScope) ) {
 		return FALSE;
 	}
+	if ( !objServer->HostAware ) {
+		XS_TlsConfigFreeCachedData(&objServer->DefaultHost.TlsConfig);
+		for ( i = 1; objServer->Hosts && i <= objServer->Hosts->Count; i++ ) {
+			XS_HostConfig* objHost = xrtArrayGet_Inline(objServer->Hosts, i);
+			if ( objHost ) {
+				XS_TlsConfigFreeCachedData(&objHost->TlsConfig);
+			}
+		}
+		XS_ServerBindTlsCallback(objServer);
+		return TRUE;
+	}
+
 	snprintf(sScope, sizeof(sScope), "server:%s default_host", objServer->Name ? objServer->Name : "(null)");
 	if ( !XS_TlsConfigPreloadCachedData(&objServer->DefaultHost.TlsConfig, sScope) ) {
 		return FALSE;
@@ -903,6 +939,10 @@ static int XS_ReloadHostTlsCache(XS_ServerConfig* objServer, XS_HostConfig* objH
 	if ( objServer == NULL || objHost == NULL ) {
 		return -1;
 	}
+	if ( !objServer->EnableTLS || !objServer->HostAware ) {
+		XS_TlsConfigFreeCachedData(&objHost->TlsConfig);
+		return 0;
+	}
 
 	snprintf(sScope, sizeof(sScope), "server:%s host:%s", objServer->Name ? objServer->Name : "(null)", objHost->Name ? objHost->Name : "(null)");
 	return XS_TlsConfigPreloadCachedData(&objHost->TlsConfig, sScope) ? 0 : -2;
@@ -917,6 +957,9 @@ static int XS_ReloadServerTlsCache(XS_ServerConfig* objServer)
 	}
 	if ( !XS_PreloadServerTlsCaches(objServer) ) {
 		return -2;
+	}
+	if ( !objServer->EnableTLS || !objServer->HostAware ) {
+		return 0;
 	}
 	for ( i = 1; objServer->Hosts && i <= objServer->Hosts->Count; i++ ) {
 		XS_HostConfig* objHost = xrtArrayGet_Inline(objServer->Hosts, i);
