@@ -3865,6 +3865,36 @@ function procRunXtpCase([string]$sExeName, [bool]$bDebug)
 			$arrResults.Add("FAIL $sExeName xtp_callrequeststatus : unexpected body")
 		}
 
+		if ( $bDebug ) {
+			procRunNamedServerNumericFieldSoftReloadCheck `
+				$arrResults `
+				$sExeName `
+				"xs_manage_xtp_test.json" `
+				"test XTP Server" `
+				"xtp_recv_limit_soft_reload" `
+				"recv_limit" `
+				$false `
+				2048 `
+				0 `
+				$sClientExe `
+				@("127.0.0.1", "$iXtpPort", "demo.callself", "tag=xtp-recv-limit-reload") `
+				@("status=0", "cmd=xtp.reply", "self call ok")
+
+			procRunNamedServerNumericFieldSoftReloadCheck `
+				$arrResults `
+				$sExeName `
+				"xs_manage_xtp_test.json" `
+				"test XTP Server" `
+				"xtp_backlog_soft_reload" `
+				"backlog" `
+				$false `
+				16 `
+				0 `
+				$sClientExe `
+				@("127.0.0.1", "$iXtpPort", "demo.callself", "tag=xtp-backlog-reload") `
+				@("status=0", "cmd=xtp.reply", "self call ok")
+		}
+
 		$iCode = 0
 		foreach ( $sLine in $arrResults ) {
 			if ( $sLine.StartsWith("FAIL ") ) {
@@ -4066,6 +4096,34 @@ function procRunCustomCase([string]$sExeName)
 				$sClientExe `
 				@("127.0.0.1", "9098", "smoke-custom-reload") `
 				@("custom demo", "data=smoke-custom-reload")
+
+			procRunNamedServerNumericFieldSoftReloadCheck `
+				$arrResults `
+				$sExeName `
+				"xs_manage_custom_test.json" `
+				"test Custom Server" `
+				"custom_recv_limit_soft_reload" `
+				"recv_limit" `
+				$false `
+				256 `
+				0 `
+				$sClientExe `
+				@("127.0.0.1", "9098", "smoke-custom-recv-limit-reload") `
+				@("custom demo", "data=smoke-custom-recv-limit-reload")
+
+			procRunNamedServerNumericFieldSoftReloadCheck `
+				$arrResults `
+				$sExeName `
+				"xs_manage_custom_test.json" `
+				"test Custom Server" `
+				"custom_backlog_soft_reload" `
+				"backlog" `
+				$false `
+				16 `
+				0 `
+				$sClientExe `
+				@("127.0.0.1", "9098", "smoke-custom-backlog-reload") `
+				@("custom demo", "data=smoke-custom-backlog-reload")
 		}
 
 		$iCode = 0

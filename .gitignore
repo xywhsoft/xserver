@@ -2,6 +2,7 @@
 /release/*.out
 /release/*.log
 /release/xrt_mem_report_auto.txt
+/release/xrt_mem_report_auto.json
 /release/__xrt_mem_report_auto.txt
 /release/__xrt_mem_report_auto.json
 /tools/*.exe
@@ -10,6 +11,7 @@
 /tools/custom_smoke_client
 /tools/.xs_stable_smoke_body.tmp
 /xrt_mem_report_auto.txt
+/xrt_mem_report_auto.json
 /__xrt_mem_report_auto.txt
 /__xrt_mem_report_auto.json
 /__codex_tmp_xs_pid.txt

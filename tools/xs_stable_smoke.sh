@@ -4922,6 +4922,44 @@ proc_run_xtp_case() {
 			i_case_exit=1
 		fi
 
+		if [ "$s_exe_name" = "$XSDBG_BIN" ]; then
+			proc_run_named_server_numeric_field_soft_reload_check \
+				"$s_exe_name" \
+				"xs_manage_xtp_test.json" \
+				"test XTP Server" \
+				"xtp_recv_limit_soft_reload" \
+				"recv_limit" \
+				"false" \
+				2048 \
+				0 \
+				"$s_client_exe" \
+				127.0.0.1 \
+				"$XTP_PORT" \
+				demo.callself \
+				tag=xtp-recv-limit-reload \
+				"status=0" \
+				"cmd=xtp.reply" \
+				"self call ok" || return 1
+
+			proc_run_named_server_numeric_field_soft_reload_check \
+				"$s_exe_name" \
+				"xs_manage_xtp_test.json" \
+				"test XTP Server" \
+				"xtp_backlog_soft_reload" \
+				"backlog" \
+				"false" \
+				16 \
+				0 \
+				"$s_client_exe" \
+				127.0.0.1 \
+				"$XTP_PORT" \
+				demo.callself \
+				tag=xtp-backlog-reload \
+				"status=0" \
+				"cmd=xtp.reply" \
+				"self call ok" || return 1
+		fi
+
 		return "$i_case_exit"
 	)
 }
@@ -5113,6 +5151,42 @@ proc_run_custom_case() {
 			"" \
 			"custom demo" \
 			"data=smoke-custom-reload" \
+			"" || return 1
+
+		proc_run_named_server_numeric_field_soft_reload_check \
+			"$s_exe_name" \
+			"xs_manage_custom_test.json" \
+			"test Custom Server" \
+			"custom_recv_limit_soft_reload" \
+			"recv_limit" \
+			"false" \
+			256 \
+			0 \
+			"$s_client_exe" \
+			127.0.0.1 \
+			9098 \
+			smoke-custom-recv-limit-reload \
+			"" \
+			"custom demo" \
+			"data=smoke-custom-recv-limit-reload" \
+			"" || return 1
+
+		proc_run_named_server_numeric_field_soft_reload_check \
+			"$s_exe_name" \
+			"xs_manage_custom_test.json" \
+			"test Custom Server" \
+			"custom_backlog_soft_reload" \
+			"backlog" \
+			"false" \
+			16 \
+			0 \
+			"$s_client_exe" \
+			127.0.0.1 \
+			9098 \
+			smoke-custom-backlog-reload \
+			"" \
+			"custom demo" \
+			"data=smoke-custom-backlog-reload" \
 			"" || return 1
 	fi
 }
@@ -6035,4 +6109,3 @@ proc_cleanup_generated_files
 proc_check_artifacts || i_exit=1
 proc_check_process_cleanup || i_exit=1
 exit "$i_exit"
-

@@ -84,6 +84,8 @@
 - 默认只能先进 `xsdbg`
 - 不应直接进入 production `xs`
 
+当前不再把限流、治理看板、在线策略编辑、异步 XTP pending request、持久 XTP client 对象体系列为 production `xs` 的收口任务；这些能力应优先由应用层或后续 `xsdbg` 调试工具按真实需求实现。
+
 
 
 ## 4. 安全头
@@ -109,3 +111,5 @@ production `xs` 下，是否返回这些头，取决于应用层自己的路由�
 
 - `tools/xs_stable_smoke.ps1`
 - `tools/xs_stable_smoke.sh`
+
+`docs/vNext设计草案.md` 仅作为历史草稿保留，不再作为当前任务清单依据。

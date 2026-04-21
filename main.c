@@ -559,10 +559,12 @@ static bool XS_ServerConfigCanSoftReload(const XS_ServerConfig* objLeft, const X
 		case XS_SVC_WS:
 			return FALSE;
 		case XS_SVC_TCP:
-		case XS_SVC_UDP:
-		case XS_SVC_XTP:
 		case XS_SVC_CUSTOM:
+			return !objLeft->HostAware && !objRight->HostAware;
+		case XS_SVC_UDP:
 			return !objLeft->HostAware && !objRight->HostAware && XS_ServerListenerCriticalEquals(objLeft, objRight);
+		case XS_SVC_XTP:
+			return !objLeft->HostAware && !objRight->HostAware;
 		default:
 			return FALSE;
 	}
@@ -1376,6 +1378,9 @@ static bool XS_WsSoftReloadSyncRuntime(XS_ServerConfig* objServer)
 	return TRUE;
 }
 
+static bool XS_CustomSoftReloadRestartListener(XS_ServerConfig* objServer);
+static bool XS_XtpSoftReloadSyncTlsListener(XS_Runtime* objRuntime, XS_ServerConfig* objServer);
+
 static bool XS_CustomSoftReloadSyncRuntime(XS_ServerConfig* objServer)
 {
 	XS_CustomHandle* objHandle;
@@ -1390,17 +1395,8 @@ static bool XS_CustomSoftReloadSyncRuntime(XS_ServerConfig* objServer)
 	}
 
 	objHandle->pServer = objServer;
-	objHandle->bStopAccept = FALSE;
-
-	if ( objHandle->hAcceptThread == NULL ) {
-		objHandle->hAcceptThread = xrtThreadCreate(XS_CustomAcceptThread, objHandle, 0);
-		if ( objHandle->hAcceptThread == NULL ) {
-			XS_LogError(
-				"config reload failed: custom accept thread create error: server=%s",
-				objServer->Name ? objServer->Name : "(null)"
-			);
-			return FALSE;
-		}
+	if ( !XS_CustomSoftReloadRestartListener(objServer) ) {
+		return FALSE;
 	}
 
 	if ( !XS_RuntimeGovernEnabled() || objServer->IdleTimeout == 0u ) {
@@ -1418,6 +1414,140 @@ static bool XS_CustomSoftReloadSyncRuntime(XS_ServerConfig* objServer)
 		}
 	}
 
+	return TRUE;
+}
+
+static bool XS_CustomBuildRuntimeConfig(XS_ServerConfig* objServer, xnetlistenconfig* pCfg)
+{
+	if ( objServer == NULL || pCfg == NULL ) {
+		return FALSE;
+	}
+
+	xrtNetListenConfigInit(pCfg);
+	if ( !XS_BuildBindAddr(objServer, FALSE, &pCfg->tBindAddr) ) {
+		return FALSE;
+	}
+	pCfg->iBacklog = objServer->Backlog;
+	pCfg->iRecvLimit = XS_RuntimeGovernEnabled() ? objServer->RecvLimit : 0u;
+	return TRUE;
+}
+
+static bool XS_CustomRuntimeConfigEquals(const xnetlistenconfig* pLeft, const xnetlistenconfig* pRight)
+{
+	if ( pLeft == pRight ) {
+		return TRUE;
+	}
+	if ( pLeft == NULL || pRight == NULL ) {
+		return FALSE;
+	}
+	if ( !XS_NetAddrEquals(&pLeft->tBindAddr, &pRight->tBindAddr) ) {
+		return FALSE;
+	}
+	if ( pLeft->iFlags != pRight->iFlags ) {
+		return FALSE;
+	}
+	if ( pLeft->iBacklog != pRight->iBacklog ) {
+		return FALSE;
+	}
+	if ( pLeft->iRecvLimit != pRight->iRecvLimit ) {
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+static bool XS_CustomSoftReloadRestartListener(XS_ServerConfig* objServer)
+{
+	XS_CustomHandle* objHandle;
+	xnetlistener* pListener;
+	xnetlistenconfig tConfig;
+	int64 iClosedConn;
+	int64 iRemainConn;
+
+	if ( objServer == NULL ) {
+		return FALSE;
+	}
+
+	objHandle = (XS_CustomHandle*)objServer->pHandle;
+	if ( objHandle == NULL ) {
+		return TRUE;
+	}
+	pListener = objHandle->pListener;
+	if ( pListener == NULL ) {
+		return FALSE;
+	}
+	if ( !XS_CustomBuildRuntimeConfig(objServer, &tConfig) ) {
+		XS_LogError(
+			"config reload failed: custom soft reload invalid addr: server=%s addr=%s",
+			objServer->Name ? objServer->Name : "(null)",
+			objServer->Addr ? objServer->Addr : "(null)"
+		);
+		return FALSE;
+	}
+
+	objHandle->pServer = objServer;
+	pListener->pUserData = objServer;
+	if ( XS_CustomRuntimeConfigEquals(&pListener->tConfig, &tConfig) ) {
+		return TRUE;
+	}
+
+	objHandle->bStopAccept = TRUE;
+	xrtNetListenerStop(pListener);
+	if ( objHandle->hAcceptThread ) {
+		xrtThreadWait(objHandle->hAcceptThread);
+		xrtThreadDestroy(objHandle->hAcceptThread);
+		objHandle->hAcceptThread = NULL;
+	}
+	if ( objHandle->hIdleThread ) {
+		xrtThreadWait(objHandle->hIdleThread);
+		xrtThreadDestroy(objHandle->hIdleThread);
+		objHandle->hIdleThread = NULL;
+	}
+
+	iClosedConn = XS_CustomCloseTrackedConns(objHandle);
+	iRemainConn = XS_CustomWaitTrackedConnDrain(objHandle, 500u);
+	if ( iRemainConn > 0 ) {
+		XS_CustomAbortTrackedConns(objHandle);
+		iRemainConn = XS_CustomWaitTrackedConnDrain(objHandle, 1000u);
+	}
+	if ( iClosedConn > 0 || iRemainConn > 0 ) {
+		XS_CustomRecordStopCleanup(iClosedConn, iRemainConn);
+		XS_LogInfo(
+			"custom soft reload cleanup: server=%s addr=%s closed=%lld remain=%lld",
+			objServer->Name ? objServer->Name : "(null)",
+			objServer->Addr ? objServer->Addr : "(null)",
+			(long long)iClosedConn,
+			(long long)iRemainConn
+		);
+	}
+
+	pListener->tConfig = tConfig;
+	if ( xrtNetListenerStart(pListener) != XRT_NET_OK ) {
+		XS_LogError(
+			"config reload failed: custom soft reload start error: server=%s addr=%s",
+			objServer->Name ? objServer->Name : "(null)",
+			objServer->Addr ? objServer->Addr : "(null)"
+		);
+		return FALSE;
+	}
+
+	objHandle->bStopAccept = FALSE;
+	objHandle->hAcceptThread = xrtThreadCreate(XS_CustomAcceptThread, objHandle, 0);
+	if ( objHandle->hAcceptThread == NULL ) {
+		XS_LogError(
+			"config reload failed: custom soft reload accept thread create error: server=%s",
+			objServer->Name ? objServer->Name : "(null)"
+		);
+		xrtNetListenerStop(pListener);
+		return FALSE;
+	}
+
+	XS_LogInfo(
+		"custom soft reload listener: server=%s addr=%s bound_port=%u",
+		objServer->Name ? objServer->Name : "(null)",
+		objServer->Addr ? objServer->Addr : "(null)",
+		(unsigned)pListener->tConfig.tBindAddr.iPort
+	);
 	return TRUE;
 }
 
@@ -1700,6 +1830,214 @@ static void XS_XtpSoftReloadDropTlsListener(XS_XtpHandle* objHandle)
 	}
 }
 
+static bool XS_XtpBuildRuntimeConfig(XS_ServerConfig* objServer, bool bTLS, xnetlistenconfig* pCfg)
+{
+	if ( objServer == NULL || pCfg == NULL ) {
+		return FALSE;
+	}
+	if ( bTLS ) {
+		if ( !objServer->EnableTLS ) {
+			return FALSE;
+		}
+		if ( objServer->BindPortTLS == 0 ) {
+			return FALSE;
+		}
+		if ( objServer->TlsConfig.sCertFile == NULL || objServer->TlsConfig.sKeyFile == NULL ) {
+			return FALSE;
+		}
+	}
+
+	xrtNetListenConfigInit(pCfg);
+	if ( !XS_BuildBindAddr(objServer, bTLS, &pCfg->tBindAddr) ) {
+		return FALSE;
+	}
+	pCfg->iBacklog = objServer->Backlog;
+	pCfg->iRecvLimit = XS_RuntimeGovernEnabled() ? objServer->RecvLimit : 0u;
+	if ( bTLS ) {
+		pCfg->pTlsConfig = &objServer->TlsConfig;
+	}
+	return TRUE;
+}
+
+static bool XS_XtpRuntimeConfigEquals(const xnetlistenconfig* pLeft, const xnetlistenconfig* pRight)
+{
+	if ( pLeft == pRight ) {
+		return TRUE;
+	}
+	if ( pLeft == NULL || pRight == NULL ) {
+		return FALSE;
+	}
+	if ( !XS_NetAddrEquals(&pLeft->tBindAddr, &pRight->tBindAddr) ) {
+		return FALSE;
+	}
+	if ( pLeft->iFlags != pRight->iFlags ) {
+		return FALSE;
+	}
+	if ( pLeft->iBacklog != pRight->iBacklog ) {
+		return FALSE;
+	}
+	if ( pLeft->iRecvLimit != pRight->iRecvLimit ) {
+		return FALSE;
+	}
+	if ( !XS_TlsConfigEquals(pLeft->pTlsConfig, pRight->pTlsConfig) ) {
+		return FALSE;
+	}
+	return TRUE;
+}
+
+static bool XS_XtpSoftReloadRestartListeners(XS_Runtime* objRuntime, XS_ServerConfig* objServer)
+{
+	XS_XtpHandle* objHandle;
+	xnetlistener* pListener;
+	xnetlistenconfig tConfig;
+	xnetlistenconfig tConfigTLS;
+	bool bRestartPlain;
+	bool bRestartTLS;
+	int64 iClosedConn;
+	int64 iRemainConn;
+
+	if ( objRuntime == NULL || objServer == NULL ) {
+		return FALSE;
+	}
+
+	objHandle = (XS_XtpHandle*)objServer->pHandle;
+	if ( objHandle == NULL ) {
+		return TRUE;
+	}
+	pListener = objHandle->pListener;
+	if ( pListener == NULL ) {
+		return FALSE;
+	}
+	if ( !XS_XtpBuildRuntimeConfig(objServer, FALSE, &tConfig) ) {
+		XS_LogError(
+			"config reload failed: xtp soft reload invalid addr: server=%s addr=%s",
+			objServer->Name ? objServer->Name : "(null)",
+			objServer->Addr ? objServer->Addr : "(null)"
+		);
+		return FALSE;
+	}
+	if ( objServer->EnableTLS ) {
+		if ( !XS_XtpBuildRuntimeConfig(objServer, TRUE, &tConfigTLS) ) {
+			XS_LogError(
+				"config reload failed: xtps soft reload invalid addr: server=%s addr=%s",
+				objServer->Name ? objServer->Name : "(null)",
+				objServer->AddrTLS ? objServer->AddrTLS : "(null)"
+			);
+			return FALSE;
+		}
+	}
+
+	objHandle->pServer = objServer;
+	pListener->pUserData = objServer;
+	if ( objHandle->pListenerTLS ) {
+		objHandle->pListenerTLS->pUserData = objServer;
+	}
+
+	bRestartPlain = !XS_XtpRuntimeConfigEquals(&pListener->tConfig, &tConfig);
+	if ( objServer->EnableTLS ) {
+		bRestartTLS = (objHandle->pListenerTLS == NULL) || (!XS_XtpRuntimeConfigEquals(&objHandle->pListenerTLS->tConfig, &tConfigTLS));
+	} else {
+		bRestartTLS = (objHandle->pListenerTLS != NULL);
+	}
+	if ( !bRestartPlain && !bRestartTLS ) {
+		return TRUE;
+	}
+
+	objHandle->bStopAccept = TRUE;
+	xrtNetListenerStop(pListener);
+	if ( objHandle->pListenerTLS ) {
+		xrtNetListenerStop(objHandle->pListenerTLS);
+	}
+	if ( objHandle->hAcceptThread ) {
+		xrtThreadWait(objHandle->hAcceptThread);
+		xrtThreadDestroy(objHandle->hAcceptThread);
+		objHandle->hAcceptThread = NULL;
+	}
+	if ( objHandle->hAcceptThreadTLS ) {
+		xrtThreadWait(objHandle->hAcceptThreadTLS);
+		xrtThreadDestroy(objHandle->hAcceptThreadTLS);
+		objHandle->hAcceptThreadTLS = NULL;
+	}
+	if ( objHandle->hIdleThread ) {
+		xrtThreadWait(objHandle->hIdleThread);
+		xrtThreadDestroy(objHandle->hIdleThread);
+		objHandle->hIdleThread = NULL;
+	}
+
+	iClosedConn = XS_XtpCloseTrackedConns(objHandle);
+	iRemainConn = XS_XtpWaitTrackedConnDrain(objHandle, 500u);
+	if ( iRemainConn > 0 ) {
+		XS_XtpAbortTrackedConns(objHandle);
+		iRemainConn = XS_XtpWaitTrackedConnDrain(objHandle, 1000u);
+	}
+	if ( iClosedConn > 0 || iRemainConn > 0 ) {
+		XS_XtpRecordStopCleanup(iClosedConn, iRemainConn);
+		XS_LogInfo(
+			"xtp soft reload cleanup: server=%s addr=%s closed=%lld remain=%lld",
+			objServer->Name ? objServer->Name : "(null)",
+			objServer->Addr ? objServer->Addr : "(null)",
+			(long long)iClosedConn,
+			(long long)iRemainConn
+		);
+	}
+
+	if ( bRestartPlain ) {
+		pListener->tConfig = tConfig;
+		if ( xrtNetListenerStart(pListener) != XRT_NET_OK ) {
+			XS_LogError(
+				"config reload failed: xtp soft reload start listener error: server=%s addr=%s",
+				objServer->Name ? objServer->Name : "(null)",
+				objServer->Addr ? objServer->Addr : "(null)"
+			);
+			return FALSE;
+		}
+	}
+	if ( !bRestartPlain ) {
+		if ( xrtNetListenerStart(pListener) != XRT_NET_OK ) {
+			XS_LogError(
+				"config reload failed: xtp soft reload restart listener error: server=%s addr=%s",
+				objServer->Name ? objServer->Name : "(null)",
+				objServer->Addr ? objServer->Addr : "(null)"
+			);
+			return FALSE;
+		}
+	}
+
+	if ( !XS_XtpSoftReloadSyncTlsListener(objRuntime, objServer) ) {
+		return FALSE;
+	}
+
+	objHandle->bStopAccept = FALSE;
+	objHandle->hAcceptThread = xrtThreadCreate(XS_XtpAcceptThread, objHandle, 0);
+	if ( objHandle->hAcceptThread == NULL ) {
+		XS_LogError(
+			"config reload failed: xtp soft reload accept thread create error: server=%s",
+			objServer->Name ? objServer->Name : "(null)"
+		);
+		xrtNetListenerStop(pListener);
+		XS_XtpSoftReloadDropTlsListener(objHandle);
+		return FALSE;
+	}
+
+	if ( bRestartPlain ) {
+		XS_LogInfo(
+			"xtp soft reload listener: server=%s addr=%s bound_port=%u",
+			objServer->Name ? objServer->Name : "(null)",
+			objServer->Addr ? objServer->Addr : "(null)",
+			(unsigned)pListener->tConfig.tBindAddr.iPort
+		);
+	}
+	if ( bRestartTLS ) {
+		XS_LogInfo(
+			"xtps soft reload listener: server=%s addr=%s bound_port=%u",
+			objServer->Name ? objServer->Name : "(null)",
+			objServer->AddrTLS ? objServer->AddrTLS : "(null)",
+			(unsigned)(objHandle->pListenerTLS ? objHandle->pListenerTLS->tConfig.tBindAddr.iPort : 0u)
+		);
+	}
+	return TRUE;
+}
+
 static bool XS_XtpSoftReloadSyncTlsListener(XS_Runtime* objRuntime, XS_ServerConfig* objServer)
 {
 	XS_XtpHandle* objHandle;
@@ -1715,8 +2053,8 @@ static bool XS_XtpSoftReloadSyncTlsListener(XS_Runtime* objRuntime, XS_ServerCon
 		return TRUE;
 	}
 
-	XS_XtpSoftReloadDropTlsListener(objHandle);
 	if ( !objServer->EnableTLS ) {
+		XS_XtpSoftReloadDropTlsListener(objHandle);
 		return TRUE;
 	}
 	if ( objRuntime == NULL || objRuntime->pEngine == NULL ) {
@@ -1726,34 +2064,16 @@ static bool XS_XtpSoftReloadSyncTlsListener(XS_Runtime* objRuntime, XS_ServerCon
 		);
 		return FALSE;
 	}
-	if ( objServer->BindPortTLS == 0 ) {
+	if ( !XS_XtpBuildRuntimeConfig(objServer, TRUE, &tCfg) ) {
 		XS_LogError(
-			"config reload failed: xtps soft reload missing port_tls: server=%s",
-			objServer->Name ? objServer->Name : "(null)"
-		);
-		return FALSE;
-	}
-	if ( objServer->TlsConfig.sCertFile == NULL || objServer->TlsConfig.sKeyFile == NULL ) {
-		XS_LogError(
-			"config reload failed: xtps soft reload missing tls cert/key: server=%s",
-			objServer->Name ? objServer->Name : "(null)"
-		);
-		return FALSE;
-	}
-
-	xrtNetListenConfigInit(&tCfg);
-	if ( !XS_BuildBindAddr(objServer, TRUE, &tCfg.tBindAddr) ) {
-		XS_LogError(
-			"config reload failed: xtps soft reload invalid addr: server=%s addr=%s",
+			"config reload failed: xtps soft reload invalid config: server=%s addr=%s",
 			objServer->Name ? objServer->Name : "(null)",
 			objServer->AddrTLS ? objServer->AddrTLS : "(null)"
 		);
 		return FALSE;
 	}
-	tCfg.iBacklog = objServer->Backlog;
-	tCfg.iRecvLimit = XS_RuntimeGovernEnabled() ? objServer->RecvLimit : 0u;
-	tCfg.pTlsConfig = &objServer->TlsConfig;
 
+	XS_XtpSoftReloadDropTlsListener(objHandle);
 	pListenerTLS = xrtNetListenerCreate(objRuntime->pEngine, &tCfg, XS_XtpListenerEvents(), XS_XtpStreamEvents(), objServer);
 	if ( pListenerTLS == NULL ) {
 		XS_LogError(
@@ -1803,19 +2123,7 @@ static bool XS_XtpSoftReloadSyncRuntime(XS_Runtime* objRuntime, XS_ServerConfig*
 	}
 
 	objHandle->pServer = objServer;
-	objHandle->bStopAccept = FALSE;
-
-	if ( objHandle->hAcceptThread == NULL ) {
-		objHandle->hAcceptThread = xrtThreadCreate(XS_XtpAcceptThread, objHandle, 0);
-		if ( objHandle->hAcceptThread == NULL ) {
-			XS_LogError(
-				"config reload failed: xtp accept thread create error: server=%s",
-				objServer->Name ? objServer->Name : "(null)"
-			);
-			return FALSE;
-		}
-	}
-	if ( !XS_XtpSoftReloadSyncTlsListener(objRuntime, objServer) ) {
+	if ( !XS_XtpSoftReloadRestartListeners(objRuntime, objServer) ) {
 		return FALSE;
 	}
 
