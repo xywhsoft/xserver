@@ -231,6 +231,8 @@ void ServiceUnit(XS_ServerObject objServer, XS_HostObject objHost)
 - `xsMsgBroadcast`
 - `xsAppPath`
 
+XTP 客户端 API 当前按“同步 one-shot + request object”冻结为第一版可用能力。暂不继续补异步 pending request 或持久客户端对象体系；如果应用层确实需要连接池、异步调度或会话级治理，应在应用层基于底层协议能力自行封装，不进入 production `xs` 的默认扩张范围。
+
 如果需要迁移旧脚本里对 `xrt`、`sqlite3` 的直接调用，优先包含 `xs_vnext_full.h`。
 
 当前 `release/script_vnext/main.c` 已经包含可直接访问的示例路由：
@@ -347,7 +349,7 @@ WebSocket 脚本 API 额外提供：
 
 核心 reload / check 行为当前是：
 
-- `reload` 支持 Host 级脚本热重载，`reload_config` 支持最小配置热加载、按 `server` 定向重载，以及对 `http / ws / tcp / udp / xtp / custom` 做 targeted soft reload；其中 `http` 已覆盖 `bind / backlog / recv_limit` 这类 listener 参数变化，并继续支持 default host 开关和 host 身份集合这类 host 拓扑变更；`ws` 已覆盖 `bind / tls / ws_protocol / ws_message_limit / backlog` 这类 listener 参数变化；`udp` 已把 `recv_limit / backlog` 这类非 socket 关键参数改成对象级同步；`xtp` 已覆盖 TLS listener 的差异化重建；对于“既有服务完全不变，只新增或删除服务”的场景，`reload_config` 也已经支持 `service add/remove only` 短路路径
+- `reload` 支持 Host 级脚本热重载，`reload_config` 支持最小配置热加载、按 `server` 定向重载，以及对 `http / ws / tcp / udp / xtp / custom` 做 targeted soft reload；其中 `http` 已覆盖 `bind / backlog / recv_limit` 这类 listener 参数变化，并继续支持 default host 开关和 host 身份集合这类 host 拓扑变更；`ws` 已覆盖 `bind / tls / ws_protocol / ws_message_limit / backlog` 这类 listener 参数变化；`udp` 已把 `recv_limit / backlog` 这类非 socket 关键参数改成对象级同步；`custom / tcp` 已覆盖主 listener 的 `bind / backlog / recv_limit` 差异化重建；`xtp` 已覆盖主 listener 与 TLS listener 的 `backlog / recv_limit / tls / port_tls / tls_cert / tls_key` 差异化重建；对于“既有服务完全不变，只新增或删除服务”的场景，`reload_config` 也已经支持 `service add/remove only` 短路路径
 - `reload` / `reload_config` 命中脚本加载失败时，会保留旧运行时并记录失败状态；当前稳定 smoke 已锁住“失败后 `/json` 业务路由继续可用、配置恢复后再次 reload 返回 unchanged”这条回滚语义
 - `reload` / `reload_json` / `reload_config` / `reload_config_json` 在命中同一目标的并发窗口时，会返回 `409 + reload busy`
 - `reload` / `reload_json` / `reload_config` / `reload_config_json` 的 `force` 参数已改成严格布尔校验，非法值直接返回 `400`
@@ -443,50 +445,40 @@ xserver/
 
 ## 未完成任务
 
-以下事项截至 `2026-04-03` 仍未最终完成，后续应优先按此清单继续：
+以下事项截至 `2026-04-21` 仍未最终冻结，但已经收敛到较少的收尾项：
 
-1. production `xs` 稳定性收口
-- 继续确认 production `xs` 没有内置应用，只保留协议栈、脚本宿主、Bus / reload 运行时 API 和稳定性保护
-- 当前稳定 smoke 已覆盖 `graceful stop`、HTTP `path_limit / body_limit` 非法输入，以及 `http / ws / xtp / custom` 的 `idle_timeout` 空闲连接清理回归
-- 仍可继续补更细的异常连接、半开连接和极端边界回归，但主线稳定性保护已经形成一轮可用基线
-- 继续梳理现有保护字段，区分哪些属于稳定性保护，哪些只做兼容不再继续扩张
+1. production `xs` 稳定性只做边界补强
+- 当前稳定 smoke 已覆盖 `graceful stop`、静态路径 guard、HTTP `path_limit / body_limit` 非法输入，以及 `http / ws / xtp / custom` 的 `idle_timeout`、非法握手、非法帧、非法头等主线回归
+- `production xs` 与 `xsdbg` 的冻结分层已经可用，后续只建议继续补异常连接、半开连接、极端边界，不再扩治理类需求
 
-2. 配置热加载做最终差异化重建
+2. 配置热加载差异化重建只剩细粒度边角
 - 当前已支持全量 reload、按 `server` reload、`http / ws` host 原位 reload、`http / ws / tcp / udp / xtp / custom` targeted server soft reload、纯 service add/remove 的 `reload_config` 短路重建，以及失败回滚
-- 当前 `http` 已覆盖 `bind / backlog / recv_limit` 这类 listener 参数变化
-- 当前 `ws` 已覆盖 `bind / tls / ws_protocol / ws_message_limit / backlog` 这类 listener 参数变化
-- 当前 `udp` 已把 `recv_limit / backlog` 这类非 socket 关键参数改成对象级同步
-- 当前 `xtp` 已把 `tls / port_tls / tls_cert / tls_key` 这类 TLS listener 配置变化纳入 targeted server soft reload
-- 仍需继续补同一 service 内更细粒度的 listener / object 级最小替换，重点还是 listener 增删、更多对象级同步，以及更细的 listener 资源热切换
+- 当前 `http` 已覆盖 `bind / backlog / recv_limit`
+- 当前 `ws` 已覆盖 `bind / tls / ws_protocol / ws_message_limit / backlog`
+- 当前 `udp` 已覆盖对象级 `recv_limit / backlog` 同步
+- 当前 `custom / tcp` 已覆盖主 listener 的 `bind / backlog / recv_limit` 差异化重建
+- 当前 `xtp` 已覆盖主 listener 与 TLS listener 的 `backlog / recv_limit / tls / port_tls / tls_cert / tls_key`
+- 剩余工作主要是继续决定是否还需要更细的 listener / object 级最小替换；这已经不是交付 production `xs` 的阻塞项
 
-3. XTP 高层 API 最终定版
+3. XTP 高层 API 第一版冻结
 - 当前已完成 `xtp v2 / xtps`、同步客户端、one-shot call、request object，以及 `body / result / error / meta / summary / value / json`
-- 仍需继续补或决定最终保留哪些 API、是否补异步 pending request、是否补持久客户端对象体系
+- 当前不再把异步 pending request、持久客户端对象体系列为 production `xs` 收口阻塞项；这类能力更适合由应用层按场景封装
 
-4. `xsdbg` 调试应用规划与重整（较长周期）
-- `xsdbg` 可以保留内置调试应用，但只服务于协议调试、错误排查、内存调试、reload/check 诊断
-- `dashboard / __xs/bus/*` 已经从内置调试应用退出，历史 `dashboard` 源码也已从主线清退；后续继续把剩余页面和字段收窄成纯调试工具，而不是应用层控制面
-- 在 production `xs` 主线稳定之前，不再让 `xsdbg` 阻塞主线交付
+4. `xsdbg` 调试应用长期收窄
+- `xsdbg` 当前可以继续保留内置调试应用，但定位只限于协议调试、错误排查、内存调试、reload/check 诊断
+- `dashboard / __xs/bus/*` 已退出内置调试应用；后续只再做收窄，不再向应用层控制面回摆
 
-5. 旧业务脚本迁移继续推进
-- `release/script_vnext` 的 demo 主线已较完整
-- 仓库内 `release/script` 这批 legacy demo 已迁到 vNext 宿主，并补了 `test_script_demo.bat/sh` smoke
-- 剩余迁移工作主要落在真实业务项目或未入库旧脚本，不再是仓库内这份 demo
-
-6. 文档最终发布版整理
-- README、稳定边界、发布检查和运行补记已持续同步
-- 但仍需最后做一轮统一整理，收成正式交付版本
+5. 文档最终整理
+- 当前 README、稳定边界、发布检查和运行补记已经可以支撑发布
+- 后续主要是继续压缩历史描述、减少重复表述，并把剩余“过程记录”收成更短的交付版文档；`docs/vNext设计草案.md` 仅作为历史草稿保留，不再作为当前任务清单依据
 
 ## 建议续做顺序
 
-建议下一个上下文优先按下面顺序继续：
+建议接下来优先按下面顺序继续：
 
-1. production `xs` 稳定性回归收口
-2. 配置热加载差异化重建
-3. XTP 接口定版
-4. 文档最终整理
-5. `xsdbg` 调试应用规划与重整
-6. 旧业务脚本迁移
+1. 文档最后一轮压缩整理
+2. `xsdbg` 调试应用继续收窄
+3. 发现真实稳定性问题时再补边界回归
 
 ## 依赖项
 

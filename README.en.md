@@ -90,6 +90,11 @@ Edit `release/xs.json`:
 
 ```json
 {
+	"default_page": "index.html",
+	"page_404": "wwwroot/error_404.xtl",
+	"page_403": "wwwroot/error_403.html",
+	"page_500": "wwwroot/error_500.xtl",
+	"error_page": "wwwroot/error_generic.html",
 	"services": [
 		{
 			"enabled": true,
@@ -111,6 +116,8 @@ Edit `release/xs.json`:
 	]
 }
 ```
+
+The root object format is fixed. `services` must always be an array, even for a single service. The old root-array or single-service-root-object formats are no longer part of the current mainline contract.
 
 ### 3. Run
 
@@ -136,6 +143,11 @@ Run `xs` or `xsdbg` inside `release`; both use `xs.json` by default.
 | devfile | string | Service-level script entry file |
 | host_default | object | Default virtual host configuration |
 | hosts | array | Additional virtual hosts |
+| default_page | string | Default page path; defaults to `index.html` |
+| page_404 | string | 404 page path |
+| page_403 | string | 403 page path |
+| page_500 | string | 500 page path |
+| error_page | string | Generic error page path |
 
 ### Host Configuration
 
@@ -150,6 +162,10 @@ Run `xs` or `xsdbg` inside `release`; both use `xs.json` by default.
 | tls_ca | string | TLS CA certificate path |
 | tls_cert | string | TLS certificate path |
 | tls_key | string | TLS private key path |
+| default_page | string | Host-level default page override |
+| page_404 / page_403 / page_500 / error_page | string | Host-level error page override |
+
+Error page fields inherit from host to service to root. A page ending in `.xtl` is rendered as a template; other files are returned as static HTML. Scripts should use `Ret404 / Ret403 / Ret500 / RetError` for unified error-page responses.
 
 ## Dynamic Script Development
 
@@ -219,6 +235,16 @@ At the same time:
 - the legacy dashboard source has been removed from the mainline and archived in [dev/2026-04-03_xsdbg_dashboard_code_trim_backup](/D:/git/xserver/dev/2026-04-03_xsdbg_dashboard_code_trim_backup)
 
 Host-level script hot reload is still available through `xsReloadCurrentHost` and `xsReloadHostByName` in `script-c` hosts.
+
+Config-level reload is available through the runtime `reload_config` path. Current targeted soft reload coverage:
+
+- `http`: `bind / backlog / recv_limit`
+- `ws`: `bind / tls / ws_protocol / ws_message_limit / backlog`
+- `custom / tcp`: main listener `bind / backlog / recv_limit`
+- `udp`: object-level `recv_limit / backlog`
+- `xtp`: main and TLS listeners `backlog / recv_limit / tls / port_tls / tls_cert / tls_key`
+
+XTP client APIs are frozen as the first usable synchronous one-shot + request-object surface. Async pending requests and persistent client-object systems are intentionally left to the application layer unless a concrete lower-level framework need appears.
 
 ## Project Structure
 
