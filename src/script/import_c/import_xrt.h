@@ -829,6 +829,8 @@ static inline void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xrtQueryCount", xrtQueryCount);
 	tcc_add_symbol(s, "xrtQueryFindN", xrtQueryFindN);
 	tcc_add_symbol(s, "xrtQueryFind", xrtQueryFind);
+	tcc_add_symbol(s, "xrtQueryFindValueToN", xrtQueryFindValueToN);
+	tcc_add_symbol(s, "xrtQueryFindValueTo", xrtQueryFindValueTo);
 	tcc_add_symbol(s, "xrtQueryParseToN", xrtQueryParseToN);
 	tcc_add_symbol(s, "xrtQueryParseTo", xrtQueryParseTo);
 	tcc_add_symbol(s, "xrtQueryAppendPairTo", xrtQueryAppendPairTo);
@@ -1009,6 +1011,7 @@ static inline void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xrtHttpdResponseHeader", xrtHttpdResponseHeader);
 	tcc_add_symbol(s, "xrtHttpdResponseSetStatus", xrtHttpdResponseSetStatus);
 	tcc_add_symbol(s, "xrtHttpdResponseSetHeader", xrtHttpdResponseSetHeader);
+	tcc_add_symbol(s, "xrtHttpdStatusText", xrtHttpdStatusText);
 	tcc_add_symbol(s, "xrtHttpdResponseSetBodyCopy", xrtHttpdResponseSetBodyCopy);
 	tcc_add_symbol(s, "xrtHttpdResponseReply", xrtHttpdResponseReply);
 	tcc_add_symbol(s, "xrtHttpdConnReply", xrtHttpdConnReply);

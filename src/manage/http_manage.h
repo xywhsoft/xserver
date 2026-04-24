@@ -353,31 +353,21 @@ static inline void XS_HttpApplyDefaultHeaders(const xhttpdrequest* pReq, xhttpdr
 	}
 }
 
-static inline uint32 XS_HttpRequestMethodID(const xhttpdrequest* pReq)
+static inline bool XS_HttpAllowGetOrPost(const xhttpdrequest* pReq)
 {
-	return xrtHttpdRequestMethod(pReq);
-}
-
-static inline bool XS_HttpMethodIs(const xhttpdrequest* pReq, uint32 iMethod)
-{
-	return XS_HttpRequestMethodID(pReq) == iMethod;
-}
-
-static inline bool XS_HttpMethodIsGetOrPost(const xhttpdrequest* pReq)
-{
-	uint32 iMethod = XS_HttpRequestMethodID(pReq);
+	uint32 iMethod = xrtHttpdRequestMethod(pReq);
 	return iMethod == XHTTPD_METHOD_GET || iMethod == XHTTPD_METHOD_POST;
 }
 
-static inline bool XS_HttpMethodIsGetOrHead(const xhttpdrequest* pReq)
+static inline bool XS_HttpAllowGetOrHead(const xhttpdrequest* pReq)
 {
-	uint32 iMethod = XS_HttpRequestMethodID(pReq);
+	uint32 iMethod = xrtHttpdRequestMethod(pReq);
 	return iMethod == XHTTPD_METHOD_GET || iMethod == XHTTPD_METHOD_HEAD;
 }
 
-static inline bool XS_HttpMethodIsGetHeadOrOptions(const xhttpdrequest* pReq)
+static inline bool XS_HttpAllowGetHeadOrOptions(const xhttpdrequest* pReq)
 {
-	uint32 iMethod = XS_HttpRequestMethodID(pReq);
+	uint32 iMethod = xrtHttpdRequestMethod(pReq);
 	return iMethod == XHTTPD_METHOD_GET || iMethod == XHTTPD_METHOD_HEAD || iMethod == XHTTPD_METHOD_OPTIONS;
 }
 
@@ -410,7 +400,7 @@ static inline bool XS_HttpValidateRequest(XS_ServerConfig* objServer, const xhtt
 
 	if ( XS_HttpPathReservedManage(pReq->sPath) ) {
 		if ( strcmp(pReq->sPath, "/__xs/reload_json") == 0 || strcmp(pReq->sPath, "/__xs/reload_config_json") == 0 ) {
-			if ( !XS_HttpMethodIsGetOrPost(pReq) ) {
+			if ( !XS_HttpAllowGetOrPost(pReq) ) {
 				xrtHttpdResponseSetHeader(pResp, "Allow", "GET, POST");
 				if ( strcmp(pReq->sPath, "/__xs/reload_json") == 0 ) {
 					return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, "reload json api only supports GET or POST");
@@ -431,7 +421,7 @@ static inline bool XS_HttpValidateRequest(XS_ServerConfig* objServer, const xhtt
 			strcmp(pReq->sPath, "/__xs/udp_metrics_clear") == 0 ||
 			strcmp(pReq->sPath, "/__xs/custom_metrics_clear") == 0
 		) {
-		if ( !XS_HttpMethodIs(pReq, XHTTPD_METHOD_GET) ) {
+		if ( !(xrtHttpdRequestMethod(pReq) == XHTTPD_METHOD_GET) ) {
 				const char* sMethodMessage = XS_HttpGetOnlyAPIMethodMessage(pReq->sPath);
 				xrtHttpdResponseSetHeader(pResp, "Allow", "GET");
 				if ( bJsonError ) {
@@ -459,7 +449,7 @@ static inline bool XS_HttpValidateRequest(XS_ServerConfig* objServer, const xhtt
 			strcmp(pReq->sPath, "/__xs/reload_status_json") == 0 ||
 			strcmp(pReq->sPath, "/__xs/health_json") == 0
 		) {
-		if ( !XS_HttpMethodIsGetOrHead(pReq) ) {
+		if ( !XS_HttpAllowGetOrHead(pReq) ) {
 				const char* sMethodMessage = XS_HttpReadOnlyAPIMethodMessage(pReq->sPath);
 				xrtHttpdResponseSetHeader(pResp, "Allow", XS_HttpReadOnlyAPIAllowHeader(pReq->sPath));
 				if ( bJsonError ) {
@@ -538,10 +528,10 @@ static inline bool XS_HttpStaticMethodAllowed(const XS_HostConfig* objHost, cons
 		return FALSE;
 	}
 
-	if ( XS_HttpMethodIsGetOrHead(pReq) ) {
+	if ( XS_HttpAllowGetOrHead(pReq) ) {
 		return TRUE;
 	}
-	return XS_HttpMethodIs(pReq, XHTTPD_METHOD_OPTIONS) && XS_HttpStaticCorsOptionsEnabled(objHost);
+	return (xrtHttpdRequestMethod(pReq) == XHTTPD_METHOD_OPTIONS) && XS_HttpStaticCorsOptionsEnabled(objHost);
 }
 
 static inline bool XS_HttpApplyHostResponseHeaders(const XS_HostConfig* objHost, xhttpdresponse* pResp)
@@ -678,7 +668,7 @@ static inline bool XS_HttpServeStatic(const XS_HostConfig* objHost, const xhttpd
 		return XS_HttpRet500Ex(NULL, objHost, pReq, pResp, NULL, "path join failed", NULL);
 	}
 
-	if ( XS_HttpMethodIs(pReq, XHTTPD_METHOD_OPTIONS) ) {
+	if ( (xrtHttpdRequestMethod(pReq) == XHTTPD_METHOD_OPTIONS) ) {
 		xrtHttpdResponseSetStatus(pResp, 204, "No Content");
 		(void)xrtHttpdResponseSetHeader(pResp, "Allow", "GET, HEAD, OPTIONS");
 		if ( !XS_HttpApplyHostResponseHeaders(objHost, pResp) ) {
@@ -697,7 +687,7 @@ static inline bool XS_HttpServeStatic(const XS_HostConfig* objHost, const xhttpd
 	iFileSize = xrtFileGetSize(sFilePath);
 	sMime = XS_HttpMimeTypeByPath(sFilePath);
 	xrtHttpdResponseSetStatus(pResp, 200, "OK");
-	if ( XS_HttpMethodIs(pReq, XHTTPD_METHOD_HEAD) ) {
+	if ( (xrtHttpdRequestMethod(pReq) == XHTTPD_METHOD_HEAD) ) {
 		snprintf(sLength, sizeof(sLength), "%llu", (unsigned long long)iFileSize);
 		(void)xrtHttpdResponseSetHeader(pResp, "Content-Type", sMime);
 		(void)xrtHttpdResponseSetHeader(pResp, "Content-Length", sLength);
@@ -981,7 +971,7 @@ static inline bool XS_HttpHandleReload(XS_ServerConfig* objServer, const XS_Host
 		return XS_HttpRespondText(pResp, 403, "Forbidden", "reload api disabled");
 	}
 	
-	if ( !XS_HttpMethodIsGetOrPost(pReq) ) {
+	if ( !XS_HttpAllowGetOrPost(pReq) ) {
 		xrtHttpdResponseSetHeader(pResp, "Allow", "GET, POST");
 		return XS_HttpRespondText(pResp, 405, "Method Not Allowed", "reload api only supports GET or POST");
 	}
@@ -1062,7 +1052,7 @@ static inline bool XS_HttpHandleReloadJson(XS_ServerConfig* objServer, const XS_
 	if ( !(objServer->Debug || objHost->Debug) ) {
 		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "reload json api disabled");
 	}
-	if ( !XS_HttpMethodIsGetOrPost(pReq) ) {
+	if ( !XS_HttpAllowGetOrPost(pReq) ) {
 		return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, "reload json api only supports GET or POST");
 	}
 
@@ -1166,7 +1156,7 @@ static inline bool XS_HttpHandleConfigReload(XS_ServerConfig* objServer, const X
 	if ( !(objServer->Debug || objHost->Debug) ) {
 		return XS_HttpRespondText(pResp, 403, "Forbidden", "config reload api disabled");
 	}
-	if ( !XS_HttpMethodIsGetOrPost(pReq) ) {
+	if ( !XS_HttpAllowGetOrPost(pReq) ) {
 		xrtHttpdResponseSetHeader(pResp, "Allow", "GET, POST");
 		return XS_HttpRespondText(pResp, 405, "Method Not Allowed", "config reload api only supports GET or POST");
 	}
@@ -1229,7 +1219,7 @@ static inline bool XS_HttpHandleConfigReloadJson(XS_ServerConfig* objServer, con
 	if ( !(objServer->Debug || objHost->Debug) ) {
 		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "config reload json api disabled");
 	}
-	if ( !XS_HttpMethodIsGetOrPost(pReq) ) {
+	if ( !XS_HttpAllowGetOrPost(pReq) ) {
 		return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, "config reload json api only supports GET or POST");
 	}
 

@@ -448,6 +448,24 @@ static inline const char* XS_ScriptRequestQuery(const void* pReq)
 	return pHttpReq->sQuery;
 }
 
+static inline int XS_ScriptRequestQueryValue(const void* pReq, const char* sName, char* sOut, size_t iOutCap)
+{
+	const xhttpdrequest* pHttpReq = XS_ScriptRequestRaw(pReq);
+	size_t iOutLen = 0u;
+
+	if ( sOut == NULL || iOutCap == 0u ) {
+		return -1;
+	}
+	sOut[0] = '\0';
+	if ( pHttpReq == NULL || sName == NULL ) {
+		return -1;
+	}
+	if ( !xrtQueryFindValueTo(pHttpReq->sQuery, sName, sOut, iOutCap, &iOutLen) ) {
+		return -1;
+	}
+	return (int)iOutLen;
+}
+
 static inline const void* XS_ScriptRequestBody(const void* pReq)
 {
 	const xhttpdrequest* pHttpReq = XS_ScriptRequestRaw(pReq);
@@ -507,6 +525,20 @@ static inline int XS_ScriptHttpReply(void* pResp, uint32 iStatus, const char* sR
 	}
 
 	return xrtHttpdResponseReply(pHttpResp, iStatus, sReason, sHeaders, pBody, iBodyLen) ? 1 : 0;
+}
+
+static inline int XS_ScriptHttpReplyAuto(void* pResp, uint32 iStatus, const char* sHeaders, const void* pBody, size_t iBodyLen)
+{
+	const char* pOutBody = (const char*)pBody;
+
+	if ( pOutBody == NULL ) {
+		pOutBody = "";
+		iBodyLen = 0u;
+	} else if ( iBodyLen == 0u ) {
+		iBodyLen = strlen(pOutBody);
+	}
+
+	return XS_ScriptHttpReply(pResp, iStatus, xrtHttpdStatusText(iStatus), sHeaders, pOutBody, iBodyLen);
 }
 
 static inline int XS_ScriptHttpStart(void* pResp, uint32 iStatus, const char* sReason, const char* sHeaders)

@@ -37,7 +37,6 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 #include <ctype.h>
 #include <wctype.h>
 #include <math.h>
@@ -132,12 +131,6 @@
 	#endif
 #else
 	#include <unistd.h>
-	#ifndef _stricmp
-		#define _stricmp strcasecmp
-	#endif
-	#ifndef _strnicmp
-		#define _strnicmp strncasecmp
-	#endif
 #endif
 
 
@@ -305,6 +298,7 @@
 	#define XRT_NO_TEMPLATE
 	#define XRT_NO_REGEX		// 禁用正则表达式模块
 	#define XRT_NO_SUBPROCESS
+	#define XRT_NO_LOGGER
 #endif
 
 // 网络根模块裁剪时，同步裁剪全部网络子库
@@ -533,6 +527,15 @@
 	#undef XRT_NO_TIME
 #endif
 
+#if defined(XRT_NO_TIME) && !defined(XRT_NO_LOGGER)
+	#if defined(__clang__) || defined(__GNUC__) || defined(__TINYC__)
+		#warning "XRT_NO_TIME ignored because LOGGER requires TIME."
+	#else
+		XRT_CUT_WARN("XRT_NO_TIME ignored because LOGGER requires TIME.")
+	#endif
+	#undef XRT_NO_TIME
+#endif
+
 #undef XRT_CUT_WARN
 #if defined(_MSC_VER)
 	#undef XRT_CUT_WARN_STR
@@ -591,9 +594,7 @@
 	typedef uintptr_t uintptr;
 	
 	typedef int64 xtime;
-	#ifndef XPK_XTIME_DEFINED
-		#define XPK_XTIME_DEFINED
-	#endif
+	#define XRT_XTIME_DEFINED
 	
 	/*
 	#ifndef bool
@@ -1032,7 +1033,7 @@
 	};
 	
 	// 全局数据
-	xrtGlobalData* xCore;
+	XXAPI extern xrtGlobalData xCore;
 	
 	
 	
@@ -2256,6 +2257,76 @@
 	
 	// 本地时间转UTC
 	XXAPI xtime xrtLocalToUTC(xtime local);
+
+
+
+	#ifndef XRT_NO_LOGGER
+	/* ---------- 日志系统 ---------- */
+
+	typedef enum {
+		XLOG_TRACE = 0,
+		XLOG_DEBUG = 1,
+		XLOG_INFO = 2,
+		XLOG_WARN = 3,
+		XLOG_ERROR = 4,
+		XLOG_FATAL = 5,
+		XLOG_OFF = 6
+	} xloglevel;
+
+	typedef enum {
+		XLOG_FORMAT_TEXT = 0,
+		XLOG_FORMAT_SIMPLE = 1,
+		XLOG_FORMAT_JSON = 2
+	} xlogformat;
+
+	typedef struct xlogger xlogger;
+	typedef struct xlogappender xlogappender;
+
+	typedef struct xlogevent {
+		xtime iTime;
+		xloglevel iLevel;
+		const char* sLogger;
+		const char* sFile;
+		uint32 iLine;
+		const char* sFunc;
+		uint64 iThreadId;
+		const char* sMessage;
+	} xlogevent;
+
+	typedef void (*xlogcustomproc)(const xlogevent* pEvent, ptr pUserData);
+
+	XXAPI xlogger* xlogCreate(str sName);
+	XXAPI void xlogDestroy(xlogger* pLogger);
+	XXAPI xlogger* xlogDefault();
+	XXAPI void xlogSetDefault(xlogger* pLogger);
+	XXAPI void xlogSetLevel(xlogger* pLogger, xloglevel iLevel);
+	XXAPI xloglevel xlogGetLevel(xlogger* pLogger);
+	XXAPI xlogappender* xlogAddConsole(xlogger* pLogger, xloglevel iMinLevel, bool bColor);
+	XXAPI xlogappender* xlogAddFile(xlogger* pLogger, str sPath, xloglevel iMinLevel);
+	XXAPI xlogappender* xlogAddRollingFile(xlogger* pLogger, str sPath, uint64 iMaxSize, uint32 iMaxBackup, xloglevel iMinLevel);
+	XXAPI xlogappender* xlogAddCustom(xlogger* pLogger, str sName, xloglevel iMinLevel, xlogcustomproc Proc, ptr pUserData);
+	XXAPI void xlogAppenderSetLevel(xlogappender* pAppender, xloglevel iMinLevel);
+	XXAPI void xlogAppenderSetFormat(xlogappender* pAppender, xlogformat iFormat);
+	XXAPI void xlogAppenderSetColor(xlogappender* pAppender, bool bColor);
+	XXAPI void xlogWrite(xlogger* pLogger, xloglevel iLevel, const char* sFile, uint32 iLine, const char* sFunc, const char* sFmt, ...);
+	XXAPI void xlogWriteV(xlogger* pLogger, xloglevel iLevel, const char* sFile, uint32 iLine, const char* sFunc, const char* sFmt, va_list args);
+	XXAPI void xlogFlush(xlogger* pLogger);
+	XXAPI str xlogLevelName(xloglevel iLevel);
+
+	#define xloggerTrace(pLogger, ...)	xlogWrite((pLogger), XLOG_TRACE, __FILE__, __LINE__, __func__, __VA_ARGS__)
+	#define xloggerDebug(pLogger, ...)	xlogWrite((pLogger), XLOG_DEBUG, __FILE__, __LINE__, __func__, __VA_ARGS__)
+	#define xloggerInfo(pLogger, ...)	xlogWrite((pLogger), XLOG_INFO, __FILE__, __LINE__, __func__, __VA_ARGS__)
+	#define xloggerWarn(pLogger, ...)	xlogWrite((pLogger), XLOG_WARN, __FILE__, __LINE__, __func__, __VA_ARGS__)
+	#define xloggerError(pLogger, ...)	xlogWrite((pLogger), XLOG_ERROR, __FILE__, __LINE__, __func__, __VA_ARGS__)
+	#define xloggerFatal(pLogger, ...)	xlogWrite((pLogger), XLOG_FATAL, __FILE__, __LINE__, __func__, __VA_ARGS__)
+
+	#define xlogTrace(...)				xlogWrite(xlogDefault(), XLOG_TRACE, __FILE__, __LINE__, __func__, __VA_ARGS__)
+	#define xlogDebug(...)				xlogWrite(xlogDefault(), XLOG_DEBUG, __FILE__, __LINE__, __func__, __VA_ARGS__)
+	#define xlogInfo(...)				xlogWrite(xlogDefault(), XLOG_INFO, __FILE__, __LINE__, __func__, __VA_ARGS__)
+	#define xlogWarn(...)				xlogWrite(xlogDefault(), XLOG_WARN, __FILE__, __LINE__, __func__, __VA_ARGS__)
+	#define xlogError(...)				xlogWrite(xlogDefault(), XLOG_ERROR, __FILE__, __LINE__, __func__, __VA_ARGS__)
+	#define xlogFatal(...)				xlogWrite(xlogDefault(), XLOG_FATAL, __FILE__, __LINE__, __func__, __VA_ARGS__)
+	#endif
 	
 	// 获取相对时间描述（如"3天前"、"2小时后"）（ 需使用 xrtFree 释放内存 ）
 	XXAPI str xrtRelativeTime(xtime iTime, xtime iBaseTime);
@@ -3441,6 +3512,15 @@
 		const char* sCertFile;
 		const char* sKeyFile;
 		const char* sCaFile;
+		const char* sCrlFile;
+		const void* pCertData;
+		size_t iCertDataLen;
+		const void* pKeyData;
+		size_t iKeyDataLen;
+		const void* pCaData;
+		size_t iCaDataLen;
+		const void* pCrlData;
+		size_t iCrlDataLen;
 		const char* sHostName;
 		bool bVerifyPeer;
 		void (*OnSNI)(xtlssession *pSession, const char *sHostName, ptr pUserData);
@@ -3448,6 +3528,7 @@
 		bool bAllowTLS12Ed25519;
 		uint16 iMaxVersion;
 		const xtlsresume* pResume;
+		volatile long iDataLock;
 	} xtlsconfig;
 
 
@@ -4418,6 +4499,7 @@
 			uint32 iFlags;
 			uint32 iBacklog;
 			uint32 iRecvLimit;
+			uint32 iBodyLimit;
 			const xtlsconfig* pTlsConfig;
 		} xhttpdconfig;
 
@@ -4685,6 +4767,12 @@
 
 		// 查找查询
 		XXAPI bool xrtQueryFind(const char* sQuery, const char* sKey, xrtquerypair* pOut);
+
+		// 查找并解码查询值到固定缓冲区
+		XXAPI bool xrtQueryFindValueToN(const char* sQuery, size_t iLen, const char* sKey, size_t iKeyLen, char* sOut, size_t iOutCap, size_t* pOutLen);
+
+		// 查找并解码查询值到固定缓冲区
+		XXAPI bool xrtQueryFindValueTo(const char* sQuery, const char* sKey, char* sOut, size_t iOutCap, size_t* pOutLen);
 
 		// 解析查询
 		XXAPI bool xrtQueryParseToN(const char* sQuery, size_t iLen, xrtquerypair* pOut, size_t iCap, size_t* pCount);
@@ -5319,6 +5407,9 @@
 
 	// 设置网络 TLS session 证书
 	XXAPI xnet_result xrtNetTlsSessionSetCert(xtlssession* pSession, const char* sCertFile, const char* sKeyFile);
+
+	// 设置网络 TLS session 内存证书
+	XXAPI xnet_result xrtNetTlsSessionSetCertData(xtlssession* pSession, const void* pCertData, size_t iCertLen, const void* pKeyData, size_t iKeyLen);
 
 	// 设置 TLS 1.2 是否允许使用 Ed25519
 	XXAPI void xrtNetTlsSessionSetAllowTLS12Ed25519(xtlssession* pSession, bool bAllow);
@@ -6076,6 +6167,9 @@
 
 		// 设置 HTTP 服务端 response 头部
 		XXAPI bool xrtHttpdResponseSetHeader(xhttpdresponse* pResp, const char* sName, const char* sValue);
+
+		// 获取 HTTP 服务端默认状态文本
+		XXAPI const char* xrtHttpdStatusText(uint32 iStatusCode);
 
 		// 复制服务端响应正文并设置 Content-Type
 		XXAPI bool xrtHttpdResponseSetBodyCopy(xhttpdresponse* pResp, const void* pData, size_t iLen, const char* sContentType);
@@ -6855,7 +6949,7 @@
 		(o)->RootNode = NULL; \
 		(o)->Count = 0; \
 		(o)->Iterator = NULL; \
-	} while(0)
+	} while ( 0 )
 	
 	// 释放 AVLTree
 	#define xrtAVLTB_Unit xrtAVLTB_Init
@@ -7433,6 +7527,7 @@
 			ptr vStruct;
 			ptr vCustom;
 		};
+		struct xvalue_struct* vFuncEnv;
 	} xvalue_struct, *xvalue;
 	
 	// 函数指针类型定义
@@ -7617,6 +7712,9 @@
 	// 创建函数值
 	XXAPI xvalue xvoCreateFunc(xfunction pFunc);
 
+	// 创建带环境的函数值
+	XXAPI xvalue xvoCreateFuncEx(xfunction pFunc, xvalue pEnv);
+
 	// 创建数组
 	XXAPI xvalue xvoCreateArray();
 
@@ -7667,6 +7765,9 @@
 
 	// 获取函数值
 	XXAPI xfunction xvoGetFunc(xvalue pVal);
+
+	// 获取函数值环境
+	XXAPI xvalue xvoGetFuncEnv(xvalue pVal);
 
 	// 获取数组
 	XXAPI xparray xvoGetArray(xvalue pVal);
@@ -7765,6 +7866,12 @@
 	// 删除数组
 	XXAPI bool xvoArrayRemove(xvalue pArr, uint32 index, uint32 count);
 
+	// Take one array item without unref; ownership of the stored value reference is transferred to caller.
+	XXAPI xvalue xvoArrayTakeValue(xvalue pArr, uint32 index);
+
+	// Pop the last array item without unref; ownership of the stored value reference is transferred to caller.
+	XXAPI xvalue xvoArrayPopValue(xvalue pArr);
+
 	// 获取数组成员数量
 	XXAPI uint32 xvoArrayItemCount(xvalue pArr);
 
@@ -7819,6 +7926,9 @@
 
 	// 删除列表
 	XXAPI bool xvoListRemove(xvalue pList, int64 index);
+
+	// Take one list item without unref; ownership of the stored value reference is transferred to caller.
+	XXAPI xvalue xvoListTakeValue(xvalue pList, int64 index);
 
 	// 获取列表成员数量
 	XXAPI uint32 xvoListItemCount(xvalue pList);
@@ -7958,6 +8068,9 @@
 	// 从表中删除一个键
 	XXAPI bool xvoTableRemove(xvalue pTbl, str key, uint32 kl);
 
+	// Take one table value without unref; ownership of the stored value reference is transferred to caller.
+	XXAPI xvalue xvoTableTakeValue(xvalue pTbl, str key, uint32 kl);
+
 	// 获取表成员数量
 	XXAPI uint32 xvoTableItemCount(xvalue pTbl);
 
@@ -7972,6 +8085,26 @@
 
 	// 获取值类型
 	XXAPI int xvoType(xvalue pVal);
+	XXAPI str xvoTypeName(int iType);
+	XXAPI bool xvoIsBool(xvalue pVal);
+	XXAPI bool xvoIsInt(xvalue pVal);
+	XXAPI bool xvoIsFloat(xvalue pVal);
+	XXAPI bool xvoIsText(xvalue pVal);
+	XXAPI bool xvoIsTime(xvalue pVal);
+	XXAPI bool xvoIsPoint(xvalue pVal);
+	XXAPI bool xvoIsFunc(xvalue pVal);
+	XXAPI bool xvoIsArray(xvalue pVal);
+	XXAPI bool xvoIsList(xvalue pVal);
+	XXAPI bool xvoIsColl(xvalue pVal);
+	XXAPI bool xvoIsTable(xvalue pVal);
+	XXAPI bool xvoIsClass(xvalue pVal);
+	XXAPI bool xvoIsCustom(xvalue pVal);
+	XXAPI bool xvoIsNumber(xvalue pVal);
+	XXAPI bool xvoIsBasic(xvalue pVal);
+	XXAPI bool xvoIsContainer(xvalue pVal);
+	XXAPI bool xvoCanCompareBasic(xvalue pLeft, xvalue pRight);
+	XXAPI int xvoBasicCompare(xvalue pLeft, xvalue pRight);
+	XXAPI bool xvoBasicEqual(xvalue pLeft, xvalue pRight);
 	#define xvoArrayItemType(pArr, index)														xvoType(xvoArrayGetValue(pArr, index))
 	#define xvoListItemType(pList, index)														xvoType(xvoListGetValue(pList, index))
 	#define xvoTableItemType(pTbl, key, kl)														xvoType(xvoTableGetValue(pTbl, key, kl))

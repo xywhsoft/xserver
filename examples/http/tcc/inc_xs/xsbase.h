@@ -20,21 +20,6 @@
 
 
 
-// xrt 事件类型定义
-#define XRT_EV_ACCEPT	1
-#define XRT_EV_RECV		2
-#define XRT_EV_CLOSE	3
-
-#define XS_HTTP_METHOD_UNKNOWN	0u
-#define XS_HTTP_METHOD_GET		1u
-#define XS_HTTP_METHOD_HEAD		2u
-#define XS_HTTP_METHOD_POST		3u
-#define XS_HTTP_METHOD_PUT		4u
-#define XS_HTTP_METHOD_DELETE	5u
-#define XS_HTTP_METHOD_PATCH	6u
-#define XS_HTTP_METHOD_OPTIONS	7u
-
-
 // 语言类型定义
 #define SLT_STATIC		0			// 静态页面
 #define SLT_C			1			// C 语言
@@ -67,6 +52,7 @@ unsigned xsReqMethodID(XS_RequestObject objReq);
 const char* xsReqTarget(XS_RequestObject objReq);
 const char* xsReqPath(XS_RequestObject objReq);
 const char* xsReqQuery(XS_RequestObject objReq);
+int xsReqQueryValue(XS_RequestObject objReq, const char* sName, char* sOut, size_t iOutCap);
 const void* xsReqBody(XS_RequestObject objReq);
 size_t xsReqBodyLen(XS_RequestObject objReq);
 const char* xsReqRemote(XS_RequestObject objReq);
@@ -74,6 +60,7 @@ const char* xsReqHeader(XS_RequestObject objReq, const char* sName);
 int xsHttpStatus(XS_ResponseObject objResp, unsigned iStatus, const char* sReason);
 int xsHttpHeader(XS_ResponseObject objResp, const char* sName, const char* sValue);
 int xsHttpReply(XS_ResponseObject objResp, unsigned iStatus, const char* sReason, const char* sHeaders, const void* pBody, size_t iBodyLen);
+int xsHttpReplyAuto(XS_ResponseObject objResp, unsigned iStatus, const char* sHeaders, const void* pBody, size_t iBodyLen);
 int xsHttpStart(XS_ResponseObject objResp, unsigned iStatus, const char* sReason, const char* sHeaders);
 int xsHttpSend(XS_ResponseObject objResp, const void* pData, size_t iLen);
 int xsHttpEnd(XS_ResponseObject objResp);
