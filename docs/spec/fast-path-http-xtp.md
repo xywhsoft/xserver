@@ -185,6 +185,26 @@ xs Host 配置支持静态响应头：
 - [x] 大文件不会一次性载入内存
 - [x] HEAD 请求不读取文件 body
 
+### H4. xadmin 通用 HTTP helper 下沉
+
+跟踪：`[x]`
+
+要求：
+
+- [x] Cookie 读取由 xs 提供 `xsReqCookieValue()`，xadmin 不再自写 Cookie 查找、解码和堆分配 helper
+- [x] Multipart 读取由 xs 提供 `xsReqMultipartNext()`，Part 类型直接使用 xrt 的 `xrtmultipartpartview`
+- [x] Multipart name 比较由 xs 提供 `xsMultipartNameIs()`，xadmin 不再维护 `HttpMultipartPart/HttpMultipartNext/HttpMultipartNameIs`
+- [x] printf 风格响应由 xs 提供 `xsHttpReplyFormat()`，生成代码不再声明 xadmin 级 `HttpReplyFormat`
+- [x] xvalue JSON 响应由 xs 提供 `xsHttpJsonValueTake()`，用函数名明确接管并释放传入值
+- [x] xadmin 只保留 `LoadPage()` 这类业务 helper，不再补齐 xs/xrt 的通用 HTTP 缺口
+
+验收：
+
+- [x] xadmin 无 `HttpGetCookieDup/HttpMultipart*/HttpReplyFormat/HttpReplyJSONValue` 自定义通用 helper
+- [x] 附件上传、插件导入、模板生成代码均改用 xs/xrt API
+- [x] `xserver` 构建通过
+- [x] `xadmin` 短时启动烟测通过，脚本与插件 SDK 符号可解析
+
 ## XTP 设计
 
 ### X1. 消息分类 fast path
@@ -307,6 +327,7 @@ int xsXtpReplyEnd(stream);
 | P1 | xs | `[x]` | XTP 轻量 reply API |
 | P2 | xs | `[x]` | production stats 默认关闭或编译隔离 |
 | P2 | xadmin | `[x]` | HTTP 路由和响应迁移 |
+| P2 | xs/xadmin | `[x]` | xadmin 通用 HTTP helper 下沉到 xs/xrt |
 | P2 | xadmin | `[x]` | XTP 路由和回复迁移（当前无实际 XTP handler，完成 API 同步） |
 | P2 | all | `[x]` | 压测、内存峰值、安全回归 |
 

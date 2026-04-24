@@ -44,22 +44,27 @@ static inline void XS_ImportXSSymbols(TCCState* s)
 	tcc_add_symbol(s, "xsReqPath", XS_ScriptRequestPath);
 	tcc_add_symbol(s, "xsReqQuery", XS_ScriptRequestQuery);
 	tcc_add_symbol(s, "xsReqQueryValue", XS_ScriptRequestQueryValue);
+	tcc_add_symbol(s, "xsReqCookieValue", XS_ScriptRequestCookieValue);
 	tcc_add_symbol(s, "xsReqBody", XS_ScriptRequestBody);
 	tcc_add_symbol(s, "xsReqBodyLen", XS_ScriptRequestBodyLen);
 	tcc_add_symbol(s, "xsReqRemote", XS_ScriptRequestRemote);
 	tcc_add_symbol(s, "xsReqHeader", XS_ScriptRequestHeader);
+	tcc_add_symbol(s, "xsReqMultipartNext", XS_ScriptRequestMultipartNext);
+	tcc_add_symbol(s, "xsMultipartNameIs", XS_ScriptMultipartNameIs);
 
 	/* response */
 	tcc_add_symbol(s, "xsHttpStatus", XS_ScriptHttpStatus);
 	tcc_add_symbol(s, "xsHttpHeader", XS_ScriptHttpHeader);
 	tcc_add_symbol(s, "xsHttpReply", XS_ScriptHttpReply);
 	tcc_add_symbol(s, "xsHttpReplyAuto", XS_ScriptHttpReplyAuto);
+	tcc_add_symbol(s, "xsHttpReplyFormat", XS_ScriptHttpReplyFormat);
 	tcc_add_symbol(s, "xsHttpStart", XS_ScriptHttpStart);
 	tcc_add_symbol(s, "xsHttpSend", XS_ScriptHttpSend);
 	tcc_add_symbol(s, "xsHttpEnd", XS_ScriptHttpEnd);
 	tcc_add_symbol(s, "xsHttpText", XS_ScriptHttpText);
 	tcc_add_symbol(s, "xsHttpBody", XS_ScriptHttpBody);
 	tcc_add_symbol(s, "xsHttpJson", XS_ScriptHttpJson);
+	tcc_add_symbol(s, "xsHttpJsonValueTake", XS_ScriptHttpJsonValueTake);
 	tcc_add_symbol(s, "xsHttpMarkdown", XS_ScriptHttpMarkdown);
 	tcc_add_symbol(s, "xsMarkdownToHtml", XS_ScriptMarkdownToHtml);
 	tcc_add_symbol(s, "xsMarkdownToHtmlEx", XS_ScriptMarkdownToHtmlEx);

@@ -1,6 +1,8 @@
 #ifndef XS_SCRIPT_SCRIPT_API_H
 #define XS_SCRIPT_SCRIPT_API_H
 
+#include <stdarg.h>
+
 #include "../../lib/sqlite3.h"
 #include "import_c/import_all.h"
 
@@ -466,6 +468,33 @@ static inline int XS_ScriptRequestQueryValue(const void* pReq, const char* sName
 	return (int)iOutLen;
 }
 
+static inline int XS_ScriptRequestCookieValue(const void* pReq, const char* sName, char* sOut, size_t iOutCap)
+{
+	xrtcookiepair tCookie;
+	const char* sCookie;
+	size_t iOutLen = 0u;
+
+	if ( sOut == NULL || iOutCap == 0u ) {
+		return -1;
+	}
+	sOut[0] = '\0';
+	if ( sName == NULL ) {
+		return -1;
+	}
+	sCookie = xrtHttpdRequestHeader(XS_ScriptRequestRaw(pReq), "Cookie");
+	if ( sCookie == NULL || sCookie[0] == '\0' ) {
+		return -1;
+	}
+	if ( !xrtCookieFind(sCookie, sName, &tCookie) ) {
+		return -1;
+	}
+	if ( !xrtPercentDecodeTo(tCookie.tValue.sPtr, tCookie.tValue.iLen, sOut, iOutCap, &iOutLen, false) ) {
+		sOut[0] = '\0';
+		return -1;
+	}
+	return (int)iOutLen;
+}
+
 static inline const void* XS_ScriptRequestBody(const void* pReq)
 {
 	const xhttpdrequest* pHttpReq = XS_ScriptRequestRaw(pReq);
@@ -491,6 +520,44 @@ static inline size_t XS_ScriptRequestBodyLen(const void* pReq)
 static inline const char* XS_ScriptRequestHeader(const void* pReq, const char* sName)
 {
 	return xrtHttpdRequestHeader(XS_ScriptRequestRaw(pReq), sName);
+}
+
+static inline int XS_ScriptRequestMultipartNext(const void* pReq, size_t* pOffset, xrtmultipartpartview* pPart)
+{
+	xrtstrview tBoundary;
+	const char* sContentType;
+
+	if ( pOffset == NULL || pPart == NULL ) {
+		return 0;
+	}
+	memset(pPart, 0, sizeof(*pPart));
+
+	sContentType = XS_ScriptRequestHeader(pReq, "Content-Type");
+	if ( sContentType == NULL || sContentType[0] == '\0' ) {
+		return 0;
+	}
+	if ( !xrtMultipartBoundaryFromContentType(sContentType, &tBoundary) ) {
+		return 0;
+	}
+	return xrtMultipartNextN(
+		(const char*)XS_ScriptRequestBody(pReq),
+		XS_ScriptRequestBodyLen(pReq),
+		tBoundary.sPtr,
+		tBoundary.iLen,
+		pOffset,
+		pPart
+	) ? 1 : 0;
+}
+
+static inline int XS_ScriptMultipartNameIs(const xrtmultipartpartview* pPart, const char* sName)
+{
+	size_t iNameLen;
+
+	if ( pPart == NULL || sName == NULL || pPart->tName.sPtr == NULL ) {
+		return 0;
+	}
+	iNameLen = strlen(sName);
+	return (pPart->tName.iLen == iNameLen && memcmp(pPart->tName.sPtr, sName, iNameLen) == 0) ? 1 : 0;
 }
 
 static inline int XS_ScriptHttpStatus(void* pResp, uint32 iStatus, const char* sReason)
@@ -539,6 +606,42 @@ static inline int XS_ScriptHttpReplyAuto(void* pResp, uint32 iStatus, const char
 	}
 
 	return XS_ScriptHttpReply(pResp, iStatus, xrtHttpdStatusText(iStatus), sHeaders, pOutBody, iBodyLen);
+}
+
+static inline int XS_ScriptHttpReplyFormat(void* pResp, uint32 iStatus, const char* sHeaders, const char* sFormat, ...)
+{
+	va_list objArgs;
+	int iLen;
+	char* sText;
+	int iRet;
+
+	if ( sFormat == NULL ) {
+		return XS_ScriptHttpReplyAuto(pResp, iStatus, sHeaders, "", 0u);
+	}
+
+	va_start(objArgs, sFormat);
+#if defined(_WIN32) || defined(_WIN64)
+	iLen = _vscprintf(sFormat, objArgs);
+#else
+	iLen = vsnprintf(NULL, 0, sFormat, objArgs);
+#endif
+	va_end(objArgs);
+	if ( iLen < 0 ) {
+		return XS_ScriptHttpReplyAuto(pResp, 500u, "Content-Type: text/plain\r\n", "format failed", 0u);
+	}
+
+	sText = (char*)xrtMalloc((size_t)iLen + 1u);
+	if ( sText == NULL ) {
+		return XS_ScriptHttpReplyAuto(pResp, 500u, "Content-Type: text/plain\r\n", "alloc failed", 0u);
+	}
+
+	va_start(objArgs, sFormat);
+	vsnprintf(sText, (size_t)iLen + 1u, sFormat, objArgs);
+	va_end(objArgs);
+
+	iRet = XS_ScriptHttpReplyAuto(pResp, iStatus, sHeaders, sText, (size_t)iLen);
+	xrtFree(sText);
+	return iRet;
 }
 
 static inline int XS_ScriptHttpStart(void* pResp, uint32 iStatus, const char* sReason, const char* sHeaders)
@@ -626,6 +729,27 @@ static inline int XS_ScriptHttpJson(void* pResp, uint32 iStatus, const char* sRe
 		sJson ? strlen(sJson) : 2,
 		"application/json; charset=utf-8"
 	) ? 1 : 0;
+}
+
+static inline int XS_ScriptHttpJsonValueTake(void* pResp, uint32 iStatus, xvalue objValue)
+{
+	char* sJson;
+	int iRet;
+
+	if ( objValue == NULL ) {
+		return XS_ScriptHttpJson(pResp, iStatus, xrtHttpdStatusText(iStatus), "{\"result\":false,\"message\":\"response build failed\"}");
+	}
+
+	sJson = xrtStringifyJSON(objValue, false, NULL);
+	if ( sJson == NULL ) {
+		xvoUnref(objValue);
+		return XS_ScriptHttpJson(pResp, 500u, xrtHttpdStatusText(500u), "{\"result\":false,\"message\":\"response stringify failed\"}");
+	}
+
+	iRet = XS_ScriptHttpJson(pResp, iStatus, xrtHttpdStatusText(iStatus), sJson);
+	xrtFree(sJson);
+	xvoUnref(objValue);
+	return iRet;
 }
 
 typedef struct {
