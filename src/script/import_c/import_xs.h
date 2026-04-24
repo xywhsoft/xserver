@@ -39,6 +39,7 @@ static inline void XS_ImportXSSymbols(TCCState* s)
 
 	/* request */
 	tcc_add_symbol(s, "xsReqMethod", XS_ScriptRequestMethod);
+	tcc_add_symbol(s, "xsReqMethodID", XS_ScriptRequestMethodID);
 	tcc_add_symbol(s, "xsReqTarget", XS_ScriptRequestTarget);
 	tcc_add_symbol(s, "xsReqPath", XS_ScriptRequestPath);
 	tcc_add_symbol(s, "xsReqQuery", XS_ScriptRequestQuery);
@@ -50,6 +51,10 @@ static inline void XS_ImportXSSymbols(TCCState* s)
 	/* response */
 	tcc_add_symbol(s, "xsHttpStatus", XS_ScriptHttpStatus);
 	tcc_add_symbol(s, "xsHttpHeader", XS_ScriptHttpHeader);
+	tcc_add_symbol(s, "xsHttpReply", XS_ScriptHttpReply);
+	tcc_add_symbol(s, "xsHttpStart", XS_ScriptHttpStart);
+	tcc_add_symbol(s, "xsHttpSend", XS_ScriptHttpSend);
+	tcc_add_symbol(s, "xsHttpEnd", XS_ScriptHttpEnd);
 	tcc_add_symbol(s, "xsHttpText", XS_ScriptHttpText);
 	tcc_add_symbol(s, "xsHttpBody", XS_ScriptHttpBody);
 	tcc_add_symbol(s, "xsHttpJson", XS_ScriptHttpJson);
@@ -91,6 +96,12 @@ static inline void XS_ImportXSSymbols(TCCState* s)
 	tcc_add_symbol(s, "xsXtpGetParam", XS_ScriptXtpGetParam);
 	tcc_add_symbol(s, "xsXtpReply", XS_ScriptXtpReply);
 	tcc_add_symbol(s, "xsXtpReplyEx", XS_ScriptXtpReplyEx);
+	tcc_add_symbol(s, "xsXtpReplySimple", XS_ScriptXtpReplySimple);
+	tcc_add_symbol(s, "xsXtpReplyStart", XS_ScriptXtpReplyStart);
+	tcc_add_symbol(s, "xsXtpReplyParam", XS_ScriptXtpReplyParam);
+	tcc_add_symbol(s, "xsXtpReplyBody", XS_ScriptXtpReplyBody);
+	tcc_add_symbol(s, "xsXtpReplyEnd", XS_ScriptXtpReplyEnd);
+	tcc_add_symbol(s, "xsXtpReplyAbort", XS_ScriptXtpReplyAbort);
 	tcc_add_symbol(s, "xsXtpMsgId", XS_ScriptXtpMsgId);
 	tcc_add_symbol(s, "xsXtpMsgType", XS_ScriptXtpMsgType);
 	tcc_add_symbol(s, "xsXtpMsgFlags", XS_ScriptXtpMsgFlags);
@@ -98,6 +109,9 @@ static inline void XS_ImportXSSymbols(TCCState* s)
 	tcc_add_symbol(s, "xsXtpStatus", XS_ScriptXtpStatus);
 	tcc_add_symbol(s, "xsXtpCmd", XS_ScriptXtpCmd);
 	tcc_add_symbol(s, "xsXtpCmdLen", XS_ScriptXtpCmdLen);
+	tcc_add_symbol(s, "xsXtpCmdID", XS_ScriptXtpCmdID);
+	tcc_add_symbol(s, "xsXtpCmdIDFrom", XS_ScriptXtpCmdIDFrom);
+	tcc_add_symbol(s, "xsXtpCmdRegister", XS_ScriptXtpCmdRegister);
 	tcc_add_symbol(s, "xsXtpBody", XS_ScriptXtpBody);
 	tcc_add_symbol(s, "xsXtpBodyLen", XS_ScriptXtpBodyLen);
 	tcc_add_symbol(s, "xsXtpBodyDup", XS_ScriptXtpBodyDup);

@@ -288,6 +288,121 @@ static inline bool XS_InheritHttpPageConfig(XS_HttpPageConfig* objPages, const X
 	return TRUE;
 }
 
+typedef struct XS_LoadHostHeaderContext {
+	XS_HostConfig* objHost;
+	const char* sScope;
+	uint32 iCount;
+	bool bOK;
+} XS_LoadHostHeaderContext;
+
+static inline bool XS_HostResponseHeaderControlled(const char* sName)
+{
+	return strcasecmp(sName, "Content-Length") == 0 ||
+		strcasecmp(sName, "Transfer-Encoding") == 0 ||
+		strcasecmp(sName, "Connection") == 0;
+}
+
+static inline bool XS_LoadHostHeaderProc(Dict_Key* pKey, xvalue* ppVal, XS_LoadHostHeaderContext* pCtx)
+{
+	xvalue objVal;
+	const char* sValue;
+	size_t iValueLen;
+	size_t iLineLen;
+	char sName[XHTTPD_HEADER_NAME_CAP];
+	char sLine[XHTTPD_HEADER_NAME_CAP + XHTTPD_HEADER_VALUE_CAP + 4u];
+	xhttpdheader* pHeader;
+
+	if ( pCtx == NULL || pCtx->objHost == NULL || pKey == NULL || ppVal == NULL ) {
+		return TRUE;
+	}
+	objVal = *ppVal;
+	if ( objVal == NULL || objVal->Type == XVO_DT_NULL ) {
+		return FALSE;
+	}
+	if ( objVal->Type != XVO_DT_TEXT ) {
+		XS_ReportError("%s headers value must be text", pCtx->sScope);
+		pCtx->bOK = FALSE;
+		return TRUE;
+	}
+	if ( pKey->Key == NULL || pKey->KeyLen == 0u || pKey->KeyLen >= sizeof(sName) ) {
+		XS_ReportError("%s headers name invalid", pCtx->sScope);
+		pCtx->bOK = FALSE;
+		return TRUE;
+	}
+	if ( pCtx->iCount >= XHTTPD_MAX_HEADERS ) {
+		XS_ReportError("%s headers count exceeds limit", pCtx->sScope);
+		pCtx->bOK = FALSE;
+		return TRUE;
+	}
+	memcpy(sName, pKey->Key, pKey->KeyLen);
+	sName[pKey->KeyLen] = '\0';
+	if ( XS_HostResponseHeaderControlled(sName) ) {
+		XS_ReportError("%s headers contains framework controlled header: %s", pCtx->sScope, sName);
+		pCtx->bOK = FALSE;
+		return TRUE;
+	}
+	sValue = xvoGetText(objVal);
+	iValueLen = sValue ? strlen(sValue) : 0u;
+	if ( iValueLen >= XHTTPD_HEADER_VALUE_CAP ||
+		!xrtHttpHeaderBuildLineTo(sName, pKey->KeyLen, sValue ? sValue : "", iValueLen, sLine, sizeof(sLine), &iLineLen) ) {
+		XS_ReportError("%s headers value invalid: %s", pCtx->sScope, sName);
+		pCtx->bOK = FALSE;
+		return TRUE;
+	}
+	pHeader = &pCtx->objHost->arrHeaders[pCtx->iCount++];
+	memcpy(pHeader->sName, sName, pKey->KeyLen + 1u);
+	if ( iValueLen > 0u ) {
+		memcpy(pHeader->sValue, sValue, iValueLen);
+	}
+	pHeader->sValue[iValueLen] = '\0';
+	return FALSE;
+}
+
+static inline bool XS_LoadHostHeaders(xvalue objTable, XS_HostConfig* objHost, const char* sScope)
+{
+	xvalue objHeaders;
+	XS_LoadHostHeaderContext tCtx;
+
+	if ( objTable == NULL || objHost == NULL ) {
+		return FALSE;
+	}
+	objHeaders = xvoTableGetValue(objTable, "headers", 7);
+	if ( objHeaders == NULL || objHeaders->Type == XVO_DT_NULL ) {
+		return TRUE;
+	}
+	if ( objHeaders->Type != XVO_DT_TABLE ) {
+		XS_ReportError("%s field type invalid: headers", sScope);
+		return FALSE;
+	}
+	if ( objHost->arrHeaders ) {
+		xrtFree(objHost->arrHeaders);
+		objHost->arrHeaders = NULL;
+		objHost->iHeaderCount = 0u;
+	}
+	objHost->arrHeaders = (xhttpdheader*)xrtCalloc(XHTTPD_MAX_HEADERS, sizeof(xhttpdheader));
+	if ( objHost->arrHeaders == NULL ) {
+		XS_ReportError("%s headers alloc failed", sScope);
+		return FALSE;
+	}
+	memset(&tCtx, 0, sizeof(tCtx));
+	tCtx.objHost = objHost;
+	tCtx.sScope = sScope;
+	tCtx.bOK = TRUE;
+	xrtDictWalk(objHeaders->vTable, (ptr)XS_LoadHostHeaderProc, &tCtx);
+	if ( !tCtx.bOK ) {
+		xrtFree(objHost->arrHeaders);
+		objHost->arrHeaders = NULL;
+		objHost->iHeaderCount = 0u;
+		return FALSE;
+	}
+	objHost->iHeaderCount = tCtx.iCount;
+	if ( objHost->iHeaderCount == 0u ) {
+		xrtFree(objHost->arrHeaders);
+		objHost->arrHeaders = NULL;
+	}
+	return TRUE;
+}
+
 static inline bool XS_LoadHostConfig(xvalue objTable, const char* sBaseDir, const XS_HttpPageConfig* objParentPages, XS_HostConfig* objHost, const char* sScope)
 {
 	static const XS_FieldRule arrRule[] = {
@@ -303,6 +418,7 @@ static inline bool XS_LoadHostConfig(xvalue objTable, const char* sBaseDir, cons
 		{"page_403", XVO_DT_TEXT, FALSE},
 		{"page_500", XVO_DT_TEXT, FALSE},
 		{"error_page", XVO_DT_TEXT, FALSE},
+		{"headers", XVO_DT_TABLE, FALSE},
 		{"默认页", XVO_DT_TEXT, FALSE},
 		{"404页面", XVO_DT_TEXT, FALSE},
 		{"403页面", XVO_DT_TEXT, FALSE},
@@ -338,6 +454,7 @@ static inline bool XS_LoadHostConfig(xvalue objTable, const char* sBaseDir, cons
 	if ( !XS_RequireFieldTypeAlias(objTable, "page_403", "403页面", XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldTypeAlias(objTable, "page_500", "500页面", XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldTypeAlias(objTable, "error_page", "自定义错误页面", XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
+	if ( !XS_RequireFieldType(objTable, "headers", 7, XVO_DT_TABLE, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "devlang", 7, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "devfile", 7, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
 	if ( !XS_RequireFieldType(objTable, "tls_ca", 6, XVO_DT_TEXT, sScope, FALSE) ) return FALSE;
@@ -359,6 +476,9 @@ static inline bool XS_LoadHostConfig(xvalue objTable, const char* sBaseDir, cons
 	objHost->Path = XS_NormalizePath(sBaseDir, sPath);
 	XS_LoadHttpPageConfig(objTable, objHost->Path ? objHost->Path : sBaseDir, &objHost->Pages);
 	if ( objParentPages && !XS_InheritHttpPageConfig(&objHost->Pages, objParentPages) ) {
+		return FALSE;
+	}
+	if ( !XS_LoadHostHeaders(objTable, objHost, sScope) ) {
 		return FALSE;
 	}
 	

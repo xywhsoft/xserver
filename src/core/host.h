@@ -59,6 +59,8 @@ typedef struct XS_HostConfig {
 	bool Debug;
 	char* Path;
 	XS_HttpPageConfig Pages;
+	xhttpdheader* arrHeaders;
+	uint32 iHeaderCount;
 	XS_DevMode DevMode;
 	char* DevFile;
 	xtlsconfig TlsConfig;
@@ -99,6 +101,7 @@ static inline void XS_FreeHostConfig(XS_HostConfig* objHost)
 	if ( objHost->Param ) xrtFree(objHost->Param);
 	if ( objHost->Path ) xrtFree(objHost->Path);
 	XS_FreeHttpPageConfig(&objHost->Pages);
+	if ( objHost->arrHeaders ) xrtFree(objHost->arrHeaders);
 	if ( objHost->DevFile ) xrtFree(objHost->DevFile);
 	if ( objHost->TlsConfig.sCaFile ) xrtFree((void*)objHost->TlsConfig.sCaFile);
 	if ( objHost->TlsConfig.sCertFile ) xrtFree((void*)objHost->TlsConfig.sCertFile);

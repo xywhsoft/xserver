@@ -13,6 +13,7 @@ $script:sRootMemReport = Join-Path $sRepoRoot "xrt_mem_report_auto.json"
 $script:sReleaseMemReport = Join-Path $sReleaseDir "xrt_mem_report_auto.json"
 $sRunTag = [string]$PID
 $script:sXtpClientExe = $null
+$script:sXtpPressureClientExe = $null
 $script:sWsClientExe = $null
 $script:sCustomClientExe = $null
 $script:sUdpClientExe = $null
@@ -24,6 +25,7 @@ function procCleanupGeneratedFiles()
 {
 	foreach ( $sPattern in @(
 		"xtp_smoke_client*.exe",
+		"xtp_pressure_client*.exe",
 		"port_probe_client*.exe",
 		"ws_smoke_client*.exe",
 		"udp_smoke_client*.exe",
@@ -87,6 +89,7 @@ function procAppendArtifactCleanupCheck(
 	$arrHelper = @()
 	foreach ( $sPattern in @(
 		"xtp_smoke_client*.exe",
+		"xtp_pressure_client*.exe",
 		"port_probe_client*.exe",
 		"ws_smoke_client*.exe",
 		"udp_smoke_client*.exe",
@@ -206,6 +209,60 @@ function procFetchEx([string]$sMethod, [string]$sUrl)
 	return $objResp
 }
 
+function procFetchWithHeaders([string]$sMethod, [string]$sUrl, [string[]]$arrRequestHeaders, [bool]$bPathAsIs = $false)
+{
+	$iStatus = 0
+	$sBody = ""
+	$sHeaders = ""
+	$sBodyFile = [System.IO.Path]::GetTempFileName()
+	$sHeaderFile = [System.IO.Path]::GetTempFileName()
+	$arrArgs = @("-s", "--max-time", "2", "-D", $sHeaderFile, "-o", $sBodyFile, "-w", "%{http_code}")
+
+	if ( $bPathAsIs ) {
+		$arrArgs += "--path-as-is"
+	}
+
+	if ( $sMethod -eq "HEAD" ) {
+		$arrArgs += "-I"
+	} else {
+		$arrArgs += @("-X", $sMethod)
+	}
+
+	foreach ( $sHeader in $arrRequestHeaders ) {
+		$arrArgs += @("-H", $sHeader)
+	}
+
+	$arrArgs += $sUrl
+
+	try {
+		$sStatus = (& curl.exe @arrArgs 2>$null) -join ""
+
+		if ( Test-Path $sBodyFile ) {
+			$sBody = [string](Get-Content -Raw -Path $sBodyFile -Encoding UTF8)
+		}
+		if ( Test-Path $sHeaderFile ) {
+			$sHeaders = [string](Get-Content -Raw -Path $sHeaderFile -Encoding UTF8)
+		}
+
+		if ( ![int]::TryParse($sStatus.Trim(), [ref]$iStatus) ) {
+			$iStatus = 0
+		}
+	} finally {
+		if ( Test-Path $sBodyFile ) {
+			Remove-Item $sBodyFile -Force -ErrorAction SilentlyContinue
+		}
+		if ( Test-Path $sHeaderFile ) {
+			Remove-Item $sHeaderFile -Force -ErrorAction SilentlyContinue
+		}
+	}
+
+	return @{
+		status = $iStatus
+		body = $sBody
+		headers = $sHeaders
+	}
+}
+
 function procFetchHostOnce([string]$sUrl, [string]$sHost)
 {
 	$iStatus = 0
@@ -322,6 +379,38 @@ function procCheckBodyNotContains([System.Collections.Generic.List[string]]$arrR
 	$arrResults.Add("OK   $sName : absent")
 }
 
+function procCheckAnyStatus([System.Collections.Generic.List[string]]$arrResults, [string]$sName, [int]$iActual, [int[]]$arrExpected)
+{
+	foreach ( $iExpect in $arrExpected ) {
+		if ( $iActual -eq $iExpect ) {
+			$arrResults.Add("OK   $sName : $iActual")
+			return
+		}
+	}
+
+	$arrResults.Add("FAIL $sName : expected one of $($arrExpected -join ','), got $iActual")
+}
+
+function procGetProcessWorkingSetBytes([System.Diagnostics.Process]$objProc)
+{
+	if ( $null -eq $objProc -or $objProc.HasExited ) {
+		return 0L
+	}
+
+	$objProc.Refresh()
+	return [long]$objProc.WorkingSet64
+}
+
+function procCheckBytesAtMost([System.Collections.Generic.List[string]]$arrResults, [string]$sName, [long]$iActual, [long]$iMax)
+{
+	if ( $iActual -le $iMax ) {
+		$arrResults.Add(("OK   {0} : {1}" -f $sName, $iActual))
+		return
+	}
+
+	$arrResults.Add(("FAIL {0} : expected <= {1}, got {2}" -f $sName, $iMax, $iActual))
+}
+
 function procCheckSecurityHeaders([System.Collections.Generic.List[string]]$arrResults, [string]$sName, [string]$sMethod, [string]$sUrl)
 {
 	procCheckBodyContains $arrResults "$sName cache" (procFetchHeaderMethod $sMethod $sUrl "Cache-Control") 'no-store'
@@ -385,6 +474,8 @@ function procRunHttpInvalidInputChecks(
 {
 	$sLongQuery = "a" * 260
 	$sBodyFile = [System.IO.Path]::GetTempFileName()
+	$arrTooManyHeaders = @()
+	$sLongHeaderValue = "h" * 9000
 	$objResp = $null
 	$sMetricsText = ""
 	$sMetricsJson = ""
@@ -400,6 +491,15 @@ function procRunHttpInvalidInputChecks(
 		$objResp = procFetch ("http://127.0.0.1:$iPort/json?" + $sLongQuery)
 		procCheck $arrResults "$sExeName http_path_limit" $objResp.status 414 $objResp.body
 		procCheckBodyContains $arrResults "$sExeName http_path_limit body" $objResp.body 'request path limit exceeded'
+
+		for ( $i = 0; $i -lt 40; $i++ ) {
+			$arrTooManyHeaders += ("X-Smoke-" + $i + ": " + $i)
+		}
+		$objResp = procFetchWithHeaders "GET" ("http://127.0.0.1:$iPort/json") $arrTooManyHeaders
+		procCheckAnyStatus $arrResults "$sExeName http_header_limit" $objResp.status @(400, 431)
+
+		$objResp = procFetchWithHeaders "GET" ("http://127.0.0.1:$iPort/json") @(("X-Smoke-Long: " + $sLongHeaderValue))
+		procCheckAnyStatus $arrResults "$sExeName http_header_line_limit" $objResp.status @(400, 431)
 
 		[System.IO.File]::WriteAllText($sBodyFile, ("b" * 270000), [System.Text.UTF8Encoding]::new($false))
 		$objResp = procFetchDataFileEx "POST" ("http://127.0.0.1:$iPort/json") $sBodyFile
@@ -461,6 +561,12 @@ function procRunProductionAppPassThroughChecks([System.Collections.Generic.List[
 	$objResp = procFetch "http://127.0.0.1:$iPort/json"
 	procCheck $arrResults "$sCaseName json_route" $objResp.status 200 $objResp.body '"path":"/json"'
 	procCheckBodyContains $arrResults "$sCaseName json_route type" (procHeaderValueFromText $objResp.headers "Content-Type") 'application/json'
+
+	$objResp = procFetch "http://127.0.0.1:$iPort/stream"
+	procCheck $arrResults "$sCaseName stream_route" $objResp.status 200 $objResp.body 'stream-chunk-done'
+	procCheckBodyContains $arrResults "$sCaseName stream_route type" (procHeaderValueFromText $objResp.headers "Content-Type") 'text/plain'
+	procCheckBodyContains $arrResults "$sCaseName stream_route mode" (procHeaderValueFromText $objResp.headers "X-XS-Mode") 'stream'
+	procCheckBodyContains $arrResults "$sCaseName stream_route transfer" (procHeaderValueFromText $objResp.headers "Transfer-Encoding") 'chunked'
 
 	$objResp = procFetch "http://127.0.0.1:$iPort/__xs/status_json"
 	procCheck $arrResults "$sCaseName passthrough_status_json" $objResp.status 200 $objResp.body 'path=/__xs/status_json'
@@ -1927,6 +2033,16 @@ function procBuildXtpSmokeClient()
 	return $script:sXtpClientExe
 }
 
+function procBuildXtpPressureClient()
+{
+	if ( $script:sXtpPressureClientExe -and (Test-Path $script:sXtpPressureClientExe) ) {
+		return $script:sXtpPressureClientExe
+	}
+
+	$script:sXtpPressureClientExe = procBuildCClient "xtp_pressure_client.c" "xtp_pressure_client"
+	return $script:sXtpPressureClientExe
+}
+
 function procBuildWsSmokeClient()
 {
 	if ( $script:sWsClientExe -and (Test-Path $script:sWsClientExe) ) {
@@ -2111,6 +2227,8 @@ function procRunStaticPathGuardCase([string]$sExeName)
 		}
 	}
 
+	[System.IO.File]::WriteAllText((Join-Path $sReleaseDir "wwwroot\static_large.txt"), (("L" * 150000) + "large-static-end"), [System.Text.UTF8Encoding]::new($false))
+
 	$objProc = Start-Process -FilePath $sExePath -ArgumentList "xs_static_test.json" -WorkingDirectory $sReleaseDir -PassThru -WindowStyle Hidden
 
 	try {
@@ -2138,9 +2256,36 @@ function procRunStaticPathGuardCase([string]$sExeName)
 		$objResp = procFetch "$sBaseUrl/static_access.json"
 		procCheck $arrResults "$sExeName static_json" $objResp.status 200 $objResp.body 'xserver static json smoke'
 		procCheckBodyContains $arrResults "$sExeName static_json type" (procHeaderValueFromText $objResp.headers "Content-Type") 'application/json'
+		procCheckBodyContains $arrResults "$sExeName static_json cors_origin" (procHeaderValueFromText $objResp.headers "Access-Control-Allow-Origin") '*'
+		procCheckBodyContains $arrResults "$sExeName static_json cors_methods" (procHeaderValueFromText $objResp.headers "Access-Control-Allow-Methods") 'GET, HEAD, OPTIONS'
+		procCheckBodyContains $arrResults "$sExeName static_json cache" (procHeaderValueFromText $objResp.headers "Cache-Control") 'public, max-age=86400'
+
+		$objResp = procFetchEx "HEAD" "$sBaseUrl/static_access.json"
+		procCheck $arrResults "$sExeName static_json_head" $objResp.status 200 $objResp.body
+		procCheckBodyContains $arrResults "$sExeName static_json_head type" (procHeaderValueFromText $objResp.headers "Content-Type") 'application/json'
+		$iStaticJsonLen = (Get-Item (Join-Path $sReleaseDir "wwwroot\static_access.json")).Length
+		procCheckBodyContains $arrResults "$sExeName static_json_head length" (procHeaderValueFromText $objResp.headers "Content-Length") ([string]$iStaticJsonLen)
+		procCheckBodyNotContains $arrResults "$sExeName static_json_head empty" $objResp.body 'xserver static json smoke'
+
+		$objResp = procFetchEx "OPTIONS" "$sBaseUrl/static_access.json"
+		procCheck $arrResults "$sExeName static_json_options" $objResp.status 204 $objResp.body
+		procCheckBodyContains $arrResults "$sExeName static_json_options allow" (procHeaderValueFromText $objResp.headers "Allow") 'GET, HEAD, OPTIONS'
+		procCheckBodyContains $arrResults "$sExeName static_json_options cors_origin" (procHeaderValueFromText $objResp.headers "Access-Control-Allow-Origin") '*'
+		procCheckBodyNotContains $arrResults "$sExeName static_json_options empty" $objResp.body 'xserver static json smoke'
+
+		$objResp = procFetch "$sBaseUrl/static_large.txt"
+		procCheck $arrResults "$sExeName static_large" $objResp.status 200 $objResp.body 'large-static-end'
+		$iStaticLargeLen = (Get-Item (Join-Path $sReleaseDir "wwwroot\static_large.txt")).Length
+		procCheckBodyContains $arrResults "$sExeName static_large length" (procHeaderValueFromText $objResp.headers "Content-Length") ([string]$iStaticLargeLen)
 
 		$objResp = procFetch "$sBaseUrl/.gitignore"
 		procCheck $arrResults "$sExeName static_dotfile" $objResp.status 403 $objResp.body
+
+		$objResp = procFetchWithHeaders "GET" "$sBaseUrl/../xs_manage_test.json" @() $true
+		procCheck $arrResults "$sExeName static_traversal" $objResp.status 403 $objResp.body
+
+		$objResp = procFetchWithHeaders "GET" "$sBaseUrl/%2e%2e/xs_manage_test.json" @() $true
+		procCheck $arrResults "$sExeName static_encoded_traversal" $objResp.status 403 $objResp.body
 
 		$objResp = procFetch "$sBaseUrl/res%5Clayui%5Ccss%5Clayui.css"
 		procCheck $arrResults "$sExeName static_backslash" $objResp.status 403 $objResp.body
@@ -2161,6 +2306,98 @@ function procRunStaticPathGuardCase([string]$sExeName)
 		Stop-Process -Id $objProc.Id -Force -ErrorAction SilentlyContinue
 		Start-Sleep -Milliseconds 500
 	}
+}
+
+function procRunCapacityBaselineCase([string]$sExeName)
+{
+	$sExePath = Join-Path $sReleaseDir $sExeName
+	$arrResults = New-Object 'System.Collections.Generic.List[string]'
+	$iBudgetBytes = 240L * 1024L * 1024L
+	$iDeltaStaticMax = 24L * 1024L * 1024L
+	$iDeltaHttpMax = 16L * 1024L * 1024L
+	$iDeltaXtpMax = 32L * 1024L * 1024L
+	$objProc = $null
+	$objResp = $null
+	$sXtpPressureExe = $null
+
+	if ( -not (Test-Path $sExePath) ) {
+		$arrResults.Add("FAIL $sExeName capacity : executable not found")
+		return @{ code = 1; lines = $arrResults }
+	}
+
+	try {
+		$sXtpPressureExe = procBuildXtpPressureClient
+	} catch {
+		$arrResults.Add("FAIL $sExeName capacity_build : $($_.Exception.Message)")
+		return @{ code = 1; lines = $arrResults }
+	}
+
+	[System.IO.File]::WriteAllText((Join-Path $sReleaseDir "wwwroot\static_capacity_large.txt"), (("C" * (4 * 1024 * 1024)) + "capacity-static-end"), [System.Text.UTF8Encoding]::new($false))
+
+	$objProc = Start-Process -FilePath $sExePath -ArgumentList "xs_static_test.json" -WorkingDirectory $sReleaseDir -PassThru -WindowStyle Hidden
+	try {
+		$objResp = procWaitBodyContains "http://127.0.0.1:8082/static_access.json" 'xserver static json smoke'
+		if ( $null -eq $objResp ) {
+			$arrResults.Add("FAIL $sExeName capacity_static ready : timeout")
+			return @{ code = 1; lines = $arrResults }
+		}
+
+		$iBase = procGetProcessWorkingSetBytes $objProc
+		$objResp = procFetch "http://127.0.0.1:8082/static_capacity_large.txt"
+		procCheck $arrResults "$sExeName capacity_static_large" $objResp.status 200 $objResp.body 'capacity-static-end'
+		$iAfter = procGetProcessWorkingSetBytes $objProc
+		procCheckBytesAtMost $arrResults "$sExeName capacity_static_budget" $iAfter $iBudgetBytes
+		procCheckBytesAtMost $arrResults "$sExeName capacity_static_delta" ([Math]::Max(0L, $iAfter - $iBase)) $iDeltaStaticMax
+	} finally {
+		if ( $objProc -and (-not $objProc.HasExited) ) {
+			Stop-Process -Id $objProc.Id -Force -ErrorAction SilentlyContinue
+			Start-Sleep -Milliseconds 500
+		}
+		Remove-Item (Join-Path $sReleaseDir "wwwroot\static_capacity_large.txt") -Force -ErrorAction SilentlyContinue
+	}
+
+	$objProc = Start-Process -FilePath $sExePath -ArgumentList "xs_manage_xtp_idle_test.json" -WorkingDirectory $sReleaseDir -PassThru -WindowStyle Hidden
+	try {
+		$objResp = procWaitBodyContains "http://127.0.0.1:8185/json" '"path":"/json"'
+		if ( $null -eq $objResp ) {
+			$arrResults.Add("FAIL $sExeName capacity_http_xtp ready : timeout")
+			return @{ code = 1; lines = $arrResults }
+		}
+
+		$iBase = procGetProcessWorkingSetBytes $objProc
+		for ( $i = 0; $i -lt 100; $i++ ) {
+			$objResp = procFetch "http://127.0.0.1:8185/json"
+			if ( $objResp.status -ne 200 ) {
+				$arrResults.Add("FAIL $sExeName capacity_http_reply : expected 200, got $($objResp.status)")
+				break
+			}
+		}
+		$iAfter = procGetProcessWorkingSetBytes $objProc
+		procCheckBytesAtMost $arrResults "$sExeName capacity_http_reply_budget" $iAfter $iBudgetBytes
+		procCheckBytesAtMost $arrResults "$sExeName capacity_http_reply_delta" ([Math]::Max(0L, $iAfter - $iBase)) $iDeltaHttpMax
+
+		$iBase = procGetProcessWorkingSetBytes $objProc
+		$tblRun = procRunClientRetry $sXtpPressureExe @("127.0.0.1", "9196", "20", "demo.largebody", "size=65536", "tag=capacity") 10
+		procCheckClientTokens $arrResults "$sExeName capacity_xtp_large_body" $tblRun @("ok_count=20", "last_status=0", "last_cmd=xtp.reply")
+		$iAfter = procGetProcessWorkingSetBytes $objProc
+		procCheckBytesAtMost $arrResults "$sExeName capacity_xtp_large_body_budget" $iAfter $iBudgetBytes
+		procCheckBytesAtMost $arrResults "$sExeName capacity_xtp_large_body_delta" ([Math]::Max(0L, $iAfter - $iBase)) $iDeltaXtpMax
+	} finally {
+		if ( $objProc -and (-not $objProc.HasExited) ) {
+			Stop-Process -Id $objProc.Id -Force -ErrorAction SilentlyContinue
+			Start-Sleep -Milliseconds 500
+		}
+	}
+
+	$iCode = 0
+	foreach ( $sLine in $arrResults ) {
+		if ( $sLine.StartsWith("FAIL ") ) {
+			$iCode = 1
+			break
+		}
+	}
+
+	return @{ code = $iCode; lines = $arrResults }
 }
 
 function procRunCase([string]$sExeName, [bool]$bDebug)
@@ -4137,6 +4374,7 @@ function procRunCustomCase([string]$sExeName)
 		return @{ code = $iCode; lines = $arrResults }
 	} finally {
 		Stop-Process -Id $objProc.Id -Force -ErrorAction SilentlyContinue
+		Remove-Item (Join-Path $sReleaseDir "wwwroot\static_large.txt") -Force -ErrorAction SilentlyContinue
 		Start-Sleep -Milliseconds 500
 	}
 }
@@ -4691,6 +4929,73 @@ function procRunXtpInvalidSizeCase([string]$sExeName, [bool]$bDebug)
 	}
 }
 
+function procRunXtpInvalidTypeCase([string]$sExeName, [bool]$bDebug)
+{
+	$sExePath = Join-Path $sReleaseDir $sExeName
+	$arrResults = New-Object 'System.Collections.Generic.List[string]'
+	$sIdleClientExe = $null
+	$sXtpClientExe = $null
+	$objProc = $null
+	$objResp = $null
+	$tblRun = $null
+
+	if ( -not (Test-Path $sExePath) ) {
+		$arrResults.Add("FAIL $sExeName xtp_invalid_type : executable not found")
+		return @{ code = 1; lines = $arrResults }
+	}
+
+	try {
+		$sIdleClientExe = procBuildIdleSocketClient
+		$sXtpClientExe = procBuildXtpSmokeClient
+	} catch {
+		$arrResults.Add("FAIL $sExeName xtp_invalid_type_build : $($_.Exception.Message)")
+		return @{ code = 1; lines = $arrResults }
+	}
+
+	$objProc = Start-Process -FilePath $sExePath -ArgumentList "xs_manage_xtp_idle_test.json" -WorkingDirectory $sReleaseDir -PassThru -WindowStyle Hidden
+
+	try {
+		$objResp = procWaitBodyContains "http://127.0.0.1:8185/json" '"path":"/json"'
+		if ( $null -eq $objResp ) {
+			$arrResults.Add("FAIL $sExeName xtp_invalid_type ready : timeout")
+			return @{ code = 1; lines = $arrResults }
+		}
+
+		$tblRun = procRunClientRetry $sIdleClientExe @("127.0.0.1", "9196", "300", "xtp_bad_type") 10
+		procCheckClientTokens $arrResults "$sExeName xtp_invalid_type client" $tblRun @("status=closed", "phase=", "mode=xtp_bad_type")
+
+		$tblRun = procRunClientRetry $sXtpClientExe @("127.0.0.1", "9196", "demo.callself", "tag=smoke-bad-type") 10
+		procCheckClientTokens $arrResults "$sExeName xtp_invalid_type service_alive" $tblRun @("status=0", "cmd=xtp.reply", "self call ok")
+
+		if ( $bDebug ) {
+			$objResp = procFetch "http://127.0.0.1:8185/__xs/xtp_metrics"
+			procCheck $arrResults "$sExeName xtp_invalid_type xtp_metrics" $objResp.status 200 $objResp.body 'xtp_invalid_count='
+			procCheckBodyContains $arrResults "$sExeName xtp_invalid_type xtp_metrics invalid" $objResp.body 'xtp_invalid_count=1'
+			procCheckBodyContains $arrResults "$sExeName xtp_invalid_type xtp_metrics reason" $objResp.body 'xtp_last_invalid_reason=invalid type'
+
+			$objResp = procFetch "http://127.0.0.1:8185/__xs/xtp_metrics_json"
+			procCheck $arrResults "$sExeName xtp_invalid_type xtp_metrics_json" $objResp.status 200 $objResp.body '"xtp_invalid_count"'
+			procCheckBodyContains $arrResults "$sExeName xtp_invalid_type xtp_metrics_json invalid" $objResp.body '"xtp_invalid_count":1'
+			procCheckBodyContains $arrResults "$sExeName xtp_invalid_type xtp_metrics_json reason" $objResp.body '"xtp_last_invalid_reason":"invalid type"'
+		}
+
+		$iCode = 0
+		foreach ( $sLine in $arrResults ) {
+			if ( $sLine.StartsWith("FAIL ") ) {
+				$iCode = 1
+				break
+			}
+		}
+
+		return @{ code = $iCode; lines = $arrResults }
+	} finally {
+		if ( $objProc -and (-not $objProc.HasExited) ) {
+			Stop-Process -Id $objProc.Id -Force -ErrorAction SilentlyContinue
+			Start-Sleep -Milliseconds 500
+		}
+	}
+}
+
 procCleanupGeneratedFiles
 
 $arrOut = New-Object 'System.Collections.Generic.List[string]'
@@ -4707,6 +5012,13 @@ if ( $tblCase.code -ne 0 ) {
 
 $tblCase = procRunStaticPathGuardCase "xs.exe"
 $arrOut.Add("[xs-static]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
+$tblCase = procRunCapacityBaselineCase "xs.exe"
+$arrOut.Add("[xs-capacity]")
 procAppendLines $arrOut $tblCase.lines
 if ( $tblCase.code -ne 0 ) {
 	$iExit = $tblCase.code
@@ -4784,6 +5096,13 @@ if ( $tblCase.code -ne 0 ) {
 
 $tblCase = procRunXtpInvalidSizeCase "xs.exe" $false
 $arrOut.Add("[xs-xtp-size]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
+$tblCase = procRunXtpInvalidTypeCase "xs.exe" $false
+$arrOut.Add("[xs-xtp-type]")
 procAppendLines $arrOut $tblCase.lines
 if ( $tblCase.code -ne 0 ) {
 	$iExit = $tblCase.code
@@ -4901,6 +5220,13 @@ if ( $tblCase.code -ne 0 ) {
 	$iExit = $tblCase.code
 }
 
+$tblCase = procRunXtpInvalidTypeCase "xsdbg.exe" $true
+$arrOut.Add("[xsdbg-xtp-type]")
+procAppendLines $arrOut $tblCase.lines
+if ( $tblCase.code -ne 0 ) {
+	$iExit = $tblCase.code
+}
+
 $tblCase = procRunXtpCase "xsdbg.exe" $true
 $arrOut.Add("[xsdbg-xtp]")
 procAppendLines $arrOut $tblCase.lines
@@ -4929,7 +5255,7 @@ if ( $tblCase.code -ne 0 ) {
 	$iExit = $tblCase.code
 }
 
-foreach ( $sPath in @($script:sXtpClientExe, $script:sWsClientExe, $script:sCustomClientExe, $script:sUdpClientExe, $script:sPortProbeExe, $script:sIdleClientExe, $script:sWinHelperExe) ) {
+foreach ( $sPath in @($script:sXtpClientExe, $script:sXtpPressureClientExe, $script:sWsClientExe, $script:sCustomClientExe, $script:sUdpClientExe, $script:sPortProbeExe, $script:sIdleClientExe, $script:sWinHelperExe) ) {
 	if ( $sPath -and (Test-Path $sPath) ) {
 		Remove-Item $sPath -Force -ErrorAction SilentlyContinue
 	}

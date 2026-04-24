@@ -1,0 +1,44 @@
+{
+	"services": [
+		{
+			"enabled": true,
+			"class": "http",
+			"name": "test HTTP Server",
+			"debug": true,
+			"backlog": 64,
+			"recv_limit": 1048576,
+			"path_limit": 512,
+			"header_limit": 32,
+			"body_limit": 262144,
+			"ip": "127.0.0.1",
+			"port": 8085,
+			"host_default": {
+				"enabled": true,
+				"name": "http",
+				"path": "wwwroot",
+				"devlang": "c",
+				"devfile": "script_vnext/main.c"
+			}
+		},
+		{
+			"enabled": true,
+			"class": "ws",
+			"name": "test WS Server",
+			"debug": true,
+			"backlog": 128,
+			"conn_limit": 128,
+			"recv_limit": 1048576,
+			"ws_message_limit": 262144,
+			"ws_protocol": "xs-demo",
+			"ip": "127.0.0.1",
+			"port": 8081,
+			"host_default": {
+				"enabled": true,
+				"name": "ws",
+				"path": "wwwroot",
+				"devlang": "c",
+				"devfile": "script_vnext/ws_main.c"
+			}
+		}
+	]
+}

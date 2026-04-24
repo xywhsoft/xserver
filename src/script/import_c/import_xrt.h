@@ -1003,12 +1003,19 @@ static inline void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xrtHttpdRequestInit", xrtHttpdRequestInit);
 	tcc_add_symbol(s, "xrtHttpdRequestUnit", xrtHttpdRequestUnit);
 	tcc_add_symbol(s, "xrtHttpdRequestHeader", xrtHttpdRequestHeader);
+	tcc_add_symbol(s, "xrtHttpdRequestMethod", xrtHttpdRequestMethod);
 	tcc_add_symbol(s, "xrtHttpdResponseInit", xrtHttpdResponseInit);
 	tcc_add_symbol(s, "xrtHttpdResponseUnit", xrtHttpdResponseUnit);
 	tcc_add_symbol(s, "xrtHttpdResponseHeader", xrtHttpdResponseHeader);
 	tcc_add_symbol(s, "xrtHttpdResponseSetStatus", xrtHttpdResponseSetStatus);
 	tcc_add_symbol(s, "xrtHttpdResponseSetHeader", xrtHttpdResponseSetHeader);
 	tcc_add_symbol(s, "xrtHttpdResponseSetBodyCopy", xrtHttpdResponseSetBodyCopy);
+	tcc_add_symbol(s, "xrtHttpdResponseReply", xrtHttpdResponseReply);
+	tcc_add_symbol(s, "xrtHttpdConnReply", xrtHttpdConnReply);
+	tcc_add_symbol(s, "xrtHttpdConnStart", xrtHttpdConnStart);
+	tcc_add_symbol(s, "xrtHttpdConnSend", xrtHttpdConnSend);
+	tcc_add_symbol(s, "xrtHttpdConnEnd", xrtHttpdConnEnd);
+	tcc_add_symbol(s, "xrtHttpdConnSendFile", xrtHttpdConnSendFile);
 
 	// 添加函数 - Codec / Telemetry / Crypto Ext
 	tcc_add_symbol(s, "xrtCodecParserInit", xrtCodecParserInit);
@@ -1409,6 +1416,10 @@ static inline void ImportXRT(TCCState* s)
 	tcc_add_symbol(s, "xrtHttpdConnClose", xrtHttpdConnClose);
 	tcc_add_symbol(s, "xrtHttpdConnIsOpen", xrtHttpdConnIsOpen);
 	tcc_add_symbol(s, "xrtHttpdConnRespond", xrtHttpdConnRespond);
+	tcc_add_symbol(s, "xrtHttpdConnStart", xrtHttpdConnStart);
+	tcc_add_symbol(s, "xrtHttpdConnSend", xrtHttpdConnSend);
+	tcc_add_symbol(s, "xrtHttpdConnEnd", xrtHttpdConnEnd);
+	tcc_add_symbol(s, "xrtHttpdConnSendFile", xrtHttpdConnSendFile);
 	tcc_add_symbol(s, "xrtHttpdResponseCreate", xrtHttpdResponseCreate);
 	tcc_add_symbol(s, "xrtHttpdResponseDestroy", xrtHttpdResponseDestroy);
 

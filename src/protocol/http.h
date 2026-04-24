@@ -456,7 +456,7 @@ static bool XS_HttpOnRequest(ptr pOwner, xhttpdserver* pServer, xhttpdconn* pCon
 	XS_HttpLogRequest(objServer, objHost, pReq, pConn);
 	
 	if ( objHost->DevMode == XS_DEV_STATIC ) {
-		bRet = XS_HttpServeStatic(objHost, pReq, pResp);
+		bRet = XS_HttpServeStatic(objHost, pReq, pResp, pConn);
 		goto end;
 	}
 	

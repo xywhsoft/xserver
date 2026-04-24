@@ -5,6 +5,33 @@
 	#define XTP_MSG_RESPONSE	2u
 #endif
 
+#define XTP_CMD_DEMO_CALL                  0x2B5E1D68u
+#define XTP_CMD_DEMO_CALLSIMPLE            0xA9AD8E82u
+#define XTP_CMD_DEMO_CALLONCE              0x09987249u
+#define XTP_CMD_DEMO_CALLJSON              0xE6A15B8Au
+#define XTP_CMD_DEMO_CALLBODY              0xE334D9D4u
+#define XTP_CMD_DEMO_CALLSUMMARY           0x3684E6C0u
+#define XTP_CMD_DEMO_CALLSUMMARYJSON       0x86F042F2u
+#define XTP_CMD_DEMO_CALLRESULT            0x308DADD1u
+#define XTP_CMD_DEMO_CALLSTATUS            0xB0C0DBCAu
+#define XTP_CMD_DEMO_CALLMETA              0x68B67D7Du
+#define XTP_CMD_DEMO_CALLMETAJSON          0xBE96DB2Bu
+#define XTP_CMD_DEMO_CALLVALUE             0x3F80D9D9u
+#define XTP_CMD_DEMO_CALLPARAMSVALUE       0xFB5C4C3Fu
+#define XTP_CMD_DEMO_CALLBODYVALUE         0xEDC2390Du
+#define XTP_CMD_DEMO_CALLTABLEVALUE        0xCC94A305u
+#define XTP_CMD_DEMO_CALLREQUEST           0x92ABC099u
+#define XTP_CMD_DEMO_CALLREQUESTSUMMARYJSON 0x77FF90A5u
+#define XTP_CMD_DEMO_CALLREQUESTRESULTJSON 0x9D1E8C1Au
+#define XTP_CMD_DEMO_CALLREQUESTSTATUS     0x2988E2DBu
+#define XTP_CMD_DEMO_CALLRESULTJSON        0xC5D4854Fu
+#define XTP_CMD_DEMO_CALLERRORJSON         0x6D68CC58u
+#define XTP_CMD_DEMO_CALLERROR             0x3F2A1DAEu
+#define XTP_CMD_DEMO_CALLERRORBODY         0x034E8D62u
+#define XTP_CMD_DEMO_CALLSELF              0x2B39E612u
+#define XTP_CMD_DEMO_LARGEBODY             0x9E63962Fu
+#define XTP_CMD_DEMO_PING                  0xEDCEB1A0u
+
 static unsigned short procParsePort(const char* sAddr)
 {
 	const char* sPos;
@@ -201,7 +228,34 @@ void ServiceInit(XS_ServerObject objServer, XS_HostObject objHost)
 {
 	char sText[256];
 	(void)objHost;
-	
+
+	xsXtpCmdRegister("demo.call", XTP_CMD_DEMO_CALL);
+	xsXtpCmdRegister("demo.callsimple", XTP_CMD_DEMO_CALLSIMPLE);
+	xsXtpCmdRegister("demo.callonce", XTP_CMD_DEMO_CALLONCE);
+	xsXtpCmdRegister("demo.calljson", XTP_CMD_DEMO_CALLJSON);
+	xsXtpCmdRegister("demo.callbody", XTP_CMD_DEMO_CALLBODY);
+	xsXtpCmdRegister("demo.callsummary", XTP_CMD_DEMO_CALLSUMMARY);
+	xsXtpCmdRegister("demo.callsummaryjson", XTP_CMD_DEMO_CALLSUMMARYJSON);
+	xsXtpCmdRegister("demo.callresult", XTP_CMD_DEMO_CALLRESULT);
+	xsXtpCmdRegister("demo.callstatus", XTP_CMD_DEMO_CALLSTATUS);
+	xsXtpCmdRegister("demo.callmeta", XTP_CMD_DEMO_CALLMETA);
+	xsXtpCmdRegister("demo.callmetajson", XTP_CMD_DEMO_CALLMETAJSON);
+	xsXtpCmdRegister("demo.callvalue", XTP_CMD_DEMO_CALLVALUE);
+	xsXtpCmdRegister("demo.callparamsvalue", XTP_CMD_DEMO_CALLPARAMSVALUE);
+	xsXtpCmdRegister("demo.callbodyvalue", XTP_CMD_DEMO_CALLBODYVALUE);
+	xsXtpCmdRegister("demo.calltablevalue", XTP_CMD_DEMO_CALLTABLEVALUE);
+	xsXtpCmdRegister("demo.callrequest", XTP_CMD_DEMO_CALLREQUEST);
+	xsXtpCmdRegister("demo.callrequestsummaryjson", XTP_CMD_DEMO_CALLREQUESTSUMMARYJSON);
+	xsXtpCmdRegister("demo.callrequestresultjson", XTP_CMD_DEMO_CALLREQUESTRESULTJSON);
+	xsXtpCmdRegister("demo.callrequeststatus", XTP_CMD_DEMO_CALLREQUESTSTATUS);
+	xsXtpCmdRegister("demo.callresultjson", XTP_CMD_DEMO_CALLRESULTJSON);
+	xsXtpCmdRegister("demo.callerrorjson", XTP_CMD_DEMO_CALLERRORJSON);
+	xsXtpCmdRegister("demo.callerror", XTP_CMD_DEMO_CALLERROR);
+	xsXtpCmdRegister("demo.callerrorbody", XTP_CMD_DEMO_CALLERRORBODY);
+	xsXtpCmdRegister("demo.callself", XTP_CMD_DEMO_CALLSELF);
+	xsXtpCmdRegister("demo.largebody", XTP_CMD_DEMO_LARGEBODY);
+	xsXtpCmdRegister("demo.ping", XTP_CMD_DEMO_PING);
+
 	snprintf(
 		sText,
 		sizeof(sText),
@@ -246,6 +300,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 	const char* arrInnerValue[3];
 	XTP_MessageObject objResp;
 	void* pClient;
+	void* pReply;
 	int64_t iSeq;
 	int iDry;
 	int iPortState;
@@ -255,6 +310,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 	unsigned iStatus;
 	unsigned short iPort;
 	unsigned iCmdLen;
+	unsigned iCmdID;
 	unsigned iBodyLen;
 	
 	objMsg = (XTP_MessageObject)pMsg;
@@ -267,6 +323,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 	iStatus = (unsigned)xsXtpStatus(objMsg);
 	pCmd = xsXtpCmd(objMsg);
 	iCmdLen = xsXtpCmdLen(objMsg);
+	iCmdID = xsXtpCmdID(objMsg);
 	pBody = xsXtpBody(objMsg);
 	iBodyLen = xsXtpBodyLen(objMsg);
 	sTagDup = xsXtpParamDup(objMsg, "tag", "");
@@ -304,7 +361,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite; \
 	} \
 } while ( 0 )
-	if ( xsXtpCmdIs(objMsg, "demo.call") ) {
+	if ( iCmdID == XTP_CMD_DEMO_CALL ) {
 		CHECK_XTP_PORT();
 
 		pClient = xsXtpClientOpen(sHost, iPort, 1048576u, 3000u);
@@ -367,7 +424,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
-	if ( xsXtpCmdIs(objMsg, "demo.callsimple") ) {
+	if ( iCmdID == XTP_CMD_DEMO_CALLSIMPLE ) {
 		CHECK_XTP_PORT();
 
 		pClient = xsXtpClientOpen(sHost, iPort, 1048576u, 3000u);
@@ -421,7 +478,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
-	if ( xsXtpCmdIs(objMsg, "demo.callonce") ) {
+	if ( iCmdID == XTP_CMD_DEMO_CALLONCE ) {
 		CHECK_XTP_PORT();
 
 		objResp = (XTP_MessageObject)xsXtpClientCallSimple(
@@ -469,7 +526,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
-	if ( xsXtpCmdIs(objMsg, "demo.calljson") ) {
+	if ( iCmdID == XTP_CMD_DEMO_CALLJSON ) {
 		CHECK_XTP_PORT();
 
 		snprintf(
@@ -529,7 +586,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
-	if ( xsXtpCmdIs(objMsg, "demo.callbody") ) {
+	if ( iCmdID == XTP_CMD_DEMO_CALLBODY ) {
 		char* sRespBody;
 
 		CHECK_XTP_PORT();
@@ -569,7 +626,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
-	if ( xsXtpCmdIs(objMsg, "demo.callsummary") ) {
+	if ( iCmdID == XTP_CMD_DEMO_CALLSUMMARY ) {
 		char* sSummary;
 
 		CHECK_XTP_PORT();
@@ -608,7 +665,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
-	if ( xsXtpCmdIs(objMsg, "demo.callsummaryjson") ) {
+	if ( iCmdID == XTP_CMD_DEMO_CALLSUMMARYJSON ) {
 		char* sSummary;
 
 		CHECK_XTP_PORT();
@@ -641,7 +698,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
-	if ( xsXtpCmdIs(objMsg, "demo.callresult") ) {
+	if ( iCmdID == XTP_CMD_DEMO_CALLRESULT ) {
 		char* sResult;
 
 		CHECK_XTP_PORT();
@@ -681,7 +738,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
-	if ( xsXtpCmdIs(objMsg, "demo.callstatus") ) {
+	if ( iCmdID == XTP_CMD_DEMO_CALLSTATUS ) {
 		int iRemoteStatus;
 		char* sRemoteCmd;
 
@@ -734,7 +791,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
-	if ( xsXtpCmdIs(objMsg, "demo.callmeta") ) {
+	if ( iCmdID == XTP_CMD_DEMO_CALLMETA ) {
 		char* sMeta;
 
 		CHECK_XTP_PORT();
@@ -773,7 +830,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
-	if ( xsXtpCmdIs(objMsg, "demo.callmetajson") ) {
+	if ( iCmdID == XTP_CMD_DEMO_CALLMETAJSON ) {
 		char* sMeta;
 
 		CHECK_XTP_PORT();
@@ -806,7 +863,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
-	if ( xsXtpCmdIs(objMsg, "demo.callvalue") ) {
+	if ( iCmdID == XTP_CMD_DEMO_CALLVALUE ) {
 		xvalue objVal;
 		char* sValueJson;
 
@@ -848,7 +905,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
-	if ( xsXtpCmdIs(objMsg, "demo.callparamsvalue") ) {
+	if ( iCmdID == XTP_CMD_DEMO_CALLPARAMSVALUE ) {
 		xvalue objVal;
 		char* sValueJson;
 
@@ -890,7 +947,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
-	if ( xsXtpCmdIs(objMsg, "demo.callbodyvalue") ) {
+	if ( iCmdID == XTP_CMD_DEMO_CALLBODYVALUE ) {
 		xvalue objVal;
 		char* sValueJson;
 
@@ -932,7 +989,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
-	if ( xsXtpCmdIs(objMsg, "demo.calltablevalue") ) {
+	if ( iCmdID == XTP_CMD_DEMO_CALLTABLEVALUE ) {
 		xvalue objParam;
 		xvalue objBody;
 		XTP_MessageObject objResp;
@@ -1010,7 +1067,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
-	if ( xsXtpCmdIs(objMsg, "demo.callrequest") ) {
+	if ( iCmdID == XTP_CMD_DEMO_CALLREQUEST ) {
 		void* pReq;
 		xvalue objParam;
 		xvalue objBody;
@@ -1084,7 +1141,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
-	if ( xsXtpCmdIs(objMsg, "demo.callrequestsummaryjson") ) {
+	if ( iCmdID == XTP_CMD_DEMO_CALLREQUESTSUMMARYJSON ) {
 		void* pReq;
 		xvalue objParam;
 		xvalue objBody;
@@ -1150,7 +1207,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
-	if ( xsXtpCmdIs(objMsg, "demo.callrequestresultjson") ) {
+	if ( iCmdID == XTP_CMD_DEMO_CALLREQUESTRESULTJSON ) {
 		void* pReq;
 		xvalue objParam;
 		char* sResultJson;
@@ -1204,7 +1261,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
-	if ( xsXtpCmdIs(objMsg, "demo.callrequeststatus") ) {
+	if ( iCmdID == XTP_CMD_DEMO_CALLREQUESTSTATUS ) {
 		void* pReq;
 		xvalue objParam;
 		char* sCmdDup;
@@ -1288,7 +1345,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
-	if ( xsXtpCmdIs(objMsg, "demo.callresultjson") ) {
+	if ( iCmdID == XTP_CMD_DEMO_CALLRESULTJSON ) {
 		char* sResultJson;
 
 		CHECK_XTP_PORT();
@@ -1321,7 +1378,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
-	if ( xsXtpCmdIs(objMsg, "demo.callerrorjson") ) {
+	if ( iCmdID == XTP_CMD_DEMO_CALLERRORJSON ) {
 		char* sErrorJson;
 
 		CHECK_XTP_PORT();
@@ -1355,7 +1412,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
-	if ( xsXtpCmdIs(objMsg, "demo.callerror") ) {
+	if ( iCmdID == XTP_CMD_DEMO_CALLERROR ) {
 		char* sError;
 
 		CHECK_XTP_PORT();
@@ -1403,7 +1460,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
-	if ( xsXtpCmdIs(objMsg, "demo.callerrorbody") ) {
+	if ( iCmdID == XTP_CMD_DEMO_CALLERRORBODY ) {
 		char* sError;
 
 		CHECK_XTP_PORT();
@@ -1443,7 +1500,7 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
-	if ( xsXtpCmdIs(objMsg, "demo.callself") ) {
+	if ( iCmdID == XTP_CMD_DEMO_CALLSELF ) {
 		XTP_CallSelfTask* pTask;
 		xthread hThread;
 
@@ -1496,7 +1553,41 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return TRUE;
 	}
 
-	if ( !xsXtpCmdIs(objMsg, "demo.ping") ) {
+	if ( iCmdID == XTP_CMD_DEMO_LARGEBODY ) {
+		int64_t iSize;
+		size_t iOutSize;
+		char* sOut;
+		size_t i;
+
+		iSize = xsXtpParamInt(objMsg, "size", 65536);
+		if ( iSize < 0 || iSize > 262144 ) {
+			iWrite = xsXtpReplyErrorText(pStream, objMsg, 400, "xtp.error", "invalid large body size") != 0;
+			FREE_XTP_DUP();
+			return iWrite;
+		}
+
+		iOutSize = (size_t)iSize;
+		sOut = (char*)xrtMalloc(iOutSize + 1u);
+		if ( sOut == NULL ) {
+			iWrite = xsXtpReplyErrorText(pStream, objMsg, 500, "xtp.error", "large body alloc failed") != 0;
+			FREE_XTP_DUP();
+			return iWrite;
+		}
+
+		for ( i = 0u; i < iOutSize; i++ ) {
+			sOut[i] = 'B';
+		}
+		if ( iOutSize >= 14u ) {
+			memcpy(sOut + iOutSize - 14u, "large-body-end", 14u);
+		}
+		sOut[iOutSize] = '\0';
+		iWrite = xsXtpReplySimple(pStream, objMsg, 0, "xtp.reply", sOut, iOutSize) != 0;
+		xrtFree(sOut);
+		FREE_XTP_DUP();
+		return iWrite;
+	}
+
+	if ( iCmdID != XTP_CMD_DEMO_PING ) {
 		iWrite = xsXtpReplyUnsupportedCmd(pStream, objMsg, sCmdText) != 0;
 		FREE_XTP_DUP();
 		return iWrite;
@@ -1506,13 +1597,6 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		FREE_XTP_DUP();
 		return iWrite;
 	}
-	arrParam[0] = "result";
-	arrValue[0] = "ok";
-	arrParam[1] = "cmd";
-	arrValue[1] = sCmdText;
-	arrParam[2] = "tag";
-	arrValue[2] = sTag ? sTag : "";
-	
 	iWrite = snprintf(
 		sBody,
 		sizeof(sBody),
@@ -1558,16 +1642,22 @@ bool EventXtpProc(XS_ServerObject objServer, void* pStream, void* pMsg)
 		return iWrite;
 	}
 
-	iWrite = xsXtpReplyText(
-		pStream,
-		objMsg,
-		0,
-		"xtp.reply",
-		3,
-		arrParam,
-		arrValue,
-		sBody
-	) != 0;
+	pReply = xsXtpReplyStart(pStream, objMsg, 0, "xtp.reply");
+	if ( pReply == NULL ) {
+		FREE_XTP_DUP();
+		return false;
+	}
+	if ( !xsXtpReplyParam(pReply, "result", "ok") ) {
+		xsXtpReplyAbort(pReply);
+		FREE_XTP_DUP();
+		return false;
+	}
+	if ( !xsXtpReplyBody(pReply, sBody, strlen(sBody)) ) {
+		xsXtpReplyAbort(pReply);
+		FREE_XTP_DUP();
+		return false;
+	}
+	iWrite = xsXtpReplyEnd(pReply) != 0;
 	FREE_XTP_DUP();
 	return iWrite;
 #undef FREE_XTP_DUP

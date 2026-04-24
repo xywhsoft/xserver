@@ -353,6 +353,34 @@ static inline void XS_HttpApplyDefaultHeaders(const xhttpdrequest* pReq, xhttpdr
 	}
 }
 
+static inline uint32 XS_HttpRequestMethodID(const xhttpdrequest* pReq)
+{
+	return xrtHttpdRequestMethod(pReq);
+}
+
+static inline bool XS_HttpMethodIs(const xhttpdrequest* pReq, uint32 iMethod)
+{
+	return XS_HttpRequestMethodID(pReq) == iMethod;
+}
+
+static inline bool XS_HttpMethodIsGetOrPost(const xhttpdrequest* pReq)
+{
+	uint32 iMethod = XS_HttpRequestMethodID(pReq);
+	return iMethod == XHTTPD_METHOD_GET || iMethod == XHTTPD_METHOD_POST;
+}
+
+static inline bool XS_HttpMethodIsGetOrHead(const xhttpdrequest* pReq)
+{
+	uint32 iMethod = XS_HttpRequestMethodID(pReq);
+	return iMethod == XHTTPD_METHOD_GET || iMethod == XHTTPD_METHOD_HEAD;
+}
+
+static inline bool XS_HttpMethodIsGetHeadOrOptions(const xhttpdrequest* pReq)
+{
+	uint32 iMethod = XS_HttpRequestMethodID(pReq);
+	return iMethod == XHTTPD_METHOD_GET || iMethod == XHTTPD_METHOD_HEAD || iMethod == XHTTPD_METHOD_OPTIONS;
+}
+
 static inline bool XS_HttpValidateRequest(XS_ServerConfig* objServer, const xhttpdrequest* pReq, xhttpdresponse* pResp)
 {
 	size_t iPathLen;
@@ -382,7 +410,7 @@ static inline bool XS_HttpValidateRequest(XS_ServerConfig* objServer, const xhtt
 
 	if ( XS_HttpPathReservedManage(pReq->sPath) ) {
 		if ( strcmp(pReq->sPath, "/__xs/reload_json") == 0 || strcmp(pReq->sPath, "/__xs/reload_config_json") == 0 ) {
-			if ( strcasecmp(pReq->sMethod, "GET") != 0 && strcasecmp(pReq->sMethod, "POST") != 0 ) {
+			if ( !XS_HttpMethodIsGetOrPost(pReq) ) {
 				xrtHttpdResponseSetHeader(pResp, "Allow", "GET, POST");
 				if ( strcmp(pReq->sPath, "/__xs/reload_json") == 0 ) {
 					return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, "reload json api only supports GET or POST");
@@ -403,7 +431,7 @@ static inline bool XS_HttpValidateRequest(XS_ServerConfig* objServer, const xhtt
 			strcmp(pReq->sPath, "/__xs/udp_metrics_clear") == 0 ||
 			strcmp(pReq->sPath, "/__xs/custom_metrics_clear") == 0
 		) {
-		if ( strcasecmp(pReq->sMethod, "GET") != 0 ) {
+		if ( !XS_HttpMethodIs(pReq, XHTTPD_METHOD_GET) ) {
 				const char* sMethodMessage = XS_HttpGetOnlyAPIMethodMessage(pReq->sPath);
 				xrtHttpdResponseSetHeader(pResp, "Allow", "GET");
 				if ( bJsonError ) {
@@ -431,7 +459,7 @@ static inline bool XS_HttpValidateRequest(XS_ServerConfig* objServer, const xhtt
 			strcmp(pReq->sPath, "/__xs/reload_status_json") == 0 ||
 			strcmp(pReq->sPath, "/__xs/health_json") == 0
 		) {
-		if ( strcasecmp(pReq->sMethod, "GET") != 0 && strcasecmp(pReq->sMethod, "HEAD") != 0 ) {
+		if ( !XS_HttpMethodIsGetOrHead(pReq) ) {
 				const char* sMethodMessage = XS_HttpReadOnlyAPIMethodMessage(pReq->sPath);
 				xrtHttpdResponseSetHeader(pResp, "Allow", XS_HttpReadOnlyAPIAllowHeader(pReq->sPath));
 				if ( bJsonError ) {
@@ -484,13 +512,50 @@ typedef enum {
 	XS_HTTP_STATIC_RESOLVE_JOIN_FAILED = 5
 } XS_HttpStaticResolveResult;
 
-static inline bool XS_HttpStaticMethodAllowed(const xhttpdrequest* pReq)
+static inline bool XS_HttpHostHasResponseHeader(const XS_HostConfig* objHost, const char* sName)
 {
-	if ( pReq == NULL || pReq->sMethod == NULL ) {
+	if ( objHost == NULL || sName == NULL || objHost->arrHeaders == NULL || objHost->iHeaderCount == 0u ) {
+		return FALSE;
+	}
+	for ( uint32 i = 0u; i < objHost->iHeaderCount; ++i ) {
+		if ( strcasecmp(objHost->arrHeaders[i].sName, sName) == 0 ) {
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
+static inline bool XS_HttpStaticCorsOptionsEnabled(const XS_HostConfig* objHost)
+{
+	return XS_HttpHostHasResponseHeader(objHost, "Access-Control-Allow-Origin") ||
+		XS_HttpHostHasResponseHeader(objHost, "Access-Control-Allow-Methods") ||
+		XS_HttpHostHasResponseHeader(objHost, "Access-Control-Allow-Headers");
+}
+
+static inline bool XS_HttpStaticMethodAllowed(const XS_HostConfig* objHost, const xhttpdrequest* pReq)
+{
+	if ( pReq == NULL ) {
 		return FALSE;
 	}
 
-	return strcasecmp(pReq->sMethod, "GET") == 0 || strcasecmp(pReq->sMethod, "HEAD") == 0;
+	if ( XS_HttpMethodIsGetOrHead(pReq) ) {
+		return TRUE;
+	}
+	return XS_HttpMethodIs(pReq, XHTTPD_METHOD_OPTIONS) && XS_HttpStaticCorsOptionsEnabled(objHost);
+}
+
+static inline bool XS_HttpApplyHostResponseHeaders(const XS_HostConfig* objHost, xhttpdresponse* pResp)
+{
+	if ( objHost == NULL || pResp == NULL || objHost->arrHeaders == NULL || objHost->iHeaderCount == 0u ) {
+		return TRUE;
+	}
+
+	for ( uint32 i = 0u; i < objHost->iHeaderCount; ++i ) {
+		if ( !xrtHttpdResponseSetHeader(pResp, objHost->arrHeaders[i].sName, objHost->arrHeaders[i].sValue) ) {
+			return FALSE;
+		}
+	}
+	return TRUE;
 }
 
 static inline XS_HttpStaticResolveResult XS_HttpResolveStaticFilePath(const XS_HostConfig* objHost, const xhttpdrequest* pReq, char** psFilePath)
@@ -522,6 +587,9 @@ static inline XS_HttpStaticResolveResult XS_HttpResolveStaticFilePath(const XS_H
 		goto denied;
 	}
 	sDecodedPath[iDecodedLen] = '\0';
+	if ( XS_HttpStaticPathSensitive(sDecodedPath) ) {
+		goto denied;
+	}
 
 	iNormCap = iDecodedLen + 4;
 	sNormPath = (char*)xrtCalloc(1, iNormCap);
@@ -576,11 +644,10 @@ end:
 	return iRet;
 }
 
-static inline bool XS_HttpServeStatic(const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp)
+static inline bool XS_HttpServeStatic(const XS_HostConfig* objHost, const xhttpdrequest* pReq, xhttpdresponse* pResp, xhttpdconn* pConn)
 {
 	char sLength[32];
 	char* sFilePath = NULL;
-	ptr pFileData;
 	size_t iFileSize;
 	const char* sMime;
 	XS_HttpStaticResolveResult iResolve;
@@ -589,9 +656,9 @@ static inline bool XS_HttpServeStatic(const XS_HostConfig* objHost, const xhttpd
 		return FALSE;
 	}
 
-	if ( !XS_HttpStaticMethodAllowed(pReq) ) {
-		xrtHttpdResponseSetHeader(pResp, "Allow", "GET, HEAD");
-		return XS_HttpRetErrorEx(NULL, objHost, pReq, pResp, NULL, 405, "Method Not Allowed", "static host only supports GET or HEAD", NULL);
+	if ( !XS_HttpStaticMethodAllowed(objHost, pReq) ) {
+		xrtHttpdResponseSetHeader(pResp, "Allow", XS_HttpStaticCorsOptionsEnabled(objHost) ? "GET, HEAD, OPTIONS" : "GET, HEAD");
+		return XS_HttpRetErrorEx(NULL, objHost, pReq, pResp, NULL, 405, "Method Not Allowed", XS_HttpStaticCorsOptionsEnabled(objHost) ? "static host only supports GET, HEAD or OPTIONS" : "static host only supports GET or HEAD", NULL);
 	}
 
 	iResolve = XS_HttpResolveStaticFilePath(objHost, pReq, &sFilePath);
@@ -610,35 +677,50 @@ static inline bool XS_HttpServeStatic(const XS_HostConfig* objHost, const xhttpd
 	if ( iResolve == XS_HTTP_STATIC_RESOLVE_JOIN_FAILED ) {
 		return XS_HttpRet500Ex(NULL, objHost, pReq, pResp, NULL, "path join failed", NULL);
 	}
+
+	if ( XS_HttpMethodIs(pReq, XHTTPD_METHOD_OPTIONS) ) {
+		xrtHttpdResponseSetStatus(pResp, 204, "No Content");
+		(void)xrtHttpdResponseSetHeader(pResp, "Allow", "GET, HEAD, OPTIONS");
+		if ( !XS_HttpApplyHostResponseHeaders(objHost, pResp) ) {
+			xrtFree(sFilePath);
+			return FALSE;
+		}
+		xrtFree(sFilePath);
+		return TRUE;
+	}
 	
 	if ( !xrtFileExists(sFilePath) ) {
 		xrtFree(sFilePath);
 		return XS_HttpRet404Ex(NULL, objHost, pReq, pResp, NULL, "file not found", NULL);
 	}
 	
-	pFileData = xrtFileGetAll(sFilePath, &iFileSize);
-	if ( pFileData == NULL ) {
-		xrtFree(sFilePath);
-		return XS_HttpRet500Ex(NULL, objHost, pReq, pResp, NULL, "file read failed", NULL);
-	}
-	
+	iFileSize = xrtFileGetSize(sFilePath);
 	sMime = XS_HttpMimeTypeByPath(sFilePath);
 	xrtHttpdResponseSetStatus(pResp, 200, "OK");
-	if ( strcasecmp(pReq->sMethod, "HEAD") == 0 ) {
+	if ( XS_HttpMethodIs(pReq, XHTTPD_METHOD_HEAD) ) {
 		snprintf(sLength, sizeof(sLength), "%llu", (unsigned long long)iFileSize);
 		(void)xrtHttpdResponseSetHeader(pResp, "Content-Type", sMime);
 		(void)xrtHttpdResponseSetHeader(pResp, "Content-Length", sLength);
-		xrtFree(pFileData);
+		if ( !XS_HttpApplyHostResponseHeaders(objHost, pResp) ) {
+			xrtFree(sFilePath);
+			return FALSE;
+		}
 		xrtFree(sFilePath);
 		return TRUE;
 	}
-	if ( !xrtHttpdResponseSetBodyCopy(pResp, pFileData, iFileSize, sMime) ) {
-		xrtFree(pFileData);
+
+	snprintf(sLength, sizeof(sLength), "%llu", (unsigned long long)iFileSize);
+	(void)xrtHttpdResponseSetHeader(pResp, "Content-Type", sMime);
+	(void)xrtHttpdResponseSetHeader(pResp, "Content-Length", sLength);
+	if ( !XS_HttpApplyHostResponseHeaders(objHost, pResp) ) {
 		xrtFree(sFilePath);
 		return FALSE;
 	}
+	if ( pConn == NULL || xrtHttpdConnSendFile(pConn, pResp, sFilePath, 0u) != XRT_NET_OK ) {
+		xrtFree(sFilePath);
+		return XS_HttpRet500Ex(NULL, objHost, pReq, pResp, NULL, "file send failed", NULL);
+	}
 	
-	xrtFree(pFileData);
 	xrtFree(sFilePath);
 	return TRUE;
 }
@@ -648,6 +730,7 @@ static inline bool XS_HttpHandleScriptHost(XS_ServerConfig* objServer, const XS_
 	bool bHandled;
 	XS_ScriptHttpRequestProc procRequest;
 	XS_ScriptRequestContext objReqCtx;
+	XS_ScriptResponseContext objRespCtx;
 	const xnetaddr* pAddr;
 	
 	procRequest = XS_GetHostHttpRequestProc((XS_HostConfig*)objHost);
@@ -665,21 +748,25 @@ static inline bool XS_HttpHandleScriptHost(XS_ServerConfig* objServer, const XS_
 	if ( objReqCtx.sRemote == NULL ) {
 		objReqCtx.sRemote = "";
 	}
+	memset(&objRespCtx, 0, sizeof(objRespCtx));
+	objRespCtx.iMagic = XS_SCRIPT_RESPONSE_MAGIC;
+	objRespCtx.pResp = pResp;
+	objRespCtx.pConn = pConn;
 
 	if ( procRequest == NULL ) {
 		if ( objHost->Path && objHost->Path[0] ) {
-			return XS_HttpServeStatic(objHost, pReq, pResp);
+			return XS_HttpServeStatic(objHost, pReq, pResp, pConn);
 		}
 
 		return FALSE;
 	}
 
-	bHandled = procRequest(objServer, (void*)objHost, &objReqCtx, pResp);
+	bHandled = procRequest(objServer, (void*)objHost, &objReqCtx, &objRespCtx);
 	if ( bHandled ) {
 		return TRUE;
 	}
 	
-	if ( XS_HttpStaticMethodAllowed(pReq) && objHost->Path && objHost->Path[0] ) {
+	if ( XS_HttpStaticMethodAllowed(objHost, pReq) && objHost->Path && objHost->Path[0] ) {
 		XS_LogInfo(
 			"http fallback static: server=%s host=%s path=%s remote=%s",
 			objServer && objServer->Name ? objServer->Name : "(null)",
@@ -687,7 +774,7 @@ static inline bool XS_HttpHandleScriptHost(XS_ServerConfig* objServer, const XS_
 			pReq ? pReq->sPath : "",
 			XS_HttpLastRemote()[0] ? XS_HttpLastRemote() : "(none)"
 		);
-		return XS_HttpServeStatic(objHost, pReq, pResp);
+		return XS_HttpServeStatic(objHost, pReq, pResp, pConn);
 	}
 	
 	return FALSE;
@@ -894,7 +981,7 @@ static inline bool XS_HttpHandleReload(XS_ServerConfig* objServer, const XS_Host
 		return XS_HttpRespondText(pResp, 403, "Forbidden", "reload api disabled");
 	}
 	
-	if ( strcasecmp(pReq->sMethod, "GET") != 0 && strcasecmp(pReq->sMethod, "POST") != 0 ) {
+	if ( !XS_HttpMethodIsGetOrPost(pReq) ) {
 		xrtHttpdResponseSetHeader(pResp, "Allow", "GET, POST");
 		return XS_HttpRespondText(pResp, 405, "Method Not Allowed", "reload api only supports GET or POST");
 	}
@@ -975,7 +1062,7 @@ static inline bool XS_HttpHandleReloadJson(XS_ServerConfig* objServer, const XS_
 	if ( !(objServer->Debug || objHost->Debug) ) {
 		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "reload json api disabled");
 	}
-	if ( strcasecmp(pReq->sMethod, "GET") != 0 && strcasecmp(pReq->sMethod, "POST") != 0 ) {
+	if ( !XS_HttpMethodIsGetOrPost(pReq) ) {
 		return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, "reload json api only supports GET or POST");
 	}
 
@@ -1079,7 +1166,7 @@ static inline bool XS_HttpHandleConfigReload(XS_ServerConfig* objServer, const X
 	if ( !(objServer->Debug || objHost->Debug) ) {
 		return XS_HttpRespondText(pResp, 403, "Forbidden", "config reload api disabled");
 	}
-	if ( strcasecmp(pReq->sMethod, "GET") != 0 && strcasecmp(pReq->sMethod, "POST") != 0 ) {
+	if ( !XS_HttpMethodIsGetOrPost(pReq) ) {
 		xrtHttpdResponseSetHeader(pResp, "Allow", "GET, POST");
 		return XS_HttpRespondText(pResp, 405, "Method Not Allowed", "config reload api only supports GET or POST");
 	}
@@ -1142,7 +1229,7 @@ static inline bool XS_HttpHandleConfigReloadJson(XS_ServerConfig* objServer, con
 	if ( !(objServer->Debug || objHost->Debug) ) {
 		return XS_HttpRespondJsonResult(pResp, 403, "Forbidden", FALSE, "config reload json api disabled");
 	}
-	if ( strcasecmp(pReq->sMethod, "GET") != 0 && strcasecmp(pReq->sMethod, "POST") != 0 ) {
+	if ( !XS_HttpMethodIsGetOrPost(pReq) ) {
 		return XS_HttpRespondJsonResult(pResp, 405, "Method Not Allowed", FALSE, "config reload json api only supports GET or POST");
 	}
 

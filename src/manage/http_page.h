@@ -3,11 +3,11 @@
 
 static inline bool XS_HttpIsHeadRequest(const xhttpdrequest* pReq)
 {
-	if ( pReq == NULL || pReq->sMethod == NULL ) {
+	if ( pReq == NULL ) {
 		return FALSE;
 	}
 
-	return strcasecmp(pReq->sMethod, "HEAD") == 0;
+	return xrtHttpdRequestMethod(pReq) == XHTTPD_METHOD_HEAD;
 }
 
 static inline bool XS_HttpRespondBodyEx(

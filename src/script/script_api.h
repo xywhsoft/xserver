@@ -7,6 +7,9 @@
 typedef struct XTP_Message XTP_Message;
 typedef XTP_Message* XTP_MessageObject;
 
+static inline uint32 XS_XtpCmdID(const void* pMsg);
+static inline uint32 XS_XtpCmdIDFrom(const char* sCmd);
+static inline uint32 XS_XtpCmdRegister(const char* sCmd, uint32 iCmdID);
 static inline void XS_ImportScriptAPI(TCCState* s);
 static inline bool XS_RequestConfigReload(bool bForce);
 
@@ -121,6 +124,12 @@ static inline int XS_XtpReplyEx(
 	const void* pBody,
 	size_t iBodySize
 );
+static inline int XS_XtpReplySimple(void* pStream, const void* pReqMsg, int32 iStatus, const char* sCmd, const void* pBody, size_t iBodySize);
+static inline void* XS_ScriptXtpReplyStart(void* pStream, const void* pReqMsg, int iStatus, const char* sCmd);
+static inline int XS_ScriptXtpReplyParam(void* pReplyObj, const char* sKey, const char* sValue);
+static inline int XS_ScriptXtpReplyBody(void* pReplyObj, const void* pBody, size_t iBodySize);
+static inline int XS_ScriptXtpReplyEnd(void* pReplyObj);
+static inline void XS_ScriptXtpReplyAbort(void* pReplyObj);
 static inline uint64 XS_XtpMsgId(const void* pMsg);
 static inline uint16 XS_XtpMsgType(const void* pMsg);
 static inline uint16 XS_XtpMsgFlags(const void* pMsg);
@@ -317,6 +326,7 @@ static inline int XS_ScriptHostDevMode(ptr objHost)
 }
 
 #define XS_SCRIPT_REQUEST_MAGIC		0x58535251u
+#define XS_SCRIPT_RESPONSE_MAGIC	0x58535250u
 
 typedef struct {
 	uint32 iMagic;
@@ -324,6 +334,12 @@ typedef struct {
 	const xhttpdconn* pConn;
 	const char* sRemote;
 } XS_ScriptRequestContext;
+
+typedef struct {
+	uint32 iMagic;
+	xhttpdresponse* pResp;
+	xhttpdconn* pConn;
+} XS_ScriptResponseContext;
 
 static inline const xhttpdrequest* XS_ScriptRequestRaw(const void* pReq)
 {
@@ -334,6 +350,28 @@ static inline const xhttpdrequest* XS_ScriptRequestRaw(const void* pReq)
 	}
 
 	return (const xhttpdrequest*)pReq;
+}
+
+static inline xhttpdresponse* XS_ScriptResponseRaw(void* pResp)
+{
+	XS_ScriptResponseContext* objCtx = (XS_ScriptResponseContext*)pResp;
+
+	if ( objCtx && (objCtx->iMagic == XS_SCRIPT_RESPONSE_MAGIC) && objCtx->pResp ) {
+		return objCtx->pResp;
+	}
+
+	return (xhttpdresponse*)pResp;
+}
+
+static inline xhttpdconn* XS_ScriptResponseConn(void* pResp)
+{
+	XS_ScriptResponseContext* objCtx = (XS_ScriptResponseContext*)pResp;
+
+	if ( objCtx && (objCtx->iMagic == XS_SCRIPT_RESPONSE_MAGIC) ) {
+		return objCtx->pConn;
+	}
+
+	return NULL;
 }
 
 static inline const char* XS_ScriptRequestRemote(const void* pReq)
@@ -370,6 +408,11 @@ static inline const char* XS_ScriptRequestMethod(const void* pReq)
 	}
 	
 	return pHttpReq->sMethod;
+}
+
+static inline uint32 XS_ScriptRequestMethodID(const void* pReq)
+{
+	return xrtHttpdRequestMethod(XS_ScriptRequestRaw(pReq));
 }
 
 static inline const char* XS_ScriptRequestTarget(const void* pReq)
@@ -434,7 +477,7 @@ static inline const char* XS_ScriptRequestHeader(const void* pReq, const char* s
 
 static inline int XS_ScriptHttpStatus(void* pResp, uint32 iStatus, const char* sReason)
 {
-	xhttpdresponse* pHttpResp = (xhttpdresponse*)pResp;
+	xhttpdresponse* pHttpResp = XS_ScriptResponseRaw(pResp);
 	
 	if ( pHttpResp == NULL ) {
 		return 0;
@@ -446,7 +489,7 @@ static inline int XS_ScriptHttpStatus(void* pResp, uint32 iStatus, const char* s
 
 static inline int XS_ScriptHttpHeader(void* pResp, const char* sName, const char* sValue)
 {
-	xhttpdresponse* pHttpResp = (xhttpdresponse*)pResp;
+	xhttpdresponse* pHttpResp = XS_ScriptResponseRaw(pResp);
 	
 	if ( pHttpResp == NULL ) {
 		return 0;
@@ -455,9 +498,62 @@ static inline int XS_ScriptHttpHeader(void* pResp, const char* sName, const char
 	return xrtHttpdResponseSetHeader(pHttpResp, sName, sValue) ? 1 : 0;
 }
 
+static inline int XS_ScriptHttpReply(void* pResp, uint32 iStatus, const char* sReason, const char* sHeaders, const void* pBody, size_t iBodyLen)
+{
+	xhttpdresponse* pHttpResp = XS_ScriptResponseRaw(pResp);
+
+	if ( pHttpResp == NULL ) {
+		return 0;
+	}
+
+	return xrtHttpdResponseReply(pHttpResp, iStatus, sReason, sHeaders, pBody, iBodyLen) ? 1 : 0;
+}
+
+static inline int XS_ScriptHttpStart(void* pResp, uint32 iStatus, const char* sReason, const char* sHeaders)
+{
+	xhttpdresponse tResp;
+	xhttpdconn* pConn = XS_ScriptResponseConn(pResp);
+	xnet_result iRet;
+
+	if ( pConn == NULL ) {
+		return 0;
+	}
+
+	xrtHttpdResponseInit(&tResp);
+	if ( !xrtHttpdResponseReply(&tResp, iStatus, sReason, sHeaders, NULL, 0u) ) {
+		xrtHttpdResponseUnit(&tResp);
+		return 0;
+	}
+	iRet = xrtHttpdConnStart(pConn, &tResp);
+	xrtHttpdResponseUnit(&tResp);
+	return iRet == XRT_NET_OK ? 1 : 0;
+}
+
+static inline int XS_ScriptHttpSend(void* pResp, const void* pData, size_t iLen)
+{
+	xhttpdconn* pConn = XS_ScriptResponseConn(pResp);
+
+	if ( pConn == NULL ) {
+		return 0;
+	}
+
+	return xrtHttpdConnSend(pConn, pData, iLen) == XRT_NET_OK ? 1 : 0;
+}
+
+static inline int XS_ScriptHttpEnd(void* pResp)
+{
+	xhttpdconn* pConn = XS_ScriptResponseConn(pResp);
+
+	if ( pConn == NULL ) {
+		return 0;
+	}
+
+	return xrtHttpdConnEnd(pConn) == XRT_NET_OK ? 1 : 0;
+}
+
 static inline int XS_ScriptHttpText(void* pResp, uint32 iStatus, const char* sReason, const char* sText)
 {
-	xhttpdresponse* pHttpResp = (xhttpdresponse*)pResp;
+	xhttpdresponse* pHttpResp = XS_ScriptResponseRaw(pResp);
 	
 	if ( pHttpResp == NULL ) {
 		return 0;
@@ -474,7 +570,7 @@ static inline int XS_ScriptHttpText(void* pResp, uint32 iStatus, const char* sRe
 
 static inline int XS_ScriptHttpBody(void* pResp, const void* pData, size_t iLen, const char* sContentType)
 {
-	xhttpdresponse* pHttpResp = (xhttpdresponse*)pResp;
+	xhttpdresponse* pHttpResp = XS_ScriptResponseRaw(pResp);
 	
 	if ( pHttpResp == NULL ) {
 		return 0;
@@ -485,7 +581,7 @@ static inline int XS_ScriptHttpBody(void* pResp, const void* pData, size_t iLen,
 
 static inline int XS_ScriptHttpJson(void* pResp, uint32 iStatus, const char* sReason, const char* sJson)
 {
-	xhttpdresponse* pHttpResp = (xhttpdresponse*)pResp;
+	xhttpdresponse* pHttpResp = XS_ScriptResponseRaw(pResp);
 	
 	if ( pHttpResp == NULL ) {
 		return 0;
@@ -554,7 +650,7 @@ static inline char* XS_ScriptMarkdownToHtml(const char* sMarkdown)
 
 static inline int XS_ScriptHttpMarkdown(void* pResp, uint32 iStatus, const char* sReason, const char* sMarkdown)
 {
-	xhttpdresponse* pHttpResp = (xhttpdresponse*)pResp;
+	xhttpdresponse* pHttpResp = XS_ScriptResponseRaw(pResp);
 	char* sHtml;
 	int iRet;
 
@@ -584,7 +680,7 @@ static inline int XS_ScriptRet403(void* pServer, void* pHost, const void* pReq, 
 		(XS_ServerConfig*)pServer,
 		(const XS_HostConfig*)pHost,
 		XS_ScriptRequestRaw(pReq),
-		(xhttpdresponse*)pResp,
+		XS_ScriptResponseRaw(pResp),
 		XS_ScriptRequestRemote(pReq),
 		sMessage,
 		objData
@@ -597,7 +693,7 @@ static inline int XS_ScriptRet404(void* pServer, void* pHost, const void* pReq, 
 		(XS_ServerConfig*)pServer,
 		(const XS_HostConfig*)pHost,
 		XS_ScriptRequestRaw(pReq),
-		(xhttpdresponse*)pResp,
+		XS_ScriptResponseRaw(pResp),
 		XS_ScriptRequestRemote(pReq),
 		sMessage,
 		objData
@@ -610,7 +706,7 @@ static inline int XS_ScriptRet500(void* pServer, void* pHost, const void* pReq, 
 		(XS_ServerConfig*)pServer,
 		(const XS_HostConfig*)pHost,
 		XS_ScriptRequestRaw(pReq),
-		(xhttpdresponse*)pResp,
+		XS_ScriptResponseRaw(pResp),
 		XS_ScriptRequestRemote(pReq),
 		sMessage,
 		objData
@@ -632,7 +728,7 @@ static inline int XS_ScriptRetError(
 		(XS_ServerConfig*)pServer,
 		(const XS_HostConfig*)pHost,
 		XS_ScriptRequestRaw(pReq),
-		(xhttpdresponse*)pResp,
+		XS_ScriptResponseRaw(pResp),
 		XS_ScriptRequestRemote(pReq),
 		iStatus,
 		sReason ? sReason : "Error",
@@ -852,6 +948,25 @@ static inline int XS_ScriptXtpReplyEx(
 	);
 }
 
+static inline int XS_ScriptXtpReplySimple(
+	void* pStream,
+	const void* pReqMsg,
+	int iStatus,
+	const char* sCmd,
+	const void* pBody,
+	size_t iBodySize
+)
+{
+	return XS_XtpReplySimple(
+		pStream,
+		pReqMsg,
+		(int32)iStatus,
+		sCmd,
+		pBody,
+		iBodySize
+	);
+}
+
 static inline uint64 XS_ScriptXtpMsgId(const void* pMsg)
 {
 	return XS_XtpMsgId(pMsg);
@@ -885,6 +1000,21 @@ static inline const char* XS_ScriptXtpCmd(const void* pMsg)
 static inline unsigned XS_ScriptXtpCmdLen(const void* pMsg)
 {
 	return XS_XtpCmdLen(pMsg);
+}
+
+static inline unsigned XS_ScriptXtpCmdID(const void* pMsg)
+{
+	return XS_XtpCmdID(pMsg);
+}
+
+static inline unsigned XS_ScriptXtpCmdIDFrom(const char* sCmd)
+{
+	return XS_XtpCmdIDFrom(sCmd);
+}
+
+static inline unsigned XS_ScriptXtpCmdRegister(const char* sCmd, unsigned iCmdID)
+{
+	return XS_XtpCmdRegister(sCmd, iCmdID);
 }
 
 static inline const void* XS_ScriptXtpBody(const void* pMsg)
@@ -1718,6 +1848,174 @@ static inline char* XS_ScriptDupText(const char* sText)
 
 	memcpy(sDup, sText, iLen + 1u);
 	return sDup;
+}
+
+typedef struct {
+	void* pStream;
+	const void* pReqMsg;
+	int32 iStatus;
+	char* sCmd;
+	xvalue objParams;
+	char* pBody;
+	size_t iBodyLen;
+	size_t iBodyCap;
+	bool bFailed;
+} XS_ScriptXtpReplyBuilder;
+
+static inline void XS_ScriptXtpReplyAbort(void* pReplyObj)
+{
+	XS_ScriptXtpReplyBuilder* pReply = (XS_ScriptXtpReplyBuilder*)pReplyObj;
+
+	if ( pReply == NULL ) {
+		return;
+	}
+
+	if ( pReply->sCmd ) {
+		xrtFree(pReply->sCmd);
+	}
+	if ( pReply->objParams ) {
+		xvoUnref(pReply->objParams);
+	}
+	if ( pReply->pBody ) {
+		xrtFree(pReply->pBody);
+	}
+	xrtFree(pReply);
+}
+
+static inline void* XS_ScriptXtpReplyStart(void* pStream, const void* pReqMsg, int iStatus, const char* sCmd)
+{
+	XS_ScriptXtpReplyBuilder* pReply;
+
+	if ( pStream == NULL || pReqMsg == NULL || sCmd == NULL || sCmd[0] == '\0' ) {
+		return NULL;
+	}
+
+	pReply = (XS_ScriptXtpReplyBuilder*)xrtMalloc(sizeof(XS_ScriptXtpReplyBuilder));
+	if ( pReply == NULL ) {
+		return NULL;
+	}
+	memset(pReply, 0, sizeof(XS_ScriptXtpReplyBuilder));
+
+	pReply->pStream = pStream;
+	pReply->pReqMsg = pReqMsg;
+	pReply->iStatus = (int32)iStatus;
+	pReply->sCmd = XS_ScriptDupText(sCmd);
+	if ( pReply->sCmd == NULL ) {
+		XS_ScriptXtpReplyAbort(pReply);
+		return NULL;
+	}
+
+	return pReply;
+}
+
+static inline xvalue XS_ScriptXtpReplyEnsureParams(XS_ScriptXtpReplyBuilder* pReply)
+{
+	if ( pReply == NULL || pReply->bFailed ) {
+		return NULL;
+	}
+
+	if ( pReply->objParams == NULL ) {
+		pReply->objParams = xvoCreateTable();
+	}
+
+	return pReply->objParams;
+}
+
+static inline int XS_ScriptXtpReplyParam(void* pReplyObj, const char* sKey, const char* sValue)
+{
+	xvalue objParams;
+
+	if ( sKey == NULL || sKey[0] == '\0' ) {
+		return 0;
+	}
+
+	objParams = XS_ScriptXtpReplyEnsureParams((XS_ScriptXtpReplyBuilder*)pReplyObj);
+	if ( objParams == NULL ) {
+		return 0;
+	}
+
+	xvoTableSetText(objParams, (str)sKey, 0, (ptr)(sValue ? sValue : ""), 0, FALSE);
+	return 1;
+}
+
+static inline int XS_ScriptXtpReplyBody(void* pReplyObj, const void* pBody, size_t iBodySize)
+{
+	XS_ScriptXtpReplyBuilder* pReply = (XS_ScriptXtpReplyBuilder*)pReplyObj;
+	char* pNew;
+	size_t iNeed;
+	size_t iCap;
+
+	if ( pReply == NULL || pReply->bFailed ) {
+		return 0;
+	}
+	if ( pBody == NULL || iBodySize == 0u ) {
+		return 1;
+	}
+	if ( iBodySize > (SIZE_MAX - pReply->iBodyLen) ) {
+		pReply->bFailed = TRUE;
+		return 0;
+	}
+
+	iNeed = pReply->iBodyLen + iBodySize;
+	if ( iNeed > pReply->iBodyCap ) {
+		iCap = pReply->iBodyCap ? pReply->iBodyCap : 256u;
+		while ( iCap < iNeed ) {
+			if ( iCap > (SIZE_MAX / 2u) ) {
+				iCap = iNeed;
+				break;
+			}
+			iCap *= 2u;
+		}
+		pNew = (char*)xrtRealloc(pReply->pBody, iCap);
+		if ( pNew == NULL ) {
+			pReply->bFailed = TRUE;
+			return 0;
+		}
+		pReply->pBody = pNew;
+		pReply->iBodyCap = iCap;
+	}
+
+	memcpy(pReply->pBody + pReply->iBodyLen, pBody, iBodySize);
+	pReply->iBodyLen += iBodySize;
+	return 1;
+}
+
+static inline int XS_ScriptXtpReplyEnd(void* pReplyObj)
+{
+	XS_ScriptXtpReplyBuilder* pReply = (XS_ScriptXtpReplyBuilder*)pReplyObj;
+	const char** arrParam = NULL;
+	const char** arrValue = NULL;
+	unsigned iCount = 0;
+	int iRet;
+
+	if ( pReply == NULL ) {
+		return 0;
+	}
+	if ( pReply->bFailed ) {
+		XS_ScriptXtpReplyAbort(pReply);
+		return 0;
+	}
+
+	if ( !XS_ScriptXtpBuildParamArrays(pReply->objParams, &arrParam, &arrValue, &iCount) ) {
+		XS_ScriptXtpReplyAbort(pReply);
+		return 0;
+	}
+
+	iRet = XS_XtpReplyEx(
+		pReply->pStream,
+		pReply->pReqMsg,
+		pReply->iStatus,
+		pReply->sCmd,
+		0,
+		iCount,
+		arrParam,
+		arrValue,
+		pReply->pBody,
+		pReply->iBodyLen
+	);
+	XS_ScriptXtpFreeParamArrays((char**)arrParam, (char**)arrValue, iCount);
+	XS_ScriptXtpReplyAbort(pReply);
+	return iRet;
 }
 
 static inline void XS_ScriptXtpRequestClearBody(XS_ScriptXtpRequest* pReq)

@@ -1,0 +1,86 @@
+{
+	"services": [
+		{
+			"enabled": true,
+			"class": "http",
+			"name": "test HTTP Server",
+			"desc": "http smoke server",
+			"debug": true,
+			"backlog": 128,
+			"conn_limit": 128,
+			"recv_limit": 1048576,
+			"path_limit": 200,
+			"header_limit": 32,
+			"body_limit": 262144,
+			"ip": "127.0.0.1",
+			"port": 8085,
+			"host_default": {
+				"enabled": true,
+				"name": "http",
+				"path": "wwwroot",
+				"devlang": "c",
+				"devfile": "script_vnext/main.c"
+			}
+		},
+		{
+			"enabled": true,
+			"class": "ws",
+			"name": "test WS Server",
+			"debug": true,
+			"backlog": 128,
+			"conn_limit": 128,
+			"recv_limit": 1048576,
+			"ws_message_limit": 262144,
+			"ws_protocol": "xs-demo",
+			"ip": "127.0.0.1",
+			"port": 8081,
+			"host_default": {
+				"enabled": true,
+				"name": "ws",
+				"path": "wwwroot",
+				"devlang": "c",
+				"devfile": "script_vnext/ws_main.c"
+			}
+		},
+		{
+			"enabled": true,
+			"class": "xtp",
+			"name": "test XTP Server",
+			"debug": true,
+			"backlog": 128,
+			"conn_limit": 128,
+			"recv_limit": 1048576,
+			"ip": "127.0.0.1",
+			"port": 9096,
+			"path": "script_vnext",
+			"devlang": "c",
+			"devfile": "script_vnext/xtp_main.c"
+		},
+		{
+			"enabled": true,
+			"class": "udp",
+			"name": "test UDP Server",
+			"debug": true,
+			"recv_limit": 4096,
+			"ip": "127.0.0.1",
+			"port": 9097,
+			"path": "script_vnext",
+			"devlang": "c",
+			"devfile": "script_vnext/udp_main.c"
+		},
+		{
+			"enabled": true,
+			"class": "custom",
+			"name": "test Custom Server",
+			"debug": true,
+			"backlog": 128,
+			"conn_limit": 128,
+			"recv_limit": 1048576,
+			"ip": "127.0.0.1",
+			"port": 9098,
+			"path": "script_vnext",
+			"devlang": "c",
+			"devfile": "script_vnext/custom_main.c"
+		}
+	]
+}

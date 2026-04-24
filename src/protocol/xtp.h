@@ -34,6 +34,7 @@ typedef struct XTP_Message {
 	char* pPackBuf;
 	const char* pCmd;
 	uint16 CmdSize;
+	uint32 CmdID;
 	const XTP_ParamInfo* pParamInfo;
 	const char* pParamData;
 	uint16 ParamCount;
@@ -71,13 +72,29 @@ typedef struct {
 	xarray arrConn;
 } XS_XtpHandle;
 
+#define XS_XTP_CMD_REG_MAX 128u
+#define XS_XTP_CMD_REG_TEXT_CAP 96u
+
+typedef struct {
+	uint32 HashID;
+	uint32 CmdID;
+	uint16 CmdSize;
+	char Cmd[XS_XTP_CMD_REG_TEXT_CAP];
+} XS_XtpCmdRegItem;
+
 static _Thread_local int g_iXsXtpClientLastErrorCode = 0;
 static _Thread_local char g_sXsXtpClientLastError[128] = "";
+static XS_XtpCmdRegItem g_arrXsXtpCmdReg[XS_XTP_CMD_REG_MAX];
+static uint32 g_iXsXtpCmdRegCount = 0u;
 
 static inline bool XS_XtpAppendChain(XS_XtpConnContext* objCtx, xnetchain* pChain);
 static inline bool XS_XtpPacketHeaderInvalid(const XS_XtpConnContext* objCtx);
 static inline void XS_XtpConsume(XS_XtpConnContext* objCtx, size_t iBytes);
 static inline bool XS_XtpParseMessage(XS_XtpConnContext* objCtx, XTP_Message* pMsg, size_t* pPackBytes);
+static inline uint32 XS_XtpCmdIDFromN(const char* sCmd, size_t iCmdSize);
+static inline uint32 XS_XtpCmdIDFrom(const char* sCmd);
+static inline uint32 XS_XtpCmdRegister(const char* sCmd, uint32 iCmdID);
+static inline uint32 XS_XtpCmdRegisteredIDFromN(const char* sCmd, size_t iCmdSize);
 static inline bool XS_XtpBuildPacket(uint16 iMsgType, uint64 iMsgID, uint16 iFlags, int32 iStatus, const char* sCmd, size_t iCmdSize, uint32 iParamCount, const char** arrParam, const char** arrValue, const void* pBody, size_t iBodySize, char** ppSendBuf, size_t* piPackSize);
 static inline bool XS_XtpIsOK(const void* pMsg);
 static inline char* XS_XtpBodyDup(const void* pMsg, const char* sDefault);
@@ -1344,6 +1361,107 @@ static inline bool XS_XtpFindParamView(const void* pMsg, const char* sKey, const
 	return FALSE;
 }
 
+static inline uint32 XS_XtpCmdIDFromN(const char* sCmd, size_t iCmdSize)
+{
+	uint32 iHash = 2166136261u;
+	size_t i;
+
+	if ( sCmd == NULL ) {
+		return 0u;
+	}
+	if ( iCmdSize == 0u ) {
+		iCmdSize = strlen(sCmd);
+	}
+	if ( iCmdSize == 0u ) {
+		return 0u;
+	}
+
+	for ( i = 0u; i < iCmdSize; i++ ) {
+		iHash ^= (uint8)sCmd[i];
+		iHash *= 16777619u;
+	}
+
+	return iHash ? iHash : 1u;
+}
+
+static inline uint32 XS_XtpCmdIDFrom(const char* sCmd)
+{
+	return XS_XtpCmdIDFromN(sCmd, 0u);
+}
+
+static inline uint32 XS_XtpCmdRegister(const char* sCmd, uint32 iCmdID)
+{
+	uint32 i;
+	size_t iCmdSize;
+	uint32 iHash;
+
+	if ( sCmd == NULL || sCmd[0] == '\0' ) {
+		return 0u;
+	}
+
+	iCmdSize = strlen(sCmd);
+	if ( iCmdSize >= XS_XTP_CMD_REG_TEXT_CAP ) {
+		return 0u;
+	}
+
+	iHash = XS_XtpCmdIDFromN(sCmd, iCmdSize);
+	if ( iCmdID == 0u ) {
+		iCmdID = iHash;
+	}
+	if ( iCmdID == 0u ) {
+		return 0u;
+	}
+
+	for ( i = 0u; i < g_iXsXtpCmdRegCount; i++ ) {
+		XS_XtpCmdRegItem* pItem = &g_arrXsXtpCmdReg[i];
+
+		if ( pItem->CmdSize == (uint16)iCmdSize && memcmp(pItem->Cmd, sCmd, iCmdSize) == 0 ) {
+			pItem->HashID = iHash;
+			pItem->CmdID = iCmdID;
+			return iCmdID;
+		}
+	}
+
+	if ( g_iXsXtpCmdRegCount >= XS_XTP_CMD_REG_MAX ) {
+		return 0u;
+	}
+
+	g_arrXsXtpCmdReg[g_iXsXtpCmdRegCount].HashID = iHash;
+	g_arrXsXtpCmdReg[g_iXsXtpCmdRegCount].CmdID = iCmdID;
+	g_arrXsXtpCmdReg[g_iXsXtpCmdRegCount].CmdSize = (uint16)iCmdSize;
+	memcpy(g_arrXsXtpCmdReg[g_iXsXtpCmdRegCount].Cmd, sCmd, iCmdSize + 1u);
+	g_iXsXtpCmdRegCount++;
+	return iCmdID;
+}
+
+static inline uint32 XS_XtpCmdRegisteredIDFromN(const char* sCmd, size_t iCmdSize)
+{
+	uint32 i;
+	uint32 iHash;
+
+	if ( sCmd == NULL || iCmdSize == 0u ) {
+		return 0u;
+	}
+
+	if ( g_iXsXtpCmdRegCount == 0u ) {
+		return XS_XtpCmdIDFromN(sCmd, iCmdSize);
+	}
+
+	iHash = XS_XtpCmdIDFromN(sCmd, iCmdSize);
+	for ( i = 0u; i < g_iXsXtpCmdRegCount; i++ ) {
+		const XS_XtpCmdRegItem* pItem = &g_arrXsXtpCmdReg[i];
+
+		if ( pItem->HashID != iHash ) {
+			continue;
+		}
+		if ( pItem->CmdSize == (uint16)iCmdSize && memcmp(pItem->Cmd, sCmd, iCmdSize) == 0 ) {
+			return pItem->CmdID;
+		}
+	}
+
+	return 0u;
+}
+
 static inline bool XS_XtpParseMessage(XS_XtpConnContext* objCtx, XTP_Message* pMsg, size_t* pPackBytes)
 {
 	XTP_PackHeader tHeader;
@@ -1395,6 +1513,17 @@ static inline bool XS_XtpParseMessage(XS_XtpConnContext* objCtx, XTP_Message* pM
 		);
 		return FALSE;
 	}
+	if ( tHeader.MsgType < XTP_MSG_REQUEST || tHeader.MsgType > XTP_MSG_EVENT ) {
+		XS_XtpRecordInvalid("invalid type");
+		XS_LogWarn(
+			"xtp invalid type: server=%s stream=%p type=%u remote=%s",
+			objCtx->pServer && objCtx->pServer->Name ? objCtx->pServer->Name : "(null)",
+			(void*)objCtx->pStream,
+			(unsigned)tHeader.MsgType,
+			g_sXsXtpLastRemote[0] ? g_sXsXtpLastRemote : "(none)"
+		);
+		return FALSE;
+	}
 	
 	iNeedBytes = sizeof(XTP_PackHeader) + ((size_t)tHeader.ParamCount * sizeof(XTP_ParamInfo)) + (size_t)tHeader.CmdSize + (size_t)tHeader.BodySize;
 	for ( i = 0; i < tHeader.ParamCount; i++ ) {
@@ -1435,6 +1564,7 @@ static inline bool XS_XtpParseMessage(XS_XtpConnContext* objCtx, XTP_Message* pM
 	pMsg->ParamCount = tHeader.ParamCount;
 	pMsg->pCmd = pPackBuf + sizeof(XTP_PackHeader) + ((size_t)tHeader.ParamCount * sizeof(XTP_ParamInfo));
 	pMsg->CmdSize = tHeader.CmdSize;
+	pMsg->CmdID = XS_XtpCmdRegisteredIDFromN(pMsg->pCmd, pMsg->CmdSize);
 	pMsg->pParamData = pMsg->pCmd + tHeader.CmdSize;
 	
 	iPos = sizeof(XTP_PackHeader) + ((size_t)tHeader.ParamCount * sizeof(XTP_ParamInfo)) + (size_t)tHeader.CmdSize;
@@ -1587,6 +1717,7 @@ static inline xvalue XS_XtpValue(const void* pMsg)
 	xvoTableSetInt(objRet, "flags", 0, (int64)objMsg->Flags);
 	xvoTableSetInt(objRet, "param_count", 0, (int64)objMsg->ParamCount);
 	xvoTableSetInt(objRet, "body_len", 0, (int64)objMsg->BodySize);
+	xvoTableSetInt(objRet, "cmd_id", 0, (int64)objMsg->CmdID);
 	xvoTableSetText(objRet, "cmd", 0, (ptr)(objMsg->pCmd ? objMsg->pCmd : ""), objMsg->CmdSize, FALSE);
 	objParams = XS_XtpParamsValue(objMsg);
 	if ( objParams ) {
@@ -2054,6 +2185,12 @@ static inline uint16 XS_XtpCmdLen(const void* pMsg)
 	return objMsg ? objMsg->CmdSize : 0;
 }
 
+static inline uint32 XS_XtpCmdID(const void* pMsg)
+{
+	const XTP_MessageObject objMsg = (const XTP_MessageObject)pMsg;
+	return objMsg ? objMsg->CmdID : 0u;
+}
+
 static inline const void* XS_XtpBody(const void* pMsg)
 {
 	const XTP_MessageObject objMsg = (const XTP_MessageObject)pMsg;
@@ -2109,6 +2246,9 @@ static inline bool XS_XtpCmdIs(const void* pMsg, const char* sCmd)
 
 	iCmdLen = strlen(sCmd);
 	if ( objMsg->CmdSize != (uint16)iCmdLen ) {
+		return FALSE;
+	}
+	if ( objMsg->CmdID != 0u && objMsg->CmdID != XS_XtpCmdIDFromN(sCmd, iCmdLen) ) {
 		return FALSE;
 	}
 
@@ -2522,6 +2662,29 @@ static inline int XS_XtpReplyEx(
 		iParamCount,
 		arrParam,
 		arrValue,
+		pBody,
+		iBodySize
+	);
+}
+
+static inline int XS_XtpReplySimple(
+	void* pStream,
+	const void* pReqMsg,
+	int32 iStatus,
+	const char* sCmd,
+	const void* pBody,
+	size_t iBodySize
+)
+{
+	return XS_XtpReplyEx(
+		pStream,
+		pReqMsg,
+		iStatus,
+		sCmd,
+		0,
+		0,
+		NULL,
+		NULL,
 		pBody,
 		iBodySize
 	);

@@ -479,6 +479,20 @@ static int procSendXtpBadSize(idle_socket_t hSocket)
 }
 
 
+static int procSendXtpBadType(idle_socket_t hSocket)
+{
+	unsigned char aBuf[XTP_HEADER_SIZE];
+
+	memset(aBuf, 0, sizeof(aBuf));
+	memcpy(aBuf, "xtp\2", 4u);
+	procStoreU32LE(aBuf + 4u, XTP_HEADER_SIZE);
+	procStoreU64LE(aBuf + 8u, 1u);
+	procStoreU16LE(aBuf + 18u, 99u);
+
+	return procSendAll(hSocket, aBuf, sizeof(aBuf));
+}
+
+
 static int procSendMode(idle_socket_t hSocket, const char* sHost, unsigned short iPort, const char* sMode)
 {
 	static const char sHttpPartial[] =
@@ -510,6 +524,9 @@ static int procSendMode(idle_socket_t hSocket, const char* sHost, unsigned short
 	}
 	if ( strcmp(sMode, "xtp_bad_size") == 0 ) {
 		return procSendXtpBadSize(hSocket);
+	}
+	if ( strcmp(sMode, "xtp_bad_type") == 0 ) {
+		return procSendXtpBadType(hSocket);
 	}
 
 	return -1;

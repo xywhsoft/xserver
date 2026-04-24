@@ -25,6 +25,7 @@
 - [目录结构规划](./structure.md)
 - [编写约定](./conventions.md)
 - [进度追踪](./progress.md)
+- [HTTP / XTP Fast Path 重构 Spec](./fast-path-http-xtp.md)
 
 现有 `docs` 根目录中的文件暂时视为“旧版文档 / 设计草案”：
 

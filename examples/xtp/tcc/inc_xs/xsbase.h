@@ -25,6 +25,15 @@
 #define XRT_EV_RECV		2
 #define XRT_EV_CLOSE	3
 
+#define XS_HTTP_METHOD_UNKNOWN	0u
+#define XS_HTTP_METHOD_GET		1u
+#define XS_HTTP_METHOD_HEAD		2u
+#define XS_HTTP_METHOD_POST		3u
+#define XS_HTTP_METHOD_PUT		4u
+#define XS_HTTP_METHOD_DELETE	5u
+#define XS_HTTP_METHOD_PATCH	6u
+#define XS_HTTP_METHOD_OPTIONS	7u
+
 
 // 语言类型定义
 #define SLT_STATIC		0			// 静态页面
@@ -54,6 +63,7 @@ const char* xsHostDevFile(XS_HostObject objHost);
 int xsHostDebug(XS_HostObject objHost);
 int xsHostDevMode(XS_HostObject objHost);
 const char* xsReqMethod(XS_RequestObject objReq);
+unsigned xsReqMethodID(XS_RequestObject objReq);
 const char* xsReqTarget(XS_RequestObject objReq);
 const char* xsReqPath(XS_RequestObject objReq);
 const char* xsReqQuery(XS_RequestObject objReq);
@@ -63,6 +73,10 @@ const char* xsReqRemote(XS_RequestObject objReq);
 const char* xsReqHeader(XS_RequestObject objReq, const char* sName);
 int xsHttpStatus(XS_ResponseObject objResp, unsigned iStatus, const char* sReason);
 int xsHttpHeader(XS_ResponseObject objResp, const char* sName, const char* sValue);
+int xsHttpReply(XS_ResponseObject objResp, unsigned iStatus, const char* sReason, const char* sHeaders, const void* pBody, size_t iBodyLen);
+int xsHttpStart(XS_ResponseObject objResp, unsigned iStatus, const char* sReason, const char* sHeaders);
+int xsHttpSend(XS_ResponseObject objResp, const void* pData, size_t iLen);
+int xsHttpEnd(XS_ResponseObject objResp);
 int xsHttpText(XS_ResponseObject objResp, unsigned iStatus, const char* sReason, const char* sText);
 int xsHttpBody(XS_ResponseObject objResp, const void* pData, size_t iLen, const char* sContentType);
 int xsHttpJson(XS_ResponseObject objResp, unsigned iStatus, const char* sReason, const char* sJson);
@@ -85,6 +99,12 @@ int xsXtpSendEx(void* pStream, unsigned iMsgType, uint64_t iMsgID, unsigned iFla
 const char* xsXtpGetParam(const void* pMsg, const char* sKey);
 int xsXtpReply(void* pStream, const void* pReqMsg, const char* sCmd, size_t iCmdSize, unsigned iParamCount, const char** arrParam, const char** arrValue, const void* pBody, size_t iBodySize);
 int xsXtpReplyEx(void* pStream, const void* pReqMsg, int iStatus, const char* sCmd, size_t iCmdSize, unsigned iParamCount, const char** arrParam, const char** arrValue, const void* pBody, size_t iBodySize);
+int xsXtpReplySimple(void* pStream, const void* pReqMsg, int iStatus, const char* sCmd, const void* pBody, size_t iBodySize);
+void* xsXtpReplyStart(void* pStream, const void* pReqMsg, int iStatus, const char* sCmd);
+int xsXtpReplyParam(void* pReply, const char* sKey, const char* sValue);
+int xsXtpReplyBody(void* pReply, const void* pBody, size_t iBodySize);
+int xsXtpReplyEnd(void* pReply);
+void xsXtpReplyAbort(void* pReply);
 uint64_t xsXtpMsgId(const void* pMsg);
 unsigned xsXtpMsgType(const void* pMsg);
 unsigned xsXtpMsgFlags(const void* pMsg);
@@ -92,6 +112,9 @@ int xsXtpIsOK(const void* pMsg);
 int xsXtpStatus(const void* pMsg);
 const char* xsXtpCmd(const void* pMsg);
 unsigned xsXtpCmdLen(const void* pMsg);
+unsigned xsXtpCmdID(const void* pMsg);
+unsigned xsXtpCmdIDFrom(const char* sCmd);
+unsigned xsXtpCmdRegister(const char* sCmd, unsigned iCmdID);
 const void* xsXtpBody(const void* pMsg);
 unsigned xsXtpBodyLen(const void* pMsg);
 char* xsXtpCmdDup(const void* pMsg, const char* sDefault);

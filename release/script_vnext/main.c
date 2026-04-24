@@ -190,6 +190,21 @@ bool RequestProc(XS_ServerObject objServer, XS_HostObject objHost, XS_RequestObj
 		xrtFree(sRet);
 		return true;
 	}
+	if ( strcmp(sPath, "/stream") == 0 ) {
+		if ( xsHttpStart(objResp, 200, "OK", "Content-Type: text/plain; charset=utf-8\r\nX-XS-Mode: stream\r\n") == 0 ) {
+			return false;
+		}
+		if ( xsHttpSend(objResp, "stream-", 7) == 0 ) {
+			return false;
+		}
+		if ( xsHttpSend(objResp, "chunk-", 6) == 0 ) {
+			return false;
+		}
+		if ( xsHttpSend(objResp, "done", 4) == 0 ) {
+			return false;
+		}
+		return xsHttpEnd(objResp) != 0;
+	}
 	if ( strcmp(sPath, "/bus/status") == 0 ) {
 		xvalue objJson = xvoCreateTable();
 		char* sRet;

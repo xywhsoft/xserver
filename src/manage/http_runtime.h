@@ -1539,19 +1539,22 @@ static inline void XS_HttpRecordResponseMetrics(const xhttpdconn* pConn, const x
 
 static inline void XS_HttpRecordMethodMetrics(const xhttpdrequest* pReq)
 {
-	if ( pReq == NULL || pReq->sMethod == NULL ) {
+	uint32 iMethod;
+
+	if ( pReq == NULL ) {
 		XS_HttpMetricAdd(&g_iXsHttpMethodOtherCount, 1);
 		g_iXsHttpLastMethodType = 4;
 		return;
 	}
 
-	if ( strcasecmp(pReq->sMethod, "GET") == 0 ) {
+	iMethod = xrtHttpdRequestMethod(pReq);
+	if ( iMethod == XHTTPD_METHOD_GET ) {
 		XS_HttpMetricAdd(&g_iXsHttpMethodGetCount, 1);
 		g_iXsHttpLastMethodType = 1;
-	} else if ( strcasecmp(pReq->sMethod, "POST") == 0 ) {
+	} else if ( iMethod == XHTTPD_METHOD_POST ) {
 		XS_HttpMetricAdd(&g_iXsHttpMethodPostCount, 1);
 		g_iXsHttpLastMethodType = 2;
-	} else if ( strcasecmp(pReq->sMethod, "HEAD") == 0 ) {
+	} else if ( iMethod == XHTTPD_METHOD_HEAD ) {
 		XS_HttpMetricAdd(&g_iXsHttpMethodHeadCount, 1);
 		g_iXsHttpLastMethodType = 3;
 	} else {
