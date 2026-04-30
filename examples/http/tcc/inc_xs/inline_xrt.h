@@ -1,7 +1,7 @@
 /*
 
     XRT Single Header File
-    Generated: 2026-04-29 20:25:19
+    Generated: 2026-04-29 22:45:07
 
     MIT License
 
@@ -7681,5 +7681,8 @@
 	#endif
 #endif
 
+// ========================================
+// Implementation
+// ========================================
 
 #endif // XRT_SINGLE_HEADER
