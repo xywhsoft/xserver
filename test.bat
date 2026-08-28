@@ -23,6 +23,11 @@ findstr /c:"rounds ok=3/3" xs_smoke.log >nul || (echo SMOKE FAIL: crt/winapi pro
 findstr /c:"server 'include_probe' custom ready" xs_smoke.log >nul || (echo SMOKE FAIL: sdk header probe & exit /b 1)
 findstr /c:"tcp ready on" xs_smoke.log >nul || (echo SMOKE FAIL: tcp driver & exit /b 1)
 findstr /c:"udp ready on" xs_smoke.log >nul || (echo SMOKE FAIL: udp driver & exit /b 1)
+findstr /c:"http ready on" xs_smoke.log >nul || (echo SMOKE FAIL: http driver & exit /b 1)
+
+rem HTTP behavior check: routes, static, errors, keep-alive, takeover
+python -c "import http.client,sys;exec(open('../tools/smoke_http.py').read())"
+if errorlevel 1 (echo SMOKE FAIL: http behavior & exit /b 1)
 
 rem TCC custom echo loop check
 python -c "import socket;s=socket.create_connection(('127.0.0.1',9099),timeout=3);s.settimeout(2);s.recv(200);s.sendall(b'xs3-smoke');import time;time.sleep(0.3);d=s.recv(200);s.close();exit(0 if d==b'xs3-smoke' else 1)"

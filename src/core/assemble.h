@@ -4,8 +4,9 @@
 /*
  * xs3 装配：按 class 分流（设计 §6）
  *   custom —— xs 只交出引擎与数据模型，一切由应用手动装配
- *   tcp/tcps、udp —— xs 建监听/绑定，事件透传脚本回调（§6.3/§6.4）
- *   http/ws —— 驱动随 HTTP 工作包接入
+ *   http/https、tcp/tcps、udp —— xs 建监听/绑定，事件透传脚本回调
+ *     http 脚本可选（无 RequestProc 走纯静态）
+ *   ws —— 驱动随 WS 工作包接入
  * 停机四阶段：驱动收口 → ServiceUnit 全部 → 引擎排空 → TCC 销毁
  */
 
@@ -15,6 +16,7 @@
 #include "config.h"
 #include "engine.h"
 #include "../script/script.h"
+#include "../protocol/http.h"
 #include "../protocol/stream.h"
 #include "../protocol/udp.h"
 
@@ -43,14 +45,15 @@ static bool XS_AssembleServers(XS_App* pApp)
 			printf("[xs] server '%s' disabled, skipped\n", pServer->Name);
 			continue;
 		}
-		/* 脚本先行（custom/tcp/udp 均挂 DefaultHost） */
-		if ( XS_ClassNeedsScript(pServer->Class) ) {
-			if ( !XS_HostHasScript(pServer->DefaultHost) ) {
+		/* 脚本先行：custom/tcp/udp 必须有；http 可选（无脚本走纯静态） */
+		if ( XS_ClassNeedsScript(pServer->Class) || strcmp(pServer->Class, "http") == 0 ) {
+			if ( XS_HostHasScript(pServer->DefaultHost) ) {
+				if ( !XS_ScriptLoad(pServer->DefaultHost) ) {
+					return false;		/* 失败原因已打印；启动 fail-fast */
+				}
+			} else if ( XS_ClassNeedsScript(pServer->Class) ) {
 				printf("[xs] server '%s' class %s requires devfile\n", pServer->Name, pServer->Class);
 				return false;
-			}
-			if ( !XS_ScriptLoad(pServer->DefaultHost) ) {
-				return false;		/* 失败原因已打印；启动 fail-fast */
 			}
 		}
 
@@ -58,6 +61,13 @@ static bool XS_AssembleServers(XS_App* pApp)
 			pServer->DefaultHost->State = XS_RUN_RUNNING;
 			pServer->State = XS_RUN_RUNNING;
 			printf("[xs] server '%s' custom ready (manual assembly)\n", pServer->Name);
+		} else if ( strcmp(pServer->Class, "http") == 0 ) {
+			if ( !XS_HttpStart(pServer, sErr, sizeof(sErr)) ) {
+				printf("[xs] %s\n", sErr);
+				return false;
+			}
+			pServer->DefaultHost->State = XS_RUN_RUNNING;
+			pServer->State = XS_RUN_RUNNING;
 		} else if ( strcmp(pServer->Class, "tcp") == 0 ) {
 			if ( !XS_TcpStart(pServer, sErr, sizeof(sErr)) ) {
 				printf("[xs] %s\n", sErr);
@@ -95,6 +105,8 @@ static void XS_ServersDrain(XS_App* pApp)
 		pServer->State = XS_RUN_STOPPING;
 		if ( strcmp(pServer->Class, "tcp") == 0 ) {
 			XS_TcpStop((XS_TcpRuntime*)pServer->Runtime);
+		} else if ( strcmp(pServer->Class, "http") == 0 ) {
+			XS_HttpStop((XS_HttpRuntime*)pServer->Runtime);
 		} else if ( strcmp(pServer->Class, "udp") == 0 ) {
 			XS_UdpStop((XS_UdpRuntime*)pServer->Runtime);
 		}
@@ -123,6 +135,8 @@ static void XS_ShutdownServers(XS_App* pApp)
 		pServer = pApp->Servers[i];
 		if ( strcmp(pServer->Class, "tcp") == 0 ) {
 			XS_TcpUnit((XS_TcpRuntime*)pServer->Runtime);
+		} else if ( strcmp(pServer->Class, "http") == 0 ) {
+			XS_HttpUnit((XS_HttpRuntime*)pServer->Runtime);
 		} else if ( strcmp(pServer->Class, "udp") == 0 ) {
 			XS_UdpUnit((XS_UdpRuntime*)pServer->Runtime);
 		}

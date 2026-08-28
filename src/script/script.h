@@ -18,6 +18,7 @@ typedef struct XS_ScriptRuntime {
 	XS_ServiceUnitProc		procUnit;
 	XS_ServiceSwapProc		procSwap;
 	/* 协议回调（按服务类按需导出） */
+	XS_RequestProc			procRequest;
 	XS_EventOpenProc		procEventOpen;
 	XS_EventDataProc		procEventData;
 	XS_EventCloseProc		procEventClose;
@@ -96,6 +97,7 @@ static bool XS_ScriptLoad(XS_HostInfo* pHost)
 	pRuntime->procInit = (XS_ServiceInitProc)tcc_get_symbol(pTcc, XS_SYM_SERVICE_INIT);
 	pRuntime->procUnit = (XS_ServiceUnitProc)tcc_get_symbol(pTcc, XS_SYM_SERVICE_UNIT);
 	pRuntime->procSwap = (XS_ServiceSwapProc)tcc_get_symbol(pTcc, XS_SYM_SERVICE_SWAP);
+	pRuntime->procRequest = (XS_RequestProc)tcc_get_symbol(pTcc, XS_SYM_REQUEST_PROC);
 	pRuntime->procEventOpen = (XS_EventOpenProc)tcc_get_symbol(pTcc, XS_SYM_EVENT_OPEN);
 	pRuntime->procEventData = (XS_EventDataProc)tcc_get_symbol(pTcc, XS_SYM_EVENT_DATA);
 	pRuntime->procEventClose = (XS_EventCloseProc)tcc_get_symbol(pTcc, XS_SYM_EVENT_CLOSE);

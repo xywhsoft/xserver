@@ -16,7 +16,7 @@
         "name": "app",
         "path": "wwwroot",
         "devlang": "c",
-        "devfile": "script/main.c",
+        "devfile": "script/http_main.c",
         "static": {
           "index": [
             "index.html"
