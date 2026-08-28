@@ -27,6 +27,7 @@ SDK_FILES = [
     ("/xs/xsbase.h", ROOT / "src" / "sdk" / "xsbase.h"),
     ("/xs/xrt_decl.h", ROOT / "lib" / "xrt_decl.h"),
     ("/xs/libtcc.h", ROOT / "lib" / "libtcc.h"),
+    ("/xs/sqlite3.h", ROOT / "lib" / "sqlite3.h"),
 ]
 
 # (虚拟目录前缀, 源目录) —— 整目录递归收录

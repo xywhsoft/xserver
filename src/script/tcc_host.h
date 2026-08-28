@@ -84,6 +84,16 @@ static const XS_TccSymbol g_XS_TccSymbols[] = {
 	{ "tcc_vfs_clear_dynamic",	(const void*)tcc_vfs_clear_dynamic },
 };
 
+#ifdef XS_USE_SQLITE
+/* sqlite3 符号（构建生成清单；仅 XS_USE_SQLITE 构建存在） */
+#include "../../lib/sqlite3.h"
+#define XS_SQLITE_SYMBOL(name)	{ #name, (const void*)(name) },
+static const XS_TccSymbol g_XS_SqliteSymbols[] = {
+#include "import_sqlite.inc"
+};
+#undef XS_SQLITE_SYMBOL
+#endif
+
 static void XS_TccAddSymbols(TCCState* pTcc, const XS_TccSymbol* pSymbols, size_t iCount)
 {
 	size_t i;
@@ -137,6 +147,9 @@ static TCCState* XS_TccCreate(void)
 	XS_TccAddSymbols(pTcc, g_XS_XrtSymbols, sizeof(g_XS_XrtSymbols) / sizeof(g_XS_XrtSymbols[0]));
 	XS_TccAddSymbols(pTcc, g_XS_ApiSymbols, sizeof(g_XS_ApiSymbols) / sizeof(g_XS_ApiSymbols[0]));
 	XS_TccAddSymbols(pTcc, g_XS_TccSymbols, sizeof(g_XS_TccSymbols) / sizeof(g_XS_TccSymbols[0]));
+#ifdef XS_USE_SQLITE
+	XS_TccAddSymbols(pTcc, g_XS_SqliteSymbols, sizeof(g_XS_SqliteSymbols) / sizeof(g_XS_SqliteSymbols[0]));
+#endif
 	return pTcc;
 }
 

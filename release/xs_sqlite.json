@@ -1,0 +1,11 @@
+{
+  "services": [
+    {
+      "enabled": true,
+      "class": "custom",
+      "name": "sqlite_probe",
+      "devlang": "c",
+      "devfile": "script/sqlite_probe_main.c"
+    }
+  ]
+}
