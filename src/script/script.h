@@ -23,6 +23,12 @@ typedef struct XS_ScriptRuntime {
 	XS_EventDataProc		procEventData;
 	XS_EventCloseProc		procEventClose;
 	XS_EventDgramProc		procEventDgram;
+	XS_WsOpenProc			procWsOpen;
+	XS_WsTextProc			procWsText;
+	XS_WsBinaryProc			procWsBinary;
+	XS_WsPingProc			procWsPing;
+	XS_WsPongProc			procWsPong;
+	XS_WsCloseProc			procWsClose;
 } XS_ScriptRuntime;
 
 static uint32 g_XS_ScriptSeq = 0;
@@ -102,6 +108,12 @@ static bool XS_ScriptLoad(XS_HostInfo* pHost)
 	pRuntime->procEventData = (XS_EventDataProc)tcc_get_symbol(pTcc, XS_SYM_EVENT_DATA);
 	pRuntime->procEventClose = (XS_EventCloseProc)tcc_get_symbol(pTcc, XS_SYM_EVENT_CLOSE);
 	pRuntime->procEventDgram = (XS_EventDgramProc)tcc_get_symbol(pTcc, XS_SYM_EVENT_DGRAM);
+	pRuntime->procWsOpen = (XS_WsOpenProc)tcc_get_symbol(pTcc, XS_SYM_WS_OPEN);
+	pRuntime->procWsText = (XS_WsTextProc)tcc_get_symbol(pTcc, XS_SYM_WS_TEXT);
+	pRuntime->procWsBinary = (XS_WsBinaryProc)tcc_get_symbol(pTcc, XS_SYM_WS_BINARY);
+	pRuntime->procWsPing = (XS_WsPingProc)tcc_get_symbol(pTcc, XS_SYM_WS_PING);
+	pRuntime->procWsPong = (XS_WsPongProc)tcc_get_symbol(pTcc, XS_SYM_WS_PONG);
+	pRuntime->procWsClose = (XS_WsCloseProc)tcc_get_symbol(pTcc, XS_SYM_WS_CLOSE);
 	pHost->Runtime = pRuntime;
 
 	printf("[xs] script loaded: %s (%.1f KB)\n", sDevPath, (double)iSize / 1024.0);

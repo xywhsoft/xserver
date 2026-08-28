@@ -17,6 +17,7 @@
 #include "engine.h"
 #include "../script/script.h"
 #include "../protocol/http.h"
+#include "../protocol/ws.h"
 #include "../protocol/stream.h"
 #include "../protocol/udp.h"
 
@@ -29,7 +30,7 @@ static bool XS_HostHasScript(XS_HostInfo* pHost)
 static bool XS_ClassNeedsScript(const char* sClass)
 {
 	return strcmp(sClass, "custom") == 0 || strcmp(sClass, "tcp") == 0 ||
-	       strcmp(sClass, "udp") == 0;
+	       strcmp(sClass, "udp") == 0 || strcmp(sClass, "ws") == 0;
 }
 
 static bool XS_AssembleServers(XS_App* pApp)
@@ -75,6 +76,13 @@ static bool XS_AssembleServers(XS_App* pApp)
 			}
 			pServer->DefaultHost->State = XS_RUN_RUNNING;
 			pServer->State = XS_RUN_RUNNING;
+		} else if ( strcmp(pServer->Class, "ws") == 0 ) {
+			if ( !XS_WsStart(pServer, sErr, sizeof(sErr)) ) {
+				printf("[xs] %s\n", sErr);
+				return false;
+			}
+			pServer->DefaultHost->State = XS_RUN_RUNNING;
+			pServer->State = XS_RUN_RUNNING;
 		} else if ( strcmp(pServer->Class, "udp") == 0 ) {
 			if ( !XS_UdpStart(pServer, sErr, sizeof(sErr)) ) {
 				printf("[xs] %s\n", sErr);
@@ -107,6 +115,8 @@ static void XS_ServersDrain(XS_App* pApp)
 			XS_TcpStop((XS_TcpRuntime*)pServer->Runtime);
 		} else if ( strcmp(pServer->Class, "http") == 0 ) {
 			XS_HttpStop((XS_HttpRuntime*)pServer->Runtime);
+		} else if ( strcmp(pServer->Class, "ws") == 0 ) {
+			XS_WsStop((XS_WsRuntime*)pServer->Runtime);
 		} else if ( strcmp(pServer->Class, "udp") == 0 ) {
 			XS_UdpStop((XS_UdpRuntime*)pServer->Runtime);
 		}
@@ -137,6 +147,8 @@ static void XS_ShutdownServers(XS_App* pApp)
 			XS_TcpUnit((XS_TcpRuntime*)pServer->Runtime);
 		} else if ( strcmp(pServer->Class, "http") == 0 ) {
 			XS_HttpUnit((XS_HttpRuntime*)pServer->Runtime);
+		} else if ( strcmp(pServer->Class, "ws") == 0 ) {
+			XS_WsUnit((XS_WsRuntime*)pServer->Runtime);
 		} else if ( strcmp(pServer->Class, "udp") == 0 ) {
 			XS_UdpUnit((XS_UdpRuntime*)pServer->Runtime);
 		}

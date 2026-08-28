@@ -24,6 +24,11 @@ findstr /c:"server 'include_probe' custom ready" xs_smoke.log >nul || (echo SMOK
 findstr /c:"tcp ready on" xs_smoke.log >nul || (echo SMOKE FAIL: tcp driver & exit /b 1)
 findstr /c:"udp ready on" xs_smoke.log >nul || (echo SMOKE FAIL: udp driver & exit /b 1)
 findstr /c:"http ready on" xs_smoke.log >nul || (echo SMOKE FAIL: http driver & exit /b 1)
+findstr /c:"ws ready on" xs_smoke.log >nul || (echo SMOKE FAIL: ws driver & exit /b 1)
+
+rem WebSocket behavior check
+python ../tools/smoke_ws.py
+if errorlevel 1 (echo SMOKE FAIL: ws behavior & exit /b 1)
 
 rem HTTP behavior check: routes, static, errors, keep-alive, takeover
 python -c "import http.client,sys;exec(open('../tools/smoke_http.py').read())"
