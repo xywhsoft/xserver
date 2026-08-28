@@ -11,6 +11,7 @@
 #include "config.h"
 #include "engine.h"
 #include "../script/tcc_host.h"
+#include "../runtime/reload.h"
 
 static XS_App* g_XS_App = NULL;
 
@@ -95,41 +96,75 @@ void xsDestroyTCC(TCCState* pTcc)
 	}
 }
 
-/* —— 以下属于"运行时与重载"工作包（设计 §14 #4），当前占位 —— */
+/* —— 重载与定时器（src/runtime/reload.h）—— */
 
 bool xsReloadHost(XS_HostInfo* pHost)
 {
-	(void)pHost;
-	return false;
+	return XS_ReloadHostNow(pHost);
 }
 
 bool xsReloadServer(const char* sName)
 {
-	(void)sName;
-	return false;
+	XS_ServerInfo* pServer = xsServerFind(sName);
+	uint32 i;
+	bool bOk = true;
+
+	if ( pServer == NULL ) {
+		return false;
+	}
+	if ( pServer->DefaultHost->Runtime != NULL ) {
+		bOk = XS_ReloadHostNow(pServer->DefaultHost) && bOk;
+	}
+	for ( i = 0; i < pServer->HostCount; i++ ) {
+		if ( pServer->Hosts[i]->Runtime != NULL ) {
+			bOk = XS_ReloadHostNow(pServer->Hosts[i]) && bOk;
+		}
+	}
+	return bOk;
 }
 
 bool xsReloadAll(void)
 {
-	return false;
+	uint32 i;
+	bool bOk = true;
+
+	if ( g_XS_App == NULL ) {
+		return false;
+	}
+	for ( i = 0; i < g_XS_App->ServerCount; i++ ) {
+		XS_ServerInfo* pServer = g_XS_App->Servers[i];
+
+		if ( pServer->DefaultHost->Runtime != NULL ) {
+			bOk = XS_ReloadHostNow(pServer->DefaultHost) && bOk;
+		}
+	}
+	return bOk;
 }
 
 uint64 xsTimerAfter(XS_HostInfo* pOwner, uint32 iMillisecond, XS_TimerProc proc, void* pUserData)
 {
-	(void)pOwner; (void)iMillisecond; (void)proc; (void)pUserData;
-	return 0;
+	return XS_TimerAfter(pOwner, iMillisecond, proc, pUserData);
 }
 
 bool xsTimerCancel(uint64 iTimerId)
 {
-	(void)iTimerId;
-	return false;
+	if ( g_XS_App == NULL || g_XS_App->Engine == NULL || iTimerId == 0 ) {
+		return false;
+	}
+	return xrtNetEngineTimerCancel(g_XS_App->Engine, iTimerId);
 }
 
 xvalue* xsSwapTake(XS_HostInfo* pHost)
 {
-	(void)pHost;
-	return NULL;
+	XS_ScriptRuntime* pRuntime = pHost != NULL ? (XS_ScriptRuntime*)pHost->Runtime : NULL;
+	xvalue* pSwap;
+
+	if ( pRuntime == NULL || pRuntime->pSwap == NULL ) {
+		return NULL;
+	}
+	pSwap = pRuntime->pSwap;
+	pRuntime->pSwap = NULL;
+	return pSwap;
 }
 
 #endif

@@ -8,6 +8,15 @@
  */
 #include <xsbase.h>
 
+static int64 g_Tick = 0;
+static int64 g_ReloadCount = 0;
+
+static void TickProc(void* pUserData)
+{
+	(void)pUserData;
+	g_Tick++;
+}
+
 static bool Reply(XS_HttpReq* pReq, uint16 iStatus, const char* sContentType,
 	const void* pBody, size_t iBodyLen)
 {
@@ -52,6 +61,11 @@ static bool Reply(XS_HttpReq* pReq, uint16 iStatus, const char* sContentType,
 	}
 	(void)iTotal;
 	return true;
+}
+
+static bool ReplyLit(XS_HttpReq* pReq, uint16 iStatus, const char* sContentType, const char* sText)
+{
+	return Reply(pReq, iStatus, sContentType, sText, strlen(sText));
 }
 
 static bool PathIs(XS_HttpReq* pReq, const char* sPath)
@@ -101,7 +115,7 @@ XS_RequestResult RequestProc(XS_HttpReq* pReq)
 	}
 	if ( pReq->head->Method.Size == 3 && memcmp(pReq->head->Method.Data, "GET", 3) == 0 ) {
 		if ( PathIs(pReq, "/text") ) {
-			return Reply(pReq, 200, "text/plain; charset=utf-8", "xs3 http ok", 11) ? XS_OK : XS_OK;
+			return ReplyLit(pReq, 200, "text/plain; charset=utf-8", "xs3 http ok") ? XS_OK : XS_OK;
 		}
 		if ( PathIs(pReq, "/json") ) {
 			xvalue* pObj = xrtValueObject();
@@ -119,6 +133,25 @@ XS_RequestResult RequestProc(XS_HttpReq* pReq)
 				return bOk ? XS_OK : XS_OK;
 			}
 			return XS_OK;
+		}
+		if ( PathIs(pReq, "/reload") ) {
+			bool bOk = xsReloadHost(pReq->host);
+			return ReplyLit(pReq, bOk ? 200 : 500, "text/plain; charset=utf-8",
+				bOk ? "reload ok" : "reload failed") ? XS_OK : XS_OK;
+		}
+		if ( PathIs(pReq, "/tick") ) {
+			(void)xsTimerAfter(pReq->host, 50, TickProc, NULL);
+			return ReplyLit(pReq, 200, "text/plain; charset=utf-8", "ticked") ? XS_OK : XS_OK;
+		}
+		if ( PathIs(pReq, "/tick-get") ) {
+			char arrNum[32];
+			int iLen = snprintf(arrNum, sizeof(arrNum), "%lld", (long long)g_Tick);
+			return Reply(pReq, 200, "text/plain; charset=utf-8", arrNum, (size_t)iLen) ? XS_OK : XS_OK;
+		}
+		if ( PathIs(pReq, "/swapstat") ) {
+			char arrNum[32];
+			int iLen = snprintf(arrNum, sizeof(arrNum), "%lld", (long long)g_ReloadCount);
+			return Reply(pReq, 200, "text/plain; charset=utf-8", arrNum, (size_t)iLen) ? XS_OK : XS_OK;
 		}
 		if ( PathIs(pReq, "/takeover") ) {
 			/* 演示接管：直接对裸流发提示，然后自行关闭并 Destroy */
@@ -142,5 +175,17 @@ XS_RequestResult RequestProc(XS_HttpReq* pReq)
 
 void ServiceInit(XS_HostInfo* pHost)
 {
+	xvalue* pSwap = xsSwapTake(pHost);
+
+	if ( pSwap != NULL ) {
+		(void)xrtValueGetInt(pSwap, &g_ReloadCount);
+		xrtValueRelease(pSwap);
+	}
+}
+
+bool ServiceSwap(XS_HostInfo* pHost, xvalue** ppShared)
+{
 	(void)pHost;
+	*ppShared = xrtValueInt(g_ReloadCount + 1);
+	return *ppShared != NULL;
 }

@@ -14,6 +14,11 @@
 
 typedef struct XS_ScriptRuntime {
 	TCCState*			pTcc;
+	uint64			tGeneration;	/* 代际（热重载语义见设计 §10） */
+	xvalue*			pSwap;		/* 旧代 ServiceSwap 导出、新代 xsSwapTake 取走 */
+	XS_HostInfo*		pHost;
+	bool			bRetired;	/* 已退役：无引用后 ServiceUnit + 销毁 */
+	struct XS_ScriptRuntime*	pRetiredNext;
 	XS_ServiceInitProc		procInit;
 	XS_ServiceUnitProc		procUnit;
 	XS_ServiceSwapProc		procSwap;
@@ -45,8 +50,10 @@ static str XS_ScriptDevPath(XS_HostInfo* pHost)
 	return xrtPathJoin(XS_AppPath(), pHost->DevFile);
 }
 
-/* 编译并启动一个 host 的脚本；成功后 host->Runtime 就绪且 ServiceInit 已调用 */
-static bool XS_ScriptLoad(XS_HostInfo* pHost)
+static uint64 g_XS_Generation = 0;
+
+/* 编译（不挂载不初始化）；失败返回 NULL。热重载先编译、成功才换代 = 回滚语义 */
+static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 {
 	str sDevPath;
 	bytes pData;
@@ -57,20 +64,20 @@ static bool XS_ScriptLoad(XS_HostInfo* pHost)
 
 	sDevPath = XS_ScriptDevPath(pHost);
 	if ( sDevPath == NULL ) {
-		return false;		/* 无脚本：由调用方决定语义 */
+		return NULL;		/* 无脚本：由调用方决定语义 */
 	}
 	pData = xrtFileReadAll(sDevPath, &iSize);
 	if ( pData == NULL ) {
 		printf("[xs] script read failed: %s\n", sDevPath);
 		xrtFree(sDevPath);
-		return false;
+		return NULL;
 	}
 	snprintf(sVirtual, sizeof(sVirtual), "/xs/script/s%u.c", g_XS_ScriptSeq++);
 	if ( !tcc_vfs_mount_memory(sVirtual, pData, iSize) ) {
 		printf("[xs] script vfs mount failed\n");
 		xrtFree(pData);
 		xrtFree(sDevPath);
-		return false;
+		return NULL;
 	}
 	xrtFree(pData);		/* mount_memory 深拷贝，源缓冲即弃 */
 
@@ -78,26 +85,26 @@ static bool XS_ScriptLoad(XS_HostInfo* pHost)
 	if ( pTcc == NULL ) {
 		printf("[xs] tcc create failed\n");
 		xrtFree(sDevPath);
-		return false;
+		return NULL;
 	}
 	if ( tcc_add_file(pTcc, sVirtual) < 0 ) {
 		printf("[xs] script compile failed: %s\n", sDevPath);
 		tcc_delete(pTcc);
 		xrtFree(sDevPath);
-		return false;
+		return NULL;
 	}
 	if ( tcc_relocate(pTcc) < 0 ) {
 		printf("[xs] script relocate failed: %s\n", sDevPath);
 		tcc_delete(pTcc);
 		xrtFree(sDevPath);
-		return false;
+		return NULL;
 	}
 
 	pRuntime = (XS_ScriptRuntime*)xrtCalloc(1, sizeof(XS_ScriptRuntime));
 	if ( pRuntime == NULL ) {
 		tcc_delete(pTcc);
 		xrtFree(sDevPath);
-		return false;
+		return NULL;
 	}
 	pRuntime->pTcc = pTcc;
 	pRuntime->procInit = (XS_ServiceInitProc)tcc_get_symbol(pTcc, XS_SYM_SERVICE_INIT);
@@ -114,14 +121,33 @@ static bool XS_ScriptLoad(XS_HostInfo* pHost)
 	pRuntime->procWsPing = (XS_WsPingProc)tcc_get_symbol(pTcc, XS_SYM_WS_PING);
 	pRuntime->procWsPong = (XS_WsPongProc)tcc_get_symbol(pTcc, XS_SYM_WS_PONG);
 	pRuntime->procWsClose = (XS_WsCloseProc)tcc_get_symbol(pTcc, XS_SYM_WS_CLOSE);
-	pHost->Runtime = pRuntime;
+	pRuntime->pHost = pHost;
+	pRuntime->tGeneration = ++g_XS_Generation;
 
-	printf("[xs] script loaded: %s (%.1f KB)\n", sDevPath, (double)iSize / 1024.0);
+	printf("[xs] script loaded: %s (%.1f KB gen %llu)\n", sDevPath, (double)iSize / 1024.0,
+		(unsigned long long)pRuntime->tGeneration);
 	xrtFree(sDevPath);
+	return pRuntime;
+}
 
-	if ( pRuntime->procInit != NULL ) {
+/* 挂载并初始化（ServiceInit 内可 xsSwapTake 取回交接数据） */
+static void XS_ScriptAttach(XS_HostInfo* pHost, XS_ScriptRuntime* pRuntime)
+{
+	pHost->Runtime = pRuntime;
+	if ( pRuntime != NULL && pRuntime->procInit != NULL ) {
 		pRuntime->procInit(pHost);
 	}
+}
+
+/* 编译并启动（首次装配路径） */
+static bool XS_ScriptLoad(XS_HostInfo* pHost)
+{
+	XS_ScriptRuntime* pRuntime = XS_ScriptCompile(pHost);
+
+	if ( pRuntime == NULL ) {
+		return false;
+	}
+	XS_ScriptAttach(pHost, pRuntime);
 	return true;
 }
 
