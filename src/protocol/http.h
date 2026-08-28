@@ -474,6 +474,49 @@ static XS_HostInfo* XS_HttpRoute(XS_HttpRecord* pRec)
  * body 排空与 keep-alive 循环
  * ============================================================ */
 
+/* body 就绪判断（不消费真实 body 状态；CHUNKED 用抛弃式探针） */
+static bool XS_HttpBodyReady(XS_HttpRecord* pRec)
+{
+	size_t iAvail = XS_HttpAvail(pRec);
+	unsigned char* pCopy;
+	xhttp1body tProbe;
+	xhttp1errorinfo tErr;
+	size_t iConsumed = 0;
+	xbytesview tData;
+	bool bDone;
+
+	if ( pRec->tPlan.Mode == XHTTP1_BODY_NONE ) {
+		return true;
+	}
+	if ( pRec->tPlan.Mode == XHTTP1_BODY_FIXED ) {
+		return iAvail >= (size_t)pRec->tPlan.Length;
+	}
+	/* CHUNKED / CLOSE：探针体全量判定 */
+	pCopy = (unsigned char*)xrtMalloc(iAvail > 0 ? iAvail : 1);
+	if ( pCopy == NULL ) {
+		return true;		/* 判定失败按就绪处理，回调内自行兜底 */
+	}
+	iAvail = XS_HttpPeek(pRec, pCopy, iAvail);
+	if ( !xrtHttp1BodyInit(&tProbe, &pRec->tPlan, NULL, 0, &pRec->tBodyLimits) ) {
+		xrtFree(pCopy);
+		return true;
+	}
+	tData.Data = pCopy;
+	tData.Size = iAvail;
+	bDone = false;
+	while ( xrtHttp1BodyRead(&tProbe, tData, false, &iConsumed, &tData, &tErr) == XHTTP1_BODY_DATA ) {
+		if ( iConsumed >= iAvail ) {
+			break;
+		}
+		tData.Data = pCopy + iConsumed;
+		tData.Size = iAvail - iConsumed;
+	}
+	bDone = (tProbe.Mode == XHTTP1_BODY_NONE || tProbe.Remaining == 0) ||
+		xrtHttp1BodyRead(&tProbe, tData, true, &iConsumed, &tData, &tErr) == XHTTP1_BODY_DONE;
+	xrtFree(pCopy);
+	return bDone;
+}
+
 static void XS_HttpFinishRequest(XS_HttpRecord* pRec, bool bClose)
 {
 	xrtHttp1HeadInit(&pRec->tHead, pRec->arrFields, XS_HTTP_MAX_FIELDS);
@@ -557,6 +600,53 @@ static const xtlsstreamevents g_XS_HttpTlsTakenEvents = {
 	NULL, XS_HttpTlsTakenOnRead, NULL, NULL, NULL, XS_HttpTlsTakenOnClose, NULL
 };
 
+/* 回调与收尾（三态处理）。返回 true 继续下一请求，false 停止驱动 */
+static bool XS_HttpDispatch(XS_HttpRecord* pRec)
+{
+	XS_HttpRuntime* pRuntime = pRec->pRuntime;
+	XS_ScriptRuntime* pScript = (XS_ScriptRuntime*)pRec->pHost->Runtime;
+	XS_HttpReq tReq;
+	XS_RequestResult eResult = XS_FALLBACK;
+	int iDrain;
+
+	tReq.tcp = pRec->tReg.pTcp;
+	tReq.tls = pRec->tReg.pTls;
+	tReq.head = &pRec->tHead;
+	tReq.body = &pRec->tBody;
+	tReq.host = pRec->pHost;
+	tReq.server = pRuntime->pServer;
+	if ( pScript != NULL && pScript->procRequest != NULL ) {
+		eResult = pScript->procRequest(&tReq);
+	}
+	if ( eResult == XS_TAKEOVER ) {
+		/* 应用接管：出表 + 换事件表（Close 仅回收记录，不 Destroy） */
+		pRec->bTakenOver = true;
+		XS_RegistryRemove(&pRuntime->tRegistry, &pRec->tReg);
+		if ( pRec->tReg.pTls != NULL ) {
+			(void)xrtTlsStreamSetEvents(pRec->tReg.pTls, &g_XS_HttpTlsTakenEvents, pRec);
+		} else {
+			(void)xrtNetStreamSetEvents(pRec->tReg.pTcp, &g_XS_HttpTakenEvents, pRec);
+		}
+		return false;
+	}
+	if ( eResult == XS_FALLBACK ) {
+		XS_HttpStatic(pRec);
+	}
+	/* 排空 body 余量后进入下一请求 */
+	iDrain = XS_HttpDrainBody(pRec);
+	if ( iDrain < 0 ) {
+		XS_HttpFinishRequest(pRec, true);
+		return false;
+	}
+	if ( iDrain == 0 ) {
+		pRec->iPhase = 1;
+		return false;
+	}
+	XS_HttpFinishRequest(pRec,
+		(pRec->tHead.Flags & XHTTP1_CONNECTION_CLOSE) != 0);
+	return !pRec->bTakenOver;
+}
+
 static void XS_HttpDrive(XS_HttpRecord* pRec)
 {
 	XS_HttpRuntime* pRuntime = pRec->pRuntime;
@@ -564,6 +654,16 @@ static void XS_HttpDrive(XS_HttpRecord* pRec)
 	int iDrain;
 
 	for ( ; ; ) {
+		if ( pRec->iPhase == 2 ) {
+			/* body 等待期：数据到达后重新判定就绪 */
+			if ( !XS_HttpBodyReady(pRec) ) {
+				return;
+			}
+			if ( !XS_HttpDispatch(pRec) ) {
+				return;
+			}
+			continue;
+		}
 		if ( pRec->iPhase == 1 ) {
 			iDrain = XS_HttpDrainBody(pRec);
 			if ( iDrain < 0 ) {
@@ -612,50 +712,15 @@ static void XS_HttpDrive(XS_HttpRecord* pRec)
 			return;
 		}
 
-		/* 脚本回调（三态） */
-		{
-			XS_ScriptRuntime* pScript = (XS_ScriptRuntime*)pRec->pHost->Runtime;
-			XS_HttpReq tReq;
-			XS_RequestResult eResult = XS_FALLBACK;
-
-			tReq.tcp = pRec->tReg.pTcp;
-			tReq.tls = pRec->tReg.pTls;
-			tReq.head = &pRec->tHead;
-			tReq.body = &pRec->tBody;
-			tReq.host = pRec->pHost;
-			tReq.server = pRuntime->pServer;
-			if ( pScript != NULL && pScript->procRequest != NULL ) {
-				eResult = pScript->procRequest(&tReq);
-			}
-			if ( eResult == XS_TAKEOVER ) {
-				/* 应用接管：出表 + 换事件表（Close 仅回收记录，不 Destroy） */
-				pRec->bTakenOver = true;
-				XS_RegistryRemove(&pRuntime->tRegistry, &pRec->tReg);
-				if ( pRec->tReg.pTls != NULL ) {
-					(void)xrtTlsStreamSetEvents(pRec->tReg.pTls, &g_XS_HttpTlsTakenEvents, pRec);
-				} else {
-					(void)xrtNetStreamSetEvents(pRec->tReg.pTcp, &g_XS_HttpTakenEvents, pRec);
-				}
-				return;
-			}
-			if ( eResult == XS_FALLBACK ) {
-				XS_HttpStatic(pRec);
-			}
-			/* 排空 body 余量后进入下一请求 */
-			iDrain = XS_HttpDrainBody(pRec);
-			if ( iDrain < 0 ) {
-				XS_HttpFinishRequest(pRec, true);
-				return;
-			}
-			if ( iDrain == 0 ) {
-				pRec->iPhase = 1;
-				return;
-			}
-			XS_HttpFinishRequest(pRec,
-				(pRec->tHead.Flags & XHTTP1_CONNECTION_CLOSE) != 0);
-			if ( pRec->bTakenOver ) {
-				return;
-			}
+		/* body 就绪检查：回调时保证请求体完整（分段到达时等待）。
+		 * FIXED 按字节数精确判断；CHUNKED 用抛弃式探针体判断；
+		 * 流式大 body 场景应由脚本用 XS_TAKEOVER 自行处理 */
+		if ( !XS_HttpBodyReady(pRec) ) {
+			pRec->iPhase = 2;
+			return;
+		}
+		if ( !XS_HttpDispatch(pRec) ) {
+			return;
 		}
 	}
 }

@@ -119,10 +119,17 @@ XS_RequestResult RequestProc(XS_HttpReq* pReq)
 		}
 		if ( PathIs(pReq, "/json") ) {
 			xvalue* pObj = xrtValueObject();
+			xvalue* pBool;
 			str sJson;
 
 			xrtValueObjectSetNew(pObj, XRT_STR_LITERAL("server"), xrtValueString(XRT_STR_LITERAL("xs3")));
-			xrtValueObjectSetNew(pObj, XRT_STR_LITERAL("ok"), xrtValueBool(true));
+			/* 注意：xrtValueBool 返回进程级单例，必须用引用版 Set——
+			 * SetNew 会消费并释放单例（UAF 会砸穿堆） */
+			pBool = xrtValueBool(true);
+			if ( pBool != NULL ) {
+				xrtValueObjectSet(pObj, XRT_STR_LITERAL("ok"), pBool);
+				xrtValueRelease(pBool);
+			}
 			xrtValueObjectSetNew(pObj, XRT_STR_LITERAL("port"), xrtValueInt((int64)pReq->server->Port));
 			sJson = xrtJsonStringify(pObj, false, NULL);
 			xrtValueRelease(pObj);

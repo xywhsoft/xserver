@@ -53,5 +53,5 @@ powershell -Command "Start-Sleep -Milliseconds 3000" >nul
 findstr /c:"engine stopped" xs_smoke.log >nul || (echo SMOKE FAIL: graceful stop & exit /b 1)
 findstr /c:"[xs] bye" xs_smoke.log >nul || (echo SMOKE FAIL: exit & exit /b 1)
 
-echo SMOKE PASS
+rem Functional test: config matrix / behavior / reload semantics / idlecd ..python toolsunc_test.pyif errorlevel 1 (echo FUNC FAIL & exit /b 1)cd releaseecho SMOKE PASS
 exit /b 0
