@@ -1,0 +1,2 @@
+/* xs3 可执行文件资源（仅 Windows 构建；windres 相对当前 rc 所在目录解析路径） */
+1 ICON "xx_exe.ico"

@@ -1,0 +1,10 @@
+release/xs
+release/xs.exe
+release/xs_smoke.log
+tools/wingrp.exe
+tools/tcc_vfs_lzma_pack.exe
+build_tmp_pack_in
+build_tmp_pack_out
+tools/wingrp.pid
+*.o
+*.obj

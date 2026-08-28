@@ -1,0 +1,95 @@
+{
+  "engine": {
+    "workers": 4
+  },
+  "services": [
+    {
+      "enabled": true,
+      "class": "http",
+      "name": "main",
+      "ip": "0.0.0.0",
+      "port": 8080,
+      "backlog": 128,
+      "recv_limit": 1048576,
+      "body_limit": 262144,
+      "host_default": {
+        "name": "app",
+        "path": "wwwroot",
+        "devlang": "c",
+        "devfile": "script/main.c",
+        "static": {
+          "index": [
+            "index.html"
+          ],
+          "deny_dotfiles": true
+        }
+      },
+      "hosts": [
+        {
+          "name": "admin",
+          "host": "admin.example.com",
+          "path": "hosts/admin/wwwroot",
+          "devlang": "c",
+          "devfile": "hosts/admin/main.c",
+          "cache_ttl_ms": 30000,
+          "feature_flags": {
+            "jwt": true
+          }
+        }
+      ],
+      "app_extra": {
+        "theme": "dark",
+        "max_upload_mb": 32
+      }
+    },
+    {
+      "enabled": true,
+      "class": "udp",
+      "name": "telemetry",
+      "ip": "0.0.0.0",
+      "port": 9090,
+      "devlang": "c",
+      "devfile": "script/udp_main.c",
+      "forward_rules": [
+        "192.168.1.0/24",
+        "10.0.0.0/8"
+      ]
+    },
+    {
+      "enabled": true,
+      "class": "custom",
+      "name": "echo",
+      "devlang": "c",
+      "devfile": "script/custom_main.c"
+    },
+    {
+      "enabled": true,
+      "class": "custom",
+      "name": "crt_probe",
+      "devlang": "c",
+      "devfile": "script/crt_probe_main.c"
+    },
+    {
+      "enabled": true,
+      "class": "custom",
+      "name": "include_probe",
+      "devlang": "c",
+      "devfile": "script/include_probe_main.c"
+    },
+    {
+      "enabled": true,
+      "class": "tcp",
+      "name": "tcp-echo",
+      "ip": "0.0.0.0",
+      "port": 9097,
+      "backlog": 64,
+      "recv_limit": 65536,
+      "idle_timeout": 30000,
+      "devlang": "c",
+      "devfile": "script/tcp_main.c"
+    }
+  ],
+  "xadmin_global": {
+    "env": "production"
+  }
+}
