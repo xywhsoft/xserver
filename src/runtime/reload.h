@@ -22,6 +22,7 @@
 #include "../protocol/stream.h"
 #include "../protocol/ws.h"
 #include "../core/driver.h"
+#include "gc.h"
 
 static volatile bool g_XS_ReloadBusy = false;
 static XS_ScriptRuntime* g_XS_Retired = NULL;
@@ -83,13 +84,6 @@ static void XS_RetiredSweepProc(xnetworker* pWorker, uint64 iId, xnetresult iRes
 	}
 	pFree = NULL;
 	(void)pFree;
-}
-
-static void XS_RetiredEnqueueServer(XS_ServerInfo* pServer)
-{
-	/* v1：旧 server 结构体不释放（~2KB/次，含字符串与 host 数组）——
-	 * 多 worker 下释放时序无法保证无 UAF；重建是低频运维操作，泄漏可接受 */
-	(void)pServer;
 }
 
 static void XS_RetiredEnqueue(XS_ScriptRuntime* pRuntime)
@@ -343,7 +337,8 @@ static bool XS_ReloadServerNow(XS_App* pApp, const char* sName)
 		if ( !XS_ServerDrain(pApp, 5000) ) {
 			printf("[xs] server reload '%s': drain timeout, forcing rebuild\n", sName);
 		}
-		/* 不调用 DriverUnit：Close 回调异步引用旧 runtime，释放会 UAF（runtime 泄漏 ~4KB） */
+		/* 旧驱动 runtime / TCC / server 结构体交给 GC 延迟释放
+		 * （连接计数归零 = 所有 Close 回调完成 = 安全） */
 
 		/* 新配置装配（新结构体接管拓扑） */
 		pNewCfg->Engine = pApp->Engine;
@@ -368,8 +363,10 @@ static bool XS_ReloadServerNow(XS_App* pApp, const char* sName)
 				}
 			}
 			XS_ScriptUnitHost(pOld->DefaultHost);
-			/* 不 DeleteHost：排队中的 Read 回调可能仍执行旧 TCC 代码，tcc_delete 会 UAF（泄漏 ~50KB） */
-			XS_RetiredEnqueueServer(pOld);
+			/* 旧代三件套入 GC：驱动 runtime + TCC 状态 + server 结构体
+			 * GC 在连接归零后按序释放（见 src/runtime/gc.h） */
+			XS_GcEnqueue(pApp->Engine, pOld->Runtime,
+				(XS_ScriptRuntime*)pOld->DefaultHost->Runtime, pOld);
 			/* 不释放 tFresh.Taken/Root：新 server 的 Custom 借用其中 xvalue 视图。
 			 * 仅释放未移交的 server 结构（字符串字段），xvalue 树随进程存活 */
 			{

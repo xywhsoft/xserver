@@ -21,6 +21,7 @@
 #include "../protocol/stream.h"
 #include "../protocol/udp.h"
 #include "driver.h"
+#include "../runtime/gc.h"
 
 /* 阶段一：驱动收口（关监听、关全部连接；custom 无 xs 侧资源） */
 static void XS_ServersDrain(XS_App* pApp)
@@ -52,6 +53,8 @@ static void XS_ShutdownServers(XS_App* pApp)
 	for ( i = 0; i < pApp->ServerCount; i++ ) {
 		XS_ServerDriverUnit(pApp->Servers[i]);
 	}
+	/* 清空 GC 延迟释放队列（进程即将退出，不安全但可接受） */
+	XS_GcShutdown();
 	/* 清空全部动态 VFS 挂载（脚本源）；内置资源不受影响 */
 	tcc_vfs_clear_dynamic();
 }
