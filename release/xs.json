@@ -98,6 +98,15 @@
       "recv_limit": 1048576,
       "devlang": "c",
       "devfile": "script/ws_main.c"
+    },
+    {
+      "enabled": true,
+      "class": "custom",
+      "name": "devinc-probe",
+      "devlang": "c",
+      "devfile": "script/devinc_probe_main.c",
+      "dev_inc": "devsdk/inc",
+      "dev_lib": "devsdk/lib"
     }
   ],
   "xadmin_global": {

@@ -122,6 +122,8 @@ static void XS_ConfigHostFree(XS_HostInfo* pHost)
 	xrtFree((void*)pHost->TlsCA);
 	xrtFree((void*)pHost->TlsCert);
 	xrtFree((void*)pHost->TlsKey);
+	xrtFree((void*)pHost->DevInc);
+	xrtFree((void*)pHost->DevLib);
 	xrtFree(pHost);
 }
 
@@ -142,6 +144,8 @@ static bool XS_ConfigParseHost(xvalue* pObj, XS_HostInfo* pHost, XS_ServerInfo* 
 	if ( !XS_ConfigTakeString(pObj, "tls_ca", &pHost->TlsCA, sErr, iErrCap) ) return false;
 	if ( !XS_ConfigTakeString(pObj, "tls_cert", &pHost->TlsCert, sErr, iErrCap) ) return false;
 	if ( !XS_ConfigTakeString(pObj, "tls_key", &pHost->TlsKey, sErr, iErrCap) ) return false;
+	if ( !XS_ConfigTakeString(pObj, "dev_inc", &pHost->DevInc, sErr, iErrCap) ) return false;
+	if ( !XS_ConfigTakeString(pObj, "dev_lib", &pHost->DevLib, sErr, iErrCap) ) return false;
 	return true;
 }
 
@@ -180,6 +184,8 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 	const char* sSvcDevLang = NULL;
 	const char* sSvcDevFile = NULL;
 	const char* sSvcPath = NULL;
+	const char* sSvcDevInc = NULL;
+	const char* sSvcDevLib = NULL;
 	int64 iVal;
 	uint32 i;
 
@@ -191,6 +197,8 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 	if ( !XS_ConfigTakeString(pObj, "devlang", &sSvcDevLang, sErr, iErrCap) ) return false;
 	if ( !XS_ConfigTakeString(pObj, "devfile", &sSvcDevFile, sErr, iErrCap) ) return false;
 	if ( !XS_ConfigTakeString(pObj, "path", &sSvcPath, sErr, iErrCap) ) return false;
+	if ( !XS_ConfigTakeString(pObj, "dev_inc", &sSvcDevInc, sErr, iErrCap) ) return false;
+	if ( !XS_ConfigTakeString(pObj, "dev_lib", &sSvcDevLib, sErr, iErrCap) ) return false;
 
 	if ( !XS_ConfigTakeBool(pObj, "enabled", &pServer->Enabled, sErr, iErrCap) ) return false;
 	if ( !XS_ConfigTakeString(pObj, "class", &pServer->Class, sErr, iErrCap) ) return false;
@@ -275,6 +283,16 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 		pServer->DefaultHost->Path = sSvcPath;
 	} else {
 		xrtFree((void*)sSvcPath);
+	}
+	if ( pServer->DefaultHost->DevInc == NULL ) {
+		pServer->DefaultHost->DevInc = sSvcDevInc;
+	} else {
+		xrtFree((void*)sSvcDevInc);
+	}
+	if ( pServer->DefaultHost->DevLib == NULL ) {
+		pServer->DefaultHost->DevLib = sSvcDevLib;
+	} else {
+		xrtFree((void*)sSvcDevLib);
 	}
 	if ( pServer->DefaultHost->Name == NULL ) {
 		pServer->DefaultHost->Name = xrtStrDupN("default", 7);

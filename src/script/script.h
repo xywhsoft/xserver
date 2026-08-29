@@ -81,7 +81,7 @@ static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 	}
 	xrtFree(pData);		/* mount_memory 深拷贝，源缓冲即弃 */
 
-	pTcc = XS_TccCreate();
+	pTcc = XS_TccCreateForHost(pHost);	/* 基础环境 + host 的 dev_inc/dev_lib */
 	if ( pTcc == NULL ) {
 		printf("[xs] tcc create failed\n");
 		xrtFree(sDevPath);

@@ -66,6 +66,9 @@ typedef struct XS_HostInfo {
 	void*				Runtime;		/* 本代脚本运行时（不透明） */
 	struct XS_ServerInfo*		Server;		/* 反向指针：从一个 host 摸到整个拓扑 */
 	xvalue*				Custom;		/* 配置文件中非预设字段的全部内容 */
+	/* 以下为尾部追加字段（ABI 纪律：只增不改） */
+	const char*			DevInc;		/* 脚本额外 include 目录（分号分隔，相对 appPath） */
+	const char*			DevLib;		/* 脚本额外库目录（分号分隔，相对 appPath） */
 } XS_HostInfo;
 
 typedef struct XS_ServerInfo {

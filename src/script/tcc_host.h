@@ -153,4 +153,62 @@ static TCCState* XS_TccCreate(void)
 	return pTcc;
 }
 
+/* host 级额外目录（dev_inc / dev_lib，分号分隔，相对 appPath 解析）：
+ * 头目录同时注册 include 与 sysinclude（尖括号/引号都可命中），真实磁盘路径 */
+static void XS_TccAddHostPaths(TCCState* pTcc, const char* sList, bool bLib)
+{
+	const char* pSeg = sList;
+
+	while ( pSeg != NULL && *pSeg != '\0' ) {
+		const char* pEnd = strchr(pSeg, ';');
+		size_t iLen = (pEnd != NULL) ? (size_t)(pEnd - pSeg) : strlen(pSeg);
+		char arrDir[1024];
+
+		while ( iLen > 0 && *pSeg == ' ' ) { pSeg++; iLen--; }
+		while ( iLen > 0 && pSeg[iLen - 1] == ' ' ) { iLen--; }
+		if ( iLen > 0 && iLen < sizeof(arrDir) - 1 ) {
+			str sAbs;
+
+			memcpy(arrDir, pSeg, iLen);
+			arrDir[iLen] = '\0';
+			sAbs = xrtPathIsAbs(arrDir) ? xrtStrDup(arrDir) : xrtPathJoin(XS_AppPath(), arrDir);
+			if ( sAbs != NULL ) {
+				if ( bLib ) {
+					tcc_add_library_path(pTcc, sAbs);
+				} else if ( xrtDirExists(sAbs) ) {
+					tcc_add_include_path(pTcc, sAbs);
+					tcc_add_sysinclude_path(pTcc, sAbs);
+				}
+				xrtFree(sAbs);
+			}
+			if ( bLib ) {
+				tcc_add_library_path(pTcc, arrDir);		/* 相对形式兜底 */
+			} else {
+				tcc_add_include_path(pTcc, arrDir);
+				tcc_add_sysinclude_path(pTcc, arrDir);
+			}
+		}
+		pSeg = (pEnd != NULL) ? pEnd + 1 : NULL;
+	}
+}
+
+/* 带 host 环境的 TCC 创建：基础环境 + dev_inc/dev_lib（脚本编译用） */
+static TCCState* XS_TccCreateForHost(XS_HostInfo* pHost)
+{
+	TCCState* pTcc = XS_TccCreate();
+
+	if ( pTcc == NULL ) {
+		return NULL;
+	}
+	if ( pHost != NULL ) {
+		if ( pHost->DevInc != NULL ) {
+			XS_TccAddHostPaths(pTcc, pHost->DevInc, false);
+		}
+		if ( pHost->DevLib != NULL ) {
+			XS_TccAddHostPaths(pTcc, pHost->DevLib, true);
+		}
+	}
+	return pTcc;
+}
+
 #endif
