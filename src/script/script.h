@@ -44,6 +44,18 @@ typedef struct XS_ScriptRuntime {
 /* 让脚本内创建的定时器绑定“正在执行的旧代”，而不是可变的 host->Runtime。 */
 static XRT_THREAD_LOCAL XS_ScriptRuntime* g_XS_CurrentScript = NULL;
 
+/* reload controller 可为一次 reconcile 安装线程局部源码快照读取器。返回缓冲
+ * 始终由调用方释放；启动路径未安装 hook 时仍直接读取文件。 */
+typedef bytes (*XS_ScriptReadHookProc)(const char* sPath, size_t* piSize, void* pContext);
+static XRT_THREAD_LOCAL XS_ScriptReadHookProc g_XS_ScriptReadHook = NULL;
+static XRT_THREAD_LOCAL void* g_XS_ScriptReadContext = NULL;
+
+static void XS_ScriptSetReadHook(XS_ScriptReadHookProc procRead, void* pContext)
+{
+	g_XS_ScriptReadHook = procRead;
+	g_XS_ScriptReadContext = pContext;
+}
+
 static XS_ScriptRuntime* XS_ScriptEnter(XS_ScriptRuntime* pRuntime)
 {
 	XS_ScriptRuntime* pPrevious = g_XS_CurrentScript;
@@ -142,33 +154,12 @@ static void XS_ScriptRetire(XS_ScriptRuntime* pRuntime)
 	}
 }
 
-/* 每个 host 固定一个 VFS 槽位路径：重载时同路径重挂（mount_memory 为替换语义），
- * 源挂载不再随代数累积——6 小时演练观察项的修复。
- * 注：host 结构体跨代复用（配置不变时），以 Server 名 + host 指针为键 */
-typedef struct XS_ScriptSlot {
-	const void*		pKey;
-	char			sPath[96];
-} XS_ScriptSlot;
-
-static XS_ScriptSlot g_XS_ScriptSlots[96];
-static uint32 g_XS_ScriptSlotCount = 0;
-
-static const char* XS_ScriptSlotPath(XS_HostInfo* pHost)
+/* 启动装配和 reload controller 均串行编译脚本；mount_memory 对同路径
+ * 是替换语义，因此全进程只需一个有界槽位。tcc_add_file 返回时源已
+ * 编译进当前 TCCState，存活代不依赖后续挂载内容。 */
+static const char* XS_ScriptSlotPath(void)
 {
-	uint32 i;
-
-	for ( i = 0; i < g_XS_ScriptSlotCount; i++ ) {
-		if ( g_XS_ScriptSlots[i].pKey == (const void*)pHost ) {
-			return g_XS_ScriptSlots[i].sPath;
-		}
-	}
-	if ( g_XS_ScriptSlotCount >= 96 ) {
-		return NULL;		/* 槽位耗尽：退回 clear_dynamic 由调用方处理 */
-	}
-	snprintf(g_XS_ScriptSlots[g_XS_ScriptSlotCount].sPath, 96,
-		"/xs/script/h%u.c", g_XS_ScriptSlotCount);
-	g_XS_ScriptSlots[g_XS_ScriptSlotCount].pKey = (const void*)pHost;
-	return g_XS_ScriptSlots[g_XS_ScriptSlotCount++].sPath;
+	return "/xs/script/current.c";
 }
 
 /* devfile 相对 appPath 解析为绝对路径（UTF-8） */
@@ -199,27 +190,15 @@ static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 	if ( sDevPath == NULL ) {
 		return NULL;		/* 无脚本：由调用方决定语义 */
 	}
-	pData = xrtFileReadAll(sDevPath, &iSize);
+	pData = g_XS_ScriptReadHook != NULL ?
+		g_XS_ScriptReadHook(sDevPath, &iSize, g_XS_ScriptReadContext) :
+		xrtFileReadAll(sDevPath, &iSize);
 	if ( pData == NULL ) {
 		printf("[xs] script read failed: %s\n", sDevPath);
 		xrtFree(sDevPath);
 		return NULL;
 	}
-	{
-		const char* sSlot = XS_ScriptSlotPath(pHost);
-
-		if ( sSlot == NULL ) {
-			tcc_vfs_clear_dynamic();
-			sSlot = XS_ScriptSlotPath(pHost);	/* 清空后槽位表失效，重取 */
-			if ( sSlot == NULL ) {
-				printf("[xs] script slot exhausted\n");
-				xrtFree(pData);
-				xrtFree(sDevPath);
-				return NULL;
-			}
-		}
-		snprintf(sVirtual, sizeof(sVirtual), "%s", sSlot);
-	}
+	snprintf(sVirtual, sizeof(sVirtual), "%s", XS_ScriptSlotPath());
 	if ( !tcc_vfs_mount_memory(sVirtual, pData, iSize) ) {
 		printf("[xs] script vfs mount failed\n");
 		xrtFree(pData);
@@ -289,37 +268,100 @@ static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 	return pRuntime;
 }
 
-/* 挂载并初始化（ServiceInit 内可 xsSwapTake 取回交接数据） */
+/* 初始化候选并保持 init 锁，直到 Publish/Discard 给出唯一结论。这样 Init 创建的
+ * timer 不可能在候选是否发布尚未确定时进入脚本。 */
+static void XS_ScriptPrepare(XS_HostInfo* pHost, XS_ScriptRuntime* pRuntime)
+{
+	if ( pHost == NULL || pRuntime == NULL ) return;
+	xrtMutexLock(pRuntime->pInitLock);
+	if ( pRuntime->procInit != NULL ) {
+		XS_ScriptRuntime* pContext = XS_ScriptEnter(pRuntime);
+
+		pRuntime->procInit(pHost);
+		XS_ScriptLeave(pContext);
+	}
+	/* pInitLock 有意保持到唯一的 Publish/Discard。 */
+}
+
+/* 把已 Init 的脚本装入候选 host，但不设 ready。server 候选驱动可以
+ * 在此后绑定脚本符号；Init 中创建的 timer 仍被 pInitLock 阻挡。 */
+static XS_ScriptRuntime* XS_ScriptMountPrepared(
+	XS_HostInfo* pHost,
+	XS_ScriptRuntime* pRuntime)
+{
+	XS_ScriptRuntime* pPrevious;
+
+	if ( pHost == NULL || pRuntime == NULL ) return NULL;
+	xrtMutexLock((xmutex*)pHost->RuntimeLock);
+	pPrevious = (XS_ScriptRuntime*)pHost->Runtime;
+	pHost->Runtime = pRuntime;
+	xrtMutexUnlock((xmutex*)pHost->RuntimeLock);
+	return pPrevious;
+}
+
+/* 只做极短的 ready 发布；调用方已将 host/拓扑/listener 切到新代。 */
+static void XS_ScriptActivatePrepared(XS_ScriptRuntime* pRuntime)
+{
+	if ( pRuntime == NULL ) return;
+	xrtAtomic32Store(&pRuntime->tReady, 1, XMEMORY_RELEASE);
+	xrtMutexUnlock(pRuntime->pInitLock);
+}
+
+/* host 级换代使用：指针与 ready 在同一个极短提交段内发布。 */
+static XS_ScriptRuntime* XS_ScriptPublishPrepared(
+	XS_HostInfo* pHost,
+	XS_ScriptRuntime* pRuntime)
+{
+	XS_ScriptRuntime* pPrevious = XS_ScriptMountPrepared(pHost, pRuntime);
+
+	XS_ScriptActivatePrepared(pRuntime);
+	return pPrevious;
+}
+
+static void XS_ScriptDiscardPrepared(XS_ScriptRuntime* pRuntime)
+{
+	if ( pRuntime == NULL ) return;
+	XS_ScriptBeginRetire(pRuntime);
+	xrtMutexUnlock(pRuntime->pInitLock);
+	XS_ScriptRetire(pRuntime);
+}
+
+/* 整个 server 预编译阶段后续脚本失败：此 runtime 从未 Init，
+ * 因此析构时不得调用 ServiceUnit。 */
+static void XS_ScriptDiscardCompiled(XS_ScriptRuntime* pRuntime)
+{
+	if ( pRuntime == NULL ) return;
+	xrtAtomic32Store(&pRuntime->tUnitCalled, 1, XMEMORY_RELEASE);
+	XS_ScriptRetire(pRuntime);
+}
+
+/* server/all 候选未发布：先从私有 host 槽位拆下，再解锁退役。 */
+static void XS_ScriptDiscardMountedPrepared(
+	XS_HostInfo* pHost,
+	XS_ScriptRuntime* pRuntime)
+{
+	if ( pHost == NULL || pRuntime == NULL ) return;
+	xrtMutexLock((xmutex*)pHost->RuntimeLock);
+	if ( pHost->Runtime == pRuntime ) pHost->Runtime = NULL;
+	xrtMutexUnlock((xmutex*)pHost->RuntimeLock);
+	XS_ScriptDiscardPrepared(pRuntime);
+}
+
+/* 挂载并初始化（ServiceInit 内可 xsSwapTake 取回交接数据）。 */
 static void XS_ScriptAttach(XS_HostInfo* pHost, XS_ScriptRuntime* pRuntime)
 {
 	XS_ScriptRuntime* pPrevious = NULL;
 
-	/* 候选代先完整初始化；旧槽位在此期间继续为新 Accept 提供旧脚本。
-	 * Runtime 发布和 ready 标记在锁序内完成：Accept 只有在 ready 已发布后才能
-	 * 取得新脚本，Init 创建的 timer 则要等 init 锁释放后才能运行。 */
 	if ( pRuntime != NULL ) {
-		xrtMutexLock(pRuntime->pInitLock);
-		if ( pRuntime->procInit != NULL ) {
-			XS_ScriptRuntime* pContext = XS_ScriptEnter(pRuntime);
-
-			pRuntime->procInit(pHost);
-			XS_ScriptLeave(pContext);
-		}
-		xrtMutexLock((xmutex*)pHost->RuntimeLock);
-		pPrevious = (XS_ScriptRuntime*)pHost->Runtime;
-		pHost->Runtime = pRuntime;
-		xrtAtomic32Store(&pRuntime->tReady, 1, XMEMORY_RELEASE);
-		xrtMutexUnlock((xmutex*)pHost->RuntimeLock);
-		xrtMutexUnlock(pRuntime->pInitLock);
-	} else {
+		XS_ScriptPrepare(pHost, pRuntime);
+		pPrevious = XS_ScriptPublishPrepared(pHost, pRuntime);
+	} else if ( pHost != NULL ) {
 		xrtMutexLock((xmutex*)pHost->RuntimeLock);
 		pPrevious = (XS_ScriptRuntime*)pHost->Runtime;
 		pHost->Runtime = NULL;
 		xrtMutexUnlock((xmutex*)pHost->RuntimeLock);
 	}
-	if ( pPrevious != NULL && pPrevious != pRuntime ) {
-		XS_ScriptRetire(pPrevious);
-	}
+	if ( pPrevious != NULL && pPrevious != pRuntime ) XS_ScriptRetire(pPrevious);
 }
 
 /* 编译并启动（首次装配路径） */

@@ -2,8 +2,8 @@
  * xs3 —— xrt 的落地化部署工具
  * 设计依据：docs/设计.md
  *
- * 骨架阶段主流程：配置装载 → 数据模型 → 引擎启动 → 待机 → 优雅停机。
- * 协议装配（http/ws/tcp/udp/custom）、TCC 脚本宿主、软重载按实施计划后续接入。
+ * 主流程：配置装载 → 常驻引擎 → 协议/TCC 装配 → reload controller
+ * → generation 排空的优雅停机。
  */
 
 #define XRT_MODULE_ALL
@@ -161,7 +161,7 @@ int main(int argc, char** argv)
 		XS_ConfigFree(&tApp);
 		return 1;
 	}
-	if ( !XS_ReloadRuntimeInit() ) {
+	if ( !XS_ReloadRuntimeInit(&tApp, sConfigPath) ) {
 		printf("[xs] reload runtime init failed\n");
 		XS_EngineShutdown(&tApp);
 		XS_TopologyRuntimeUnit();
@@ -170,7 +170,7 @@ int main(int argc, char** argv)
 	}
 
 
-	/* 装配（本轮：custom 完整路径；其余协议驱动后续接入） */
+	/* 所有初始服务就绪后才开放 reload admission。 */
 	if ( !XS_AssembleServers(&tApp) ) {
 		printf("[xs] assemble failed, exit\n");
 		XS_ServersDrain(&tApp);
@@ -182,6 +182,7 @@ int main(int argc, char** argv)
 		XS_ConfigFree(&tApp);
 		return 1;
 	}
+	XS_ReloadRuntimeStart();
 
 	/* 信号与待机 */
 #if defined(_WIN32) || defined(_WIN64)

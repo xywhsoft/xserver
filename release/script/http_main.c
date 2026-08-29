@@ -91,6 +91,53 @@ static bool PathIs(XS_HttpReq* pReq, const char* sPath)
 	       memcmp(pReq->head->Target.Data, sPath, i) == 0;
 }
 
+static const char* ReloadStateName(XS_ReloadState iState)
+{
+	switch ( iState ) {
+	case XS_RELOAD_ACCEPTED: return "accepted";
+	case XS_RELOAD_PREPARING: return "preparing";
+	case XS_RELOAD_SUCCEEDED: return "succeeded";
+	case XS_RELOAD_FAILED: return "failed";
+	case XS_RELOAD_SUPERSEDED: return "superseded";
+	case XS_RELOAD_CANCELLED: return "cancelled";
+	default: return "unknown";
+	}
+}
+
+static bool ReloadStatusId(XS_HttpReq* pReq, XS_ReloadId* pId)
+{
+	static const char sPrefix[] = "/reload-status/";
+	size_t iPrefix = sizeof(sPrefix) - 1;
+	size_t i;
+	uint64 iValue = 0;
+
+	if ( pReq->head->Target.Size <= iPrefix ||
+	     memcmp(pReq->head->Target.Data, sPrefix, iPrefix) != 0 ) return false;
+	for ( i = iPrefix; i < pReq->head->Target.Size; i++ ) {
+		unsigned char c = (unsigned char)pReq->head->Target.Data[i];
+
+		if ( c < '0' || c > '9' || iValue > (UINT64_MAX - (uint64)(c - '0')) / 10 ) return false;
+		iValue = iValue * 10 + (uint64)(c - '0');
+	}
+	if ( iValue == 0 ) return false;
+	*pId = iValue;
+	return true;
+}
+
+static XS_RequestResult ReplyReloadAccepted(XS_HttpReq* pReq, XS_ReloadId iId)
+{
+	char arrJson[128];
+	int iLen;
+
+	if ( iId == 0 ) {
+		return ReplyLit(pReq, 503, "application/json; charset=utf-8",
+			"{\"status\":\"rejected\"}") ? XS_OK : XS_OK;
+	}
+	iLen = snprintf(arrJson, sizeof(arrJson),
+		"{\"reload_id\":%llu,\"status\":\"accepted\"}", (unsigned long long)iId);
+	return Reply(pReq, 202, "application/json; charset=utf-8", arrJson, (size_t)iLen) ? XS_OK : XS_OK;
+}
+
 XS_RequestResult RequestProc(XS_HttpReq* pReq)
 {
 	/* POST /echo：读 body 后回显（演示 xhttp1body 用法） */
@@ -128,6 +175,24 @@ XS_RequestResult RequestProc(XS_HttpReq* pReq)
 		return Reply(pReq, 200, "application/octet-stream", arrBuf, iUsed) ? XS_OK : XS_OK;
 	}
 	if ( pReq->head->Method.Size == 3 && memcmp(pReq->head->Method.Data, "GET", 3) == 0 ) {
+		XS_ReloadId iStatusId;
+
+		if ( ReloadStatusId(pReq, &iStatusId) ) {
+			XS_ReloadResult tResult;
+			char arrJson[256];
+			int iLen;
+
+			if ( !xsReloadQuery(iStatusId, &tResult) ) {
+				return ReplyLit(pReq, 404, "application/json; charset=utf-8",
+					"{\"status\":\"unknown\"}") ? XS_OK : XS_OK;
+			}
+			iLen = snprintf(arrJson, sizeof(arrJson),
+				"{\"reload_id\":%llu,\"status\":\"%s\",\"revision\":%llu}",
+				(unsigned long long)tResult.Id, ReloadStateName(tResult.State),
+				(unsigned long long)tResult.Revision);
+			return Reply(pReq, 200, "application/json; charset=utf-8",
+				arrJson, (size_t)iLen) ? XS_OK : XS_OK;
+		}
 		if ( PathIs(pReq, "/text") ) {
 			return ReplyLit(pReq, 200, "text/plain; charset=utf-8", "xs3 http ok") ? XS_OK : XS_OK;
 		}
@@ -156,19 +221,13 @@ XS_RequestResult RequestProc(XS_HttpReq* pReq)
 			return XS_OK;
 		}
 		if ( PathIs(pReq, "/reload-svr") ) {
-			bool bOk = xsReloadServer("main");
-			return ReplyLit(pReq, bOk ? 200 : 500, "text/plain; charset=utf-8",
-				bOk ? "server reload ok" : "server reload failed") ? XS_OK : XS_OK;
+			return ReplyReloadAccepted(pReq, xsReloadServerSubmit("main"));
 		}
 		if ( PathIs(pReq, "/reload-all") ) {
-			bool bOk = xsReloadAll();
-			return ReplyLit(pReq, bOk ? 200 : 500, "text/plain; charset=utf-8",
-				bOk ? "all reload ok" : "all reload failed") ? XS_OK : XS_OK;
+			return ReplyReloadAccepted(pReq, xsReloadAllSubmit());
 		}
 		if ( PathIs(pReq, "/reload") ) {
-			bool bOk = xsReloadHost(pReq->host);
-			return ReplyLit(pReq, bOk ? 200 : 500, "text/plain; charset=utf-8",
-				bOk ? "reload ok" : "reload failed") ? XS_OK : XS_OK;
+			return ReplyReloadAccepted(pReq, xsReloadHostSubmit(pReq->host));
 		}
 		if ( PathIs(pReq, "/tick") ) {
 			(void)xsTimerAfter(pReq->host, 50, TickProc, NULL);

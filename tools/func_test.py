@@ -111,6 +111,29 @@ def behavior_matrix():
     def local_http(path, host_header=None, method='GET', body=None):
         return http_get(path, host_header=host_header, port=http_port, method=method, body=body)
 
+    def submit_reload(path='/reload'):
+        status, body = local_http(path)
+        if status != 202:
+            raise AssertionError(f'{path} status={status} body={body[:120]!r}')
+        return int(json.loads(body)['reload_id'])
+
+    def wait_reload(reload_id, timeout=8.0):
+        deadline = time.time() + timeout
+        connection = http.client.HTTPConnection('127.0.0.1', http_port, timeout=5)
+        try:
+            while time.time() < deadline:
+                connection.request('GET', f'/reload-status/{reload_id}')
+                response = connection.getresponse()
+                body = response.read()
+                if response.status == 200:
+                    result = json.loads(body)
+                    if result['status'] in {'succeeded', 'failed', 'superseded', 'cancelled'}:
+                        return result
+                time.sleep(0.02)
+        finally:
+            connection.close()
+        raise AssertionError(f'reload {reload_id} did not reach terminal state')
+
     cfg_path = RELEASE / 'func_test_config.json'
     json.dump(cfg, open(cfg_path, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
 
@@ -145,23 +168,55 @@ def behavior_matrix():
         bad = src.replace('RequestProc(XS_HttpReq', 'RequestProc(XS_HttpReq BROKEN')
         try:
             script.write_text(mod, encoding='utf-8')
-            s4, b4 = local_http('/reload')
-            time.sleep(0.4)
+            try:
+                first_id = submit_reload()
+                first_result = wait_reload(first_id)
+                if first_result['status'] != 'succeeded' or not first_result['revision']:
+                    fail('behavior/reload-result', f'result={first_result}')
+            except (AssertionError, KeyError, ValueError, json.JSONDecodeError) as exc:
+                fail('behavior/reload-accepted', str(exc))
             _, body = local_http('/text')
             if b'RELOADED' not in body:
                 fail('behavior/reload-swap', f'body={body[:40]!r}')
+
+            # 同目标风暴只保留一个 trailing desired intent；中间 ticket 必须明确 superseded。
+            try:
+                burst_ids = []
+                burst_conn = http.client.HTTPConnection('127.0.0.1', http_port, timeout=5)
+                try:
+                    for _ in range(20):
+                        burst_conn.request('GET', '/reload')
+                        response = burst_conn.getresponse()
+                        payload = response.read()
+                        if response.status != 202:
+                            raise AssertionError(f'/reload status={response.status}')
+                        burst_ids.append(int(json.loads(payload)['reload_id']))
+                finally:
+                    burst_conn.close()
+                burst_results = [wait_reload(reload_id) for reload_id in burst_ids]
+                states = [result['status'] for result in burst_results]
+                latest = burst_results[burst_ids.index(max(burst_ids))]
+                if latest['status'] != 'succeeded' or 'superseded' not in states:
+                    fail('behavior/reload-latest-wins', f'states={states}')
+            except (AssertionError, KeyError, ValueError, json.JSONDecodeError) as exc:
+                fail('behavior/reload-latest-wins', str(exc))
+
             script.write_text(bad, encoding='utf-8')
-            s5, _ = local_http('/reload')
-            if s5 != 200:
-                fail('behavior/reload-queue-status', f'status={s5}')
-            time.sleep(0.4)  # reload API 只确认固定 worker 已接收；编译结果异步落状态/日志
+            try:
+                failed_result = wait_reload(submit_reload())
+                if failed_result['status'] != 'failed':
+                    fail('behavior/reload-failed-status', f'result={failed_result}')
+            except (AssertionError, KeyError, ValueError, json.JSONDecodeError) as exc:
+                fail('behavior/reload-queue-status', str(exc))
             _, body = local_http('/text')
             if b'RELOADED' not in body:
                 fail('behavior/reload-rollback', 'old gen lost')
         finally:
             script.write_text(src, encoding='utf-8')
-            local_http('/reload')
-            time.sleep(0.3)
+            try:
+                wait_reload(submit_reload())
+            except (AssertionError, KeyError, ValueError, json.JSONDecodeError):
+                pass
 
         # B4 定时器
         local_http('/tick')

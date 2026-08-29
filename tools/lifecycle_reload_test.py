@@ -46,6 +46,36 @@ def get(port: int, path: str) -> tuple[int, str]:
         conn.close()
 
 
+def submit_reload(port: int, path: str) -> int:
+    status, body = get(port, path)
+    assert status == 202, (status, body)
+    return int(json.loads(body)["reload_id"])
+
+
+def wait_reload(port: int, reload_id: int, timeout: float = 12.0) -> dict[str, object]:
+    deadline = time.time() + timeout
+    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+    try:
+        while time.time() < deadline:
+            try:
+                connection.request("GET", f"/reload-status/{reload_id}")
+                response = connection.getresponse()
+                body = response.read().decode()
+            except OSError:
+                connection.close()
+                connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+                time.sleep(0.03)
+                continue
+            if response.status == 200:
+                result = json.loads(body)
+                if result["status"] in {"succeeded", "failed", "superseded", "cancelled"}:
+                    return result
+            time.sleep(0.03)
+    finally:
+        connection.close()
+    raise AssertionError(f"reload {reload_id} did not reach terminal state")
+
+
 def write_config(
     path: Path,
     port: int,
@@ -170,6 +200,9 @@ def main() -> int:
                 [str(exe)], cwd=app, stdout=log, stderr=subprocess.STDOUT,
                 creationflags=creationflags,
             )
+            held_connections: list[http.client.HTTPConnection] = []
+            hammer_stop: threading.Event | None = None
+            hammer_thread: threading.Thread | None = None
             try:
                 wait_port(port_a)
 
@@ -179,10 +212,11 @@ def main() -> int:
 
                 # Host 换代：旧 keep-alive 连接继续跑旧脚本，新连接进入新脚本。
                 old = http.client.HTTPConnection("127.0.0.1", port_a, timeout=5)
+                held_connections.append(old)
                 old.request("GET", "/swapstat")
                 assert old.getresponse().read() == b"0"
-                assert get(port_a, "/reload")[0] == 200
-                time.sleep(0.5)
+                result = wait_reload(port_a, submit_reload(port_a, "/reload"))
+                assert result["status"] == "succeeded", result
                 old.request("GET", "/swapstat")
                 assert old.getresponse().read() == b"0"
                 assert get(port_a, "/swapstat") == (200, "1")
@@ -190,6 +224,7 @@ def main() -> int:
 
                 # 同端点配置换代：listener 原地切槽；旧连接仍看到旧配置。
                 same = http.client.HTTPConnection("127.0.0.1", port_a, timeout=5)
+                held_connections.append(same)
                 same.request("GET", "/configstat")
                 assert same.getresponse().read() == b"0"
                 write_config(
@@ -211,16 +246,22 @@ def main() -> int:
                                 hammer_errors.append(f"topology={status}/{body}")
                                 return
                         except Exception as exc:  # noqa: BLE001 - test captures worker races
+                            if isinstance(exc, OSError) and getattr(exc, "winerror", None) == 10048:
+                                time.sleep(0.02)
+                                continue
                             hammer_errors.append(repr(exc))
                             return
+                        time.sleep(0.01)
 
-                thread = threading.Thread(target=hammer, daemon=True)
-                thread.start()
-                assert get(port_a, "/reload-svr")[0] == 200
+                hammer_thread = threading.Thread(target=hammer, daemon=True)
+                hammer_thread.start()
+                reload_id = submit_reload(port_a, "/reload-svr")
+                result = wait_reload(port_a, reload_id)
+                assert result["status"] == "succeeded", result
                 wait_body(port_a, "/configstat", "1")
                 wait_body(port_a, "/rootstat", "1")
                 hammer_stop.set()
-                thread.join(timeout=3)
+                hammer_thread.join(timeout=3)
                 assert not hammer_errors, hammer_errors
                 same.request("GET", "/configstat")
                 assert same.getresponse().read() == b"0"
@@ -231,21 +272,24 @@ def main() -> int:
                     app / "xs.json", port_a, marker=2, root_marker=2,
                     init_delay_ms=0, recv_limit=4096,
                 )
-                assert get(port_a, "/reload-svr")[0] == 200
-                time.sleep(0.4)
+                result = wait_reload(port_a, submit_reload(port_a, "/reload-svr"))
+                assert result["status"] == "failed", result
                 assert get(port_a, "/configstat") == (200, "1")
                 assert get(port_a, "/rootstat") == (200, "1")
 
                 # Server 换代：候选端口先就绪，旧端口只保留既有连接。
                 draining = http.client.HTTPConnection("127.0.0.1", port_a, timeout=5)
+                held_connections.append(draining)
                 draining.request("GET", "/swapstat")
                 assert draining.getresponse().read() == b"2"
                 write_config(app / "xs.json", port_b, marker=3, root_marker=3)
                 draining.request("GET", "/reload-svr")
                 response = draining.getresponse()
-                assert response.status == 200
-                response.read()
+                assert response.status == 202
+                reload_id = int(json.loads(response.read())["reload_id"])
                 wait_port(port_b)
+                result = wait_reload(port_b, reload_id)
+                assert result["status"] == "succeeded", result
                 wait_refused(port_a)
                 draining.request("GET", "/topology")
                 assert draining.getresponse().read() == str(port_b).encode()
@@ -256,11 +300,19 @@ def main() -> int:
 
                 # 再换回原端口，覆盖动态配置快照所有权的二次释放。
                 write_config(app / "xs.json", port_a, marker=4, root_marker=4)
-                assert get(port_b, "/reload-svr")[0] == 200
+                reload_id = submit_reload(port_b, "/reload-svr")
                 wait_port(port_a)
+                result = wait_reload(port_a, reload_id)
+                assert result["status"] == "succeeded", result
                 wait_refused(port_b)
                 assert get(port_a, "/swapstat") == (200, "4")
             finally:
+                if hammer_stop is not None:
+                    hammer_stop.set()
+                if hammer_thread is not None:
+                    hammer_thread.join(timeout=3)
+                for connection in held_connections:
+                    connection.close()
                 if process.poll() is None:
                     if os.name == "nt":
                         process.send_signal(signal.CTRL_BREAK_EVENT)

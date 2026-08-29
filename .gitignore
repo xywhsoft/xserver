@@ -9,3 +9,5 @@ build_tmp_pack_out
 tools/wingrp.pid
 *.o
 *.obj
+*.pyc
+/build_out.txt

@@ -11,6 +11,7 @@
  */
 
 #include "generation.h"
+#include "topology.h"
 
 typedef struct XS_ListenerSlot {
 	xmutex*			pLock;
@@ -18,13 +19,15 @@ typedef struct XS_ListenerSlot {
 	void*			pTlsContext;	/* 当前代 XS_TlsTable*，由 TLS selector 在锁内读取 */
 	XS_ServerGeneration*	pGeneration;
 	uint32			iResources;	/* listener / TLS listener / UDP socket 数 */
+	bool			bAccepting;	/* 候选端点已 bind 但未发布时为 false */
 	bool			bClosing;
 } XS_ListenerSlot;
 
 static XS_ListenerSlot* XS_ListenerSlotCreate(
 	void* pRuntime,
 	XS_ServerGeneration* pGeneration,
-	void* pTlsContext)
+	void* pTlsContext,
+	bool bAccepting)
 {
 	XS_ListenerSlot* pSlot = (XS_ListenerSlot*)xrtCalloc(1, sizeof(XS_ListenerSlot));
 
@@ -37,6 +40,7 @@ static XS_ListenerSlot* XS_ListenerSlotCreate(
 	pSlot->pRuntime = pRuntime;
 	pSlot->pGeneration = pGeneration;
 	pSlot->pTlsContext = pTlsContext;
+	pSlot->bAccepting = bAccepting;
 	return pSlot;
 }
 
@@ -87,7 +91,9 @@ static void XS_ListenerSlotDestroyEmpty(XS_ListenerSlot* pSlot)
 	xrtFree(pSlot);
 }
 
-/* Accept 与切槽串行：返回时连接已经精确持有选中 generation。 */
+/* Accept 先进 topology 读侧再进槽位：reload-all 在 topology 写锁内
+ * 切换所有槽位与公开数组，因此任一 Accept 只会看到完整旧版或完整新版。
+ * 返回时连接已经精确持有选中 generation。 */
 static bool XS_ListenerSlotAcquireConnection(
 	XS_ListenerSlot* pSlot,
 	void** ppRuntime,
@@ -98,15 +104,71 @@ static bool XS_ListenerSlotAcquireConnection(
 	if ( ppRuntime != NULL ) *ppRuntime = NULL;
 	if ( ppGeneration != NULL ) *ppGeneration = NULL;
 	if ( pSlot == NULL || ppRuntime == NULL || ppGeneration == NULL ) return false;
+	if ( !XS_TopologyReadLock() ) return false;
 	xrtMutexLock(pSlot->pLock);
-	if ( !pSlot->bClosing && pSlot->pRuntime != NULL &&
+	if ( !pSlot->bClosing && pSlot->bAccepting && pSlot->pRuntime != NULL &&
 	     XS_GenerationConnectionAcquire(pSlot->pGeneration) ) {
 		*ppRuntime = pSlot->pRuntime;
 		*ppGeneration = pSlot->pGeneration;
 		bOk = true;
 	}
 	xrtMutexUnlock(pSlot->pLock);
+	XS_TopologyReadUnlock();
 	return bOk;
+}
+
+/* 多 server 事务在真正切槽前做无副作用预检；停机先等待 reload controller，
+ * 因此预检到提交之间 listener 不会被并发关闭。 */
+static bool XS_ListenerSlotCanHandoff(XS_ListenerSlot* pSlot, void* pExpectedRuntime)
+{
+	bool bOk;
+
+	if ( pSlot == NULL || pExpectedRuntime == NULL ) return false;
+	xrtMutexLock(pSlot->pLock);
+	bOk = !pSlot->bClosing && pSlot->bAccepting &&
+	      pSlot->pRuntime == pExpectedRuntime &&
+	      pSlot->pGeneration != NULL && pSlot->iResources > 0;
+	xrtMutexUnlock(pSlot->pLock);
+	return bOk;
+}
+
+/* 新端点可在事务外 bind/预热，但只能在 topology 写锁下发布。 */
+static bool XS_ListenerSlotCanActivate(XS_ListenerSlot* pSlot, void* pExpectedRuntime)
+{
+	bool bOk;
+
+	if ( pSlot == NULL || pExpectedRuntime == NULL ) return false;
+	xrtMutexLock(pSlot->pLock);
+	bOk = !pSlot->bClosing && !pSlot->bAccepting &&
+	      pSlot->pRuntime == pExpectedRuntime &&
+	      pSlot->pGeneration != NULL && pSlot->iResources > 0;
+	xrtMutexUnlock(pSlot->pLock);
+	return bOk;
+}
+
+static bool XS_ListenerSlotActivate(XS_ListenerSlot* pSlot, void* pExpectedRuntime)
+{
+	bool bOk;
+
+	if ( pSlot == NULL || pExpectedRuntime == NULL ) return false;
+	xrtMutexLock(pSlot->pLock);
+	bOk = !pSlot->bClosing && !pSlot->bAccepting &&
+	      pSlot->pRuntime == pExpectedRuntime &&
+	      pSlot->pGeneration != NULL && pSlot->iResources > 0;
+	if ( bOk ) pSlot->bAccepting = true;
+	xrtMutexUnlock(pSlot->pLock);
+	return bOk;
+}
+
+/* 仅用于多 server 事务在意外失败时撤销尚未公开的候选端点。 */
+static void XS_ListenerSlotDeactivate(XS_ListenerSlot* pSlot, void* pExpectedRuntime)
+{
+	if ( pSlot == NULL || pExpectedRuntime == NULL ) return;
+	xrtMutexLock(pSlot->pLock);
+	if ( !pSlot->bClosing && pSlot->pRuntime == pExpectedRuntime ) {
+		pSlot->bAccepting = false;
+	}
+	xrtMutexUnlock(pSlot->pLock);
 }
 
 /* 调用方须同时持有 topology 写锁，使公开拓扑与 Accept 切换线性化。 */
@@ -124,7 +186,8 @@ static bool XS_ListenerSlotHandoff(
 
 	if ( pSlot == NULL || pNewRuntime == NULL || pNewGeneration == NULL ) return false;
 	xrtMutexLock(pSlot->pLock);
-	if ( pSlot->bClosing || pSlot->pRuntime != pExpectedRuntime ||
+	if ( pSlot->bClosing || !pSlot->bAccepting ||
+	     pSlot->pRuntime != pExpectedRuntime ||
 	     pSlot->iResources == 0 ) {
 		xrtMutexUnlock(pSlot->pLock);
 		return false;
@@ -146,6 +209,7 @@ static bool XS_ListenerSlotHandoff(
 	pSlot->pRuntime = pNewRuntime;
 	pSlot->pGeneration = pNewGeneration;
 	pSlot->pTlsContext = pNewTlsContext;
+	pSlot->bAccepting = true;
 	xrtMutexUnlock(pSlot->pLock);
 	for ( i = 0; i < iResources; i++ ) XS_GenerationRelease(pOldGeneration);
 	return true;
@@ -158,6 +222,7 @@ static void XS_ListenerSlotBeginClose(XS_ListenerSlot* pSlot, void* pExpectedRun
 	xrtMutexLock(pSlot->pLock);
 	if ( pSlot->pRuntime == pExpectedRuntime ) {
 		pSlot->bClosing = true;
+		pSlot->bAccepting = false;
 		pSlot->pRuntime = NULL;
 		pSlot->pTlsContext = NULL;
 	}
@@ -178,6 +243,7 @@ static void XS_ListenerSlotResourceClose(XS_ListenerSlot* pSlot)
 		bLast = pSlot->iResources == 0;
 		if ( bLast ) {
 			pSlot->bClosing = true;
+			pSlot->bAccepting = false;
 			pSlot->pRuntime = NULL;
 			pSlot->pTlsContext = NULL;
 		}

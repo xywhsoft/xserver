@@ -47,6 +47,24 @@ def http_get(port: int, path: str) -> tuple[int, str]:
         conn.close()
 
 
+def submit_reload(port: int, path: str) -> int:
+    status, body = http_get(port, path)
+    assert status == 202, (status, body)
+    return int(json.loads(body)["reload_id"])
+
+
+def wait_reload(port: int, reload_id: int, timeout: float = 12.0) -> dict[str, object]:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        status, body = http_get(port, f"/reload-status/{reload_id}")
+        if status == 200:
+            result = json.loads(body)
+            if result["status"] in {"succeeded", "failed", "superseded", "cancelled"}:
+                return result
+        time.sleep(0.03)
+    raise AssertionError(f"reload {reload_id} did not reach terminal state")
+
+
 def wait_http(port: int, path: str, expected: str, timeout: float = 10.0) -> None:
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -197,7 +215,9 @@ def main() -> int:
                 udp_echo(ports["udp"], b"udp-before")
 
                 write_config(app / "xs.json", ports, 1)
-                assert http_get(ports["http"], "/reload-all")[0] == 200
+                reload_id = submit_reload(ports["http"], "/reload-all")
+                result = wait_reload(ports["http"], reload_id)
+                assert result["status"] == "succeeded" and result["revision"], result
                 wait_http(ports["http"], "/configstat", "1")
                 wait_http(ports["http"], "/rootstat", "1")
 

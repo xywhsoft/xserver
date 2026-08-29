@@ -99,32 +99,46 @@ void xsDestroyTCC(TCCState* pTcc)
 }
 
 /* —— 重载与定时器（src/runtime/reload.h）——
- * 重载一律延迟到固定 worker，调用点永不在自己的 TCC 回调栈上卸载。 */
+ * reload 只提交名字与期望状态，由独立控制线程准备；调用点永不在自己的
+ * TCC 回调栈上卸载。 */
+
+XS_ReloadId xsReloadHostSubmit(XS_HostInfo* pHost)
+{
+	if ( pHost == NULL || pHost->Server == NULL ||
+	     pHost->Server->Name == NULL || pHost->Name == NULL ) return 0;
+	return XS_ReloadSubmit(XS_RELOAD_KIND_HOST, pHost->Server->Name, pHost->Name);
+}
+
+XS_ReloadId xsReloadServerSubmit(const char* sName)
+{
+	if ( sName == NULL || g_XS_App == NULL ) return 0;
+	return XS_ReloadSubmit(XS_RELOAD_KIND_SERVER, sName, NULL);
+}
+
+XS_ReloadId xsReloadAllSubmit(void)
+{
+	if ( g_XS_App == NULL ) return 0;
+	return XS_ReloadSubmit(XS_RELOAD_KIND_ALL, NULL, NULL);
+}
+
+bool xsReloadQuery(XS_ReloadId iId, XS_ReloadResult* pResult)
+{
+	return XS_ReloadQueryResult(iId, pResult);
+}
 
 bool xsReloadHost(XS_HostInfo* pHost)
 {
-	if ( pHost == NULL ) {
-		return false;
-	}
-	return XS_DeferReload(g_XS_App, pHost, NULL, false);
+	return xsReloadHostSubmit(pHost) != 0;
 }
 
 bool xsReloadServer(const char* sName)
 {
-	if ( sName == NULL || g_XS_App == NULL ) {
-		return false;
-	}
-	/* server 级重建总是延迟执行：结构变更路径要拆旧监听器，
-	 * 同步执行会摧毁当前回调栈（回调正跑在旧结构上） */
-	return XS_DeferReload(g_XS_App, NULL, sName, false);
+	return xsReloadServerSubmit(sName) != 0;
 }
 
 bool xsReloadAll(void)
 {
-	if ( g_XS_App == NULL ) {
-		return false;
-	}
-	return XS_DeferReload(g_XS_App, NULL, NULL, true);
+	return xsReloadAllSubmit() != 0;
 }
 
 uint64 xsTimerAfter(XS_HostInfo* pOwner, uint32 iMillisecond, XS_TimerProc proc, void* pUserData)

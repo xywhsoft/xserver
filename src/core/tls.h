@@ -265,12 +265,14 @@ static bool XS_TlsSlotSelect(ptr pContext, const xtlsserverrequest* pRequest, xt
 	bool bFound = false;
 
 	if ( pSlot == NULL ) return false;
+	if ( !XS_TopologyReadLock() ) return false;
 	xrtMutexLock(pSlot->pLock);
 	pTable = (XS_TlsTable*)pSlot->pTlsContext;
-	if ( !pSlot->bClosing && pTable != NULL ) {
+	if ( !pSlot->bClosing && pSlot->bAccepting && pTable != NULL ) {
 		bFound = XS_TlsSelect(pTable, pRequest, pChoice);
 	}
 	xrtMutexUnlock(pSlot->pLock);
+	XS_TopologyReadUnlock();
 	return bFound;
 }
 
@@ -328,46 +330,6 @@ static void XS_TlsTableUnit(XS_TlsTable* pTable)
 	}
 	xrtFree(pTable->pEntries);
 	memset(pTable, 0, sizeof(*pTable));
-}
-
-/* 证书热替换（设计 §10.3）：重读证书文件构建新表，锁内整体换指向。
- * 旧 identity 延迟释放——进行中握手已由 xrt 侧 Retain 保护（先 Retain 再选用），
- * 等一个宽限窗口后释放，避免释放竞态。 */
-static bool XS_TlsTableRefresh(XS_ServerInfo* pServer, XS_TlsTable* pTable, char* sErr, size_t iErrCap)
-{
-	XS_TlsTable tNew;
-	XS_TlsEntry* pOldEntries;
-	uint32 iOldCount;
-	bool bOk;
-
-	bOk = XS_TlsTableBuild(pServer, &tNew, sErr, iErrCap);
-	if ( !bOk || tNew.iCount == 0 ) {
-		XS_TlsTableUnit(&tNew);
-		snprintf(sErr + strlen(sErr), iErrCap - strlen(sErr),
-			"tls refresh: no usable identity, keep old");
-		return false;
-	}
-	if ( pTable->pLock != NULL ) {
-		xrtMutexLock(pTable->pLock);
-	}
-	pOldEntries = pTable->pEntries;
-	iOldCount = pTable->iCount;
-	pTable->pEntries = tNew.pEntries;
-	pTable->iCount = tNew.iCount;
-	if ( pTable->pLock != NULL ) {
-		xrtMutexUnlock(pTable->pLock);
-	}
-	/* 宽限释放：旧 identity 立即 Release 一次（握手侧已 Retain 的不受影响；
-	 * 我们持有的表引用转让给延迟释放列表由调用方处理——v1 简化为直接释放，
-	 * 依赖 xrt 握手 Retain 语义保证不 UAF */
-	for ( iOldCount = iOldCount; iOldCount > 0; iOldCount-- ) {
-		if ( pOldEntries[iOldCount - 1].pIdentity != NULL ) {
-			xrtTlsIdentityRelease(pOldEntries[iOldCount - 1].pIdentity);
-		}
-	}
-	xrtFree(pOldEntries);
-	(void)iOldCount;
-	return true;
 }
 
 #endif

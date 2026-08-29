@@ -16,10 +16,13 @@
 #include "../protocol/ws.h"
 #include "../protocol/udp.h"
 
+static void XS_ServerDriverUnit(XS_ServerInfo* pServer);
+
 /* 单 server 驱动启停（启动装配与在线重建共用） */
 static bool XS_ServerDriverStartEx(
 	XS_ServerInfo* pServer,
 	bool bStartEndpoint,
+	bool bAcceptEndpoint,
 	char* sErr,
 	size_t iErrCap)
 {
@@ -33,20 +36,24 @@ static bool XS_ServerDriverStartEx(
 		return true;
 	}
 	if ( strcmp(pServer->Class, "http") == 0 ) {
-		return bStartEndpoint ? XS_HttpStart(pServer, sErr, iErrCap) :
-			XS_HttpStartEx(pServer, false, sErr, iErrCap);
+		if ( XS_HttpStartEx(pServer, bStartEndpoint, bAcceptEndpoint, sErr, iErrCap) ) return true;
+		XS_ServerDriverUnit(pServer);
+		return false;
 	}
 	if ( strcmp(pServer->Class, "tcp") == 0 ) {
-		return bStartEndpoint ? XS_TcpStart(pServer, sErr, iErrCap) :
-			XS_TcpStartEx(pServer, false, sErr, iErrCap);
+		if ( XS_TcpStartEx(pServer, bStartEndpoint, bAcceptEndpoint, sErr, iErrCap) ) return true;
+		XS_ServerDriverUnit(pServer);
+		return false;
 	}
 	if ( strcmp(pServer->Class, "ws") == 0 ) {
-		return bStartEndpoint ? XS_WsStart(pServer, sErr, iErrCap) :
-			XS_WsStartEx(pServer, false, sErr, iErrCap);
+		if ( XS_WsStartEx(pServer, bStartEndpoint, bAcceptEndpoint, sErr, iErrCap) ) return true;
+		XS_ServerDriverUnit(pServer);
+		return false;
 	}
 	if ( strcmp(pServer->Class, "udp") == 0 ) {
-		return bStartEndpoint ? XS_UdpStart(pServer, sErr, iErrCap) :
-			XS_UdpStartEx(pServer, false, sErr, iErrCap);
+		if ( XS_UdpStartEx(pServer, bStartEndpoint, bAcceptEndpoint, sErr, iErrCap) ) return true;
+		XS_ServerDriverUnit(pServer);
+		return false;
 	}
 	snprintf(sErr, iErrCap, "unknown class '%s'", pServer->Class);
 	return false;
@@ -54,7 +61,36 @@ static bool XS_ServerDriverStartEx(
 
 static bool XS_ServerDriverStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap)
 {
-	return XS_ServerDriverStartEx(pServer, true, sErr, iErrCap);
+	return XS_ServerDriverStartEx(pServer, true, true, sErr, iErrCap);
+}
+
+static XS_ListenerSlot* XS_ServerDriverListenerSlot(
+	XS_ServerInfo* pServer,
+	void** ppExpectedRuntime)
+{
+	if ( ppExpectedRuntime != NULL ) *ppExpectedRuntime = NULL;
+	if ( pServer == NULL || pServer->Runtime == NULL || ppExpectedRuntime == NULL ) return NULL;
+	if ( strcmp(pServer->Class, "http") == 0 ) {
+		XS_HttpRuntime* pRuntime = (XS_HttpRuntime*)pServer->Runtime;
+		*ppExpectedRuntime = pRuntime;
+		return pRuntime->pListenerSlot;
+	}
+	if ( strcmp(pServer->Class, "tcp") == 0 ) {
+		XS_TcpRuntime* pRuntime = (XS_TcpRuntime*)pServer->Runtime;
+		*ppExpectedRuntime = pRuntime;
+		return pRuntime->pListenerSlot;
+	}
+	if ( strcmp(pServer->Class, "ws") == 0 ) {
+		XS_WsRuntime* pRuntime = (XS_WsRuntime*)pServer->Runtime;
+		*ppExpectedRuntime = pRuntime;
+		return pRuntime->pListenerSlot;
+	}
+	if ( strcmp(pServer->Class, "udp") == 0 ) {
+		XS_UdpRuntime* pRuntime = (XS_UdpRuntime*)pServer->Runtime;
+		*ppExpectedRuntime = pRuntime;
+		return pRuntime->pListenerSlot;
+	}
+	return NULL;
 }
 
 static bool XS_ServerDriverHandoff(XS_ServerInfo* pOld, XS_ServerInfo* pNew)
@@ -73,6 +109,50 @@ static bool XS_ServerDriverHandoff(XS_ServerInfo* pOld, XS_ServerInfo* pNew)
 		return XS_UdpHandoff((XS_UdpRuntime*)pOld->Runtime, (XS_UdpRuntime*)pNew->Runtime);
 	}
 	return false;
+}
+
+static bool XS_ServerDriverCanHandoff(XS_ServerInfo* pOld, XS_ServerInfo* pNew)
+{
+	XS_ListenerSlot* pSlot;
+	void* pExpected = NULL;
+
+	if ( pOld == NULL || pNew == NULL || pOld->Runtime == NULL || pNew->Runtime == NULL ||
+	     strcmp(pOld->Class, pNew->Class) != 0 ) return false;
+	pSlot = XS_ServerDriverListenerSlot(pOld, &pExpected);
+	return XS_ListenerSlotCanHandoff(pSlot, pExpected);
+}
+
+/* 候选新端点已经 bind，但在 topology 事务提交前拒绝所有连接。 */
+static bool XS_ServerDriverCanActivate(XS_ServerInfo* pServer)
+{
+	XS_ListenerSlot* pSlot;
+	void* pExpected = NULL;
+
+	if ( pServer == NULL ) return false;
+	if ( !pServer->Enabled ) return true;
+	pSlot = XS_ServerDriverListenerSlot(pServer, &pExpected);
+	return XS_ListenerSlotCanActivate(pSlot, pExpected);
+}
+
+static bool XS_ServerDriverActivate(XS_ServerInfo* pServer)
+{
+	XS_ListenerSlot* pSlot;
+	void* pExpected = NULL;
+
+	if ( pServer == NULL ) return false;
+	if ( !pServer->Enabled ) return true;
+	pSlot = XS_ServerDriverListenerSlot(pServer, &pExpected);
+	return XS_ListenerSlotActivate(pSlot, pExpected);
+}
+
+static void XS_ServerDriverDeactivate(XS_ServerInfo* pServer)
+{
+	XS_ListenerSlot* pSlot;
+	void* pExpected = NULL;
+
+	if ( pServer == NULL || !pServer->Enabled ) return;
+	pSlot = XS_ServerDriverListenerSlot(pServer, &pExpected);
+	XS_ListenerSlotDeactivate(pSlot, pExpected);
 }
 
 static void XS_ServerDriverStop(XS_ServerInfo* pServer)
@@ -132,6 +212,18 @@ static bool XS_ClassNeedsScript(const char* sClass)
 	       strcmp(sClass, "udp") == 0 || strcmp(sClass, "ws") == 0;
 }
 
+static bool XS_ServerScriptsLoad(XS_ServerInfo* pServer)
+{
+	if ( XS_HostHasScript(pServer->DefaultHost) ) {
+		if ( !XS_ScriptLoad(pServer->DefaultHost) ) return false;
+	} else if ( XS_ClassNeedsScript(pServer->Class) ) {
+		printf("[xs] server '%s' class %s requires devfile\n",
+			pServer->Name, pServer->Class);
+		return false;
+	}
+	return true;
+}
+
 static bool XS_AssembleServers(XS_App* pApp)
 {
 	uint32 i;
@@ -155,21 +247,15 @@ static bool XS_AssembleServers(XS_App* pApp)
 			printf("[xs] server '%s' disabled, skipped\n", pServer->Name);
 			continue;
 		}
-		/* 脚本先行：custom/tcp/udp 必须有；http 可选（无脚本走纯静态） */
-		if ( XS_ClassNeedsScript(pServer->Class) || strcmp(pServer->Class, "http") == 0 ) {
-			if ( XS_HostHasScript(pServer->DefaultHost) ) {
-				if ( !XS_ScriptLoad(pServer->DefaultHost) ) {
-					return false;		/* 失败原因已打印；启动 fail-fast */
-				}
-			} else if ( XS_ClassNeedsScript(pServer->Class) ) {
-				printf("[xs] server '%s' class %s requires devfile\n", pServer->Name, pServer->Class);
-				return false;
-			}
-		}
+		/* 脚本先行：custom/tcp/udp/ws 的 DefaultHost 必须有；HTTP 可纯静态。 */
+		if ( !XS_ServerScriptsLoad(pServer) ) return false;
 
 		if ( XS_ServerDriverStart(pServer, sErr, sizeof(sErr)) ) {
-			if ( pServer->DefaultHost != NULL ) {
-				pServer->DefaultHost->State = XS_RUN_RUNNING;
+			pServer->DefaultHost->State = pServer->DefaultHost->Enabled ?
+				XS_RUN_RUNNING : XS_RUN_STOPPED;
+			for ( uint32 j = 0; j < pServer->HostCount; j++ ) {
+				pServer->Hosts[j]->State = pServer->Hosts[j]->Enabled ?
+					XS_RUN_RUNNING : XS_RUN_STOPPED;
 			}
 			pServer->State = XS_RUN_RUNNING;
 		} else {

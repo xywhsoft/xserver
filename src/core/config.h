@@ -356,9 +356,9 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
  * 装载 / 释放 / 打印
  * ============================================================ */
 
-static bool XS_ConfigLoad(const char* sPath, XS_App* pApp)
+/* 从已经解析出的根构造独立配置快照；成功后 Root 所有权归 pApp。 */
+static bool XS_ConfigBuild(const char* sSource, xvalue* pRoot, XS_App* pApp)
 {
-	xvalue* pRoot;
 	xvalue* pServices;
 	xvalue* pEngine;
 	xvalue* pServerObj;
@@ -366,11 +366,12 @@ static bool XS_ConfigLoad(const char* sPath, XS_App* pApp)
 	uint32 i, j;
 
 	memset(pApp, 0, sizeof(XS_App));
-	pRoot = xrtJsonParseFile(sPath);
 	if ( pRoot == NULL || xrtValueType(pRoot) != XVALUE_OBJECT ) {
 		const xerror* pErr = xrtGetError();
 		snprintf(pApp->ParseError, sizeof(pApp->ParseError), "parse '%.200s' failed: %.240s",
-			sPath, pErr ? xrtErrorMessage(pErr) : "root expect object");
+			sSource != NULL ? sSource : "<memory>",
+			pRoot == NULL && pErr != NULL ? xrtErrorMessage(pErr) : "root expect object");
+		if ( pRoot != NULL ) xrtValueRelease(pRoot);
 		return false;
 	}
 	pApp->Root = pRoot;
@@ -427,6 +428,27 @@ static bool XS_ConfigLoad(const char* sPath, XS_App* pApp)
 		}
 	}
 	return true;
+}
+
+static bool XS_ConfigLoad(const char* sPath, XS_App* pApp)
+{
+	if ( sPath == NULL || pApp == NULL ) return false;
+	return XS_ConfigBuild(sPath, xrtJsonParseFile(sPath), pApp);
+}
+
+/* reload coordinator 先冻结文件字节，再从同一份内存反复构建候选，避免一次
+ * reconcile 内不同 server 观察到不同的 xs.json 内容。 */
+static bool XS_ConfigLoadMemory(
+	const char* sSource,
+	const void* pData,
+	size_t iSize,
+	XS_App* pApp)
+{
+	xstrview tText;
+
+	if ( pData == NULL || pApp == NULL ) return false;
+	tText = xrtStrViewN((const char*)pData, iSize);
+	return XS_ConfigBuild(sSource, xrtJsonParse(tText), pApp);
 }
 
 static void XS_ConfigFree(XS_App* pApp)

@@ -529,7 +529,12 @@ static const xtlslistenerevents g_XS_WsTlsListenerEvents = {
  * 启动 / 停止
  * ============================================================ */
 
-static bool XS_WsStartEx(XS_ServerInfo* pServer, bool bStartEndpoint, char* sErr, size_t iErrCap)
+static bool XS_WsStartEx(
+	XS_ServerInfo* pServer,
+	bool bStartEndpoint,
+	bool bAcceptEndpoint,
+	char* sErr,
+	size_t iErrCap)
 {
 	XS_WsRuntime* pRuntime = (XS_WsRuntime*)xrtCalloc(1, sizeof(XS_WsRuntime));
 	xhttp1limits tDef;
@@ -595,7 +600,7 @@ static bool XS_WsStartEx(XS_ServerInfo* pServer, bool bStartEndpoint, char* sErr
 	}
 	if ( bStartEndpoint ) {
 		pRuntime->pListenerSlot = XS_ListenerSlotCreate(pRuntime, pRuntime->pGeneration,
-			pRuntime->bTls ? (void*)&pRuntime->tTls : NULL);
+			pRuntime->bTls ? (void*)&pRuntime->tTls : NULL, bAcceptEndpoint);
 		if ( pRuntime->pListenerSlot == NULL ) {
 			snprintf(sErr, iErrCap, "ws listener slot create failed");
 			return false;
@@ -659,15 +664,10 @@ static bool XS_WsStartEx(XS_ServerInfo* pServer, bool bStartEndpoint, char* sErr
 	}
 	printf("[xs] server '%s' %s %s on %s:%u%s\n", pServer->Name,
 		pRuntime->bTls ? "wss" : "ws",
-		bStartEndpoint ? "ready" : "prepared",
+		bStartEndpoint ? (bAcceptEndpoint ? "ready" : "bound") : "prepared",
 		pServer->IP ? pServer->IP : "0.0.0.0", pServer->Port,
 		pRuntime->sProtocol != NULL ? " (subprotocol required)" : "");
 	return true;
-}
-
-static bool XS_WsStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap)
-{
-	return XS_WsStartEx(pServer, true, sErr, iErrCap);
 }
 
 static bool XS_WsHandoff(XS_WsRuntime* pOld, XS_WsRuntime* pNew)

@@ -179,17 +179,6 @@ static xvalue* XS_TopologyRootReplaceLocked(XS_App* pApp, const xvalue* pNewRoot
 	return pOld;
 }
 
-static bool XS_TopologyRootReplace(XS_App* pApp, const xvalue* pNewRoot)
-{
-	xvalue* pOld;
-
-	if ( pApp == NULL || pNewRoot == NULL || !XS_TopologyWriteLock() ) return false;
-	pOld = XS_TopologyRootReplaceLocked(pApp, pNewRoot);
-	XS_TopologyWriteUnlock();
-	xrtValueRelease(pOld);
-	return true;
-}
-
 /* 停机先封住新 lease；写锁屏障保证并发查找已经完成 retain 或已经失败。 */
 static void XS_TopologyStopAccepting(void)
 {

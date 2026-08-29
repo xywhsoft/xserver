@@ -63,7 +63,12 @@ static const xnetudpevents g_XS_UdpEvents = {
 	XS_UdpOnClose
 };
 
-static bool XS_UdpStartEx(XS_ServerInfo* pServer, bool bStartEndpoint, char* sErr, size_t iErrCap)
+static bool XS_UdpStartEx(
+	XS_ServerInfo* pServer,
+	bool bStartEndpoint,
+	bool bAcceptEndpoint,
+	char* sErr,
+	size_t iErrCap)
 {
 	XS_UdpRuntime* pRuntime = (XS_UdpRuntime*)xrtCalloc(1, sizeof(XS_UdpRuntime));
 	XS_ScriptRuntime* pScript = (XS_ScriptRuntime*)pServer->DefaultHost->Runtime;
@@ -93,13 +98,12 @@ static bool XS_UdpStartEx(XS_ServerInfo* pServer, bool bStartEndpoint, char* sEr
 	}
 	pRuntime->pScript = XS_ScriptAcquireHost(pServer->DefaultHost);
 	if ( pRuntime->pScript == NULL ) {
-		XS_ScriptRelease(pRuntime->pScript);
-		xrtFree(pRuntime);
 		snprintf(sErr, iErrCap, "udp server '%s' cannot acquire generation", pServer->Name);
 		return false;
 	}
 	if ( bStartEndpoint ) {
-		pRuntime->pListenerSlot = XS_ListenerSlotCreate(pRuntime, pRuntime->pGeneration, NULL);
+		pRuntime->pListenerSlot = XS_ListenerSlotCreate(pRuntime, pRuntime->pGeneration,
+			NULL, bAcceptEndpoint);
 		if ( pRuntime->pListenerSlot == NULL ||
 		     !XS_ListenerSlotResourceAdd(pRuntime->pListenerSlot) ) {
 			snprintf(sErr, iErrCap, "udp server '%s' listener slot failed", pServer->Name);
@@ -116,14 +120,9 @@ static bool XS_UdpStartEx(XS_ServerInfo* pServer, bool bStartEndpoint, char* sEr
 		}
 	}
 	printf("[xs] server '%s' udp %s on %s:%u\n", pServer->Name,
-		bStartEndpoint ? "ready" : "prepared",
+		bStartEndpoint ? (bAcceptEndpoint ? "ready" : "bound") : "prepared",
 		pServer->IP ? pServer->IP : "0.0.0.0", pServer->Port);
 	return true;
-}
-
-static bool XS_UdpStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap)
-{
-	return XS_UdpStartEx(pServer, true, sErr, iErrCap);
 }
 
 static bool XS_UdpHandoff(XS_UdpRuntime* pOld, XS_UdpRuntime* pNew)

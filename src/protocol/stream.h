@@ -348,7 +348,12 @@ static bool XS_TcpScheduleSweep(XS_TcpRuntime* pRuntime)
 
 /* —— 启动 / 停止 —— */
 
-static bool XS_TcpStartEx(XS_ServerInfo* pServer, bool bStartEndpoint, char* sErr, size_t iErrCap)
+static bool XS_TcpStartEx(
+	XS_ServerInfo* pServer,
+	bool bStartEndpoint,
+	bool bAcceptEndpoint,
+	char* sErr,
+	size_t iErrCap)
 {
 	XS_TcpRuntime* pRuntime = (XS_TcpRuntime*)xrtCalloc(1, sizeof(XS_TcpRuntime));
 	XS_ScriptRuntime* pScript = (XS_ScriptRuntime*)pServer->DefaultHost->Runtime;
@@ -394,7 +399,7 @@ static bool XS_TcpStartEx(XS_ServerInfo* pServer, bool bStartEndpoint, char* sEr
 	}
 	if ( bStartEndpoint ) {
 		pRuntime->pListenerSlot = XS_ListenerSlotCreate(pRuntime, pRuntime->pGeneration,
-			pRuntime->bTls ? (void*)&pRuntime->tTls : NULL);
+			pRuntime->bTls ? (void*)&pRuntime->tTls : NULL, bAcceptEndpoint);
 		if ( pRuntime->pListenerSlot == NULL ) {
 			snprintf(sErr, iErrCap, "tcp listener slot create failed");
 			return false;
@@ -466,15 +471,10 @@ static bool XS_TcpStartEx(XS_ServerInfo* pServer, bool bStartEndpoint, char* sEr
 	}
 	printf("[xs] server '%s' %s %s on %s:%u%s\n", pServer->Name,
 		pRuntime->bTls ? "tcps" : "tcp",
-		bStartEndpoint ? "ready" : "prepared",
+		bStartEndpoint ? (bAcceptEndpoint ? "ready" : "bound") : "prepared",
 		pServer->IP ? pServer->IP : "0.0.0.0", pServer->Port,
 		pRuntime->iIdleMs > 0 ? " (idle protected)" : "");
 	return true;
-}
-
-static bool XS_TcpStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap)
-{
-	return XS_TcpStartEx(pServer, true, sErr, iErrCap);
 }
 
 static bool XS_TcpHandoff(XS_TcpRuntime* pOld, XS_TcpRuntime* pNew)

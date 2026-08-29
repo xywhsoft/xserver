@@ -619,7 +619,8 @@ static XS_HostInfo* XS_HttpRoute(XS_HttpRecord* pRec)
 		tVal = pRec->tHead.Fields[iField].Value;
 		for ( iHostLen = 0; iHostLen < tVal.Size && tVal.Data[iHostLen] != ':'; iHostLen++ ) {}
 		for ( iServer = 0; iServer < pServer->HostCount; iServer++ ) {
-			if ( pServer->Hosts[iServer]->Host != NULL &&
+			if ( pServer->Hosts[iServer]->Enabled &&
+			     pServer->Hosts[iServer]->Host != NULL &&
 			     XS_HttpNameMatch(pServer->Hosts[iServer]->Host, tVal.Data, iHostLen) ) {
 				return pServer->Hosts[iServer];
 			}
@@ -1263,7 +1264,12 @@ static void XS_HttpHdrCacheUnit(XS_HttpRuntime* pRuntime)
 	pRuntime->iHdrCacheCount = 0;
 }
 
-static bool XS_HttpStartEx(XS_ServerInfo* pServer, bool bStartEndpoint, char* sErr, size_t iErrCap)
+static bool XS_HttpStartEx(
+	XS_ServerInfo* pServer,
+	bool bStartEndpoint,
+	bool bAcceptEndpoint,
+	char* sErr,
+	size_t iErrCap)
 {
 	XS_HttpRuntime* pRuntime = (XS_HttpRuntime*)xrtCalloc(1, sizeof(XS_HttpRuntime));
 	XS_ScriptRuntime* pScript = (XS_ScriptRuntime*)pServer->DefaultHost->Runtime;
@@ -1323,7 +1329,7 @@ static bool XS_HttpStartEx(XS_ServerInfo* pServer, bool bStartEndpoint, char* sE
 	}
 	if ( bStartEndpoint ) {
 		pRuntime->pListenerSlot = XS_ListenerSlotCreate(pRuntime, pRuntime->pGeneration,
-			pRuntime->bTls ? (void*)&pRuntime->tTls : NULL);
+			pRuntime->bTls ? (void*)&pRuntime->tTls : NULL, bAcceptEndpoint);
 		if ( pRuntime->pListenerSlot == NULL ) {
 			snprintf(sErr, iErrCap, "http listener slot create failed");
 			return false;
@@ -1390,14 +1396,10 @@ static bool XS_HttpStartEx(XS_ServerInfo* pServer, bool bStartEndpoint, char* sE
 	}
 	XS_HttpHdrCacheBuildAll(pRuntime, pServer);
 	printf("[xs] server '%s' %s %s on %s:%u\n", pServer->Name,
-		pRuntime->bTls ? "https" : "http", bStartEndpoint ? "ready" : "prepared",
+		pRuntime->bTls ? "https" : "http",
+		bStartEndpoint ? (bAcceptEndpoint ? "ready" : "bound") : "prepared",
 		pServer->IP ? pServer->IP : "0.0.0.0", pServer->Port);
 	return true;
-}
-
-static bool XS_HttpStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap)
-{
-	return XS_HttpStartEx(pServer, true, sErr, iErrCap);
 }
 
 static bool XS_HttpHandoff(XS_HttpRuntime* pOld, XS_HttpRuntime* pNew)

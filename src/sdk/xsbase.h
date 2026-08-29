@@ -47,6 +47,27 @@ typedef enum {
 	XS_RUN_STOPPED			/* 已停止 */
 } XS_RunState;
 
+/* reload 是期望状态协调任务，不是同步命令。每次受理返回稳定 ID，结果可查询。 */
+typedef uint64 XS_ReloadId;
+
+typedef enum {
+	XS_RELOAD_UNKNOWN = 0,
+	XS_RELOAD_ACCEPTED,
+	XS_RELOAD_PREPARING,
+	XS_RELOAD_SUCCEEDED,
+	XS_RELOAD_FAILED,
+	XS_RELOAD_SUPERSEDED,
+	XS_RELOAD_CANCELLED
+} XS_ReloadState;
+
+typedef struct XS_ReloadResult {
+	XS_ReloadId		Id;
+	XS_ReloadState		State;
+	uint64			Revision;	/* 本次不可变输入快照的内容指纹；无配置输入时含脚本指纹 */
+	char			Target[160];
+	char			Message[256];
+} XS_ReloadResult;
+
 /* ============================================================
  * 数据模型：server + host 两层（五种协议类统一，无特例）
  * 见设计 §4：恒有 DefaultHost；tcp/udp/custom 的 host 语义由应用自定
@@ -191,7 +212,13 @@ XS_API void xsEnumServers(XS_ServerEnumProc procEach, void* pUserData);
 XS_API void xsEnumHosts(XS_ServerInfo* pServer, XS_HostEnumProc procEach, void* pUserData);
 XS_API xvalue* xsConfigRoot(void);			/* xs.json 顶层 Custom */
 
-/* 重载（异步排队；返回值仅表示请求已受理。实际失败时旧代原样服务，见 §10.2） */
+/* 重载协调器：Submit 返回 0 表示未受理；非零 ID 可用 xsReloadQuery 查询终态。
+ * 同目标尚未开始的旧意图会被最新意图覆盖；失败时旧代原样服务。
+ * bool 入口是兼容包装，只表示 Submit 是否返回非零。 */
+XS_API XS_ReloadId xsReloadHostSubmit(XS_HostInfo* pHost);
+XS_API XS_ReloadId xsReloadServerSubmit(const char* sName);
+XS_API XS_ReloadId xsReloadAllSubmit(void);
+XS_API bool xsReloadQuery(XS_ReloadId iId, XS_ReloadResult* pResult);
 XS_API bool xsReloadHost(XS_HostInfo* pHost);
 XS_API bool xsReloadServer(const char* sName);
 XS_API bool xsReloadAll(void);
