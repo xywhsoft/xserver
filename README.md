@@ -2,7 +2,7 @@
 
 **xs 是 xrt 的落地化部署工具。** 它把 xrt 的网络、协议、TLS、并发、数据能力装配成一个由配置文件驱动的可执行程序，并在运行时把 C 脚本编译进进程。xrt 才是主要的那个；xs 只负责部署，不提供框架、不提供治理、不教应用怎么做事。
 
-当前状态：**五大协议全量交付（http(+https)/ws(+wss)/tcp(+tcps)/udp/custom）+ 热重载 + 可选库门控 + 三层测试体系**。
+当前状态：**生产就绪**——五大协议（http(+https)/ws(+wss)/tcp(+tcps)/udp/custom）、热重载深化（配置级分流/证书热替换/VFS 槽位复用）、可选库门控（sqlite）、dev_inc/dev_lib 应用 SDK 目录、静态层四旋钮、四层测试体系（冒烟/功能/压力/攻防演练 6h 704 轮 0 失败）。遗留：xadmin 试点、Linux 实测。
 - 协议：HTTP 连接驱动（三态返回/虚拟主机路由/静态层/keep-alive）、WS 升级移交、TCP/TCP+TLS、UDP、custom 手动装配
 - 热重载：generation 换代、编译失败回滚、ServiceSwap 交接、代际定时器
 - 可选库：`build.bat sqlite` 变体（296 符号导入 + sqlite3.h 入 VFS）
