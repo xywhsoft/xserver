@@ -112,12 +112,11 @@ bool xsReloadHost(XS_HostInfo* pHost)
 
 bool xsReloadServer(const char* sName)
 {
-	if ( sName == NULL ) {
+	if ( sName == NULL || g_XS_App == NULL ) {
 		return false;
 	}
-	if ( !g_XS_ReloadBusy ) {
-		return XS_ReloadServerNow(g_XS_App, sName);
-	}
+	/* server 级重建总是延迟执行：结构变更路径要拆旧监听器，
+	 * 同步执行会摧毁当前回调栈（回调正跑在旧结构上） */
 	return XS_DeferReload(g_XS_App, NULL, sName, false);
 }
 

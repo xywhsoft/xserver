@@ -21,6 +21,7 @@
 #include "../protocol/http.h"
 #include "../protocol/stream.h"
 #include "../protocol/ws.h"
+#include "../core/driver.h"
 
 static volatile bool g_XS_ReloadBusy = false;
 static XS_ScriptRuntime* g_XS_Retired = NULL;
@@ -82,6 +83,13 @@ static void XS_RetiredSweepProc(xnetworker* pWorker, uint64 iId, xnetresult iRes
 	}
 	pFree = NULL;
 	(void)pFree;
+}
+
+static void XS_RetiredEnqueueServer(XS_ServerInfo* pServer)
+{
+	/* v1：旧 server 结构体不释放（~2KB/次，含字符串与 host 数组）——
+	 * 多 worker 下释放时序无法保证无 UAF；重建是低频运维操作，泄漏可接受 */
+	(void)pServer;
 }
 
 static void XS_RetiredEnqueue(XS_ScriptRuntime* pRuntime)
@@ -275,7 +283,7 @@ static bool XS_ReloadServerNow(XS_App* pApp, const char* sName)
 		g_XS_ReloadBusy = false;
 		return false;
 	}
-	{
+
 		XS_ServerInfo* pNewCfg = tFresh.Servers[i];
 
 		if ( XS_ServerStructEquals(pOld, pNewCfg) ) {
@@ -312,18 +320,104 @@ static bool XS_ReloadServerNow(XS_App* pApp, const char* sName)
 			g_XS_ReloadBusy = false;
 			return bOk;
 		}
-	}
-	/* 结构有变：v1 边界——不在线重建监听器，回退为脚本级并提示 */
-	printf("[xs] server reload '%s': structural change detected "
-		"(listener rebuild deferred, scripts only; restart process for listener changes)\n", sName);
-	if ( XS_HostHasScript(pOld->DefaultHost) ) {
-		bOk = XS_ReloadHostInner(pOld->DefaultHost) && bOk;
-	}
-	XS_ConfigFree(&tFresh);
-	g_XS_ReloadBusy = false;
-	return bOk;
-}
+	else {
+	/* 结构有变：listener 在线重建（设计 §10.2 完整时序）
+	 * 1. ServiceSwap 导出 → 2. 旧驱动收口 + 等排空 → 3. 新配置装配 →
+	 * 失败回滚旧配置 → 4. 旧结构体退役链延迟释放 */
 
+		XS_ServerInfo* pNewCfg = tFresh.Servers[i];
+		XS_ScriptRuntime* pOldRt = (XS_ScriptRuntime*)pOld->DefaultHost->Runtime;
+		xvalue* pShared = NULL;
+		char sErr2[256];
+
+		sErr2[0] = '\0';
+		printf("[xs] server reload '%s': structural change, rebuilding listener\n", sName);
+		if ( pOldRt != NULL && pOldRt->procSwap != NULL ) {
+			xvalue* pOut = NULL;
+
+			if ( pOldRt->procSwap(pOld->DefaultHost, &pOut) && pOut != NULL ) {
+				pShared = pOut;
+			}
+		}
+		XS_ServerDriverStop(pOld);
+		if ( !XS_ServerDrain(pApp, 5000) ) {
+			printf("[xs] server reload '%s': drain timeout, forcing rebuild\n", sName);
+		}
+		/* 不调用 DriverUnit：Close 回调异步引用旧 runtime，释放会 UAF（runtime 泄漏 ~4KB） */
+
+		/* 新配置装配（新结构体接管拓扑） */
+		pNewCfg->Engine = pApp->Engine;
+		if ( XS_HostHasScript(pNewCfg->DefaultHost) ) {
+			XS_ScriptRuntime* pNewRt = XS_ScriptCompile(pNewCfg->DefaultHost);
+
+			if ( pNewRt != NULL ) {
+				pNewRt->pSwap = pShared;
+				XS_ScriptAttach(pNewCfg->DefaultHost, pNewRt);
+			} else {
+				printf("[xs] server rebuild '%s': new script compile failed\n", sName);
+			}
+		}
+		if ( XS_ServerDriverStart(pNewCfg, sErr2, sizeof(sErr2)) ) {
+			uint32 iSlot;
+
+			for ( iSlot = 0; iSlot < pApp->ServerCount; iSlot++ ) {
+				if ( pApp->Servers[iSlot] == pOld ) {
+					tFresh.Servers[i] = NULL;		/* 移交所有权 */
+					pApp->Servers[iSlot] = pNewCfg;
+					break;
+				}
+			}
+			XS_ScriptUnitHost(pOld->DefaultHost);
+			/* 不 DeleteHost：排队中的 Read 回调可能仍执行旧 TCC 代码，tcc_delete 会 UAF（泄漏 ~50KB） */
+			XS_RetiredEnqueueServer(pOld);
+			/* 不释放 tFresh.Taken/Root：新 server 的 Custom 借用其中 xvalue 视图。
+			 * 仅释放未移交的 server 结构（字符串字段），xvalue 树随进程存活 */
+			{
+				uint32 k;
+
+				for ( k = 0; k < tFresh.ServerCount; k++ ) {
+					if ( tFresh.Servers[k] != NULL ) {
+						/* 其他 server：释放其字符串（xvalue 树同样借用不释放） */
+						xrtFree((void*)tFresh.Servers[k]->Class);
+						xrtFree((void*)tFresh.Servers[k]->Name);
+						xrtFree((void*)tFresh.Servers[k]->IP);
+						xrtFree((void*)tFresh.Servers[k]->IPTLS);
+						xrtFree(tFresh.Servers[k]->DefaultHost);
+						xrtFree(tFresh.Servers[k]->Hosts);
+						xrtFree(tFresh.Servers[k]);
+					}
+				}
+				xrtFree(tFresh.Servers);
+				tFresh.Servers = NULL;
+				tFresh.ServerCount = 0;
+				tFresh.Taken = NULL;		/* 放弃 Taken 所有权（防 ConfigFree 释放借用树） */
+				tFresh.TakenCount = 0;
+				tFresh.Root = NULL;
+			}
+			printf("[xs] server reload '%s': rebuild ok\n", sName);
+		} else {
+			/* 失败回滚：旧配置重建（不进拓扑——旧结构体仍在槽位） */
+			printf("[xs] server rebuild '%s' failed: %s, rolling back\n", sName, sErr2);
+			if ( XS_HostHasScript(pOld->DefaultHost) ) {
+				XS_ScriptRuntime* pRollRt = XS_ScriptCompile(pOld->DefaultHost);
+
+				if ( pRollRt != NULL ) {
+					pRollRt->pSwap = pShared;
+					XS_ScriptAttach(pOld->DefaultHost, pRollRt);
+				}
+			}
+			if ( XS_ServerDriverStart(pOld, sErr2, sizeof(sErr2)) ) {
+				printf("[xs] server reload '%s': rollback ok (old config serving)\n", sName);
+			} else {
+				printf("[xs] server reload '%s': ROLLBACK FAILED: %s\n", sName, sErr2);
+				bOk = false;
+			}
+		}
+		XS_ConfigFree(&tFresh);
+		g_XS_ReloadBusy = false;
+		return bOk;
+	}
+	}
 /* All 级：重读配置 → 逐 server 分流（现存的按 server 级；新增的装配；消失的收口下线） */
 static bool XS_ReloadAllNow(XS_App* pApp)
 {
