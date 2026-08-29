@@ -71,6 +71,17 @@ def wait_port(port, timeout=10.0):
     return False
 
 
+def free_port(sock_type=socket.SOCK_STREAM, used=None):
+    used = used if used is not None else set()
+    while True:
+        with socket.socket(socket.AF_INET, sock_type) as sock:
+            sock.bind(('127.0.0.1', 0))
+            port = int(sock.getsockname()[1])
+        if port not in used:
+            used.add(port)
+            return port
+
+
 def http_get(path, host_header=None, port=8080, method='GET', body=None):
     c = http.client.HTTPConnection('127.0.0.1', port, timeout=5)
     headers = {}
@@ -85,9 +96,21 @@ def http_get(path, host_header=None, port=8080, method='GET', body=None):
 
 def behavior_matrix():
     cfg = json.load(open(RELEASE / 'xs.json', encoding='utf-8'))
+    ports = {}
+    used_ports = set()
     for s in cfg['services']:
+        if s.get('class') != 'custom':
+            sock_type = socket.SOCK_DGRAM if s.get('class') == 'udp' else socket.SOCK_STREAM
+            s['port'] = free_port(sock_type, used_ports)
+            ports[s.get('name')] = s['port']
         if s.get('name') == 'tcp-echo':
             s['idle_timeout'] = 3000
+    http_port = ports['main']
+    tcp_port = ports['tcp-echo']
+
+    def local_http(path, host_header=None, method='GET', body=None):
+        return http_get(path, host_header=host_header, port=http_port, method=method, body=body)
+
     cfg_path = RELEASE / 'func_test_config.json'
     json.dump(cfg, open(cfg_path, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
 
@@ -96,20 +119,20 @@ def behavior_matrix():
         [str(RELEASE / 'xs.exe'), 'func_test_config.json'],
         cwd=str(RELEASE), stdout=log, stderr=subprocess.STDOUT)
     try:
-        if not wait_port(8080):
+        if not wait_port(http_port):
             fail('behavior/startup', 'http port not up')
             return
         time.sleep(1.5)
 
         # B1 虚拟主机路由：admin Host → admin host（无静态根 → 404），默认 Host → 200
-        s1, _ = http_get('/', host_header='admin.example.com')
-        s2, _ = http_get('/')
+        s1, _ = local_http('/', host_header='admin.example.com')
+        s2, _ = local_http('/')
         if not (s1 == 404 and s2 == 200):
             fail('behavior/vhost', f'admin={s1} default={s2} (expect 404/200)')
 
         # B2 body 上限：body_limit=262144 → 300KB body 触发 400/断连
         try:
-            s3, _ = http_get('/echo', method='POST', body=b'x' * 300000)
+            s3, _ = local_http('/echo', method='POST', body=b'x' * 300000)
             if s3 != 400:
                 fail('behavior/body-limit', f'status={s3} expect 400')
         except (http.client.HTTPException, ConnectionError):
@@ -122,33 +145,33 @@ def behavior_matrix():
         bad = src.replace('RequestProc(XS_HttpReq', 'RequestProc(XS_HttpReq BROKEN')
         try:
             script.write_text(mod, encoding='utf-8')
-            s4, b4 = http_get('/reload')
+            s4, b4 = local_http('/reload')
             time.sleep(0.4)
-            _, body = http_get('/text')
+            _, body = local_http('/text')
             if b'RELOADED' not in body:
                 fail('behavior/reload-swap', f'body={body[:40]!r}')
             script.write_text(bad, encoding='utf-8')
-            s5, _ = http_get('/reload')
+            s5, _ = local_http('/reload')
             if s5 != 200:
                 fail('behavior/reload-queue-status', f'status={s5}')
             time.sleep(0.4)  # reload API 只确认固定 worker 已接收；编译结果异步落状态/日志
-            _, body = http_get('/text')
+            _, body = local_http('/text')
             if b'RELOADED' not in body:
                 fail('behavior/reload-rollback', 'old gen lost')
         finally:
             script.write_text(src, encoding='utf-8')
-            http_get('/reload')
+            local_http('/reload')
             time.sleep(0.3)
 
         # B4 定时器
-        http_get('/tick')
+        local_http('/tick')
         time.sleep(0.5)
-        _, tick = http_get('/tick-get')
+        _, tick = local_http('/tick-get')
         if tick == b'0':
             fail('behavior/timer', 'timer never fired')
 
         # B5 tcp idle：连接静默 4.5s → 服务端应已关闭（EOF）
-        s6 = socket.create_connection(('127.0.0.1', 9097), timeout=3)
+        s6 = socket.create_connection(('127.0.0.1', tcp_port), timeout=3)
         s6.settimeout(6)
         s6.recv(200)  # banner
         t0 = time.time()
@@ -163,18 +186,18 @@ def behavior_matrix():
 
         # B6 静态层旋钮（主配置已带 static 四旋钮）
         import http.client as _hc
-        c = _hc.HTTPConnection('127.0.0.1', 8080, timeout=5)
+        c = _hc.HTTPConnection('127.0.0.1', http_port, timeout=5)
         c.request('GET', '/')
         r = c.getresponse(); body = r.read(); hdrs = dict(r.getheaders()); c.close()
         if hdrs.get('X-XS-Static') != 'on' or hdrs.get('Cache-Control') != 'no-cache':
             fail('behavior/static-headers', f'{hdrs}')
         if b'xs3 static ok' not in body:
             fail('behavior/static-index', f'{body[:40]!r}')
-        s404, _ = http_get('/no-such')
+        s404, _ = local_http('/no-such')
         # 主配置未配 error_pages 时为内置页；已配 err404.html 时为自定义页（二者择一断言状态）
         if s404 != 404:
             fail('behavior/static-404', f'status={s404}')
-        s403, _ = http_get('/.hidden')
+        s403, _ = local_http('/.hidden')
         if s403 != 403:
             fail('behavior/static-dotfile', f'status={s403} expect 403')
 

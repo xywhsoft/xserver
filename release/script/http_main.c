@@ -7,6 +7,8 @@
  *   其余          —— XS_FALLBACK：静态层（wwwroot）
  */
 #include <xsbase.h>
+#include <stdio.h>
+#include <string.h>
 
 static int64 g_Tick = 0;
 static int64 g_ReloadCount = 0;

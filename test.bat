@@ -8,11 +8,15 @@ if errorlevel 1 exit /b 1
 gcc tools\wingrp.c -O2 -s -o tools\wingrp.exe
 if errorlevel 1 exit /b 1
 
+set XS_HTTP_PORT=
+for /f %%P in ('python tools\smoke_config.py release\xs.json release\xs_smoke_config.json') do set XS_HTTP_PORT=%%P
+if not defined XS_HTTP_PORT (echo SMOKE FAIL: temp http config & exit /b 1)
+
 cd release
 if exist xs_smoke.log del xs_smoke.log
 if exist ..\tools\wingrp.pid del ..\tools\wingrp.pid
 
-start "" /b ..\tools\wingrp.exe run xs_smoke.log ..\tools\wingrp.pid xs.exe
+start "" /b ..\tools\wingrp.exe run xs_smoke.log ..\tools\wingrp.pid xs.exe xs_smoke_config.json
 powershell -Command "Start-Sleep -Milliseconds 3500" >nul
 
 findstr /c:"config loaded" xs_smoke.log >nul || (echo SMOKE FAIL: config & exit /b 1)
@@ -31,7 +35,7 @@ python ../tools/smoke_ws.py
 if errorlevel 1 (echo SMOKE FAIL: ws behavior & exit /b 1)
 
 rem HTTP behavior check: routes, static, errors, keep-alive, takeover
-python ../tools/smoke_http.py
+python ../tools/smoke_http.py --port %XS_HTTP_PORT%
 if errorlevel 1 (echo SMOKE FAIL: http behavior & exit /b 1)
 
 rem TCC custom echo loop check
@@ -52,6 +56,7 @@ powershell -Command "Start-Sleep -Milliseconds 3000" >nul
 
 findstr /c:"engine stopped" xs_smoke.log >nul || (echo SMOKE FAIL: graceful stop & exit /b 1)
 findstr /c:"[xs] bye" xs_smoke.log >nul || (echo SMOKE FAIL: exit & exit /b 1)
+if exist xs_smoke_config.json del xs_smoke_config.json
 
 rem Functional test: config matrix / behavior / reload semantics / idle
 cd ..

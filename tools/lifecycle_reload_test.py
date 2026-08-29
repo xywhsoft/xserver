@@ -103,6 +103,45 @@ def wait_body(port: int, path: str, expected: str, timeout: float = 8.0) -> None
     raise AssertionError(f"{path} on {port} did not become {expected!r}")
 
 
+def split_post(port: int, payload: bytes) -> None:
+    """强制 Header/body 分两次到达，验证 Head 借用视图在等待期被 pin。"""
+    head = (
+        b"POST /echo HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: "
+        + str(len(payload)).encode()
+        + b"\r\nConnection: close\r\n\r\n"
+    )
+    with socket.create_connection(("127.0.0.1", port), timeout=3) as sock:
+        sock.settimeout(3)
+        sock.sendall(head)
+        time.sleep(0.03)
+        sock.sendall(payload)
+        response = b""
+        while True:
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            response += chunk
+    response_head, response_body = response.split(b"\r\n\r\n", 1)
+    assert b" 200 " in response_head.split(b"\r\n", 1)[0], response[:200]
+    assert response_body == payload, response_body
+
+
+def post_keepalive(port: int) -> None:
+    """脚本读完 body 后，驱动必须同步消费 wire bytes，下一请求才能正常解析。"""
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+    try:
+        for index in range(10):
+            payload = f"keepalive-{index}".encode()
+            conn.request("POST", "/echo", body=payload)
+            response = conn.getresponse()
+            assert response.status == 200 and response.read() == payload
+            conn.request("GET", "/text")
+            response = conn.getresponse()
+            assert response.status == 200 and response.read() == b"xs3 http ok"
+    finally:
+        conn.close()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--exe", type=Path, default=ROOT / "release" / "xs.exe")
@@ -133,6 +172,10 @@ def main() -> int:
             )
             try:
                 wait_port(port_a)
+
+                for index in range(20):
+                    split_post(port_a, f"split-{index}".encode())
+                post_keepalive(port_a)
 
                 # Host 换代：旧 keep-alive 连接继续跑旧脚本，新连接进入新脚本。
                 old = http.client.HTTPConnection("127.0.0.1", port_a, timeout=5)

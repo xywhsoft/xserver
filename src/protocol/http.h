@@ -68,9 +68,18 @@ typedef struct XS_HttpRecord {
 	xhttp1bodyplan		tPlan;
 	xhttpfield		arrTrailers[XS_HTTP_MAX_TRAILERS];
 	xhttp1bodylimits	tBodyLimits;
+	unsigned char*		pHeadData;	/* pin 住 Head 借用的原始字节，覆盖 body 等待期 */
+	size_t			iHeadCapacity;
 	int			iPhase;		/* 0=HEAD 1=BODY_DRAIN */
 	bool			bTakenOver;
 } XS_HttpRecord;
+
+static void XS_HttpRecordFree(XS_HttpRecord* pRec)
+{
+	if ( pRec == NULL ) return;
+	xrtFree(pRec->pHeadData);
+	xrtFree(pRec);
+}
 
 /* ============================================================
  * 传输抽象（tcp / tls 双形态）
@@ -125,6 +134,30 @@ static xhttp1status XS_HttpParseHead(XS_HttpRecord* pRec, xhttp1errorinfo* pErr)
 	}
 	return xrtHttp1RequestParseBuffer((xnetbuf*)xrtNetStreamBuffer(pRec->tReg.pTcp),
 		&pRec->tHead, &pRec->pRuntime->tLimits, pErr);
+}
+
+/* xhttp1head 的所有字符串/字段都借用解析输入。网络 Header 消费后 body 可能在
+ * 后续 Read 中覆盖同一 ring-buffer 区域，因此先复制完整 Header 并重新解析，
+ * 让视图在本次请求（包括等待完整 body）期间始终指向连接自有存储。 */
+static bool XS_HttpPinHead(XS_HttpRecord* pRec, xhttp1errorinfo* pErr)
+{
+	unsigned char* pData;
+	xbytesview tInput;
+	size_t iBytes = pRec->tHead.Bytes;
+
+	if ( iBytes == 0 ) return false;
+	if ( pRec->iHeadCapacity < iBytes ) {
+		pData = (unsigned char*)xrtRealloc(pRec->pHeadData, iBytes);
+		if ( pData == NULL ) return false;
+		pRec->pHeadData = pData;
+		pRec->iHeadCapacity = iBytes;
+	}
+	if ( XS_HttpPeek(pRec, pRec->pHeadData, iBytes) != iBytes ) return false;
+	xrtHttp1HeadInit(&pRec->tHead, pRec->arrFields, XS_HTTP_MAX_FIELDS);
+	tInput.Data = pRec->pHeadData;
+	tInput.Size = iBytes;
+	return xrtHttp1RequestParse(tInput, &pRec->tHead, &pRec->pRuntime->tLimits, pErr) ==
+		XHTTP1_READY;
 }
 
 /* ============================================================
@@ -669,12 +702,8 @@ static int XS_HttpDrainBody(XS_HttpRecord* pRec)
 		xbytesview tData;
 		xhttp1bodystatus eBody;
 
-		if ( iAvail == 0 ) {
-			return 0;		/* 等待更多数据 */
-		}
 		iGot = iAvail > sizeof(arrChunk) ? sizeof(arrChunk) : iAvail;
-		iGot = XS_HttpPeek(pRec, arrChunk, iGot);
-		if ( iGot == 0 ) {
+		if ( iGot > 0 && XS_HttpPeek(pRec, arrChunk, iGot) != iGot ) {
 			return 0;
 		}
 		tData.Data = arrChunk;
@@ -689,7 +718,10 @@ static int XS_HttpDrainBody(XS_HttpRecord* pRec)
 		if ( eBody == XHTTP1_BODY_DONE ) {
 			return 1;
 		}
-		if ( iConsumed == 0 && eBody == XHTTP1_BODY_MORE ) {
+		if ( eBody == XHTTP1_BODY_FIELDS ) {
+			return -1;
+		}
+		if ( iConsumed == 0 ) {
 			return 0;		/* 需要更多网络数据 */
 		}
 	}
@@ -716,7 +748,7 @@ static void XS_HttpTakenOnClose(xnetstream* pStream, xnetresult iResult, const x
 	(void)iResult; (void)pError;
 	xrtNetStreamDestroy(pStream);
 	XS_RegistryRemove(pRec->tReg.pRegistry, &pRec->tReg);
-	xrtFree(pRec);
+	XS_HttpRecordFree(pRec);
 	XS_ScriptRelease(pScript);
 	XS_GenerationConnectionRelease(pGeneration);
 }
@@ -745,7 +777,7 @@ static void XS_HttpTlsTakenOnClose(xtlsstream* pStream, xnetresult iResult, cons
 	(void)iResult; (void)pError;
 	xrtTlsStreamDestroy(pStream);
 	XS_RegistryRemove(pRec->tReg.pRegistry, &pRec->tReg);
-	xrtFree(pRec);
+	XS_HttpRecordFree(pRec);
 	XS_ScriptRelease(pScript);
 	XS_GenerationConnectionRelease(pGeneration);
 }
@@ -761,6 +793,8 @@ static bool XS_HttpDispatch(XS_HttpRecord* pRec)
 	XS_ScriptRuntime* pScript = pRec->tReg.pScript;
 	XS_HttpReq tReq;
 	XS_RequestResult eResult = XS_FALLBACK;
+	uint64 iWireBefore = pRec->tBody.WireBytes;
+	uint64 iWireUsed;
 	int iDrain;
 
 	tReq.tcp = pRec->tReg.pTcp;
@@ -775,6 +809,18 @@ static bool XS_HttpDispatch(XS_HttpRecord* pRec)
 		eResult = pScript->procRequest(&tReq);
 		XS_ScriptLeave(pPrevious);
 	}
+	/* 脚本通过公开 Body Reader 推进了解码状态，但网络 buffer 的消费权仍在驱动。
+	 * WireBytes 是本 reader 已消费的线路字节数，精确同步其增量后再排空余量。 */
+	if ( pRec->tBody.WireBytes < iWireBefore ) {
+		XS_HttpFinishRequest(pRec, true);
+		return false;
+	}
+	iWireUsed = pRec->tBody.WireBytes - iWireBefore;
+	if ( iWireUsed > (uint64)XS_HttpAvail(pRec) ) {
+		XS_HttpFinishRequest(pRec, true);
+		return false;
+	}
+	if ( iWireUsed > 0 ) XS_HttpConsume(pRec, (size_t)iWireUsed);
 	if ( eResult == XS_TAKEOVER ) {
 		/* 应用接管仍属于本 generation；终态 Close 才出表并释放引用。 */
 		pRec->bTakenOver = true;
@@ -848,7 +894,12 @@ static void XS_HttpDrive(XS_HttpRecord* pRec)
 		default:
 			break;
 		}
-		XS_HttpConsume(pRec, pRec->tHead.Bytes);
+		if ( !XS_HttpPinHead(pRec, &tErr) ) {
+			pRec->pHost = pRuntime->pDefaultHost;
+			XS_HttpErrorPage(pRec, 500);
+			XS_HttpFinishRequest(pRec, true);
+			return;
+		}
 		pRec->pHost = XS_HttpRoute(pRec);
 
 		/* body 预备 */
@@ -867,6 +918,7 @@ static void XS_HttpDrive(XS_HttpRecord* pRec)
 			XS_HttpFinishRequest(pRec, true);
 			return;
 		}
+		XS_HttpConsume(pRec, pRec->tHead.Bytes);
 
 		/* body 就绪检查：回调时保证请求体完整（分段到达时等待）。
 		 * FIXED 按字节数精确判断；CHUNKED 用抛弃式探针体判断；
@@ -909,7 +961,7 @@ static void XS_HttpOnClose(xnetstream* pStream, xnetresult iResult, const xerror
 	(void)iResult; (void)pError;
 	xrtNetStreamDestroy(pStream);
 	XS_RegistryRemove(pRec->tReg.pRegistry, &pRec->tReg);
-	xrtFree(pRec);
+	XS_HttpRecordFree(pRec);
 	XS_ScriptRelease(pScript);
 	XS_GenerationConnectionRelease(pGeneration);
 }
@@ -928,12 +980,12 @@ static bool XS_HttpOnAccept(xnetlistener* pListener, xnetstream* pStream, ptr pD
 	(void)pListener;
 	if ( pRec == NULL ||
 	     !XS_ListenerSlotAcquireConnection(pSlot, (void**)&pRuntime, &pGeneration) ) {
-		xrtFree(pRec);
+		XS_HttpRecordFree(pRec);
 		return false;
 	}
 	if ( xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) != 0 ) {
 		XS_GenerationConnectionRelease(pGeneration);
-		xrtFree(pRec);
+		XS_HttpRecordFree(pRec);
 		return false;
 	}
 	pRec->pRuntime = pRuntime;
@@ -945,7 +997,7 @@ static bool XS_HttpOnAccept(xnetlistener* pListener, xnetstream* pStream, ptr pD
 	if ( !XS_RegistryAdd(&pRuntime->tRegistry, &pRec->tReg) ) {
 		XS_ScriptRelease(pRec->tReg.pScript);
 		XS_GenerationConnectionRelease(pGeneration);
-		xrtFree(pRec);
+		XS_HttpRecordFree(pRec);
 		return false;
 	}
 	(void)xrtNetStreamSetData(pStream, pRec);
@@ -990,7 +1042,7 @@ static void XS_HttpTlsOnClose(xtlsstream* pStream, xnetresult iResult, const xer
 	(void)iResult; (void)pError;
 	xrtTlsStreamDestroy(pStream);
 	XS_RegistryRemove(pRec->tReg.pRegistry, &pRec->tReg);
-	xrtFree(pRec);
+	XS_HttpRecordFree(pRec);
 	XS_ScriptRelease(pScript);
 	XS_GenerationConnectionRelease(pGeneration);
 }
@@ -1009,12 +1061,12 @@ static bool XS_HttpTlsOnAccept(xtlslistener* pListener, xtlsstream* pStream, ptr
 	(void)pListener;
 	if ( pRec == NULL ||
 	     !XS_ListenerSlotAcquireConnection(pSlot, (void**)&pRuntime, &pGeneration) ) {
-		xrtFree(pRec);
+		XS_HttpRecordFree(pRec);
 		return false;
 	}
 	if ( xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) != 0 ) {
 		XS_GenerationConnectionRelease(pGeneration);
-		xrtFree(pRec);
+		XS_HttpRecordFree(pRec);
 		return false;
 	}
 	pRec->pRuntime = pRuntime;
@@ -1026,7 +1078,7 @@ static bool XS_HttpTlsOnAccept(xtlslistener* pListener, xtlsstream* pStream, ptr
 	if ( !XS_RegistryAdd(&pRuntime->tRegistry, &pRec->tReg) ) {
 		XS_ScriptRelease(pRec->tReg.pScript);
 		XS_GenerationConnectionRelease(pGeneration);
-		xrtFree(pRec);
+		XS_HttpRecordFree(pRec);
 		return false;
 	}
 	(void)xrtTlsStreamSetEvents(pStream, &g_XS_HttpTlsStreamEvents, pRec);

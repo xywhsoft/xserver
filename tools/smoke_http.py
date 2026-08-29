@@ -1,10 +1,15 @@
 """xs3 冒烟基线：HTTP 行为断言（路由三态/静态/错误码/keep-alive/takeover）。
 由 test.bat 调用；任一断言失败以非零退出。"""
 import http.client
+import argparse
 import socket
 import sys
 
-HOST, PORT = '127.0.0.1', 8080
+parser = argparse.ArgumentParser(add_help=False)
+parser.add_argument('--port', type=int, default=8080)
+args = parser.parse_args()
+
+HOST, PORT = '127.0.0.1', args.port
 failures = []
 
 
