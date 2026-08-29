@@ -1,4 +1,0 @@
-文件名、目录名或卷标语法不正确。
-generated D:\GIT\xserver\src\script\tcc_builtin_resources.c
-resources: 268 (lzma 268, store 0)
-raw 7940 KB -> packed 1170 KB
