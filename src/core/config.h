@@ -261,11 +261,16 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 	}
 	pHostDefault = xrtValueObjectTake(pObj, XRT_STR_LITERAL("host_default"));
 	if ( pHostDefault != NULL ) {
-		if ( !XS_ConfigParseHost(pHostDefault, pServer->DefaultHost, pServer, sErr, iErrCap) ) return false;
 		if ( !XS_ConfigTrack(pApp, pHostDefault) ) {
+			xrtValueRelease(pHostDefault);
 			snprintf(sErr, iErrCap, "out of memory");
 			return false;
 		}
+		if ( xrtValueType(pHostDefault) != XVALUE_OBJECT ) {
+			snprintf(sErr, iErrCap, "field 'host_default' expect object");
+			return false;
+		}
+		if ( !XS_ConfigParseHost(pHostDefault, pServer->DefaultHost, pServer, sErr, iErrCap) ) return false;
 	} else {
 		/* 合成 DefaultHost：基础字段在此补齐（XS_ConfigParseHost 未经过） */
 		pServer->DefaultHost->Enabled = true;
@@ -273,7 +278,13 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 		pServer->DefaultHost->State = XS_RUN_STARTING;
 		pServer->DefaultHost->Custom = xrtValueObject();	/* 空 Custom，恒为对象 */
 		pServer->DefaultHost->RuntimeLock = xrtMutexCreate();
-		if ( pServer->DefaultHost->Custom == NULL || !XS_ConfigTrack(pApp, pServer->DefaultHost->Custom) ) {
+		if ( pServer->DefaultHost->Custom == NULL ) {
+			snprintf(sErr, iErrCap, "out of memory");
+			return false;
+		}
+		if ( !XS_ConfigTrack(pApp, pServer->DefaultHost->Custom) ) {
+			xrtValueRelease(pServer->DefaultHost->Custom);
+			pServer->DefaultHost->Custom = NULL;
 			snprintf(sErr, iErrCap, "out of memory");
 			return false;
 		}
@@ -315,10 +326,19 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 		snprintf(sErr, iErrCap, "out of memory");
 		return false;
 	}
+	if ( pServer->DefaultHost->Name[0] == '\0' ) {
+		snprintf(sErr, iErrCap, "host_default field 'name' must not be empty");
+		return false;
+	}
 
 	/* hosts[]：以 Take 移交后逐个解析 */
 	pHosts = xrtValueObjectTake(pObj, XRT_STR_LITERAL("hosts"));
 	if ( pHosts != NULL ) {
+		if ( !XS_ConfigTrack(pApp, pHosts) ) {
+			xrtValueRelease(pHosts);
+			snprintf(sErr, iErrCap, "out of memory");
+			return false;
+		}
 		if ( xrtValueType(pHosts) != XVALUE_ARRAY ) {
 			snprintf(sErr, iErrCap, "field 'hosts' expect array");
 			return false;
@@ -337,15 +357,40 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 					return false;
 				}
 				pServer->Hosts[i] = (XS_HostInfo*)xrtCalloc(1, sizeof(XS_HostInfo));
-				if ( pServer->Hosts[i] == NULL ||
-				     !XS_ConfigParseHost(pHostObj, pServer->Hosts[i], pServer, sErr, iErrCap) ) {
+				if ( pServer->Hosts[i] == NULL ) {
 					snprintf(sErr, iErrCap, "out of memory");
+					return false;
+				}
+				if ( !XS_ConfigParseHost(pHostObj, pServer->Hosts[i], pServer, sErr, iErrCap) ) {
 					return false;
 				}
 			}
 		}
-		if ( !XS_ConfigTrack(pApp, pHosts) ) {
-			snprintf(sErr, iErrCap, "out of memory");
+	}
+	/* host name 是 reload/API 键，必须在 server generation 内唯一。 */
+	for ( i = 0; i < pServer->HostCount; i++ ) {
+		XS_HostInfo* pHost = pServer->Hosts[i];
+		uint32 j;
+
+		if ( pHost->Name == NULL || pHost->Name[0] == '\0' ) {
+			snprintf(sErr, iErrCap, "field 'hosts[%u].name' required", i);
+			return false;
+		}
+		if ( strcmp(pHost->Name, pServer->DefaultHost->Name) == 0 ) {
+			snprintf(sErr, iErrCap, "duplicate host name '%s'", pHost->Name);
+			return false;
+		}
+		for ( j = 0; j < i; j++ ) {
+			if ( strcmp(pHost->Name, pServer->Hosts[j]->Name) == 0 ) {
+				snprintf(sErr, iErrCap, "duplicate host name '%s'", pHost->Name);
+				return false;
+			}
+		}
+		if ( pHost->Enabled &&
+		     (strcmp(pServer->Class, "http") == 0 || strcmp(pServer->Class, "ws") == 0) &&
+		     (pHost->Host == NULL || pHost->Host[0] == '\0') ) {
+			snprintf(sErr, iErrCap,
+				"virtual host '%s' requires non-empty field 'host'", pHost->Name);
 			return false;
 		}
 	}
@@ -387,12 +432,17 @@ static bool XS_ConfigBuild(const char* sSource, xvalue* pRoot, XS_App* pApp)
 
 	/* services：以 Take 移交（各 server 的 Custom 指向其中对象） */
 	pServices = xrtValueObjectTake(pRoot, XRT_STR_LITERAL("services"));
-	if ( pServices == NULL || xrtValueType(pServices) != XVALUE_ARRAY ) {
+	if ( pServices == NULL ) {
 		snprintf(pApp->ParseError, sizeof(pApp->ParseError), "field 'services' expect array");
 		return false;
 	}
 	if ( !XS_ConfigTrack(pApp, pServices) ) {
+		xrtValueRelease(pServices);
 		snprintf(pApp->ParseError, sizeof(pApp->ParseError), "out of memory");
+		return false;
+	}
+	if ( xrtValueType(pServices) != XVALUE_ARRAY ) {
+		snprintf(pApp->ParseError, sizeof(pApp->ParseError), "field 'services' expect array");
 		return false;
 	}
 	pApp->ServerCount = (uint32)xrtValueCount(pServices);

@@ -20,6 +20,7 @@
 #include "../core/engine.h"
 #include "../core/tls.h"
 #include "../runtime/registry.h"
+#include "../runtime/vhost.h"
 #include "../script/script.h"
 #include "stream.h"
 
@@ -36,6 +37,7 @@ typedef struct XS_HttpRuntime {
 	xtlslistener*		pTlsListener;
 	XS_ListenerSlot*	pListenerSlot;
 	XS_TlsTable		tTls;
+	XS_VHostTable		tVHosts;
 	XS_ConnRegistry		tRegistry;
 	XS_ServerGeneration*	pGeneration;
 	xhttp1limits		tLimits;
@@ -336,7 +338,8 @@ static void XS_HttpStatic(XS_HttpRecord* pRec)
 	str sFull;
 	xfileinfo tInfo;
 	xhttpfield* pField;
-	xstrview tTarget = pRec->tHead.Target;
+	xhttptarget tParsedTarget;
+	xstrview tTarget;
 
 	/* 方法限制 */
 	if ( !(XS_HttpViewEq(pRec->tHead.Method, "GET")) &&
@@ -344,7 +347,15 @@ static void XS_HttpStatic(XS_HttpRecord* pRec)
 		XS_HttpErrorPage(pRec, 405);
 		return;
 	}
-	/* 取 path（去掉 query） */
+	if ( !xrtHttpTargetParse(pRec->tHead.Method, pRec->tHead.Target, &tParsedTarget) ) {
+		XS_HttpErrorPage(pRec, 400);
+		return;
+	}
+	tTarget = tParsedTarget.Path;
+	if ( tTarget.Size == 0 && tParsedTarget.Form == XHTTP_TARGET_ABSOLUTE ) {
+		tTarget = XRT_STR_LITERAL("/");
+	}
+	/* 取有效 request-target 的 path（origin/absolute-form 统一）。 */
 	for ( i = 0; i < tTarget.Size && tTarget.Data[i] != '?'; i++ ) {}
 	if ( i == 0 || i >= sizeof(arrPath) ) {
 		XS_HttpErrorPage(pRec, 400);
@@ -559,77 +570,6 @@ static bool XS_HttpViewEq(xstrview tView, const char* sLiteral)
 	return true;
 }
 
-static bool XS_HttpNameMatch(const char* sHostList, const char* sName, size_t iNameLen)
-{
-	const char* pSeg = sHostList;
-
-	while ( pSeg != NULL && *pSeg != '\0' ) {
-		const char* pEnd = strchr(pSeg, ';');
-		size_t iLen = (pEnd != NULL) ? (size_t)(pEnd - pSeg) : strlen(pSeg);
-
-		while ( iLen > 0 && *pSeg == ' ' ) { pSeg++; iLen--; }
-		while ( iLen > 0 && pSeg[iLen - 1] == ' ' ) { iLen--; }
-		if ( iLen == iNameLen ) {
-			size_t i;
-
-			for ( i = 0; i < iLen; i++ ) {
-				char chA = pSeg[i];
-				char chB = sName[i];
-
-				if ( chA >= 'A' && chA <= 'Z' ) chA = (char)(chA - 'A' + 'a');
-				if ( chB >= 'A' && chB <= 'Z' ) chB = (char)(chB - 'A' + 'a');
-				if ( chA != chB ) {
-					break;
-				}
-			}
-			if ( i == iLen ) {
-				return true;
-			}
-		}
-		pSeg = (pEnd != NULL) ? pEnd + 1 : NULL;
-	}
-	return false;
-}
-
-/* Host 头（头名与值均忽略大小写）→ host；无匹配回落 DefaultHost */
-static XS_HostInfo* XS_HttpRoute(XS_HttpRecord* pRec)
-{
-	XS_ServerInfo* pServer = pRec->pRuntime->pServer;
-	size_t iField;
-	size_t k;
-
-	for ( iField = 0; iField < pRec->tHead.FieldCount; iField++ ) {
-		xstrview tName = pRec->tHead.Fields[iField].Name;
-		xstrview tVal;
-		size_t iHostLen;
-		size_t iServer;
-
-		for ( k = 0; k < tName.Size; k++ ) {
-			char chA = tName.Data[k];
-			char chB = "host"[k < 4 ? k : 3];
-			if ( chA >= 'A' && chA <= 'Z' ) chA = (char)(chA - 'A' + 'a');
-			if ( chB >= 'A' && chB <= 'Z' ) chB = (char)(chB - 'A' + 'a');
-			if ( chA != chB ) {
-				break;
-			}
-		}
-		if ( k != 4 || tName.Size != 4 ) {
-			continue;
-		}
-		tVal = pRec->tHead.Fields[iField].Value;
-		for ( iHostLen = 0; iHostLen < tVal.Size && tVal.Data[iHostLen] != ':'; iHostLen++ ) {}
-		for ( iServer = 0; iServer < pServer->HostCount; iServer++ ) {
-			if ( pServer->Hosts[iServer]->Enabled &&
-			     pServer->Hosts[iServer]->Host != NULL &&
-			     XS_HttpNameMatch(pServer->Hosts[iServer]->Host, tVal.Data, iHostLen) ) {
-				return pServer->Hosts[iServer];
-			}
-		}
-		break;
-	}
-	return pServer->DefaultHost;
-}
-
 /* ============================================================
  * body 排空与 keep-alive 循环
  * ============================================================ */
@@ -680,6 +620,8 @@ static bool XS_HttpBodyReady(XS_HttpRecord* pRec)
 static void XS_HttpFinishRequest(XS_HttpRecord* pRec, bool bClose)
 {
 	xrtHttp1HeadInit(&pRec->tHead, pRec->arrFields, XS_HTTP_MAX_FIELDS);
+	pRec->pHost = NULL;
+	pRec->tReg.pHost = NULL;
 	pRec->iPhase = 0;
 	if ( bClose ) {
 		if ( pRec->tReg.pTls != NULL ) {
@@ -791,7 +733,7 @@ static const xtlsstreamevents g_XS_HttpTlsTakenEvents = {
 static bool XS_HttpDispatch(XS_HttpRecord* pRec)
 {
 	XS_HttpRuntime* pRuntime = pRec->pRuntime;
-	XS_ScriptRuntime* pScript = pRec->tReg.pScript;
+	XS_ScriptRuntime* pScript = XS_ScriptAcquireHost(pRec->pHost);
 	XS_HttpReq tReq;
 	XS_RequestResult eResult = XS_FALLBACK;
 	uint64 iWireBefore = pRec->tBody.WireBytes;
@@ -804,6 +746,13 @@ static bool XS_HttpDispatch(XS_HttpRecord* pRec)
 	tReq.body = &pRec->tBody;
 	tReq.host = pRec->pHost;
 	tReq.server = pRuntime->pServer;
+	if ( pRec->pHost->DevFile != NULL && pRec->pHost->DevFile[0] != '\0' &&
+	     (pRec->pHost->DevLang == NULL || strcmp(pRec->pHost->DevLang, "c") == 0) &&
+	     pScript == NULL ) {
+		XS_HttpErrorPage(pRec, 503);
+		XS_HttpFinishRequest(pRec, true);
+		return false;
+	}
 	if ( pScript != NULL && pScript->procRequest != NULL ) {
 		XS_ScriptRuntime* pPrevious = XS_ScriptEnter(pScript);
 
@@ -813,17 +762,20 @@ static bool XS_HttpDispatch(XS_HttpRecord* pRec)
 	/* 脚本通过公开 Body Reader 推进了解码状态，但网络 buffer 的消费权仍在驱动。
 	 * WireBytes 是本 reader 已消费的线路字节数，精确同步其增量后再排空余量。 */
 	if ( pRec->tBody.WireBytes < iWireBefore ) {
+		XS_ScriptRelease(pScript);
 		XS_HttpFinishRequest(pRec, true);
 		return false;
 	}
 	iWireUsed = pRec->tBody.WireBytes - iWireBefore;
 	if ( iWireUsed > (uint64)XS_HttpAvail(pRec) ) {
+		XS_ScriptRelease(pScript);
 		XS_HttpFinishRequest(pRec, true);
 		return false;
 	}
 	if ( iWireUsed > 0 ) XS_HttpConsume(pRec, (size_t)iWireUsed);
 	if ( eResult == XS_TAKEOVER ) {
 		/* 应用接管仍属于本 generation；终态 Close 才出表并释放引用。 */
+		pRec->tReg.pScript = pScript;
 		pRec->bTakenOver = true;
 		if ( pRec->tReg.pTls != NULL ) {
 			(void)xrtTlsStreamSetEvents(pRec->tReg.pTls, &g_XS_HttpTlsTakenEvents, pRec);
@@ -832,6 +784,7 @@ static bool XS_HttpDispatch(XS_HttpRecord* pRec)
 		}
 		return false;
 	}
+	XS_ScriptRelease(pScript);
 	if ( eResult == XS_FALLBACK ) {
 		XS_HttpStatic(pRec);
 	}
@@ -884,6 +837,8 @@ static void XS_HttpDrive(XS_HttpRecord* pRec)
 			}
 		}
 		/* phase == HEAD */
+		pRec->pHost = pRuntime->pDefaultHost;
+		pRec->tReg.pHost = pRec->pHost;
 		xrtHttp1HeadInit(&pRec->tHead, pRec->arrFields, XS_HTTP_MAX_FIELDS);
 		switch ( XS_HttpParseHead(pRec, &tErr) ) {
 		case XHTTP1_MORE:
@@ -901,7 +856,21 @@ static void XS_HttpDrive(XS_HttpRecord* pRec)
 			XS_HttpFinishRequest(pRec, true);
 			return;
 		}
-		pRec->pHost = XS_HttpRoute(pRec);
+		{
+			XS_VHostResult eRoute = XS_VHostRouteHead(&pRuntime->tVHosts,
+				&pRec->tHead, pRec->tHead.Version == XHTTP_VERSION_1_1,
+				&pRec->pHost);
+
+			if ( eRoute != XS_VHOST_FOUND ) {
+				pRec->pHost = pRuntime->pDefaultHost;
+				pRec->tReg.pHost = pRec->pHost;
+				XS_HttpErrorPage(pRec,
+					eRoute == XS_VHOST_BAD_REQUEST ? 400 : 404);
+				XS_HttpFinishRequest(pRec, true);
+				return;
+			}
+			pRec->tReg.pHost = pRec->pHost;
+		}
 
 		/* body 预备 */
 		if ( !xrtHttp1RequestBodyPlan(&pRec->tHead, &pRec->tPlan) ) {
@@ -990,13 +959,12 @@ static bool XS_HttpOnAccept(xnetlistener* pListener, xnetstream* pStream, ptr pD
 		return false;
 	}
 	pRec->pRuntime = pRuntime;
+	pRec->pHost = pRuntime->pDefaultHost;
 	pRec->tReg.pHost = pRuntime->pDefaultHost;
 	pRec->tReg.pTcp = pStream;
 	pRec->tReg.pGeneration = pGeneration;
-	pRec->tReg.pScript = XS_ScriptAcquireHost(pRuntime->pDefaultHost);
 	xrtHttp1HeadInit(&pRec->tHead, pRec->arrFields, XS_HTTP_MAX_FIELDS);
 	if ( !XS_RegistryAdd(&pRuntime->tRegistry, &pRec->tReg) ) {
-		XS_ScriptRelease(pRec->tReg.pScript);
 		XS_GenerationConnectionRelease(pGeneration);
 		XS_HttpRecordFree(pRec);
 		return false;
@@ -1071,13 +1039,12 @@ static bool XS_HttpTlsOnAccept(xtlslistener* pListener, xtlsstream* pStream, ptr
 		return false;
 	}
 	pRec->pRuntime = pRuntime;
+	pRec->pHost = pRuntime->pDefaultHost;
 	pRec->tReg.pHost = pRuntime->pDefaultHost;
 	pRec->tReg.pTls = pStream;
 	pRec->tReg.pGeneration = pGeneration;
-	pRec->tReg.pScript = XS_ScriptAcquireHost(pRuntime->pDefaultHost);
 	xrtHttp1HeadInit(&pRec->tHead, pRec->arrFields, XS_HTTP_MAX_FIELDS);
 	if ( !XS_RegistryAdd(&pRuntime->tRegistry, &pRec->tReg) ) {
-		XS_ScriptRelease(pRec->tReg.pScript);
 		XS_GenerationConnectionRelease(pGeneration);
 		XS_HttpRecordFree(pRec);
 		return false;
@@ -1236,14 +1203,16 @@ static void XS_HttpHdrCacheBuildAll(XS_HttpRuntime* pRuntime, XS_ServerInfo* pSe
 		return;
 	}
 	{
-		XS_HttpHostHdrs* pHdrs = XS_HttpHdrCacheBuild(pServer->DefaultHost);
+		XS_HttpHostHdrs* pHdrs = pServer->DefaultHost->Enabled ?
+			XS_HttpHdrCacheBuild(pServer->DefaultHost) : NULL;
 
 		if ( pHdrs != NULL ) {
 			pRuntime->arrHdrCache[pRuntime->iHdrCacheCount++] = pHdrs;
 		}
 	}
 	for ( i = 0; i < pServer->HostCount; i++ ) {
-		XS_HttpHostHdrs* pHdrs = XS_HttpHdrCacheBuild(pServer->Hosts[i]);
+		XS_HttpHostHdrs* pHdrs = pServer->Hosts[i]->Enabled ?
+			XS_HttpHdrCacheBuild(pServer->Hosts[i]) : NULL;
 
 		if ( pHdrs != NULL ) {
 			pRuntime->arrHdrCache[pRuntime->iHdrCacheCount++] = pHdrs;
@@ -1272,10 +1241,11 @@ static bool XS_HttpStartEx(
 	size_t iErrCap)
 {
 	XS_HttpRuntime* pRuntime = (XS_HttpRuntime*)xrtCalloc(1, sizeof(XS_HttpRuntime));
-	XS_ScriptRuntime* pScript = (XS_ScriptRuntime*)pServer->DefaultHost->Runtime;
 	xhttp1limits tDef;
 	xnetaddr tAddr;
 	int64 iVal = 0;
+	uint32 i;
+	bool bHasRequestProc = false;
 
 	if ( pRuntime == NULL ) {
 		snprintf(sErr, iErrCap, "out of memory");
@@ -1287,7 +1257,17 @@ static bool XS_HttpStartEx(
 	xrtAtomic32Init(&pRuntime->tStopping, 0);
 	pServer->Runtime = pRuntime;
 
-	if ( pScript == NULL || pScript->procRequest == NULL ) {
+	for ( i = 0; i <= pServer->HostCount; i++ ) {
+		XS_HostInfo* pHost = i == 0 ? pServer->DefaultHost : pServer->Hosts[i - 1];
+		XS_ScriptRuntime* pScript = pHost != NULL && pHost->Enabled ?
+			(XS_ScriptRuntime*)pHost->Runtime : NULL;
+
+		if ( pScript != NULL && pScript->procRequest != NULL ) {
+			bHasRequestProc = true;
+			break;
+		}
+	}
+	if ( !bHasRequestProc ) {
 		/* 无 RequestProc：纯静态服务（设计 §5.3：static 也走 fallback） */
 		printf("[xs] http server '%s' static-only mode\n", pServer->Name);
 	}
@@ -1297,6 +1277,9 @@ static bool XS_HttpStartEx(
 	}
 	if ( !XS_RegistryInit(&pRuntime->tRegistry) ) {
 		snprintf(sErr, iErrCap, "registry init failed");
+		return false;
+	}
+	if ( !XS_VHostTableBuild(pServer, &pRuntime->tVHosts, sErr, iErrCap) ) {
 		return false;
 	}
 
@@ -1460,6 +1443,7 @@ static void XS_HttpUnit(XS_HttpRuntime* pRuntime)
 	}
 	XS_RegistryUnit(&pRuntime->tRegistry);
 	XS_HttpHdrCacheUnit(pRuntime);
+	XS_VHostTableUnit(&pRuntime->tVHosts);
 	XS_TlsTableUnit(&pRuntime->tTls);
 	if ( pRuntime->pListenerSlot != NULL ) {
 		XS_ListenerSlotDestroyEmpty(pRuntime->pListenerSlot);

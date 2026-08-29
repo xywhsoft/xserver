@@ -194,34 +194,22 @@ typedef struct XS_TlsTable {
 	xmutex*			pLock;		/* Select（worker 线程）与 Refresh（任意线程）互斥 */
 } XS_TlsTable;
 
-/* 按 host 域名列表忽略大小写匹配 SNI 名（xbytesview 非零结尾） */
+/* 与 HTTP/WS 共用 xrt authority 规则匹配 SNI（xbytesview 非零结尾）。 */
 static bool XS_TlsNameMatch(const char* sHostList, xbytesview tName)
 {
 	const char* pSeg = sHostList;
+	xstrview tServerName = xrtStrViewN((const char*)tName.Data, tName.Size);
 
 	while ( pSeg != NULL && *pSeg != '\0' ) {
 		const char* pEnd = strchr(pSeg, ';');
 		size_t iLen = (pEnd != NULL) ? (size_t)(pEnd - pSeg) : strlen(pSeg);
+		xhttpauthority tAuthority;
 
-		while ( iLen > 0 && *pSeg == ' ' ) { pSeg++; iLen--; }
-		while ( iLen > 0 && pSeg[iLen - 1] == ' ' ) { iLen--; }
-		if ( iLen == tName.Size ) {
-			size_t i;
-
-			for ( i = 0; i < iLen; i++ ) {
-				char chA = pSeg[i];
-				char chB = (char)tName.Data[i];
-
-				if ( chA >= 'A' && chA <= 'Z' ) chA = (char)(chA - 'A' + 'a');
-				if ( chB >= 'A' && chB <= 'Z' ) chB = (char)(chB - 'A' + 'a');
-				if ( chA != chB ) {
-					break;
-				}
-			}
-			if ( i == iLen ) {
-				return true;
-			}
-		}
+		while ( iLen > 0 && (*pSeg == ' ' || *pSeg == '\t') ) { pSeg++; iLen--; }
+		while ( iLen > 0 && (pSeg[iLen - 1] == ' ' || pSeg[iLen - 1] == '\t') ) { iLen--; }
+		if ( xrtHttpHostParse(xrtStrViewN(pSeg, iLen), &tAuthority) &&
+		     (tAuthority.Flags & XHTTP_AUTHORITY_HAS_PORT) == 0 &&
+		     xrtHttpHostEqual(tAuthority.Host, tServerName) ) return true;
 		pSeg = (pEnd != NULL) ? pEnd + 1 : NULL;
 	}
 	return false;
@@ -276,7 +264,7 @@ static bool XS_TlsSlotSelect(ptr pContext, const xtlsserverrequest* pRequest, xt
 	return bFound;
 }
 
-/* 从 DefaultHost + hosts[] 收集证书；DefaultHost 证书（若存在）恒为 entries[0] */
+/* 从启用的 DefaultHost + hosts[] 收集证书；首个可用身份是 SNI 回落。 */
 static bool XS_TlsTableBuild(XS_ServerInfo* pServer, XS_TlsTable* pTable, char* sErr, size_t iErrCap)
 {
 	uint32 iCount = 1 + pServer->HostCount;
@@ -285,11 +273,19 @@ static bool XS_TlsTableBuild(XS_ServerInfo* pServer, XS_TlsTable* pTable, char* 
 	memset(pTable, 0, sizeof(*pTable));
 	pTable->pEntries = (XS_TlsEntry*)xrtCalloc(iCount, sizeof(XS_TlsEntry));
 	pTable->pLock = pTable->pEntries != NULL ? xrtMutexCreate() : NULL;
-	if ( pTable->pEntries == NULL ) {
+	if ( pTable->pEntries == NULL || pTable->pLock == NULL ) {
+		xrtFree(pTable->pEntries);
+		pTable->pEntries = NULL;
 		snprintf(sErr, iErrCap, "out of memory");
 		return false;
 	}
-	if ( pServer->DefaultHost->TlsCert != NULL ) {
+	if ( pServer->DefaultHost->Enabled &&
+	     ((pServer->DefaultHost->TlsCert == NULL) != (pServer->DefaultHost->TlsKey == NULL)) ) {
+		snprintf(sErr, iErrCap, "tls host '%s' requires both tls_cert and tls_key",
+			pServer->DefaultHost->Name);
+		return false;
+	}
+	if ( pServer->DefaultHost->Enabled && pServer->DefaultHost->TlsCert != NULL ) {
 		pTable->pEntries[pTable->iCount].pHost = pServer->DefaultHost;
 		pTable->pEntries[pTable->iCount].pIdentity = XS_TlsLoadHost(pServer->DefaultHost, sErr, iErrCap);
 		if ( pTable->pEntries[pTable->iCount].pIdentity == NULL && sErr[0] != '\0' ) {
@@ -300,6 +296,12 @@ static bool XS_TlsTableBuild(XS_ServerInfo* pServer, XS_TlsTable* pTable, char* 
 		}
 	}
 	for ( i = 0; i < pServer->HostCount; i++ ) {
+		if ( !pServer->Hosts[i]->Enabled ) continue;
+		if ( (pServer->Hosts[i]->TlsCert == NULL) != (pServer->Hosts[i]->TlsKey == NULL) ) {
+			snprintf(sErr, iErrCap, "tls host '%s' requires both tls_cert and tls_key",
+				pServer->Hosts[i]->Name);
+			return false;
+		}
 		if ( pServer->Hosts[i]->TlsCert == NULL ) {
 			continue;
 		}

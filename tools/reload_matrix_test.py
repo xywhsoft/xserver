@@ -83,12 +83,12 @@ def tcp_echo(sock: socket.socket, payload: bytes) -> None:
     assert data == payload, data
 
 
-def ws_open(port: int) -> socket.socket:
+def ws_open(port: int, host: str = "x") -> socket.socket:
     sock = socket.create_connection(("127.0.0.1", port), timeout=3)
     sock.settimeout(3)
     key = base64.b64encode(os.urandom(16)).decode()
     sock.sendall(
-        f"GET / HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+        f"GET / HTTP/1.1\r\nHost: {host}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
         f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n".encode()
     )
     response = b""
@@ -98,7 +98,7 @@ def ws_open(port: int) -> socket.socket:
     return sock
 
 
-def ws_echo(sock: socket.socket, payload: bytes) -> None:
+def ws_send_expect(sock: socket.socket, payload: bytes, expected: bytes) -> None:
     mask = os.urandom(4)
     assert len(payload) < 126
     frame = bytes([0x81, 0x80 | len(payload)]) + mask
@@ -106,9 +106,13 @@ def ws_echo(sock: socket.socket, payload: bytes) -> None:
     sock.sendall(frame)
     data = b""
     deadline = time.time() + 3
-    while payload not in data and time.time() < deadline:
+    while expected not in data and time.time() < deadline:
         data += sock.recv(4096)
-    assert payload in data, data
+    assert expected in data, data
+
+
+def ws_echo(sock: socket.socket, payload: bytes) -> None:
+    ws_send_expect(sock, payload, payload)
 
 
 def udp_echo(port: int, payload: bytes) -> None:
@@ -164,6 +168,14 @@ def write_config(path: Path, ports: dict[str, int], marker: int) -> None:
             "reload_marker": marker,
             "devlang": "c",
             "devfile": "script/ws_main.c",
+            "hosts": [
+                {
+                    "name": "ws-admin",
+                    "host": "admin.ws.example.com",
+                    "devlang": "c",
+                    "devfile": "hosts/ws-admin/main.c",
+                },
+            ],
         },
     ]
     config = {"engine": {"workers": 2}, "reload_root": marker, "services": services}
@@ -184,6 +196,7 @@ def main() -> int:
         shutil.copy2(source_exe, exe)
         shutil.copytree(ROOT / "release" / "script", app / "script")
         shutil.copytree(ROOT / "release" / "wwwroot", app / "wwwroot")
+        shutil.copytree(ROOT / "release" / "hosts", app / "hosts")
         write_config(app / "xs.json", ports, 0)
 
         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
@@ -195,6 +208,7 @@ def main() -> int:
             old_http: http.client.HTTPConnection | None = None
             old_tcp: socket.socket | None = None
             old_ws: socket.socket | None = None
+            old_ws_admin: socket.socket | None = None
             try:
                 for name in ("http", "tcp", "ws"):
                     wait_port(ports[name])
@@ -212,8 +226,16 @@ def main() -> int:
 
                 old_ws = ws_open(ports["ws"])
                 ws_echo(old_ws, b"old-ws-before")
+                old_ws_admin = ws_open(ports["ws"], "admin.ws.example.com")
+                ws_send_expect(old_ws_admin, b"before", b"ws-admin-script")
                 udp_echo(ports["udp"], b"udp-before")
 
+                admin_ws_script = app / "hosts" / "ws-admin" / "main.c"
+                admin_ws_script.write_text(
+                    admin_ws_script.read_text(encoding="utf-8").replace(
+                        "ws-admin-script", "ws-admin-new"),
+                    encoding="utf-8",
+                )
                 write_config(app / "xs.json", ports, 1)
                 reload_id = submit_reload(ports["http"], "/reload-all")
                 result = wait_reload(ports["http"], reload_id)
@@ -236,6 +258,7 @@ def main() -> int:
                 assert old_http.getresponse().read() == str(ports["http"]).encode()
                 tcp_echo(old_tcp, b"old-tcp-after")
                 ws_echo(old_ws, b"old-ws-after")
+                ws_send_expect(old_ws_admin, b"after", b"ws-admin-script")
 
                 # HTTP 旧脚本持有旧 TCP server lease：TCP 连接关闭后仍不得提前释放。
                 old_tcp.close()
@@ -263,6 +286,11 @@ def main() -> int:
                     ws_echo(new_ws, b"new-ws")
                 finally:
                     new_ws.close()
+                new_ws_admin = ws_open(ports["ws"], "admin.ws.example.com")
+                try:
+                    ws_send_expect(new_ws_admin, b"new", b"ws-admin-new")
+                finally:
+                    new_ws_admin.close()
                 udp_echo(ports["udp"], b"udp-after")
             finally:
                 if old_http is not None:
@@ -271,6 +299,8 @@ def main() -> int:
                     old_tcp.close()
                 if old_ws is not None:
                     old_ws.close()
+                if old_ws_admin is not None:
+                    old_ws_admin.close()
                 if process.poll() is None:
                     if os.name == "nt":
                         process.send_signal(signal.CTRL_BREAK_EVENT)

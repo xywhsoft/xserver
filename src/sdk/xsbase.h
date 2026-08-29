@@ -213,7 +213,8 @@ XS_API void xsEnumHosts(XS_ServerInfo* pServer, XS_HostEnumProc procEach, void* 
 XS_API xvalue* xsConfigRoot(void);			/* xs.json 顶层 Custom */
 
 /* 重载协调器：Submit 返回 0 表示未受理；非零 ID 可用 xsReloadQuery 查询终态。
- * 同目标尚未开始的旧意图会被最新意图覆盖；失败时旧代原样服务。
+ * host/server 都以完整 server generation 为发布单元，同 server 旧意图会被
+ * 最新意图覆盖；失败时旧代原样服务。
  * bool 入口是兼容包装，只表示 Submit 是否返回非零。 */
 XS_API XS_ReloadId xsReloadHostSubmit(XS_HostInfo* pHost);
 XS_API XS_ReloadId xsReloadServerSubmit(const char* sName);

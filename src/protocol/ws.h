@@ -17,6 +17,7 @@
 #include "../core/config.h"
 #include "../core/engine.h"
 #include "../core/tls.h"
+#include "../runtime/vhost.h"
 #include "../script/script.h"
 #include "http.h"
 
@@ -24,12 +25,12 @@
 
 typedef struct XS_WsRuntime {
 	XS_ServerInfo*		pServer;
-	XS_HostInfo*		pHost;
 	bool			bTls;
 	xnetlistener*		pListener;
 	xtlslistener*		pTlsListener;
 	XS_ListenerSlot*	pListenerSlot;
 	XS_TlsTable		tTls;
+	XS_VHostTable		tVHosts;
 	xhttp1limits		tLimits;
 	str			sProtocol;	/* ws_protocol 旋钮（可空） */
 	uint64			iMessageLimit;	/* 0 = 内核默认 */
@@ -57,6 +58,7 @@ typedef struct XS_WsConn {
 	size_t			iMsgSize;
 	size_t			iMsgCap;
 	uint8			iMsgOpcode;
+	bool			bUpgradeStarted;
 	bool			bHandshakeDone;
 } XS_WsConn;
 
@@ -142,6 +144,9 @@ static const xwsstreamevents g_XS_WsStreamEvents;	/* 前向声明（定义在事
 static bool XS_WsUpgrade(XS_WsConn* pConn)
 {
 	XS_WsRuntime* pRuntime = pConn->pRuntime;
+	XS_HostInfo* pHost = NULL;
+	XS_ScriptRuntime* pScript = NULL;
+	XS_VHostResult eRoute;
 	xwsupgradeserverconfig tSrvCfg;
 	xwsupgrade tUpgrade;
 	xhttpfield arrFields[4];
@@ -159,6 +164,21 @@ static bool XS_WsUpgrade(XS_WsConn* pConn)
 		XS_WsReject(pConn, 400);
 		return false;
 	}
+	eRoute = XS_VHostRouteHead(&pRuntime->tVHosts, &pConn->tHead, true, &pHost);
+	if ( eRoute != XS_VHOST_FOUND ) {
+		XS_WsReject(pConn, eRoute == XS_VHOST_BAD_REQUEST ? 400 : 404);
+		return false;
+	}
+	pScript = XS_ScriptAcquireHost(pHost);
+	if ( pScript == NULL ||
+	     (pScript->procWsText == NULL && pScript->procWsBinary == NULL) ) {
+		XS_ScriptRelease(pScript);
+		XS_WsReject(pConn, 503);
+		return false;
+	}
+	/* upgrade 是 WS 连接的唯一路由点；此后 host+脚本一直固定到 Close。 */
+	pConn->pHost = pHost;
+	pConn->pScript = pScript;
 	if ( !xrtWsUpgradeResponseFields(xrtStrViewN(tUpgrade.Accept, strlen(tUpgrade.Accept)),
 		tUpgrade.Protocol, xrtStrViewN(tUpgrade.Extensions, tUpgrade.ExtensionSize),
 		arrFields, 4, &iCount) ||
@@ -212,7 +232,7 @@ static void XS_WsOnRead(xnetstream* pStream, xnetbuf* pBuffer, ptr pData)
 	xhttp1errorinfo tErr;
 
 	(void)pStream; (void)pBuffer;
-	if ( pConn->bHandshakeDone ) {
+	if ( pConn->bHandshakeDone || pConn->bUpgradeStarted ) {
 		return;		/* 已移交 WS 层，不该再收到 */
 	}
 	switch ( xrtHttp1RequestParseBuffer((xnetbuf*)xrtNetStreamBuffer(pConn->pTcp),
@@ -225,6 +245,7 @@ static void XS_WsOnRead(xnetstream* pStream, xnetbuf* pBuffer, ptr pData)
 	default:
 		break;
 	}
+	pConn->bUpgradeStarted = true;
 	(void)XS_WsUpgrade(pConn);
 }
 
@@ -256,7 +277,7 @@ static void XS_WsTlsOnRead(xtlsstream* pStream, const xnetbuf* pBuffer, ptr pDat
 	xhttp1errorinfo tErr;
 
 	(void)pStream; (void)pBuffer;
-	if ( pConn->bHandshakeDone ) {
+	if ( pConn->bHandshakeDone || pConn->bUpgradeStarted ) {
 		return;
 	}
 	switch ( xrtHttp1RequestParseTls(pConn->pTls, &pConn->tHead, &pConn->pRuntime->tLimits, &tErr) ) {
@@ -268,6 +289,7 @@ static void XS_WsTlsOnRead(xtlsstream* pStream, const xnetbuf* pBuffer, ptr pDat
 	default:
 		break;
 	}
+	pConn->bUpgradeStarted = true;
 	(void)XS_WsUpgrade(pConn);
 }
 
@@ -441,19 +463,11 @@ static bool XS_WsOnAccept(xnetlistener* pListener, xnetstream* pStream, ptr pDat
 		xrtFree(pConn);
 		return false;
 	}
-	pConn->pScript = XS_ScriptAcquireHost(pRuntime->pHost);
-	if ( pConn->pScript == NULL ) {
-		XS_GenerationConnectionRelease(pGeneration);
-		xrtFree(pConn);
-		return false;
-	}
 	pConn->pRuntime = pRuntime;
-	pConn->pHost = pRuntime->pHost;
 	pConn->pGeneration = pGeneration;
 	pConn->pTcp = pStream;
 	xrtHttp1HeadInit(&pConn->tHead, pConn->arrFields, XS_WS_MAX_FIELDS);
 	if ( !XS_WsListAdd(pRuntime, pConn) ) {
-		XS_ScriptRelease(pConn->pScript);
 		XS_GenerationConnectionRelease(pGeneration);
 		xrtFree(pConn);
 		return false;
@@ -492,19 +506,11 @@ static bool XS_WsTlsOnAccept(xtlslistener* pListener, xtlsstream* pStream, ptr p
 		xrtFree(pConn);
 		return false;
 	}
-	pConn->pScript = XS_ScriptAcquireHost(pRuntime->pHost);
-	if ( pConn->pScript == NULL ) {
-		XS_GenerationConnectionRelease(pGeneration);
-		xrtFree(pConn);
-		return false;
-	}
 	pConn->pRuntime = pRuntime;
-	pConn->pHost = pRuntime->pHost;
 	pConn->pGeneration = pGeneration;
 	pConn->pTls = pStream;
 	xrtHttp1HeadInit(&pConn->tHead, pConn->arrFields, XS_WS_MAX_FIELDS);
 	if ( !XS_WsListAdd(pRuntime, pConn) ) {
-		XS_ScriptRelease(pConn->pScript);
 		XS_GenerationConnectionRelease(pGeneration);
 		xrtFree(pConn);
 		return false;
@@ -546,7 +552,6 @@ static bool XS_WsStartEx(
 		return false;
 	}
 	pRuntime->pServer = pServer;
-	pRuntime->pHost = pServer->DefaultHost;
 	pRuntime->pGeneration = (XS_ServerGeneration*)pServer->Generation;
 	pRuntime->pConnLock = xrtMutexCreate();
 	if ( pRuntime->pConnLock == NULL ) {
@@ -557,13 +562,25 @@ static bool XS_WsStartEx(
 	pServer->Runtime = pRuntime;
 
 	{
-		XS_ScriptRuntime* pScript = (XS_ScriptRuntime*)pServer->DefaultHost->Runtime;
+		uint32 i;
 
-		if ( pScript == NULL || (pScript->procWsText == NULL && pScript->procWsBinary == NULL) ) {
-			snprintf(sErr, iErrCap, "ws server '%s' requires script exporting WsText/WsBinary",
-				pServer->Name);
-			return false;
+		for ( i = 0; i <= pServer->HostCount; i++ ) {
+			XS_HostInfo* pHost = i == 0 ? pServer->DefaultHost : pServer->Hosts[i - 1];
+			XS_ScriptRuntime* pScript;
+
+			if ( pHost == NULL || !pHost->Enabled ) continue;
+			pScript = (XS_ScriptRuntime*)pHost->Runtime;
+			if ( pScript == NULL ||
+			     (pScript->procWsText == NULL && pScript->procWsBinary == NULL) ) {
+				snprintf(sErr, iErrCap,
+					"ws host '%s/%s' requires script exporting WsText/WsBinary",
+					pServer->Name, pHost->Name != NULL ? pHost->Name : "?");
+				return false;
+			}
 		}
+	}
+	if ( !XS_VHostTableBuild(pServer, &pRuntime->tVHosts, sErr, iErrCap) ) {
+		return false;
 	}
 	if ( !xrtNetAddrParse(&tAddr, pServer->IP ? pServer->IP : "0.0.0.0", pServer->Port) ) {
 		snprintf(sErr, iErrCap, "ws server '%s' addr parse failed", pServer->Name);
@@ -736,6 +753,7 @@ static void XS_WsUnit(XS_WsRuntime* pRuntime)
 		return;
 	}
 	xrtFree(pRuntime->sProtocol);
+	XS_VHostTableUnit(&pRuntime->tVHosts);
 	XS_TlsTableUnit(&pRuntime->tTls);
 	if ( pRuntime->pListenerSlot != NULL ) {
 		XS_ListenerSlotDestroyEmpty(pRuntime->pListenerSlot);

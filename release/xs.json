@@ -104,7 +104,15 @@
       "backlog": 64,
       "recv_limit": 1048576,
       "devlang": "c",
-      "devfile": "script/ws_main.c"
+      "devfile": "script/ws_main.c",
+      "hosts": [
+        {
+          "name": "ws-admin",
+          "host": "admin.ws.example.com",
+          "devlang": "c",
+          "devfile": "hosts/ws-admin/main.c"
+        }
+      ]
     },
     {
       "enabled": true,

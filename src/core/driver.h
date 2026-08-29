@@ -206,19 +206,46 @@ static bool XS_HostHasScript(XS_HostInfo* pHost)
 	       (pHost->DevLang == NULL || strcmp(pHost->DevLang, "c") == 0);
 }
 
-static bool XS_ClassNeedsScript(const char* sClass)
-{
-	return strcmp(sClass, "custom") == 0 || strcmp(sClass, "tcp") == 0 ||
-	       strcmp(sClass, "udp") == 0 || strcmp(sClass, "ws") == 0;
-}
-
 static bool XS_ServerScriptsLoad(XS_ServerInfo* pServer)
 {
-	if ( XS_HostHasScript(pServer->DefaultHost) ) {
-		if ( !XS_ScriptLoad(pServer->DefaultHost) ) return false;
-	} else if ( XS_ClassNeedsScript(pServer->Class) ) {
-		printf("[xs] server '%s' class %s requires devfile\n",
-			pServer->Name, pServer->Class);
+	bool bVirtualHosts = strcmp(pServer->Class, "http") == 0 ||
+		strcmp(pServer->Class, "ws") == 0;
+	uint32 iCount = bVirtualHosts ? pServer->HostCount + 1 : 1;
+	uint32 i;
+
+	if ( bVirtualHosts ) {
+		XS_VHostTable tCheck;
+		char sErr[256];
+
+		if ( !XS_VHostTableBuild(pServer, &tCheck, sErr, sizeof(sErr)) ) {
+			printf("[xs] server '%s' virtual host config invalid: %s\n",
+				pServer->Name, sErr);
+			return false;
+		}
+		XS_VHostTableUnit(&tCheck);
+	}
+
+	for ( i = 0; i < iCount; i++ ) {
+		XS_HostInfo* pHost = i == 0 ? pServer->DefaultHost : pServer->Hosts[i - 1];
+
+		if ( pHost == NULL || !pHost->Enabled ) continue;
+		if ( XS_HostHasScript(pHost) ) {
+			if ( XS_ScriptLoad(pHost) ) continue;
+		} else if ( strcmp(pServer->Class, "http") == 0 ) {
+			continue;	/* HTTP host 可以是纯静态站点 */
+		} else {
+			printf("[xs] server '%s' host '%s' class %s requires devfile\n",
+				pServer->Name, pHost->Name != NULL ? pHost->Name : "?",
+				pServer->Class);
+		}
+		/* 失败时撤销本 server 已经挂载的脚本，不留半装配代。 */
+		while ( i > 0 ) {
+			XS_HostInfo* pLoaded;
+
+			i--;
+			pLoaded = i == 0 ? pServer->DefaultHost : pServer->Hosts[i - 1];
+			if ( pLoaded != NULL ) XS_ScriptUnitHost(pLoaded);
+		}
 		return false;
 	}
 	return true;
@@ -247,7 +274,7 @@ static bool XS_AssembleServers(XS_App* pApp)
 			printf("[xs] server '%s' disabled, skipped\n", pServer->Name);
 			continue;
 		}
-		/* 脚本先行：custom/tcp/udp/ws 的 DefaultHost 必须有；HTTP 可纯静态。 */
+		/* 脚本先行：HTTP/WS 编译每个启用 host；HTTP 可纯静态，WS 必须有脚本。 */
 		if ( !XS_ServerScriptsLoad(pServer) ) return false;
 
 		if ( XS_ServerDriverStart(pServer, sErr, sizeof(sErr)) ) {

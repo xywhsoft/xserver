@@ -3,12 +3,12 @@
 **xs 是 xrt 的落地化部署工具。** 它把 xrt 的网络、协议、TLS、并发、数据能力装配成一个由配置文件驱动的可执行程序，并在运行时把 C 脚本编译进进程。xrt 才是主要的那个；xs 只负责部署，不提供框架、不提供治理、不教应用怎么做事。
 
 当前状态：**生产就绪**——五大协议（http(+https)/ws(+wss)/tcp(+tcps)/udp/custom）、期望状态热重载（latest-wins/整代候选/原子发布/自动排空回收）、可选库门控（sqlite）、dev_inc/dev_lib 应用 SDK 目录、静态层四旋钮、四层测试体系（冒烟/功能/压力/攻防演练 6h 704 轮 0 失败）。遗留：xadmin 试点、Linux 实测。
-- 协议：HTTP 连接驱动（三态返回/虚拟主机路由/静态层/keep-alive）、WS 升级移交、TCP/TCP+TLS、UDP、custom 手动装配
-- 热重载：独立 controller、latest-wins ticket、不可变配置快照、候选 listener 先 bind 但不接入、server/all 拓扑原子发布；旧代停止新接入后由 generation 终态引用自然排空回收，无泄漏、无宽限/超时强拆
+- 协议：HTTP 每请求虚拟主机路由（脚本+静态根）、WS 握手期路由并固定 host/脚本、TCP/TCP+TLS、UDP、custom 手动装配
+- 热重载：独立 controller、同 server latest-wins ticket、不可变配置快照、候选 listener 先 bind 但不接入、host/server/all 均以完整 server generation 原子发布；旧代停止新接入后由 generation 终态引用自然排空回收，无泄漏、无宽限/超时强拆
 - 可选库：`build.bat sqlite` 变体（296 符号导入 + sqlite3.h 入 VFS）
 - 测试：`test.bat`（冒烟+功能+generation 生命周期+四协议 reload 矩阵）、`tools/lifecycle_reload_test.py`（旧 keep-alive 留在旧代、初始化发布屏障、拓扑 lease 与 Root 换代）、`tools/reload_matrix_test.py`（HTTP/TCP/UDP/WS 同端点换代及跨服务 lease 回收）、`tools/pressure_test.py`、`tools/drill.py`。
 
-热换安全边界：绑定端点改变时候选可先 bind，但在拓扑事务提交前拒绝接入；同一端点由稳定 listener 槽位转交给新 generation。所有 Accept 与拓扑写锁线性化，reload-all 不会暴露半新半旧状态。旧连接继续持有旧代，最后一个终态引用归零后自动释放。协议类型、TLS 形态、backlog、recv_limit 等 listener 固化字段若在同端点改变会明确拒绝并要求重启。UDP 不做 host 级原地换脚本，但 server 级可经 socket 槽位换代；custom 因裸资源无统一终态 lease，不支持在线卸载。公开 server 查找返回显式 lease，必须 `xsServerRelease`。
+热换安全边界：绑定端点改变时候选可先 bind，但在拓扑事务提交前拒绝接入；同一端点由稳定 listener 槽位转交给新 generation。所有 Accept 与拓扑写锁线性化，reload-all 不会暴露半新半旧状态。旧连接继续持有旧代，最后一个终态引用归零后自动释放。协议类型、TLS 形态、backlog、recv_limit 等 listener 固化字段若在同端点改变会明确拒绝并要求重启。`xsReloadHost*` 是指定 host 的管理面入口，内部也重建并发布它所属的完整 server generation，不原地改指针；custom 因裸资源无统一终态 lease，不支持在线卸载。公开 server 查找返回显式 lease，必须 `xsServerRelease`。
 
 TCC 宿主吸收了 xlang（demo6）的成熟经验并推进到**单文件交付**：`res/tcc`（VFS 构建目录）在构建期整体 LZMA 打包进二进制（SDK 头 + 精简 winapi/linux 头 + libtcc1.a + 导入库，7.3MB → 1.0MB），运行时从内置 VFS 读取——**xs 不附带任何磁盘 TCC 环境**。新增内置库 = 放入 `res/tcc` 重新构建。中文路径由 UTF-8 宽字符 IO 全链路保障。
 

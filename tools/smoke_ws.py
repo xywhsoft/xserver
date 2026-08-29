@@ -10,9 +10,9 @@ HOST, PORT = '127.0.0.1', 9098
 failures = []
 
 
-def handshake(sock, key):
+def handshake(sock, key, host='x'):
     sock.sendall(
-        f'GET / HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n'
+        f'GET / HTTP/1.1\r\nHost: {host}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n'
         f'Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n'.encode()
     )
     resp = b''
@@ -72,7 +72,23 @@ try:
 except Exception as exc:  # noqa: BLE001
     failures.append(f'echo session: {exc}')
 
-# 2) 坏握手（缺 Key）→ 400 且连接关闭
+# 2) Host 选择次级 WS host，并固定其脚本。
+try:
+    s = socket.create_connection((HOST, PORT), timeout=3)
+    s.settimeout(2)
+    key = base64.b64encode(os.urandom(16)).decode()
+    head, rest = handshake(s, key, host='admin.ws.example.com')
+    if b'101' not in head.split(b'\r\n', 1)[0]:
+        failures.append(f'vhost handshake: {head[:60]!r}')
+    send_frame(s, 0x1, b'ignored-by-admin')
+    data = rest + recv_until(s, b'ws-admin-script')
+    if b'[xs3-ws-admin] connected' not in data or b'ws-admin-script' not in data:
+        failures.append(f'vhost script: {data[:120]!r}')
+    s.close()
+except Exception as exc:  # noqa: BLE001
+    failures.append(f'vhost session: {exc}')
+
+# 3) 坏握手（缺 Key）→ 400 且连接关闭
 try:
     s = socket.create_connection((HOST, PORT), timeout=3)
     s.settimeout(2)

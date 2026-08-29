@@ -72,7 +72,6 @@ typedef struct XS_ReloadCoordinator {
 static XS_ReloadCoordinator g_XS_Reload;
 static XRT_THREAD_LOCAL XS_ReloadIntent* g_XS_ReloadCurrent = NULL;
 
-static bool XS_ReloadHostNow(XS_HostInfo* pHost);
 static bool XS_ReloadServerNow(XS_App* pApp, const char* sName);
 static bool XS_ReloadAllAtomicNow(XS_App* pApp);
 
@@ -220,16 +219,13 @@ static bool XS_ReloadIntentDominates(
 	const XS_ReloadIntent* pOld)
 {
 	if ( pNew->iKind == XS_RELOAD_KIND_ALL ) return true;
-	if ( pNew->iKind == XS_RELOAD_KIND_SERVER ) {
+	if ( pNew->iKind == XS_RELOAD_KIND_SERVER ||
+	     pNew->iKind == XS_RELOAD_KIND_HOST ) {
 		return pOld->sServerName != NULL &&
 		       strcmp(pNew->sServerName, pOld->sServerName) == 0 &&
 		       (pOld->iKind == XS_RELOAD_KIND_SERVER || pOld->iKind == XS_RELOAD_KIND_HOST);
 	}
-	return pOld->iKind == XS_RELOAD_KIND_HOST &&
-	       pNew->sServerName != NULL && pOld->sServerName != NULL &&
-	       pNew->sHostName != NULL && pOld->sHostName != NULL &&
-	       strcmp(pNew->sServerName, pOld->sServerName) == 0 &&
-	       strcmp(pNew->sHostName, pOld->sHostName) == 0;
+	return false;
 }
 
 static void XS_ReloadPendingTailRefreshLocked(void)
@@ -355,7 +351,6 @@ static bool XS_ReloadQueryResult(XS_ReloadId iId, XS_ReloadResult* pResult)
 
 static bool XS_ReloadSnapshotConfig(XS_ReloadIntent* pIntent)
 {
-	if ( pIntent->iKind == XS_RELOAD_KIND_HOST ) return true;
 	pIntent->pConfigData = xrtFileReadAll(g_XS_Reload.sConfigPath, &pIntent->iConfigSize);
 	if ( pIntent->pConfigData == NULL ) {
 		XS_ReloadSetError("config snapshot read failed");
@@ -377,7 +372,7 @@ static bool XS_ReloadExecuteIntent(XS_ReloadIntent* pIntent)
 		XS_HostInfo* pHost = pServer != NULL ? xsHostFind(pServer, pIntent->sHostName) : NULL;
 
 		if ( pHost == NULL ) XS_ReloadSetError("reload target host not found");
-		else bOk = XS_ReloadHostNow(pHost);
+		else bOk = XS_ReloadServerNow(g_XS_Reload.pApp, pIntent->sServerName);
 		xsServerRelease(pServer);
 	} else if ( pIntent->iKind == XS_RELOAD_KIND_SERVER ) {
 		bOk = XS_ReloadServerNow(g_XS_Reload.pApp, pIntent->sServerName);
@@ -615,72 +610,6 @@ static bool XS_ReloadEngineConfigCompatible(const XS_App* pCurrent, const XS_App
 	return false;
 }
 
-static bool XS_ReloadHostInner(XS_HostInfo* pHost)
-{
-	XS_ScriptRuntime* pOld;
-	XS_ScriptRuntime* pNew;
-	XS_ScriptRuntime* pPrevious;
-	xvalue* pShared = NULL;
-	uint64 tOldGen;
-
-	if ( pHost == NULL || pHost->Server == NULL ||
-	     !XS_ReloadClassSupported(pHost->Server, "host") ) {
-		return false;
-	}
-	/* UDP socket 捕获脚本代直到 socket Close；原地换脚本不会改变接收者。 */
-	if ( strcmp(pHost->Server->Class, "udp") == 0 ) {
-		printf("[xs] host reload rejected for udp server '%s': use structural server reload\n",
-			pHost->Server->Name);
-		return false;
-	}
-	pOld = XS_ScriptAcquireHost(pHost);
-	if ( pOld == NULL ) {
-		return false;
-	}
-	pNew = XS_ScriptCompile(pHost);
-	if ( pNew == NULL ) {
-		printf("[xs] reload '%s' compile failed, old generation keeps serving\n",
-			pHost->Name != NULL ? pHost->Name : "?");
-		XS_ReloadSetError("script compile failed");
-		pHost->State = XS_RUN_RELOAD_FAILED;
-		pHost->Server->State = XS_RUN_RELOAD_FAILED;
-		XS_ScriptRelease(pOld);
-		return false;
-	}
-	if ( pOld->procSwap != NULL ) {
-		xvalue* pOut = NULL;
-		XS_ScriptRuntime* pPrevious = XS_ScriptEnter(pOld);
-
-		if ( pOld->procSwap(pHost, &pOut) && pOut != NULL ) {
-			pShared = pOut;
-		}
-		XS_ScriptLeave(pPrevious);
-	}
-	pNew->pSwap = pShared;
-	tOldGen = pOld->tGeneration;
-	XS_ScriptPrepare(pHost, pNew);
-	if ( !XS_ReloadCommitBegin() ) {
-		XS_ScriptDiscardPrepared(pNew);
-		XS_ScriptRelease(pOld);
-		return false;
-	}
-	pPrevious = XS_ScriptPublishPrepared(pHost, pNew);
-	pHost->State = XS_RUN_RUNNING;
-	pHost->Server->State = XS_RUN_RUNNING;
-	XS_ReloadCommitEnd(true);
-	if ( pPrevious != NULL && pPrevious != pNew ) XS_ScriptRetire(pPrevious);
-	printf("[xs] reload '%s' ok (gen %llu -> %llu)\n",
-		pHost->Name != NULL ? pHost->Name : "?",
-		(unsigned long long)tOldGen, (unsigned long long)pNew->tGeneration);
-	XS_ScriptRelease(pOld);		/* 撤销本函数临时引用 */
-	return true;
-}
-
-static bool XS_ReloadHostNow(XS_HostInfo* pHost)
-{
-	return XS_ReloadHostInner(pHost);
-}
-
 static XS_App* XS_ReloadTakeSnapshot(XS_App* pFresh)
 {
 	XS_App* pOwner = (XS_App*)xrtMalloc(sizeof(XS_App));
@@ -759,8 +688,15 @@ static bool XS_ReloadPrepareServer(
 		}
 		return true;
 	}
-	/* 只有 HTTP 按 Host 路由脚本；TCP/UDP/WS 的回调固定属于 DefaultHost。 */
-	iHostCount = strcmp(pServer->Class, "http") == 0 ? 1 + pServer->HostCount : 1;
+	if ( strcmp(pServer->Class, "http") == 0 || strcmp(pServer->Class, "ws") == 0 ) {
+		XS_VHostTable tCheck;
+
+		if ( !XS_VHostTableBuild(pServer, &tCheck, sErr, iErrCap) ) return false;
+		XS_VHostTableUnit(&tCheck);
+	}
+	/* HTTP/WS 的路由单元是 host；其他协议仍只编译 DefaultHost。 */
+	iHostCount = (strcmp(pServer->Class, "http") == 0 ||
+		strcmp(pServer->Class, "ws") == 0) ? 1 + pServer->HostCount : 1;
 	pScripts = (XS_ScriptRuntime**)xrtCalloc(iHostCount, sizeof(XS_ScriptRuntime*));
 	if ( pScripts == NULL ) {
 		snprintf(sErr, iErrCap, "out of memory while compiling server scripts");
@@ -769,13 +705,7 @@ static bool XS_ReloadPrepareServer(
 	for ( i = 0; i < iHostCount; i++ ) {
 		XS_HostInfo* pHost = XS_ReloadServerHostAt(pServer, i);
 
-		/* 初始装配只自动启动 DefaultHost 脚本；虚拟 host 若曾经
-		 * 通过 host reload 显式激活，server 换代才继承其激活状态。 */
-		if ( i > 0 ) {
-			XS_HostInfo* pOldHost = XS_ReloadMatchOldHost(pOld, pHost, i);
-
-			if ( !pHost->Enabled || pOldHost == NULL || pOldHost->Runtime == NULL ) continue;
-		}
+		if ( pHost == NULL || !pHost->Enabled ) continue;
 		if ( XS_HostHasScript(pHost) ) {
 			pScripts[i] = XS_ScriptCompile(pHost);
 			if ( pScripts[i] == NULL ) {
@@ -783,8 +713,16 @@ static bool XS_ReloadPrepareServer(
 					pHost->Name != NULL ? pHost->Name : "?");
 				goto Done;
 			}
-		} else if ( i == 0 && XS_ClassNeedsScript(pServer->Class) ) {
-			snprintf(sErr, iErrCap, "class '%s' requires devfile", pServer->Class);
+			if ( strcmp(pServer->Class, "ws") == 0 &&
+			     pScripts[i]->procWsText == NULL && pScripts[i]->procWsBinary == NULL ) {
+				snprintf(sErr, iErrCap,
+					"ws host '%s' requires script exporting WsText/WsBinary",
+					pHost->Name != NULL ? pHost->Name : "?");
+				goto Done;
+			}
+		} else if ( strcmp(pServer->Class, "http") != 0 ) {
+			snprintf(sErr, iErrCap, "class '%s' host '%s' requires devfile",
+				pServer->Class, pHost->Name != NULL ? pHost->Name : "?");
 			goto Done;
 		}
 	}
@@ -908,6 +846,15 @@ static bool XS_ReloadServerNow(XS_App* pApp, const char* sName)
 		goto Done;
 	}
 	pNew = tFresh.Servers[i];
+	if ( g_XS_ReloadCurrent != NULL &&
+	     g_XS_ReloadCurrent->iKind == XS_RELOAD_KIND_HOST &&
+	     xsHostFind(pNew, g_XS_ReloadCurrent->sHostName) == NULL ) {
+		printf("[xs] host reload: '%s/%s' no longer exists in desired config\n",
+			sName, g_XS_ReloadCurrent->sHostName);
+		XS_ReloadSetError("target host no longer exists in desired config");
+		XS_ConfigFree(&tFresh);
+		goto Done;
+	}
 	if ( strcmp(pNew->Class, "custom") == 0 ) {
 		printf("[xs] server reload '%s' rejected: target custom generation has no lease boundary\n", sName);
 		XS_ReloadSetError("custom server has no online terminal lease boundary");

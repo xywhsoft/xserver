@@ -36,6 +36,14 @@ def config_matrix():
         ('missing-port', '{"services":[{"class":"tcp","name":"x"}]}', 'port'),
         ('tls-on-udp', '{"services":[{"class":"udp","name":"x","port":1,"tls":true}]}', 'tls'),
         ('type-error', '{"services":[{"class":"tcp","name":"x","port":"80"}]}', 'expect int'),
+        ('dup-host-name', '{"services":[{"class":"http","name":"x","port":1,"hosts":['
+                          '{"name":"a","host":"a.example"},{"name":"a","host":"b.example"}]}]}',
+         'duplicate host name'),
+        ('missing-vhost-alias', '{"services":[{"class":"http","name":"x","port":1,'
+                                '"hosts":[{"name":"a"}]}]}', 'requires non-empty'),
+        ('dup-vhost-alias', '{"services":[{"class":"http","name":"x","port":1,"hosts":['
+                            '{"name":"a","host":"same.example"},'
+                            '{"name":"b","host":"SAME.EXAMPLE"}]}]}', 'duplicate virtual host alias'),
     ]
     for name, text, expect in cases:
         with tempfile.NamedTemporaryFile('w', suffix='.json', delete=False, encoding='utf-8') as fp:
@@ -94,6 +102,21 @@ def http_get(path, host_header=None, port=8080, method='GET', body=None):
     return r.status, d
 
 
+def raw_http(port, request):
+    with socket.create_connection(('127.0.0.1', port), timeout=5) as sock:
+        sock.settimeout(5)
+        sock.sendall(request)
+        data = b''
+        while True:
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            data += chunk
+    status = int(data.split(b'\r\n', 1)[0].split()[1])
+    body = data.split(b'\r\n\r\n', 1)[1] if b'\r\n\r\n' in data else b''
+    return status, body
+
+
 def behavior_matrix():
     cfg = json.load(open(RELEASE / 'xs.json', encoding='utf-8'))
     ports = {}
@@ -111,8 +134,8 @@ def behavior_matrix():
     def local_http(path, host_header=None, method='GET', body=None):
         return http_get(path, host_header=host_header, port=http_port, method=method, body=body)
 
-    def submit_reload(path='/reload'):
-        status, body = local_http(path)
+    def submit_reload(path='/reload', host_header=None):
+        status, body = local_http(path, host_header=host_header)
         if status != 202:
             raise AssertionError(f'{path} status={status} body={body[:120]!r}')
         return int(json.loads(body)['reload_id'])
@@ -147,11 +170,58 @@ def behavior_matrix():
             return
         time.sleep(1.5)
 
-        # B1 虚拟主机路由：admin Host → admin host（无静态根 → 404），默认 Host → 200
-        s1, _ = local_http('/', host_header='admin.example.com')
-        s2, _ = local_http('/')
-        if not (s1 == 404 and s2 == 200):
-            fail('behavior/vhost', f'admin={s1} default={s2} (expect 404/200)')
+        # B1 虚拟主机路由：Host 同时选择静态根和脚本。
+        s1, admin_static = local_http('/', host_header='admin.example.com')
+        s_script, admin_script = local_http('/vhost', host_header='admin.example.com')
+        s_absolute, absolute_static = local_http(
+            'http://admin.example.com/', host_header='default.example.com')
+        s2, default_static = local_http('/')
+        if not (s1 == 200 and b'admin static ok' in admin_static and
+                s_script == 200 and b'admin script ok' in admin_script and
+                s_absolute == 200 and b'admin static ok' in absolute_static and
+                s2 == 200 and b'xs3 static ok' in default_static):
+            fail('behavior/vhost',
+                 f'admin-static={s1}/{admin_static[:40]!r} '
+                 f'admin-script={s_script}/{admin_script[:40]!r} '
+                 f'absolute={s_absolute}/{absolute_static[:40]!r} '
+                 f'default={s2}/{default_static[:40]!r}')
+
+        # 同一 keep-alive TCP 连接的两个请求可分别路由到不同 host。
+        try:
+            vhost_conn = http.client.HTTPConnection('127.0.0.1', http_port, timeout=5)
+            vhost_conn.request('GET', '/vhost', headers={'Host': 'admin.example.com'})
+            first = vhost_conn.getresponse()
+            first_body = first.read()
+            vhost_conn.request('GET', '/text', headers={'Host': 'default.example.com'})
+            second = vhost_conn.getresponse()
+            second_body = second.read()
+            vhost_conn.close()
+            if first.status != 200 or b'admin script ok' not in first_body or \
+                    second.status != 200 or b'xs3 http ok' not in second_body:
+                fail('behavior/vhost-keepalive',
+                     f'first={first.status}/{first_body[:40]!r} '
+                     f'second={second.status}/{second_body[:40]!r}')
+        except (OSError, http.client.HTTPException) as exc:
+            fail('behavior/vhost-keepalive', str(exc))
+
+        try:
+            port_status, port_body = raw_http(http_port,
+                f'GET /vhost HTTP/1.1\r\nHost: ADMIN.EXAMPLE.COM:{http_port}\r\n'
+                'Connection: close\r\n\r\n'.encode())
+            duplicate_status, _ = raw_http(http_port,
+                b'GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\nConnection: close\r\n\r\n')
+            missing_status, _ = raw_http(http_port,
+                b'GET / HTTP/1.1\r\nConnection: close\r\n\r\n')
+            legacy_status, legacy_body = raw_http(http_port,
+                b'GET / HTTP/1.0\r\nConnection: close\r\n\r\n')
+            if port_status != 200 or b'admin script ok' not in port_body or \
+                    duplicate_status != 400 or missing_status != 400 or \
+                    legacy_status != 200 or b'xs3 static ok' not in legacy_body:
+                fail('behavior/vhost-host-rules',
+                     f'port={port_status}/{port_body[:30]!r} duplicate={duplicate_status} '
+                     f'missing={missing_status} legacy={legacy_status}/{legacy_body[:30]!r}')
+        except (OSError, ValueError, IndexError) as exc:
+            fail('behavior/vhost-host-rules', str(exc))
 
         # B2 body 上限：body_limit=262144 → 300KB body 触发 400/断连
         try:
@@ -215,6 +285,29 @@ def behavior_matrix():
             script.write_text(src, encoding='utf-8')
             try:
                 wait_reload(submit_reload())
+            except (AssertionError, KeyError, ValueError, json.JSONDecodeError):
+                pass
+
+        # B3b 次级 host 入口同样发布完整 server generation。
+        admin_script_path = RELEASE / 'hosts' / 'admin' / 'main.c'
+        admin_src = admin_script_path.read_text(encoding='utf-8')
+        admin_mod = admin_src.replace('xs3 admin script ok', 'xs3 admin RELOADED')
+        try:
+            admin_script_path.write_text(admin_mod, encoding='utf-8')
+            try:
+                admin_result = wait_reload(submit_reload(
+                    '/reload', host_header='admin.example.com'))
+                if admin_result['status'] != 'succeeded' or not admin_result['revision']:
+                    fail('behavior/vhost-reload-result', f'result={admin_result}')
+            except (AssertionError, KeyError, ValueError, json.JSONDecodeError) as exc:
+                fail('behavior/vhost-reload-submit', str(exc))
+            status, body = local_http('/vhost', host_header='admin.example.com')
+            if status != 200 or b'admin RELOADED' not in body:
+                fail('behavior/vhost-reload-active', f'{status}/{body[:50]!r}')
+        finally:
+            admin_script_path.write_text(admin_src, encoding='utf-8')
+            try:
+                wait_reload(submit_reload('/reload', host_header='admin.example.com'))
             except (AssertionError, KeyError, ValueError, json.JSONDecodeError):
                 pass
 
