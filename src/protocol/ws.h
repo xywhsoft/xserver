@@ -28,6 +28,7 @@ typedef struct XS_WsRuntime {
 	bool			bTls;
 	xnetlistener*		pListener;
 	xtlslistener*		pTlsListener;
+	XS_ListenerSlot*	pListenerSlot;
 	XS_TlsTable		tTls;
 	xhttp1limits		tLimits;
 	str			sProtocol;	/* ws_protocol 旋钮（可空） */
@@ -424,29 +425,36 @@ static const xwsstreamevents g_XS_WsStreamEvents = {
 
 static bool XS_WsOnAccept(xnetlistener* pListener, xnetstream* pStream, ptr pData)
 {
-	XS_WsRuntime* pRuntime = (XS_WsRuntime*)pData;
+	XS_ListenerSlot* pSlot = (XS_ListenerSlot*)pData;
+	XS_WsRuntime* pRuntime = NULL;
+	XS_ServerGeneration* pGeneration = NULL;
 	XS_WsConn* pConn = (XS_WsConn*)xrtCalloc(1, sizeof(XS_WsConn));
 
 	(void)pListener;
-	if ( pConn == NULL || pRuntime->bStopping ||
-	     !XS_GenerationConnectionAcquire(pRuntime->pGeneration) ) {
+	if ( pConn == NULL ||
+	     !XS_ListenerSlotAcquireConnection(pSlot, (void**)&pRuntime, &pGeneration) ) {
+		xrtFree(pConn);
+		return false;
+	}
+	if ( pRuntime->bStopping ) {
+		XS_GenerationConnectionRelease(pGeneration);
 		xrtFree(pConn);
 		return false;
 	}
 	pConn->pScript = XS_ScriptAcquireHost(pRuntime->pHost);
 	if ( pConn->pScript == NULL ) {
-		XS_GenerationConnectionRelease(pRuntime->pGeneration);
+		XS_GenerationConnectionRelease(pGeneration);
 		xrtFree(pConn);
 		return false;
 	}
 	pConn->pRuntime = pRuntime;
 	pConn->pHost = pRuntime->pHost;
-	pConn->pGeneration = pRuntime->pGeneration;
+	pConn->pGeneration = pGeneration;
 	pConn->pTcp = pStream;
 	xrtHttp1HeadInit(&pConn->tHead, pConn->arrFields, XS_WS_MAX_FIELDS);
 	if ( !XS_WsListAdd(pRuntime, pConn) ) {
 		XS_ScriptRelease(pConn->pScript);
-		XS_GenerationConnectionRelease(pRuntime->pGeneration);
+		XS_GenerationConnectionRelease(pGeneration);
 		xrtFree(pConn);
 		return false;
 	}
@@ -456,10 +464,10 @@ static bool XS_WsOnAccept(xnetlistener* pListener, xnetstream* pStream, ptr pDat
 
 static void XS_WsOnListenerClose(xnetlistener* pListener, ptr pData)
 {
-	XS_WsRuntime* pRuntime = (XS_WsRuntime*)pData;
+	XS_ListenerSlot* pSlot = (XS_ListenerSlot*)pData;
 
 	xrtNetListenerDestroy(pListener);
-	XS_GenerationRelease(pRuntime->pGeneration);
+	XS_ListenerSlotResourceClose(pSlot);
 }
 
 static const xnetlistenerevents g_XS_WsListenerEvents = {
@@ -468,29 +476,36 @@ static const xnetlistenerevents g_XS_WsListenerEvents = {
 
 static bool XS_WsTlsOnAccept(xtlslistener* pListener, xtlsstream* pStream, ptr pData)
 {
-	XS_WsRuntime* pRuntime = (XS_WsRuntime*)pData;
+	XS_ListenerSlot* pSlot = (XS_ListenerSlot*)pData;
+	XS_WsRuntime* pRuntime = NULL;
+	XS_ServerGeneration* pGeneration = NULL;
 	XS_WsConn* pConn = (XS_WsConn*)xrtCalloc(1, sizeof(XS_WsConn));
 
 	(void)pListener;
-	if ( pConn == NULL || pRuntime->bStopping ||
-	     !XS_GenerationConnectionAcquire(pRuntime->pGeneration) ) {
+	if ( pConn == NULL ||
+	     !XS_ListenerSlotAcquireConnection(pSlot, (void**)&pRuntime, &pGeneration) ) {
+		xrtFree(pConn);
+		return false;
+	}
+	if ( pRuntime->bStopping ) {
+		XS_GenerationConnectionRelease(pGeneration);
 		xrtFree(pConn);
 		return false;
 	}
 	pConn->pScript = XS_ScriptAcquireHost(pRuntime->pHost);
 	if ( pConn->pScript == NULL ) {
-		XS_GenerationConnectionRelease(pRuntime->pGeneration);
+		XS_GenerationConnectionRelease(pGeneration);
 		xrtFree(pConn);
 		return false;
 	}
 	pConn->pRuntime = pRuntime;
 	pConn->pHost = pRuntime->pHost;
-	pConn->pGeneration = pRuntime->pGeneration;
+	pConn->pGeneration = pGeneration;
 	pConn->pTls = pStream;
 	xrtHttp1HeadInit(&pConn->tHead, pConn->arrFields, XS_WS_MAX_FIELDS);
 	if ( !XS_WsListAdd(pRuntime, pConn) ) {
 		XS_ScriptRelease(pConn->pScript);
-		XS_GenerationConnectionRelease(pRuntime->pGeneration);
+		XS_GenerationConnectionRelease(pGeneration);
 		xrtFree(pConn);
 		return false;
 	}
@@ -500,10 +515,10 @@ static bool XS_WsTlsOnAccept(xtlslistener* pListener, xtlsstream* pStream, ptr p
 
 static void XS_WsTlsOnListenerClose(xtlslistener* pListener, ptr pData)
 {
-	XS_WsRuntime* pRuntime = (XS_WsRuntime*)pData;
+	XS_ListenerSlot* pSlot = (XS_ListenerSlot*)pData;
 
 	xrtTlsListenerDestroy(pListener);
-	XS_GenerationRelease(pRuntime->pGeneration);
+	XS_ListenerSlotResourceClose(pSlot);
 }
 
 static const xtlslistenerevents g_XS_WsTlsListenerEvents = {
@@ -514,7 +529,7 @@ static const xtlslistenerevents g_XS_WsTlsListenerEvents = {
  * 启动 / 停止
  * ============================================================ */
 
-static bool XS_WsStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap)
+static bool XS_WsStartEx(XS_ServerInfo* pServer, bool bStartEndpoint, char* sErr, size_t iErrCap)
 {
 	XS_WsRuntime* pRuntime = (XS_WsRuntime*)xrtCalloc(1, sizeof(XS_WsRuntime));
 	xhttp1limits tDef;
@@ -568,7 +583,26 @@ static bool XS_WsStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap)
 		(void)sProto;
 	}
 
-	if ( !pServer->TLS ) {
+	if ( pServer->TLS ) {
+		if ( XS_TlsSharedContext() == NULL ||
+		     !XS_TlsTableBuild(pServer, &pRuntime->tTls, sErr, iErrCap) ||
+		     pRuntime->tTls.iCount == 0 ) {
+			snprintf(sErr + strlen(sErr), iErrCap - strlen(sErr),
+				"wss server '%s' has no usable tls identity", pServer->Name);
+			return false;
+		}
+		pRuntime->bTls = true;
+	}
+	if ( bStartEndpoint ) {
+		pRuntime->pListenerSlot = XS_ListenerSlotCreate(pRuntime, pRuntime->pGeneration,
+			pRuntime->bTls ? (void*)&pRuntime->tTls : NULL);
+		if ( pRuntime->pListenerSlot == NULL ) {
+			snprintf(sErr, iErrCap, "ws listener slot create failed");
+			return false;
+		}
+	}
+
+	if ( bStartEndpoint && !pServer->TLS ) {
 		xnetlistenconfig tListen;
 
 		xrtNetListenConfigInit(&tListen);
@@ -581,26 +615,22 @@ static bool XS_WsStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap)
 		if ( pServer->RecvLimit > 0 ) {
 			tListen.Stream.ReadLimit = pServer->RecvLimit;
 		}
-		if ( !XS_GenerationRetain(pRuntime->pGeneration) ) return false;
+		if ( !XS_ListenerSlotResourceAdd(pRuntime->pListenerSlot) ) return false;
 		pRuntime->pListener = xrtNetListen(pServer->Engine, &tListen,
-			&g_XS_WsListenerEvents, &g_XS_WsTransportEvents, pRuntime);
+			&g_XS_WsListenerEvents, &g_XS_WsTransportEvents, pRuntime->pListenerSlot);
 		if ( pRuntime->pListener == NULL ) {
-			XS_GenerationRelease(pRuntime->pGeneration);
+			XS_ListenerSlotResourceCancel(pRuntime->pListenerSlot);
+			XS_ListenerSlotDestroyEmpty(pRuntime->pListenerSlot);
+			pRuntime->pListenerSlot = NULL;
 			const xerror* pErr = xrtGetError();
 			snprintf(sErr, iErrCap, "ws server '%s' listen failed (port %u): %s",
 				pServer->Name, pServer->Port, pErr ? xrtErrorMessage(pErr) : "unknown");
 			return false;
 		}
-	} else {
+	} else if ( bStartEndpoint ) {
 		xtlslistenerconfig tTlsListen;
 		xtlscontext* pContext = XS_TlsSharedContext();
 
-		if ( pContext == NULL || !XS_TlsTableBuild(pServer, &pRuntime->tTls, sErr, iErrCap) ||
-		     pRuntime->tTls.iCount == 0 ) {
-			snprintf(sErr + strlen(sErr), iErrCap - strlen(sErr),
-				"wss server '%s' has no usable tls identity", pServer->Name);
-			return false;
-		}
 		xrtNetListenConfigInit(&tTlsListen.Listen);
 		tTlsListen.Listen.Address = tAddr;
 		tTlsListen.Listen.ReuseAddress = true;
@@ -608,37 +638,68 @@ static bool XS_WsStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap)
 		if ( pServer->Backlog > 0 ) {
 			tTlsListen.Listen.Backlog = (int)pServer->Backlog;
 		}
+		if ( pServer->RecvLimit > 0 ) {
+			tTlsListen.Listen.Stream.ReadLimit = pServer->RecvLimit;
+		}
 		xrtTlsServerConfigInit(&tTlsListen.Tls);
 		tTlsListen.Tls.Context = pContext;
 		tTlsListen.Tls.Identity = pRuntime->tTls.pEntries[0].pIdentity;
-		tTlsListen.Tls.Select = XS_TlsSelect;
-		tTlsListen.Tls.SelectContext = &pRuntime->tTls;
-		pRuntime->bTls = true;
-		if ( !XS_GenerationRetain(pRuntime->pGeneration) ) return false;
+		tTlsListen.Tls.Select = XS_TlsSlotSelect;
+		tTlsListen.Tls.SelectContext = pRuntime->pListenerSlot;
+		if ( !XS_ListenerSlotResourceAdd(pRuntime->pListenerSlot) ) return false;
 		pRuntime->pTlsListener = xrtTlsListenerStart(pServer->Engine, &tTlsListen,
-			&g_XS_WsTlsListenerEvents, &g_XS_WsTlsTransportEvents, pRuntime);
+			&g_XS_WsTlsListenerEvents, &g_XS_WsTlsTransportEvents, pRuntime->pListenerSlot);
 		if ( pRuntime->pTlsListener == NULL ) {
-			XS_GenerationRelease(pRuntime->pGeneration);
-			XS_TlsTableUnit(&pRuntime->tTls);
+			XS_ListenerSlotResourceCancel(pRuntime->pListenerSlot);
+			XS_ListenerSlotDestroyEmpty(pRuntime->pListenerSlot);
+			pRuntime->pListenerSlot = NULL;
 			snprintf(sErr, iErrCap, "wss server '%s' listen failed (port %u)", pServer->Name, pServer->Port);
 			return false;
 		}
 	}
-	printf("[xs] server '%s' %s ready on %s:%u%s\n", pServer->Name,
+	printf("[xs] server '%s' %s %s on %s:%u%s\n", pServer->Name,
 		pRuntime->bTls ? "wss" : "ws",
+		bStartEndpoint ? "ready" : "prepared",
 		pServer->IP ? pServer->IP : "0.0.0.0", pServer->Port,
 		pRuntime->sProtocol != NULL ? " (subprotocol required)" : "");
 	return true;
 }
 
+static bool XS_WsStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap)
+{
+	return XS_WsStartEx(pServer, true, sErr, iErrCap);
+}
+
+static bool XS_WsHandoff(XS_WsRuntime* pOld, XS_WsRuntime* pNew)
+{
+	XS_ListenerSlot* pSlot;
+
+	if ( pOld == NULL || pNew == NULL || pOld->bTls != pNew->bTls ||
+	     pOld->pListenerSlot == NULL ) return false;
+	pSlot = pOld->pListenerSlot;
+	if ( !XS_ListenerSlotHandoff(pSlot, pOld, pNew, pNew->pGeneration,
+		pNew->bTls ? (void*)&pNew->tTls : NULL) ) return false;
+	pNew->pListenerSlot = pSlot;
+	pNew->pListener = pOld->pListener;
+	pNew->pTlsListener = pOld->pTlsListener;
+	pOld->pListenerSlot = NULL;
+	pOld->pListener = NULL;
+	pOld->pTlsListener = NULL;
+	return true;
+}
+
 static void XS_WsStop(XS_WsRuntime* pRuntime)
 {
+	XS_ListenerSlot* pSlot;
+
 	if ( pRuntime == NULL ) {
 		return;
 	}
 	xrtMutexLock(pRuntime->pConnLock);
 	pRuntime->bStopping = true;
 	xrtMutexUnlock(pRuntime->pConnLock);
+	pSlot = pRuntime->pListenerSlot;
+	if ( pSlot != NULL ) XS_ListenerSlotBeginClose(pSlot, pRuntime);
 	if ( pRuntime->pListener != NULL ) {
 		xrtNetListenerClose(pRuntime->pListener);
 		pRuntime->pListener = NULL;
@@ -647,6 +708,7 @@ static void XS_WsStop(XS_WsRuntime* pRuntime)
 		xrtTlsListenerClose(pRuntime->pTlsListener);
 		pRuntime->pTlsListener = NULL;
 	}
+	pRuntime->pListenerSlot = NULL;
 }
 
 static void XS_WsCloseConnections(XS_WsRuntime* pRuntime)
@@ -675,6 +737,10 @@ static void XS_WsUnit(XS_WsRuntime* pRuntime)
 	}
 	xrtFree(pRuntime->sProtocol);
 	XS_TlsTableUnit(&pRuntime->tTls);
+	if ( pRuntime->pListenerSlot != NULL ) {
+		XS_ListenerSlotDestroyEmpty(pRuntime->pListenerSlot);
+		pRuntime->pListenerSlot = NULL;
+	}
 	if ( pRuntime->pConnLock != NULL ) {
 		xrtMutexDestroy(pRuntime->pConnLock);
 	}

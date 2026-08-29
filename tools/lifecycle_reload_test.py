@@ -12,6 +12,7 @@ import signal
 import socket
 import subprocess
 import tempfile
+import threading
 import time
 
 
@@ -45,9 +46,18 @@ def get(port: int, path: str) -> tuple[int, str]:
         conn.close()
 
 
-def write_config(path: Path, port: int) -> None:
+def write_config(
+    path: Path,
+    port: int,
+    *,
+    marker: int = 0,
+    root_marker: int = 0,
+    init_delay_ms: int = 0,
+    recv_limit: int = 0,
+) -> None:
     config = {
         "engine": {"workers": 2},
+        "reload_root": root_marker,
         "services": [
             {
                 "enabled": True,
@@ -55,11 +65,14 @@ def write_config(path: Path, port: int) -> None:
                 "name": "main",
                 "ip": "127.0.0.1",
                 "port": port,
+                "recv_limit": recv_limit,
+                "config_marker": marker,
                 "host_default": {
                     "name": "app",
                     "path": "wwwroot",
                     "devlang": "c",
                     "devfile": "script/http_main.c",
+                    "init_delay_ms": init_delay_ms,
                 },
             }
         ],
@@ -76,6 +89,18 @@ def wait_refused(port: int, timeout: float = 5.0) -> None:
         except OSError:
             return
     raise AssertionError(f"old port {port} still accepts new connections")
+
+
+def wait_body(port: int, path: str, expected: str, timeout: float = 8.0) -> None:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            if get(port, path) == (200, expected):
+                return
+        except OSError:
+            pass
+        time.sleep(0.05)
+    raise AssertionError(f"{path} on {port} did not become {expected!r}")
 
 
 def main() -> int:
@@ -120,28 +145,78 @@ def main() -> int:
                 assert get(port_a, "/swapstat") == (200, "1")
                 old.close()
 
+                # 同端点配置换代：listener 原地切槽；旧连接仍看到旧配置。
+                same = http.client.HTTPConnection("127.0.0.1", port_a, timeout=5)
+                same.request("GET", "/configstat")
+                assert same.getresponse().read() == b"0"
+                write_config(
+                    app / "xs.json", port_a, marker=1, root_marker=1, init_delay_ms=300,
+                )
+
+                hammer_errors: list[str] = []
+                hammer_stop = threading.Event()
+
+                def hammer() -> None:
+                    while not hammer_stop.is_set():
+                        try:
+                            status, body = get(port_a, "/ready")
+                            if status != 200 or body != "ready":
+                                hammer_errors.append(f"ready={status}/{body}")
+                                return
+                            status, body = get(port_a, "/topology")
+                            if status != 200 or body != str(port_a):
+                                hammer_errors.append(f"topology={status}/{body}")
+                                return
+                        except Exception as exc:  # noqa: BLE001 - test captures worker races
+                            hammer_errors.append(repr(exc))
+                            return
+
+                thread = threading.Thread(target=hammer, daemon=True)
+                thread.start()
+                assert get(port_a, "/reload-svr")[0] == 200
+                wait_body(port_a, "/configstat", "1")
+                wait_body(port_a, "/rootstat", "1")
+                hammer_stop.set()
+                thread.join(timeout=3)
+                assert not hammer_errors, hammer_errors
+                same.request("GET", "/configstat")
+                assert same.getresponse().read() == b"0"
+                same.close()
+
+                # listener 固化字段改变时明确拒绝，旧配置与 Root 都保持一致。
+                write_config(
+                    app / "xs.json", port_a, marker=2, root_marker=2,
+                    init_delay_ms=0, recv_limit=4096,
+                )
+                assert get(port_a, "/reload-svr")[0] == 200
+                time.sleep(0.4)
+                assert get(port_a, "/configstat") == (200, "1")
+                assert get(port_a, "/rootstat") == (200, "1")
+
                 # Server 换代：候选端口先就绪，旧端口只保留既有连接。
                 draining = http.client.HTTPConnection("127.0.0.1", port_a, timeout=5)
                 draining.request("GET", "/swapstat")
-                assert draining.getresponse().read() == b"1"
-                write_config(app / "xs.json", port_b)
+                assert draining.getresponse().read() == b"2"
+                write_config(app / "xs.json", port_b, marker=3, root_marker=3)
                 draining.request("GET", "/reload-svr")
                 response = draining.getresponse()
                 assert response.status == 200
                 response.read()
                 wait_port(port_b)
                 wait_refused(port_a)
+                draining.request("GET", "/topology")
+                assert draining.getresponse().read() == str(port_b).encode()
                 draining.request("GET", "/swapstat")
-                assert draining.getresponse().read() == b"1"
-                assert get(port_b, "/swapstat") == (200, "2")
+                assert draining.getresponse().read() == b"2"
+                assert get(port_b, "/swapstat") == (200, "3")
                 draining.close()
 
                 # 再换回原端口，覆盖动态配置快照所有权的二次释放。
-                write_config(app / "xs.json", port_a)
+                write_config(app / "xs.json", port_a, marker=4, root_marker=4)
                 assert get(port_b, "/reload-svr")[0] == 200
                 wait_port(port_a)
                 wait_refused(port_b)
-                assert get(port_a, "/swapstat") == (200, "3")
+                assert get(port_a, "/swapstat") == (200, "4")
             finally:
                 if process.poll() is None:
                     if os.name == "nt":
@@ -158,6 +233,8 @@ def main() -> int:
         output = log_path.read_text(encoding="utf-8", errors="replace")
         assert process.returncode == 0, output[-2000:]
         assert output.count("generation finalized: server 'main'") >= 3, output[-2000:]
+        assert "candidate active on retained listener" in output, output[-3000:]
+        assert "same endpoint changed an immutable listener field" in output, output[-3000:]
         assert "engine stopped" in output and "[xs] bye" in output, output[-2000:]
         assert "force-free" not in output and "timeout force" not in output
         print("LIFECYCLE RELOAD PASS")

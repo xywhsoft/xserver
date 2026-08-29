@@ -20,8 +20,10 @@ typedef struct XS_ScriptRuntime {
 	XS_HostInfo*		pHost;
 	volatile int32		iReferences;	/* host 所有权 1 + 连接/定时器引用 */
 	xatomic32		tRetired;	/* 退役后拒绝新增脚本资源 */
+	xatomic32		tReady;		/* ServiceInit 完整返回后才允许异步回调 */
 	xatomic32		tUnitCalled;	/* ServiceUnit 全生命周期至多一次 */
 	xatomic32		tOwnerReleased;	/* host owner 引用至多撤销一次 */
+	xmutex*			pInitLock;	/* 阻挡 ServiceInit 中创建后抢先触发的 timer */
 	XS_ServiceInitProc		procInit;
 	XS_ServiceUnitProc		procUnit;
 	XS_ServiceSwapProc		procSwap;
@@ -67,6 +69,17 @@ static bool XS_ScriptRetain(XS_ScriptRuntime* pRuntime)
 	       xrtRefRetain(&pRuntime->iReferences) > 0;
 }
 
+static bool XS_ScriptWaitReady(XS_ScriptRuntime* pRuntime)
+{
+	bool bReady;
+
+	if ( pRuntime == NULL || pRuntime->pInitLock == NULL ) return false;
+	xrtMutexLock(pRuntime->pInitLock);
+	bReady = xrtAtomic32Load(&pRuntime->tReady, XMEMORY_ACQUIRE) != 0;
+	xrtMutexUnlock(pRuntime->pInitLock);
+	return bReady;
+}
+
 static void XS_ScriptCallUnit(XS_ScriptRuntime* pRuntime)
 {
 	if ( pRuntime != NULL &&
@@ -103,6 +116,7 @@ static void XS_ScriptRelease(XS_ScriptRuntime* pRuntime)
 			xrtValueRelease(pRuntime->pSwap);
 		}
 		tcc_delete(pRuntime->pTcc);
+		if ( pRuntime->pInitLock != NULL ) xrtMutexDestroy(pRuntime->pInitLock);
 		xrtFree(pRuntime);
 	}
 }
@@ -257,7 +271,15 @@ static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 	pRuntime->pHost = pHost;
 	pRuntime->tGeneration = ++g_XS_Generation;
 	pRuntime->iReferences = 1;
+	pRuntime->pInitLock = xrtMutexCreate();
+	if ( pRuntime->pInitLock == NULL ) {
+		tcc_delete(pTcc);
+		xrtFree(pRuntime);
+		xrtFree(sDevPath);
+		return NULL;
+	}
 	xrtAtomic32Init(&pRuntime->tRetired, 0);
+	xrtAtomic32Init(&pRuntime->tReady, 0);
 	xrtAtomic32Init(&pRuntime->tUnitCalled, 0);
 	xrtAtomic32Init(&pRuntime->tOwnerReleased, 0);
 
@@ -270,17 +292,30 @@ static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 /* 挂载并初始化（ServiceInit 内可 xsSwapTake 取回交接数据） */
 static void XS_ScriptAttach(XS_HostInfo* pHost, XS_ScriptRuntime* pRuntime)
 {
-	XS_ScriptRuntime* pPrevious;
+	XS_ScriptRuntime* pPrevious = NULL;
 
-	xrtMutexLock((xmutex*)pHost->RuntimeLock);
-	pPrevious = (XS_ScriptRuntime*)pHost->Runtime;
-	pHost->Runtime = pRuntime;
-	xrtMutexUnlock((xmutex*)pHost->RuntimeLock);
-	if ( pRuntime != NULL && pRuntime->procInit != NULL ) {
-		XS_ScriptRuntime* pContext = XS_ScriptEnter(pRuntime);
+	/* 候选代先完整初始化；旧槽位在此期间继续为新 Accept 提供旧脚本。
+	 * Runtime 发布和 ready 标记在锁序内完成：Accept 只有在 ready 已发布后才能
+	 * 取得新脚本，Init 创建的 timer 则要等 init 锁释放后才能运行。 */
+	if ( pRuntime != NULL ) {
+		xrtMutexLock(pRuntime->pInitLock);
+		if ( pRuntime->procInit != NULL ) {
+			XS_ScriptRuntime* pContext = XS_ScriptEnter(pRuntime);
 
-		pRuntime->procInit(pHost);
-		XS_ScriptLeave(pContext);
+			pRuntime->procInit(pHost);
+			XS_ScriptLeave(pContext);
+		}
+		xrtMutexLock((xmutex*)pHost->RuntimeLock);
+		pPrevious = (XS_ScriptRuntime*)pHost->Runtime;
+		pHost->Runtime = pRuntime;
+		xrtAtomic32Store(&pRuntime->tReady, 1, XMEMORY_RELEASE);
+		xrtMutexUnlock((xmutex*)pHost->RuntimeLock);
+		xrtMutexUnlock(pRuntime->pInitLock);
+	} else {
+		xrtMutexLock((xmutex*)pHost->RuntimeLock);
+		pPrevious = (XS_ScriptRuntime*)pHost->Runtime;
+		pHost->Runtime = NULL;
+		xrtMutexUnlock((xmutex*)pHost->RuntimeLock);
 	}
 	if ( pPrevious != NULL && pPrevious != pRuntime ) {
 		XS_ScriptRetire(pPrevious);

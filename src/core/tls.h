@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include "../sdk/xsbase.h"
+#include "../runtime/listener_slot.h"
 #include "engine.h"
 
 /* 进程级共享 TLS 上下文（惰性创建） */
@@ -253,6 +254,23 @@ static bool XS_TlsSelect(ptr pContext, const xtlsserverrequest* pRequest, xtlsse
 	if ( pTable->pLock != NULL ) {
 		xrtMutexUnlock(pTable->pLock);
 	}
+	return bFound;
+}
+
+/* listener 跨 generation 复用时，TLS selector 也必须经稳定槽位取当前表。 */
+static bool XS_TlsSlotSelect(ptr pContext, const xtlsserverrequest* pRequest, xtlsserverchoice* pChoice)
+{
+	XS_ListenerSlot* pSlot = (XS_ListenerSlot*)pContext;
+	XS_TlsTable* pTable;
+	bool bFound = false;
+
+	if ( pSlot == NULL ) return false;
+	xrtMutexLock(pSlot->pLock);
+	pTable = (XS_TlsTable*)pSlot->pTlsContext;
+	if ( !pSlot->bClosing && pTable != NULL ) {
+		bFound = XS_TlsSelect(pTable, pRequest, pChoice);
+	}
+	xrtMutexUnlock(pSlot->pLock);
 	return bFound;
 }
 

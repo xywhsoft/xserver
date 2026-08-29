@@ -34,6 +34,7 @@ typedef struct XS_HttpRuntime {
 	bool			bTls;
 	xnetlistener*		pListener;
 	xtlslistener*		pTlsListener;
+	XS_ListenerSlot*	pListenerSlot;
 	XS_TlsTable		tTls;
 	XS_ConnRegistry		tRegistry;
 	XS_ServerGeneration*	pGeneration;
@@ -919,24 +920,31 @@ static const xnetstreamevents g_XS_HttpStreamEvents = {
 
 static bool XS_HttpOnAccept(xnetlistener* pListener, xnetstream* pStream, ptr pData)
 {
-	XS_HttpRuntime* pRuntime = (XS_HttpRuntime*)pData;
+	XS_ListenerSlot* pSlot = (XS_ListenerSlot*)pData;
+	XS_HttpRuntime* pRuntime = NULL;
+	XS_ServerGeneration* pGeneration = NULL;
 	XS_HttpRecord* pRec = (XS_HttpRecord*)xrtCalloc(1, sizeof(XS_HttpRecord));
 
 	(void)pListener;
-	if ( pRec == NULL || xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) != 0 ||
-	     !XS_GenerationConnectionAcquire(pRuntime->pGeneration) ) {
+	if ( pRec == NULL ||
+	     !XS_ListenerSlotAcquireConnection(pSlot, (void**)&pRuntime, &pGeneration) ) {
+		xrtFree(pRec);
+		return false;
+	}
+	if ( xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) != 0 ) {
+		XS_GenerationConnectionRelease(pGeneration);
 		xrtFree(pRec);
 		return false;
 	}
 	pRec->pRuntime = pRuntime;
 	pRec->tReg.pHost = pRuntime->pDefaultHost;
 	pRec->tReg.pTcp = pStream;
-	pRec->tReg.pGeneration = pRuntime->pGeneration;
+	pRec->tReg.pGeneration = pGeneration;
 	pRec->tReg.pScript = XS_ScriptAcquireHost(pRuntime->pDefaultHost);
 	xrtHttp1HeadInit(&pRec->tHead, pRec->arrFields, XS_HTTP_MAX_FIELDS);
 	if ( !XS_RegistryAdd(&pRuntime->tRegistry, &pRec->tReg) ) {
 		XS_ScriptRelease(pRec->tReg.pScript);
-		XS_GenerationConnectionRelease(pRuntime->pGeneration);
+		XS_GenerationConnectionRelease(pGeneration);
 		xrtFree(pRec);
 		return false;
 	}
@@ -946,10 +954,10 @@ static bool XS_HttpOnAccept(xnetlistener* pListener, xnetstream* pStream, ptr pD
 
 static void XS_HttpOnListenerClose(xnetlistener* pListener, ptr pData)
 {
-	XS_HttpRuntime* pRuntime = (XS_HttpRuntime*)pData;
+	XS_ListenerSlot* pSlot = (XS_ListenerSlot*)pData;
 
 	xrtNetListenerDestroy(pListener);
-	XS_GenerationRelease(pRuntime->pGeneration);
+	XS_ListenerSlotResourceClose(pSlot);
 }
 
 static const xnetlistenerevents g_XS_HttpListenerEvents = {
@@ -993,24 +1001,31 @@ static const xtlsstreamevents g_XS_HttpTlsStreamEvents = {
 
 static bool XS_HttpTlsOnAccept(xtlslistener* pListener, xtlsstream* pStream, ptr pData)
 {
-	XS_HttpRuntime* pRuntime = (XS_HttpRuntime*)pData;
+	XS_ListenerSlot* pSlot = (XS_ListenerSlot*)pData;
+	XS_HttpRuntime* pRuntime = NULL;
+	XS_ServerGeneration* pGeneration = NULL;
 	XS_HttpRecord* pRec = (XS_HttpRecord*)xrtCalloc(1, sizeof(XS_HttpRecord));
 
 	(void)pListener;
-	if ( pRec == NULL || xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) != 0 ||
-	     !XS_GenerationConnectionAcquire(pRuntime->pGeneration) ) {
+	if ( pRec == NULL ||
+	     !XS_ListenerSlotAcquireConnection(pSlot, (void**)&pRuntime, &pGeneration) ) {
+		xrtFree(pRec);
+		return false;
+	}
+	if ( xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) != 0 ) {
+		XS_GenerationConnectionRelease(pGeneration);
 		xrtFree(pRec);
 		return false;
 	}
 	pRec->pRuntime = pRuntime;
 	pRec->tReg.pHost = pRuntime->pDefaultHost;
 	pRec->tReg.pTls = pStream;
-	pRec->tReg.pGeneration = pRuntime->pGeneration;
+	pRec->tReg.pGeneration = pGeneration;
 	pRec->tReg.pScript = XS_ScriptAcquireHost(pRuntime->pDefaultHost);
 	xrtHttp1HeadInit(&pRec->tHead, pRec->arrFields, XS_HTTP_MAX_FIELDS);
 	if ( !XS_RegistryAdd(&pRuntime->tRegistry, &pRec->tReg) ) {
 		XS_ScriptRelease(pRec->tReg.pScript);
-		XS_GenerationConnectionRelease(pRuntime->pGeneration);
+		XS_GenerationConnectionRelease(pGeneration);
 		xrtFree(pRec);
 		return false;
 	}
@@ -1020,10 +1035,10 @@ static bool XS_HttpTlsOnAccept(xtlslistener* pListener, xtlsstream* pStream, ptr
 
 static void XS_HttpTlsOnListenerClose(xtlslistener* pListener, ptr pData)
 {
-	XS_HttpRuntime* pRuntime = (XS_HttpRuntime*)pData;
+	XS_ListenerSlot* pSlot = (XS_ListenerSlot*)pData;
 
 	xrtTlsListenerDestroy(pListener);
-	XS_GenerationRelease(pRuntime->pGeneration);
+	XS_ListenerSlotResourceClose(pSlot);
 }
 
 static const xtlslistenerevents g_XS_HttpTlsListenerEvents = {
@@ -1196,7 +1211,7 @@ static void XS_HttpHdrCacheUnit(XS_HttpRuntime* pRuntime)
 	pRuntime->iHdrCacheCount = 0;
 }
 
-static bool XS_HttpStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap)
+static bool XS_HttpStartEx(XS_ServerInfo* pServer, bool bStartEndpoint, char* sErr, size_t iErrCap)
 {
 	XS_HttpRuntime* pRuntime = (XS_HttpRuntime*)xrtCalloc(1, sizeof(XS_HttpRuntime));
 	XS_ScriptRuntime* pScript = (XS_ScriptRuntime*)pServer->DefaultHost->Runtime;
@@ -1244,7 +1259,26 @@ static bool XS_HttpStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap)
 	(void)XS_CustomGetInt(pServer->Custom, "idle_timeout", &iVal);
 	pRuntime->iIdleMs = (iVal > 0) ? (uint64)iVal : 0;
 
-	if ( !pServer->TLS ) {
+	if ( pServer->TLS ) {
+		if ( XS_TlsSharedContext() == NULL ||
+		     !XS_TlsTableBuild(pServer, &pRuntime->tTls, sErr, iErrCap) ||
+		     pRuntime->tTls.iCount == 0 ) {
+			snprintf(sErr + strlen(sErr), iErrCap - strlen(sErr),
+				"https server '%s' has no usable tls identity", pServer->Name);
+			return false;
+		}
+		pRuntime->bTls = true;
+	}
+	if ( bStartEndpoint ) {
+		pRuntime->pListenerSlot = XS_ListenerSlotCreate(pRuntime, pRuntime->pGeneration,
+			pRuntime->bTls ? (void*)&pRuntime->tTls : NULL);
+		if ( pRuntime->pListenerSlot == NULL ) {
+			snprintf(sErr, iErrCap, "http listener slot create failed");
+			return false;
+		}
+	}
+
+	if ( bStartEndpoint && !pServer->TLS ) {
 		xnetlistenconfig tListen;
 
 		xrtNetListenConfigInit(&tListen);
@@ -1257,26 +1291,22 @@ static bool XS_HttpStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap)
 		if ( pServer->RecvLimit > 0 ) {
 			tListen.Stream.ReadLimit = pServer->RecvLimit;
 		}
-		if ( !XS_GenerationRetain(pRuntime->pGeneration) ) return false;
+		if ( !XS_ListenerSlotResourceAdd(pRuntime->pListenerSlot) ) return false;
 		pRuntime->pListener = xrtNetListen(pServer->Engine, &tListen,
-			&g_XS_HttpListenerEvents, &g_XS_HttpStreamEvents, pRuntime);
+			&g_XS_HttpListenerEvents, &g_XS_HttpStreamEvents, pRuntime->pListenerSlot);
 		if ( pRuntime->pListener == NULL ) {
-			XS_GenerationRelease(pRuntime->pGeneration);
+			XS_ListenerSlotResourceCancel(pRuntime->pListenerSlot);
+			XS_ListenerSlotDestroyEmpty(pRuntime->pListenerSlot);
+			pRuntime->pListenerSlot = NULL;
 			const xerror* pErr = xrtGetError();
 			snprintf(sErr, iErrCap, "http server '%s' listen failed (port %u): %s",
 				pServer->Name, pServer->Port, pErr ? xrtErrorMessage(pErr) : "unknown");
 			return false;
 		}
-	} else {
+	} else if ( bStartEndpoint ) {
 		xtlslistenerconfig tTlsListen;
 		xtlscontext* pContext = XS_TlsSharedContext();
 
-		if ( pContext == NULL || !XS_TlsTableBuild(pServer, &pRuntime->tTls, sErr, iErrCap) ||
-		     pRuntime->tTls.iCount == 0 ) {
-			snprintf(sErr + strlen(sErr), iErrCap - strlen(sErr),
-				"https server '%s' has no usable tls identity", pServer->Name);
-			return false;
-		}
 		xrtNetListenConfigInit(&tTlsListen.Listen);
 		tTlsListen.Listen.Address = tAddr;
 		tTlsListen.Listen.ReuseAddress = true;
@@ -1290,15 +1320,15 @@ static bool XS_HttpStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap)
 		xrtTlsServerConfigInit(&tTlsListen.Tls);
 		tTlsListen.Tls.Context = pContext;
 		tTlsListen.Tls.Identity = pRuntime->tTls.pEntries[0].pIdentity;
-		tTlsListen.Tls.Select = XS_TlsSelect;
-		tTlsListen.Tls.SelectContext = &pRuntime->tTls;
-		pRuntime->bTls = true;
-		if ( !XS_GenerationRetain(pRuntime->pGeneration) ) return false;
+		tTlsListen.Tls.Select = XS_TlsSlotSelect;
+		tTlsListen.Tls.SelectContext = pRuntime->pListenerSlot;
+		if ( !XS_ListenerSlotResourceAdd(pRuntime->pListenerSlot) ) return false;
 		pRuntime->pTlsListener = xrtTlsListenerStart(pServer->Engine, &tTlsListen,
-			&g_XS_HttpTlsListenerEvents, &g_XS_HttpTlsStreamEvents, pRuntime);
+			&g_XS_HttpTlsListenerEvents, &g_XS_HttpTlsStreamEvents, pRuntime->pListenerSlot);
 		if ( pRuntime->pTlsListener == NULL ) {
-			XS_GenerationRelease(pRuntime->pGeneration);
-			XS_TlsTableUnit(&pRuntime->tTls);
+			XS_ListenerSlotResourceCancel(pRuntime->pListenerSlot);
+			XS_ListenerSlotDestroyEmpty(pRuntime->pListenerSlot);
+			pRuntime->pListenerSlot = NULL;
 			snprintf(sErr, iErrCap, "https server '%s' listen failed (port %u)", pServer->Name, pServer->Port);
 			return false;
 		}
@@ -1307,14 +1337,39 @@ static bool XS_HttpStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap)
 		(void)XS_HttpScheduleSweep(pRuntime);
 	}
 	XS_HttpHdrCacheBuildAll(pRuntime, pServer);
-	printf("[xs] server '%s' %s ready on %s:%u\n", pServer->Name,
-		pRuntime->bTls ? "https" : "http",
+	printf("[xs] server '%s' %s %s on %s:%u\n", pServer->Name,
+		pRuntime->bTls ? "https" : "http", bStartEndpoint ? "ready" : "prepared",
 		pServer->IP ? pServer->IP : "0.0.0.0", pServer->Port);
+	return true;
+}
+
+static bool XS_HttpStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap)
+{
+	return XS_HttpStartEx(pServer, true, sErr, iErrCap);
+}
+
+static bool XS_HttpHandoff(XS_HttpRuntime* pOld, XS_HttpRuntime* pNew)
+{
+	XS_ListenerSlot* pSlot;
+
+	if ( pOld == NULL || pNew == NULL || pOld->bTls != pNew->bTls ||
+	     pOld->pListenerSlot == NULL ) return false;
+	pSlot = pOld->pListenerSlot;
+	if ( !XS_ListenerSlotHandoff(pSlot, pOld, pNew, pNew->pGeneration,
+		pNew->bTls ? (void*)&pNew->tTls : NULL) ) return false;
+	pNew->pListenerSlot = pSlot;
+	pNew->pListener = pOld->pListener;
+	pNew->pTlsListener = pOld->pTlsListener;
+	pOld->pListenerSlot = NULL;
+	pOld->pListener = NULL;
+	pOld->pTlsListener = NULL;
 	return true;
 }
 
 static void XS_HttpStop(XS_HttpRuntime* pRuntime)
 {
+	XS_ListenerSlot* pSlot;
+
 	if ( pRuntime == NULL ) {
 		return;
 	}
@@ -1324,6 +1379,8 @@ static void XS_HttpStop(XS_HttpRuntime* pRuntime)
 		pRuntime->iSweepTimer = 0;
 	}
 	XS_RegistryStopAccepting(&pRuntime->tRegistry);
+	pSlot = pRuntime->pListenerSlot;
+	if ( pSlot != NULL ) XS_ListenerSlotBeginClose(pSlot, pRuntime);
 	if ( pRuntime->pListener != NULL ) {
 		xrtNetListenerClose(pRuntime->pListener);
 		pRuntime->pListener = NULL;
@@ -1332,6 +1389,7 @@ static void XS_HttpStop(XS_HttpRuntime* pRuntime)
 		xrtTlsListenerClose(pRuntime->pTlsListener);
 		pRuntime->pTlsListener = NULL;
 	}
+	pRuntime->pListenerSlot = NULL;
 }
 
 static void XS_HttpCloseConnections(XS_HttpRuntime* pRuntime)
@@ -1349,6 +1407,10 @@ static void XS_HttpUnit(XS_HttpRuntime* pRuntime)
 	XS_RegistryUnit(&pRuntime->tRegistry);
 	XS_HttpHdrCacheUnit(pRuntime);
 	XS_TlsTableUnit(&pRuntime->tTls);
+	if ( pRuntime->pListenerSlot != NULL ) {
+		XS_ListenerSlotDestroyEmpty(pRuntime->pListenerSlot);
+		pRuntime->pListenerSlot = NULL;
+	}
 	xrtFree(pRuntime);
 }
 

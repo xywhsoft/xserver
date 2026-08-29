@@ -3,9 +3,9 @@
 
 /*
  * xs3 连接注册表（设计 §10.3）
- * 职责：tcp/tcps 连接追踪 —— idle 超时扫描、停机时批量收口、
- * 以及后续热重载的按代 drain 判据（当前停机用 LiveObjects 轮询兜底）。
- * 回调在各 worker 线程并发执行，全部操作持锁。
+ * 职责：tcp/tcps 连接追踪 —— idle 超时扫描、停机时批量收口与观测。
+ * 回调在各 worker 线程并发执行，全部操作持锁；代际安全与最终回收由
+ * generation lease 的唯一终态释放保证，不以 iCount 或轮询作为释放判据。
  */
 
 #include <stdio.h>

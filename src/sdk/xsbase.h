@@ -172,13 +172,20 @@ typedef bool (*XS_ServiceSwapProc)(XS_HostInfo* pHost, xvalue** ppShared);
 #define XS_SYM_EVENT_DGRAM	"EventDgram"
 
 /* ============================================================
- * xs API（13 个，封顶 —— 见设计 §7；其余一切能力皆为 xrt 或可选库符号）
+ * xs API（其余一切能力皆为 xrt 或可选库符号）
  * ============================================================ */
 
-/* 配置访问：结构体直读 + 枚举，零限制（可跨 server 访问任何对象） */
+/* 配置访问：
+ * - xsServerFind 返回 retained server lease，必须 xsServerRelease；
+ * - xsServerRetain 用于延长连接/枚举回调内借用指针的生命周期；
+ * - 枚举参数只在回调内借用，如需保存必须 Retain；
+ * - xsHostFind/xsEnumHosts 的 host 由其 server lease 共同保护；
+ * - xsConfigRoot 返回 retained xvalue，必须 xrtValueRelease。 */
 typedef bool (*XS_ServerEnumProc)(XS_ServerInfo* pServer, void* pUserData);
 typedef bool (*XS_HostEnumProc)(XS_HostInfo* pHost, void* pUserData);
 XS_API XS_ServerInfo* xsServerFind(const char* sName);
+XS_API XS_ServerInfo* xsServerRetain(XS_ServerInfo* pServer);
+XS_API void xsServerRelease(XS_ServerInfo* pServer);
 XS_API XS_HostInfo* xsHostFind(XS_ServerInfo* pServer, const char* sName);
 XS_API void xsEnumServers(XS_ServerEnumProc procEach, void* pUserData);
 XS_API void xsEnumHosts(XS_ServerInfo* pServer, XS_HostEnumProc procEach, void* pUserData);

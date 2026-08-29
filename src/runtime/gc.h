@@ -16,6 +16,20 @@
 #include "../core/driver.h"
 #include "../script/script.h"
 
+/* 连接/UDP 回调/lifecycle timer 已全部离开脚本后先通知 Unit。
+ * 这里只调用一次，不撤销脚本 owner；TCC/配置仍由最后总引用归零后释放。 */
+static void XS_GenerationQuiesce(XS_ServerGeneration* pGeneration)
+{
+	XS_ServerInfo* pServer = pGeneration != NULL ? pGeneration->pServer : NULL;
+	uint32 i;
+
+	if ( pServer == NULL ) return;
+	XS_ScriptRequestUnitHost(pServer->DefaultHost);
+	for ( i = 0; i < pServer->HostCount; i++ ) {
+		XS_ScriptRequestUnitHost(pServer->Hosts[i]);
+	}
+}
+
 static void XS_GenerationFinalize(XS_ServerGeneration* pGeneration)
 {
 	XS_ServerInfo* pServer = pGeneration->pServer;
@@ -70,7 +84,7 @@ static bool XS_GcRetireServer(XS_ServerInfo* pServer, bool bFreeServer)
 	}
 	pGeneration = (XS_ServerGeneration*)pServer->Generation;
 	XS_GenerationRetire(pGeneration, pServer->Runtime, pServer->ConfigOwner,
-		bFreeServer, XS_GenerationFinalize);
+		bFreeServer, XS_GenerationQuiesce, XS_GenerationFinalize);
 	return true;
 }
 

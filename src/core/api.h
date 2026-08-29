@@ -2,46 +2,48 @@
 #define XS_CORE_API_H
 
 /*
- * xs3 契约 API 实现（xsbase.h 声明的 13 个函数）
- * 本轮交付：配置访问（枚举/查找/根 Custom）+ xsAppPath + xsCreateTCC/xsDestroyTCC
- * reload / timer 属于"运行时与重载"工作包，当前为占位实现
+ * xs3 契约 API 实现
+ * 配置访问使用显式 generation lease；reload / timer 由 runtime 工作包实现。
  */
 
 #include "../sdk/xsbase.h"
 #include "config.h"
 #include "engine.h"
 #include "../script/tcc_host.h"
+#include "../runtime/topology.h"
 #include "../runtime/reload.h"
 
 static XS_App* g_XS_App = NULL;
 
 XS_ServerInfo* xsServerFind(const char* sName)
 {
-	uint32 i;
+	return XS_TopologyServerAcquire(sName);
+}
 
-	if ( g_XS_App == NULL || sName == NULL ) {
-		return NULL;
-	}
-	for ( i = 0; i < g_XS_App->ServerCount; i++ ) {
-		if ( strcmp(g_XS_App->Servers[i]->Name, sName) == 0 ) {
-			return g_XS_App->Servers[i];
-		}
-	}
-	return NULL;
+XS_ServerInfo* xsServerRetain(XS_ServerInfo* pServer)
+{
+	return XS_TopologyServerRetain(pServer);
+}
+
+void xsServerRelease(XS_ServerInfo* pServer)
+{
+	XS_TopologyServerRelease(pServer);
 }
 
 void xsEnumServers(XS_ServerEnumProc procEach, void* pUserData)
 {
+	XS_ServerInfo** pServers;
+	uint32 iCount;
 	uint32 i;
 
-	if ( g_XS_App == NULL || procEach == NULL ) {
+	if ( procEach == NULL || !XS_TopologyServerSnapshot(&pServers, &iCount) ) {
 		return;
 	}
-	for ( i = 0; i < g_XS_App->ServerCount; i++ ) {
-		if ( !procEach(g_XS_App->Servers[i], pUserData) ) {
-			return;
-		}
+	for ( i = 0; i < iCount; i++ ) {
+		if ( !procEach(pServers[i], pUserData) ) break;
 	}
+	for ( i = 0; i < iCount; i++ ) XS_TopologyServerRelease(pServers[i]);
+	xrtFree(pServers);
 }
 
 XS_HostInfo* xsHostFind(XS_ServerInfo* pServer, const char* sName)
@@ -81,7 +83,7 @@ void xsEnumHosts(XS_ServerInfo* pServer, XS_HostEnumProc procEach, void* pUserDa
 
 xvalue* xsConfigRoot(void)
 {
-	return g_XS_App != NULL ? g_XS_App->Root : NULL;
+	return XS_TopologyRootAcquire();
 }
 
 TCCState* xsCreateTCC(void)

@@ -22,6 +22,7 @@
 #include "../protocol/udp.h"
 #include "driver.h"
 #include "../runtime/gc.h"
+#include "../runtime/topology.h"
 
 /* 阶段一：驱动收口（关监听、关全部连接；custom 无 xs 侧资源） */
 static void XS_ServersDrain(XS_App* pApp)
@@ -41,6 +42,7 @@ static void XS_ServersDrain(XS_App* pApp)
 			XS_ScriptQuiesceHost(pServer->DefaultHost);
 		}
 	}
+	XS_TopologyStopAccepting();
 }
 
 static void XS_ShutdownServers(XS_App* pApp)
@@ -58,6 +60,9 @@ static void XS_ShutdownServers(XS_App* pApp)
 		if ( pServer->ConfigOwner != NULL ) pApp->Servers[i] = NULL;
 		(void)XS_GcRetireServer(pServer, false);
 	}
+	/* 退役后最后一个脚本活动先触发 ServiceUnit，使脚本可释放其公开 lease；
+	 * lease 本身仍无超时等待，归零后才允许引擎进入最终停止。 */
+	XS_TopologyWaitLeases();
 }
 
 /* Engine 已 Stop/Destroy：custom 的任意回调都已终结，此时才撤销脚本 owner。 */

@@ -38,6 +38,8 @@ static const XS_TccSymbol g_XS_XrtSymbols[] = {
 #define XS_API_SYMBOL(name)	{ #name, (const void*)(name) },
 static const XS_TccSymbol g_XS_ApiSymbols[] = {
 	XS_API_SYMBOL(xsServerFind)
+	XS_API_SYMBOL(xsServerRetain)
+	XS_API_SYMBOL(xsServerRelease)
 	XS_API_SYMBOL(xsEnumServers)
 	XS_API_SYMBOL(xsHostFind)
 	XS_API_SYMBOL(xsEnumHosts)

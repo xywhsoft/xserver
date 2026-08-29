@@ -5,15 +5,16 @@
  * 服务代生命周期。
  *
  * 一个 generation 初始持有一个管理引用。监听器、连接、UDP socket、
- * idle/lifecycle timer 等异步资源各自持有引用，并且只在各自唯一的终态
- * 回调中释放。退役只标记状态并撤销管理引用；最后一个资源结束时同步触发
- * finalizer。这里没有宽限时间，也没有超时强制释放路径。
+ * idle/lifecycle timer 与公开 server lease 各自持有引用，并且只在各自唯一
+ * 的终态释放。退役代最后一个脚本活动结束时先通知 ServiceUnit；最后一个
+ * 总引用结束时同步触发 finalizer。这里没有宽限时间或超时强制释放路径。
  */
 
 #include "../sdk/xsbase.h"
 
 typedef struct XS_ServerGeneration XS_ServerGeneration;
 typedef struct XS_GenerationTimer XS_GenerationTimer;
+typedef void (*XS_GenerationQuiesceProc)(XS_ServerGeneration* pGeneration);
 typedef void (*XS_GenerationFinalizeProc)(XS_ServerGeneration* pGeneration);
 
 struct XS_GenerationTimer {
@@ -25,14 +26,17 @@ struct XS_GenerationTimer {
 
 struct XS_ServerGeneration {
 	volatile int32		iReferences;	/* 管理引用 1 + 所有异步资源 */
-	xatomic32		tRetired;
+	xatomic32		tRetired;	/* 0 active；1 正在发布终态；2 已完整发布 */
 	xatomic32		tConnections;	/* 仅用于状态/测试；安全性由引用决定 */
+	xatomic32		tActivities;	/* 会进入脚本的连接/UDP 回调/lifecycle timer */
+	xatomic32		tQuiesced;	/* ServiceUnit 提前通知至多一次 */
 	xmutex*			pTimerLock;
 	XS_GenerationTimer*	pTimers;	/* lifecycle timer；退役时全部取消 */
 	XS_ServerInfo*		pServer;
 	void*			pDriverRuntime;
 	void*			pConfigOwner;
 	bool			bFreeServer;
+	XS_GenerationQuiesceProc	procQuiesce;
 	XS_GenerationFinalizeProc	procFinalize;
 };
 
@@ -52,6 +56,8 @@ static XS_ServerGeneration* XS_GenerationCreate(XS_ServerInfo* pServer)
 	pGeneration->iReferences = 1;
 	xrtAtomic32Init(&pGeneration->tRetired, 0);
 	xrtAtomic32Init(&pGeneration->tConnections, 0);
+	xrtAtomic32Init(&pGeneration->tActivities, 0);
+	xrtAtomic32Init(&pGeneration->tQuiesced, 0);
 	pGeneration->pServer = pServer;
 	pServer->Generation = pGeneration;
 	return pGeneration;
@@ -66,6 +72,25 @@ static bool XS_GenerationIsRetired(const XS_ServerGeneration* pGeneration)
 {
 	return pGeneration == NULL ||
 	       xrtAtomic32Load(&pGeneration->tRetired, XMEMORY_ACQUIRE) != 0;
+}
+
+/* 调用点必须仍持有至少一个 generation 引用，防止 quiesce 回调释放外部 lease 后归零。 */
+static void XS_GenerationMaybeQuiesce(XS_ServerGeneration* pGeneration)
+{
+	if ( pGeneration != NULL &&
+	     xrtAtomic32Load(&pGeneration->tRetired, XMEMORY_ACQUIRE) == 2 &&
+	     xrtAtomic32Load(&pGeneration->tActivities, XMEMORY_ACQUIRE) == 0 &&
+	     pGeneration->procQuiesce != NULL &&
+	     xrtAtomic32Exchange(&pGeneration->tQuiesced, 1, XMEMORY_ACQ_REL) == 0 ) {
+		pGeneration->procQuiesce(pGeneration);
+	}
+}
+
+static void XS_GenerationActivityRelease(XS_ServerGeneration* pGeneration)
+{
+	if ( pGeneration == NULL ) return;
+	xrtAtomic32FetchSub(&pGeneration->tActivities, 1, XMEMORY_ACQ_REL);
+	XS_GenerationMaybeQuiesce(pGeneration);
 }
 
 static void XS_GenerationRelease(XS_ServerGeneration* pGeneration)
@@ -86,12 +111,14 @@ static uint64 XS_GenerationTimerSchedule(
 {
 	XS_GenerationTimer** ppLink;
 	uint64 iId = 0;
+	bool bReleaseFailed = false;
 
 	if ( pGeneration == NULL || pTimer == NULL || procTimer == NULL ) {
 		return 0;
 	}
 	xrtMutexLock(pGeneration->pTimerLock);
 	if ( !XS_GenerationIsRetired(pGeneration) && XS_GenerationRetain(pGeneration) ) {
+		xrtAtomic32FetchAdd(&pGeneration->tActivities, 1, XMEMORY_ACQ_REL);
 		pTimer->pGeneration = pGeneration;
 		pTimer->pOwner = pOwner;
 		pTimer->pNext = pGeneration->pTimers;
@@ -108,10 +135,16 @@ static uint64 XS_GenerationTimerSchedule(
 				}
 			}
 			pTimer->pGeneration = NULL;
-			XS_GenerationRelease(pGeneration);
+			bReleaseFailed = true;
 		}
 	}
 	xrtMutexUnlock(pGeneration->pTimerLock);
+	/* MaybeQuiesce 可调用 ServiceUnit，而 ServiceUnit 允许再次调用 xsAfter；
+	 * 因此失败引用必须在 timer 锁外撤销，避免同锁重入。 */
+	if ( bReleaseFailed ) {
+		XS_GenerationActivityRelease(pGeneration);
+		XS_GenerationRelease(pGeneration);
+	}
 	return iId;
 }
 
@@ -160,6 +193,7 @@ static bool XS_GenerationConnectionAcquire(XS_ServerGeneration* pGeneration)
 		return false;
 	}
 	xrtAtomic32FetchAdd(&pGeneration->tConnections, 1, XMEMORY_RELAXED);
+	xrtAtomic32FetchAdd(&pGeneration->tActivities, 1, XMEMORY_ACQ_REL);
 	return true;
 }
 
@@ -169,6 +203,7 @@ static void XS_GenerationConnectionRelease(XS_ServerGeneration* pGeneration)
 		return;
 	}
 	xrtAtomic32FetchSub(&pGeneration->tConnections, 1, XMEMORY_RELAXED);
+	XS_GenerationActivityRelease(pGeneration);
 	XS_GenerationRelease(pGeneration);
 }
 
@@ -183,18 +218,26 @@ static void XS_GenerationRetire(
 	void* pDriverRuntime,
 	void* pConfigOwner,
 	bool bFreeServer,
+	XS_GenerationQuiesceProc procQuiesce,
 	XS_GenerationFinalizeProc procFinalize)
 {
+	uint32 iExpected = 0;
+
 	if ( pGeneration == NULL || procFinalize == NULL ) {
 		return;
 	}
-	if ( xrtAtomic32Exchange(&pGeneration->tRetired, 1, XMEMORY_ACQ_REL) != 0 ) {
+	/* 先用 preparing 状态封住新 timer/activity，再发布全部终态字段。
+	 * MaybeQuiesce 只接受状态 2，因此不会并发读取尚未写完的回调指针。 */
+	if ( !xrtAtomic32CompareExchange(&pGeneration->tRetired, &iExpected, 1,
+	     XMEMORY_ACQ_REL, XMEMORY_ACQUIRE) ) {
 		return;
 	}
 	pGeneration->pDriverRuntime = pDriverRuntime;
 	pGeneration->pConfigOwner = pConfigOwner;
 	pGeneration->bFreeServer = bFreeServer;
+	pGeneration->procQuiesce = procQuiesce;
 	pGeneration->procFinalize = procFinalize;
+	xrtAtomic32Store(&pGeneration->tRetired, 2, XMEMORY_RELEASE);
 	/* lifecycle timer 不属于要继续排空的连接；退役即请求其终态取消。 */
 	xrtMutexLock(pGeneration->pTimerLock);
 	{
@@ -207,6 +250,7 @@ static void XS_GenerationRetire(
 		}
 	}
 	xrtMutexUnlock(pGeneration->pTimerLock);
+	XS_GenerationMaybeQuiesce(pGeneration);
 	XS_GenerationRelease(pGeneration);	/* 撤销唯一的管理引用 */
 }
 

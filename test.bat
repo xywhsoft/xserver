@@ -61,6 +61,10 @@ if errorlevel 1 (echo FUNC FAIL & exit /b 1)
 rem Generation lifetime: keep-alive old generation + structural rebuild + exact finalization
 python tools\lifecycle_reload_test.py
 if errorlevel 1 (echo LIFECYCLE FAIL & exit /b 1)
+
+rem Same-endpoint listener handoff across HTTP/TCP/UDP/WS.
+python tools\reload_matrix_test.py
+if errorlevel 1 (echo RELOAD MATRIX FAIL & exit /b 1)
 cd release
 
 echo SMOKE PASS

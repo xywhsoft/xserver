@@ -10,6 +10,18 @@
 
 static int64 g_Tick = 0;
 static int64 g_ReloadCount = 0;
+static int64 g_Ready = 0;
+static XS_ServerInfo* g_HeldServer = NULL;
+
+static int64 ConfigInt(xvalue* pObject, const char* sName)
+{
+	xvalue* pValue = pObject != NULL ?
+		xrtValueObjectGet(pObject, xrtStrViewN(sName, strlen(sName))) : NULL;
+	int64 iValue = 0;
+
+	if ( pValue != NULL ) (void)xrtValueGetInt(pValue, &iValue);
+	return iValue;
+}
 
 static void TickProc(void* pUserData)
 {
@@ -170,6 +182,54 @@ XS_RequestResult RequestProc(XS_HttpReq* pReq)
 			int iLen = snprintf(arrNum, sizeof(arrNum), "%lld", (long long)g_ReloadCount);
 			return Reply(pReq, 200, "text/plain; charset=utf-8", arrNum, (size_t)iLen) ? XS_OK : XS_OK;
 		}
+		if ( PathIs(pReq, "/configstat") ) {
+			char arrNum[32];
+			int iLen = snprintf(arrNum, sizeof(arrNum), "%lld",
+				(long long)ConfigInt(pReq->server->Custom, "config_marker"));
+			return Reply(pReq, 200, "text/plain; charset=utf-8", arrNum, (size_t)iLen) ? XS_OK : XS_OK;
+		}
+		if ( PathIs(pReq, "/rootstat") ) {
+			xvalue* pRoot = xsConfigRoot();
+			int64 iValue = ConfigInt(pRoot, "reload_root");
+			char arrNum[32];
+			int iLen;
+
+			xrtValueRelease(pRoot);
+			iLen = snprintf(arrNum, sizeof(arrNum), "%lld", (long long)iValue);
+			return Reply(pReq, 200, "text/plain; charset=utf-8", arrNum, (size_t)iLen) ? XS_OK : XS_OK;
+		}
+		if ( PathIs(pReq, "/topology") ) {
+			XS_ServerInfo* pFound = xsServerFind("main");
+			char arrNum[32];
+			int iLen = snprintf(arrNum, sizeof(arrNum), "%u",
+				pFound != NULL ? (unsigned)pFound->Port : 0u);
+
+			xsServerRelease(pFound);
+			return Reply(pReq, 200, "text/plain; charset=utf-8", arrNum, (size_t)iLen) ? XS_OK : XS_OK;
+		}
+		if ( PathIs(pReq, "/ready") ) {
+			return ReplyLit(pReq, g_Ready == 1 ? 200 : 503, "text/plain; charset=utf-8",
+				g_Ready == 1 ? "ready" : "initializing") ? XS_OK : XS_OK;
+		}
+		if ( PathIs(pReq, "/lease-hold") ) {
+			char arrNum[32];
+			int iLen;
+
+			if ( g_HeldServer == NULL ) g_HeldServer = xsServerFind("tcp-echo");
+			iLen = snprintf(arrNum, sizeof(arrNum), "%u",
+				g_HeldServer != NULL ? (unsigned)g_HeldServer->Port : 0u);
+			return Reply(pReq, g_HeldServer != NULL ? 200 : 404,
+				"text/plain; charset=utf-8", arrNum, (size_t)iLen) ? XS_OK : XS_OK;
+		}
+		if ( PathIs(pReq, "/lease-release") ) {
+			char arrNum[32];
+			int iLen = snprintf(arrNum, sizeof(arrNum), "%u",
+				g_HeldServer != NULL ? (unsigned)g_HeldServer->Port : 0u);
+
+			xsServerRelease(g_HeldServer);
+			g_HeldServer = NULL;
+			return Reply(pReq, 200, "text/plain; charset=utf-8", arrNum, (size_t)iLen) ? XS_OK : XS_OK;
+		}
 		if ( PathIs(pReq, "/takeover") ) {
 			/* 演示接管：直接对裸流发提示并 Close；终态 Destroy 由 xs 完成 */
 			const char* sMsg = "[xs3] connection taken over by script\n";
@@ -193,11 +253,15 @@ XS_RequestResult RequestProc(XS_HttpReq* pReq)
 void ServiceInit(XS_HostInfo* pHost)
 {
 	xvalue* pSwap = xsSwapTake(pHost);
+	int64 iDelay = ConfigInt(pHost->Custom, "init_delay_ms");
+
+	if ( iDelay > 0 && iDelay <= 5000 ) xrtSleep((uint32)iDelay);
 
 	if ( pSwap != NULL ) {
 		(void)xrtValueGetInt(pSwap, &g_ReloadCount);
 		xrtValueRelease(pSwap);
 	}
+	g_Ready = 1;
 }
 
 bool ServiceSwap(XS_HostInfo* pHost, xvalue** ppShared)
@@ -205,4 +269,11 @@ bool ServiceSwap(XS_HostInfo* pHost, xvalue** ppShared)
 	(void)pHost;
 	*ppShared = xrtValueInt(g_ReloadCount + 1);
 	return *ppShared != NULL;
+}
+
+void ServiceUnit(XS_HostInfo* pHost)
+{
+	(void)pHost;
+	xsServerRelease(g_HeldServer);
+	g_HeldServer = NULL;
 }
