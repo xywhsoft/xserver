@@ -98,27 +98,34 @@ static bool XS_EngineStartup(XS_App* pApp)
 	return true;
 }
 
-/* 引擎停机：等待 LiveObjects 排空（listener/流的异步 Close 完成）→ Stop → Destroy。
- * xrt 保证有活对象时 Stop 拒绝；此处轮询排空是过渡方案，
- * 正式 drain 判据随"运行时与重载"工作包的连接注册表落地（设计 §10.3）。 */
+/* 引擎停机：等待全部异步对象进入终态，再 Stop/Destroy。没有超时强拆；
+ * 长连接不关闭就继续等待，这是“不泄漏且不 UAF”的必要约束。 */
 static void XS_EngineShutdown(XS_App* pApp)
 {
 	xnetenginestats tStats;
-	int iWait;
+	uint32 iWait = 0;
 
 	if ( pApp->Engine == NULL ) {
 		return;
 	}
-	for ( iWait = 0; iWait < 50; iWait++ ) {
-		memset(&tStats, 0, sizeof(tStats));
-		if ( !xrtNetEngineStats(pApp->Engine, &tStats) || tStats.LiveObjects == 0 ) {
+	for ( ; ; ) {
+		for ( ; ; ) {
+			memset(&tStats, 0, sizeof(tStats));
+			if ( !xrtNetEngineStats(pApp->Engine, &tStats) || tStats.LiveObjects == 0 ) {
+				break;
+			}
+			if ( iWait != 0 && iWait % 50 == 0 ) {
+				printf("[xs] waiting for %llu live engine objects to close\n",
+					(unsigned long long)tStats.LiveObjects);
+			}
+			iWait++;
+			xrtSleep(100);
+		}
+		if ( xrtNetEngineStop(pApp->Engine) ) {
 			break;
 		}
+		printf("[xs] engine stop deferred: terminal callbacks still draining\n");
 		xrtSleep(100);
-	}
-	if ( !xrtNetEngineStop(pApp->Engine) ) {
-		printf("[xs] engine stop rejected (live objects remain)\n");
-		return;
 	}
 	xrtNetEngineDestroy(pApp->Engine);
 	pApp->Engine = NULL;

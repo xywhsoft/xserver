@@ -36,12 +36,13 @@ typedef struct XS_HttpRuntime {
 	xtlslistener*		pTlsListener;
 	XS_TlsTable		tTls;
 	XS_ConnRegistry		tRegistry;
+	XS_ServerGeneration*	pGeneration;
 	xhttp1limits		tLimits;
 	uint64			iBodyLimit;	/* 0 = 内核默认 */
 	uint64			iPathLimit;	/* 0 = 默认 2048 */
 	uint64			iIdleMs;
 	uint64			iSweepTimer;
-	volatile bool		bStopping;
+	xatomic32		tStopping;
 	/* static.headers 装配期预渲染缓存（每 host 一条；请求路径零字符串处理） */
 	struct XS_HttpHostHdrs**	arrHdrCache;	/* 指针数组（每 host 一条） */
 	uint32			iHdrCacheCount;
@@ -278,6 +279,7 @@ static str XS_HttpHostRoot(XS_HttpRuntime* pRuntime, XS_HostInfo* pHost)
 {
 	str sPath;
 
+	(void)pRuntime;
 	if ( pHost->Path == NULL ) {
 		return xrtStrDup(XS_AppPath());
 	}
@@ -692,20 +694,34 @@ static int XS_HttpDrainBody(XS_HttpRecord* pRec)
 	}
 }
 
-/* TAKEOVER 后的事件表：数据忽略，Close 仅回收记录（流由应用 Destroy） */
+/* TAKEOVER 后仍保留框架终态事件：应用负责最终 Close，框架在 Close 中 Destroy。 */
 static void XS_HttpTakenOnRead(xnetstream* pStream, xnetbuf* pBuffer, ptr pData)
 {
 	(void)pStream; (void)pBuffer; (void)pData;
 }
 
+static void XS_HttpTakenOnEnd(xnetstream* pStream, ptr pData)
+{
+	(void)pData;
+	(void)xrtNetStreamClose(pStream);
+}
+
 static void XS_HttpTakenOnClose(xnetstream* pStream, xnetresult iResult, const xerror* pError, ptr pData)
 {
-	(void)pStream; (void)iResult; (void)pError;
-	xrtFree(pData);
+	XS_HttpRecord* pRec = (XS_HttpRecord*)pData;
+	XS_ScriptRuntime* pScript = pRec->tReg.pScript;
+	XS_ServerGeneration* pGeneration = pRec->tReg.pGeneration;
+
+	(void)iResult; (void)pError;
+	xrtNetStreamDestroy(pStream);
+	XS_RegistryRemove(pRec->tReg.pRegistry, &pRec->tReg);
+	xrtFree(pRec);
+	XS_ScriptRelease(pScript);
+	XS_GenerationConnectionRelease(pGeneration);
 }
 
 static const xnetstreamevents g_XS_HttpTakenEvents = {
-	NULL, XS_HttpTakenOnRead, NULL, NULL, NULL, NULL, XS_HttpTakenOnClose
+	NULL, XS_HttpTakenOnRead, XS_HttpTakenOnEnd, NULL, NULL, NULL, XS_HttpTakenOnClose
 };
 
 static void XS_HttpTlsTakenOnRead(xtlsstream* pStream, const xnetbuf* pBuffer, ptr pData)
@@ -713,21 +729,35 @@ static void XS_HttpTlsTakenOnRead(xtlsstream* pStream, const xnetbuf* pBuffer, p
 	(void)pStream; (void)pBuffer; (void)pData;
 }
 
+static void XS_HttpTlsTakenOnEnd(xtlsstream* pStream, ptr pData)
+{
+	(void)pData;
+	(void)xrtTlsStreamClose(pStream);
+}
+
 static void XS_HttpTlsTakenOnClose(xtlsstream* pStream, xnetresult iResult, const xerror* pError, ptr pData)
 {
-	(void)pStream; (void)iResult; (void)pError;
-	xrtFree(pData);
+	XS_HttpRecord* pRec = (XS_HttpRecord*)pData;
+	XS_ScriptRuntime* pScript = pRec->tReg.pScript;
+	XS_ServerGeneration* pGeneration = pRec->tReg.pGeneration;
+
+	(void)iResult; (void)pError;
+	xrtTlsStreamDestroy(pStream);
+	XS_RegistryRemove(pRec->tReg.pRegistry, &pRec->tReg);
+	xrtFree(pRec);
+	XS_ScriptRelease(pScript);
+	XS_GenerationConnectionRelease(pGeneration);
 }
 
 static const xtlsstreamevents g_XS_HttpTlsTakenEvents = {
-	NULL, XS_HttpTlsTakenOnRead, NULL, NULL, NULL, XS_HttpTlsTakenOnClose, NULL
+	NULL, XS_HttpTlsTakenOnRead, XS_HttpTlsTakenOnEnd, NULL, NULL, XS_HttpTlsTakenOnClose, NULL
 };
 
 /* 回调与收尾（三态处理）。返回 true 继续下一请求，false 停止驱动 */
 static bool XS_HttpDispatch(XS_HttpRecord* pRec)
 {
 	XS_HttpRuntime* pRuntime = pRec->pRuntime;
-	XS_ScriptRuntime* pScript = (XS_ScriptRuntime*)pRec->pHost->Runtime;
+	XS_ScriptRuntime* pScript = pRec->tReg.pScript;
 	XS_HttpReq tReq;
 	XS_RequestResult eResult = XS_FALLBACK;
 	int iDrain;
@@ -739,12 +769,14 @@ static bool XS_HttpDispatch(XS_HttpRecord* pRec)
 	tReq.host = pRec->pHost;
 	tReq.server = pRuntime->pServer;
 	if ( pScript != NULL && pScript->procRequest != NULL ) {
+		XS_ScriptRuntime* pPrevious = XS_ScriptEnter(pScript);
+
 		eResult = pScript->procRequest(&tReq);
+		XS_ScriptLeave(pPrevious);
 	}
 	if ( eResult == XS_TAKEOVER ) {
-		/* 应用接管：出表 + 换事件表（Close 仅回收记录，不 Destroy） */
+		/* 应用接管仍属于本 generation；终态 Close 才出表并释放引用。 */
 		pRec->bTakenOver = true;
-		XS_RegistryRemove(&pRuntime->tRegistry, &pRec->tReg);
 		if ( pRec->tReg.pTls != NULL ) {
 			(void)xrtTlsStreamSetEvents(pRec->tReg.pTls, &g_XS_HttpTlsTakenEvents, pRec);
 		} else {
@@ -861,18 +893,28 @@ static void XS_HttpOnRead(xnetstream* pStream, xnetbuf* pBuffer, ptr pData)
 	XS_HttpDrive(pRec);
 }
 
+static void XS_HttpOnEnd(xnetstream* pStream, ptr pData)
+{
+	(void)pData;
+	(void)xrtNetStreamClose(pStream);
+}
+
 static void XS_HttpOnClose(xnetstream* pStream, xnetresult iResult, const xerror* pError, ptr pData)
 {
 	XS_HttpRecord* pRec = (XS_HttpRecord*)pData;
+	XS_ScriptRuntime* pScript = pRec->tReg.pScript;
+	XS_ServerGeneration* pGeneration = pRec->tReg.pGeneration;
 
 	(void)iResult; (void)pError;
 	xrtNetStreamDestroy(pStream);
-	XS_RegistryRemove(&((XS_HttpRuntime*)pRec->tReg.pHost->Server->Runtime)->tRegistry, &pRec->tReg);
+	XS_RegistryRemove(pRec->tReg.pRegistry, &pRec->tReg);
 	xrtFree(pRec);
+	XS_ScriptRelease(pScript);
+	XS_GenerationConnectionRelease(pGeneration);
 }
 
 static const xnetstreamevents g_XS_HttpStreamEvents = {
-	NULL, XS_HttpOnRead, NULL, NULL, NULL, NULL, XS_HttpOnClose
+	NULL, XS_HttpOnRead, XS_HttpOnEnd, NULL, NULL, NULL, XS_HttpOnClose
 };
 
 static bool XS_HttpOnAccept(xnetlistener* pListener, xnetstream* pStream, ptr pData)
@@ -881,22 +923,33 @@ static bool XS_HttpOnAccept(xnetlistener* pListener, xnetstream* pStream, ptr pD
 	XS_HttpRecord* pRec = (XS_HttpRecord*)xrtCalloc(1, sizeof(XS_HttpRecord));
 
 	(void)pListener;
-	if ( pRec == NULL ) {
+	if ( pRec == NULL || xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) != 0 ||
+	     !XS_GenerationConnectionAcquire(pRuntime->pGeneration) ) {
+		xrtFree(pRec);
 		return false;
 	}
 	pRec->pRuntime = pRuntime;
 	pRec->tReg.pHost = pRuntime->pDefaultHost;
 	pRec->tReg.pTcp = pStream;
+	pRec->tReg.pGeneration = pRuntime->pGeneration;
+	pRec->tReg.pScript = XS_ScriptAcquireHost(pRuntime->pDefaultHost);
 	xrtHttp1HeadInit(&pRec->tHead, pRec->arrFields, XS_HTTP_MAX_FIELDS);
-	XS_RegistryAdd(&pRuntime->tRegistry, &pRec->tReg);
+	if ( !XS_RegistryAdd(&pRuntime->tRegistry, &pRec->tReg) ) {
+		XS_ScriptRelease(pRec->tReg.pScript);
+		XS_GenerationConnectionRelease(pRuntime->pGeneration);
+		xrtFree(pRec);
+		return false;
+	}
 	(void)xrtNetStreamSetData(pStream, pRec);
 	return true;
 }
 
 static void XS_HttpOnListenerClose(xnetlistener* pListener, ptr pData)
 {
-	(void)pData;
+	XS_HttpRuntime* pRuntime = (XS_HttpRuntime*)pData;
+
 	xrtNetListenerDestroy(pListener);
+	XS_GenerationRelease(pRuntime->pGeneration);
 }
 
 static const xnetlistenerevents g_XS_HttpListenerEvents = {
@@ -914,18 +967,28 @@ static void XS_HttpTlsOnRead(xtlsstream* pStream, const xnetbuf* pBuffer, ptr pD
 	XS_HttpDrive(pRec);
 }
 
+static void XS_HttpTlsOnEnd(xtlsstream* pStream, ptr pData)
+{
+	(void)pData;
+	(void)xrtTlsStreamClose(pStream);
+}
+
 static void XS_HttpTlsOnClose(xtlsstream* pStream, xnetresult iResult, const xerror* pError, ptr pData)
 {
 	XS_HttpRecord* pRec = (XS_HttpRecord*)pData;
+	XS_ScriptRuntime* pScript = pRec->tReg.pScript;
+	XS_ServerGeneration* pGeneration = pRec->tReg.pGeneration;
 
 	(void)iResult; (void)pError;
 	xrtTlsStreamDestroy(pStream);
-	XS_RegistryRemove(&((XS_HttpRuntime*)pRec->tReg.pHost->Server->Runtime)->tRegistry, &pRec->tReg);
+	XS_RegistryRemove(pRec->tReg.pRegistry, &pRec->tReg);
 	xrtFree(pRec);
+	XS_ScriptRelease(pScript);
+	XS_GenerationConnectionRelease(pGeneration);
 }
 
 static const xtlsstreamevents g_XS_HttpTlsStreamEvents = {
-	NULL, XS_HttpTlsOnRead, NULL, NULL, NULL, XS_HttpTlsOnClose, NULL
+	NULL, XS_HttpTlsOnRead, XS_HttpTlsOnEnd, NULL, NULL, XS_HttpTlsOnClose, NULL
 };
 
 static bool XS_HttpTlsOnAccept(xtlslistener* pListener, xtlsstream* pStream, ptr pData)
@@ -934,22 +997,33 @@ static bool XS_HttpTlsOnAccept(xtlslistener* pListener, xtlsstream* pStream, ptr
 	XS_HttpRecord* pRec = (XS_HttpRecord*)xrtCalloc(1, sizeof(XS_HttpRecord));
 
 	(void)pListener;
-	if ( pRec == NULL ) {
+	if ( pRec == NULL || xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) != 0 ||
+	     !XS_GenerationConnectionAcquire(pRuntime->pGeneration) ) {
+		xrtFree(pRec);
 		return false;
 	}
 	pRec->pRuntime = pRuntime;
 	pRec->tReg.pHost = pRuntime->pDefaultHost;
 	pRec->tReg.pTls = pStream;
+	pRec->tReg.pGeneration = pRuntime->pGeneration;
+	pRec->tReg.pScript = XS_ScriptAcquireHost(pRuntime->pDefaultHost);
 	xrtHttp1HeadInit(&pRec->tHead, pRec->arrFields, XS_HTTP_MAX_FIELDS);
-	XS_RegistryAdd(&pRuntime->tRegistry, &pRec->tReg);
+	if ( !XS_RegistryAdd(&pRuntime->tRegistry, &pRec->tReg) ) {
+		XS_ScriptRelease(pRec->tReg.pScript);
+		XS_GenerationConnectionRelease(pRuntime->pGeneration);
+		xrtFree(pRec);
+		return false;
+	}
 	(void)xrtTlsStreamSetEvents(pStream, &g_XS_HttpTlsStreamEvents, pRec);
 	return true;
 }
 
 static void XS_HttpTlsOnListenerClose(xtlslistener* pListener, ptr pData)
 {
-	(void)pData;
+	XS_HttpRuntime* pRuntime = (XS_HttpRuntime*)pData;
+
 	xrtTlsListenerDestroy(pListener);
+	XS_GenerationRelease(pRuntime->pGeneration);
 }
 
 static const xtlslistenerevents g_XS_HttpTlsListenerEvents = {
@@ -965,18 +1039,40 @@ static void XS_HttpSweepProc(xnetworker* pWorker, uint64 iId, xnetresult iResult
 	XS_HttpRuntime* pRuntime = (XS_HttpRuntime*)pData;
 
 	(void)pWorker; (void)iId;
-	if ( iResult != XNET_RESULT_OK || pRuntime->bStopping ) {
-		return;
-	}
-	(void)XS_RegistrySweepIdle(&pRuntime->tRegistry, pRuntime->iIdleMs);
-	{
-		uint64 iInterval = pRuntime->iIdleMs / 2;
+	if ( iResult == XNET_RESULT_OK &&
+	     xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) == 0 ) {
+		(void)XS_RegistrySweepIdle(&pRuntime->tRegistry, pRuntime->iIdleMs);
+		{
+			uint64 iInterval = pRuntime->iIdleMs / 2;
 
-		if ( iInterval > 1000 ) iInterval = 1000;
-		if ( iInterval < 10 ) iInterval = 10;
-		pRuntime->iSweepTimer = xrtNetEngineAfter(pRuntime->pServer->Engine, 0,
-			iInterval * 1000, XS_HttpSweepProc, pData);
+			if ( iInterval > 1000 ) iInterval = 1000;
+			if ( iInterval < 10 ) iInterval = 10;
+			if ( XS_GenerationRetain(pRuntime->pGeneration) ) {
+				pRuntime->iSweepTimer = xrtNetEngineAfter(pRuntime->pServer->Engine, 0,
+					iInterval * 1000, XS_HttpSweepProc, pData);
+				if ( pRuntime->iSweepTimer == 0 ) {
+					XS_GenerationRelease(pRuntime->pGeneration);
+				}
+			}
+		}
 	}
+	XS_GenerationRelease(pRuntime->pGeneration);
+}
+
+static bool XS_HttpScheduleSweep(XS_HttpRuntime* pRuntime)
+{
+	uint64 iInterval = pRuntime->iIdleMs / 2;
+
+	if ( iInterval > 1000 ) iInterval = 1000;
+	if ( iInterval < 10 ) iInterval = 10;
+	if ( !XS_GenerationRetain(pRuntime->pGeneration) ) return false;
+	pRuntime->iSweepTimer = xrtNetEngineAfter(pRuntime->pServer->Engine, 0,
+		iInterval * 1000, XS_HttpSweepProc, pRuntime);
+	if ( pRuntime->iSweepTimer == 0 ) {
+		XS_GenerationRelease(pRuntime->pGeneration);
+		return false;
+	}
+	return true;
 }
 
 /* 装配期渲染一个 host 的 static.headers：JSON 遍历与字符串拷贝只发生在这里。
@@ -1114,6 +1210,8 @@ static bool XS_HttpStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap)
 	}
 	pRuntime->pServer = pServer;
 	pRuntime->pDefaultHost = pServer->DefaultHost;
+	pRuntime->pGeneration = (XS_ServerGeneration*)pServer->Generation;
+	xrtAtomic32Init(&pRuntime->tStopping, 0);
 	pServer->Runtime = pRuntime;
 
 	if ( pScript == NULL || pScript->procRequest == NULL ) {
@@ -1159,9 +1257,11 @@ static bool XS_HttpStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap)
 		if ( pServer->RecvLimit > 0 ) {
 			tListen.Stream.ReadLimit = pServer->RecvLimit;
 		}
+		if ( !XS_GenerationRetain(pRuntime->pGeneration) ) return false;
 		pRuntime->pListener = xrtNetListen(pServer->Engine, &tListen,
 			&g_XS_HttpListenerEvents, &g_XS_HttpStreamEvents, pRuntime);
 		if ( pRuntime->pListener == NULL ) {
+			XS_GenerationRelease(pRuntime->pGeneration);
 			const xerror* pErr = xrtGetError();
 			snprintf(sErr, iErrCap, "http server '%s' listen failed (port %u): %s",
 				pServer->Name, pServer->Port, pErr ? xrtErrorMessage(pErr) : "unknown");
@@ -1193,16 +1293,18 @@ static bool XS_HttpStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap)
 		tTlsListen.Tls.Select = XS_TlsSelect;
 		tTlsListen.Tls.SelectContext = &pRuntime->tTls;
 		pRuntime->bTls = true;
+		if ( !XS_GenerationRetain(pRuntime->pGeneration) ) return false;
 		pRuntime->pTlsListener = xrtTlsListenerStart(pServer->Engine, &tTlsListen,
 			&g_XS_HttpTlsListenerEvents, &g_XS_HttpTlsStreamEvents, pRuntime);
 		if ( pRuntime->pTlsListener == NULL ) {
+			XS_GenerationRelease(pRuntime->pGeneration);
 			XS_TlsTableUnit(&pRuntime->tTls);
 			snprintf(sErr, iErrCap, "https server '%s' listen failed (port %u)", pServer->Name, pServer->Port);
 			return false;
 		}
 	}
 	if ( pRuntime->iIdleMs > 0 ) {
-		XS_HttpSweepProc(NULL, 0, XNET_RESULT_OK, pRuntime);
+		(void)XS_HttpScheduleSweep(pRuntime);
 	}
 	XS_HttpHdrCacheBuildAll(pRuntime, pServer);
 	printf("[xs] server '%s' %s ready on %s:%u\n", pServer->Name,
@@ -1216,12 +1318,12 @@ static void XS_HttpStop(XS_HttpRuntime* pRuntime)
 	if ( pRuntime == NULL ) {
 		return;
 	}
-	pRuntime->bStopping = true;
+	xrtAtomic32Store(&pRuntime->tStopping, 1, XMEMORY_RELEASE);
 	if ( pRuntime->iSweepTimer != 0 ) {
 		(void)xrtNetEngineTimerCancel(pRuntime->pServer->Engine, pRuntime->iSweepTimer);
 		pRuntime->iSweepTimer = 0;
 	}
-	XS_RegistryCloseAll(&pRuntime->tRegistry);
+	XS_RegistryStopAccepting(&pRuntime->tRegistry);
 	if ( pRuntime->pListener != NULL ) {
 		xrtNetListenerClose(pRuntime->pListener);
 		pRuntime->pListener = NULL;
@@ -1229,6 +1331,13 @@ static void XS_HttpStop(XS_HttpRuntime* pRuntime)
 	if ( pRuntime->pTlsListener != NULL ) {
 		xrtTlsListenerClose(pRuntime->pTlsListener);
 		pRuntime->pTlsListener = NULL;
+	}
+}
+
+static void XS_HttpCloseConnections(XS_HttpRuntime* pRuntime)
+{
+	if ( pRuntime != NULL ) {
+		XS_RegistryCloseAll(&pRuntime->tRegistry);
 	}
 }
 

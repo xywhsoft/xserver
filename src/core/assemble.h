@@ -7,7 +7,7 @@
  *   http/https、tcp/tcps、udp —— xs 建监听/绑定，事件透传脚本回调
  *     http 脚本可选（无 RequestProc 走纯静态）
  *   ws —— 驱动随 WS 工作包接入
- * 停机四阶段：驱动收口 → ServiceUnit 全部 → 引擎排空 → TCC 销毁
+ * 停机：驱动收口 → builtin generation 退役 → 引擎排空 → custom 最终退役
  */
 
 #include <stdio.h>
@@ -28,8 +28,18 @@ static void XS_ServersDrain(XS_App* pApp)
 {
 	uint32 i;
 
+	XS_ReloadQuiesce();
 	for ( i = 0; i < pApp->ServerCount; i++ ) {
-		XS_ServerDriverStop(pApp->Servers[i]);
+		XS_ServerInfo* pServer = pApp->Servers[i];
+
+		if ( pServer == NULL ) continue;
+		XS_ServerDriverStop(pServer);
+		XS_ServerDriverCloseConnections(pServer);
+		/* custom 资源对 xs 不透明：先让 ServiceUnit 主动关闭，TCC 暂不卸载。 */
+		if ( strcmp(pServer->Class, "custom") == 0 ) {
+			XS_ScriptRequestUnitHost(pServer->DefaultHost);
+			XS_ScriptQuiesceHost(pServer->DefaultHost);
+		}
 	}
 }
 
@@ -37,25 +47,32 @@ static void XS_ShutdownServers(XS_App* pApp)
 {
 	uint32 i;
 
-	/* 阶段二：ServiceUnit 全部先跑（脚本间仍可互访） */
+	/* builtin：退役撤销管理引用；终态回调归零时自行 Unit/TCC/driver。 */
 	for ( i = 0; i < pApp->ServerCount; i++ ) {
-		XS_ScriptUnitHost(pApp->Servers[i]->DefaultHost);
+		XS_ServerInfo* pServer = pApp->Servers[i];
+
+		if ( pServer == NULL || strcmp(pServer->Class, "custom") == 0 ) continue;
+		pServer->State = XS_RUN_STOPPED;
+		if ( pServer->DefaultHost != NULL ) pServer->DefaultHost->State = XS_RUN_STOPPED;
+		/* 动态配置快照可能在同步 finalizer 中释放 server，先清借用槽位。 */
+		if ( pServer->ConfigOwner != NULL ) pApp->Servers[i] = NULL;
+		(void)XS_GcRetireServer(pServer, false);
 	}
-	/* 阶段三：等引擎 LiveObjects 排空（worker 不再执行脚本代码）后销毁 TCC */
+}
+
+/* Engine 已 Stop/Destroy：custom 的任意回调都已终结，此时才撤销脚本 owner。 */
+static void XS_ShutdownAfterEngine(XS_App* pApp)
+{
+	uint32 i;
+
 	for ( i = 0; i < pApp->ServerCount; i++ ) {
-		XS_ScriptDeleteHost(pApp->Servers[i]->DefaultHost);
-		pApp->Servers[i]->State = XS_RUN_STOPPED;
-		if ( pApp->Servers[i]->DefaultHost != NULL ) {
-			pApp->Servers[i]->DefaultHost->State = XS_RUN_STOPPED;
-		}
+		XS_ServerInfo* pServer = pApp->Servers[i];
+
+		if ( pServer == NULL || strcmp(pServer->Class, "custom") != 0 ) continue;
+		pServer->State = XS_RUN_STOPPED;
+		if ( pServer->ConfigOwner != NULL ) pApp->Servers[i] = NULL;
+		(void)XS_GcRetireServer(pServer, false);
 	}
-	/* 阶段四：驱动运行时释放（连接已排空） */
-	for ( i = 0; i < pApp->ServerCount; i++ ) {
-		XS_ServerDriverUnit(pApp->Servers[i]);
-	}
-	/* 清空 GC 延迟释放队列（进程即将退出，不安全但可接受） */
-	XS_GcShutdown();
-	/* 清空全部动态 VFS 挂载（脚本源）；内置资源不受影响 */
 	tcc_vfs_clear_dynamic();
 }
 

@@ -4,9 +4,11 @@
 
 当前状态：**生产就绪**——五大协议（http(+https)/ws(+wss)/tcp(+tcps)/udp/custom）、热重载深化（配置级分流/证书热替换/VFS 槽位复用）、可选库门控（sqlite）、dev_inc/dev_lib 应用 SDK 目录、静态层四旋钮、四层测试体系（冒烟/功能/压力/攻防演练 6h 704 轮 0 失败）。遗留：xadmin 试点、Linux 实测。
 - 协议：HTTP 连接驱动（三态返回/虚拟主机路由/静态层/keep-alive）、WS 升级移交、TCP/TCP+TLS、UDP、custom 手动装配
-- 热重载：generation 换代、编译失败回滚、ServiceSwap 交接、代际定时器
+- 热重载：终态引用 generation、旧连接自然排空、候选 listener 先行、ServiceSwap、代际定时器精确取消；无宽限/超时强拆
 - 可选库：`build.bat sqlite` 变体（296 符号导入 + sqlite3.h 入 VFS）
-- 测试：`test.bat`（冒烟+功能：配置矩阵/行为/重载/idle）、`tools/pressure_test.py`（四协议 RPS 基线：tcp/ws ~70k、udp ~60k、http ~9k）、`tools/drill.py`（攻防演练：对抗样本+金丝雀+内存监控）——`cmd /c test.bat` 一键回归：配置装载 → 引擎启动 → TCC 经内置 VFS 编译 custom 脚本（2,850 个 xrt 符号全量导入）→ 脚本自建 echo 监听 → TCP 回路验证 → 三阶段优雅停机。http/ws/tcp/udp 协议驱动与软重载按 [docs/设计.md](docs/设计.md) §14 推进。
+- 测试：`test.bat`（冒烟+功能+generation 生命周期）、`tools/lifecycle_reload_test.py`（旧 keep-alive 留在旧代、双向 listener 换代、最后连接终态自动释放）、`tools/pressure_test.py`、`tools/drill.py`。
+
+热换安全边界：绑定端点改变时采用候选先行；同一端点的结构重建明确拒绝，避免先拆旧再危险回滚。UDP 不做原地 host 换脚本；custom 因裸资源无统一终态 lease，不支持在线卸载，进程停机时在引擎停止后才释放其 TCC。
 
 TCC 宿主吸收了 xlang（demo6）的成熟经验并推进到**单文件交付**：`res/tcc`（VFS 构建目录）在构建期整体 LZMA 打包进二进制（SDK 头 + 精简 winapi/linux 头 + libtcc1.a + 导入库，7.3MB → 1.0MB），运行时从内置 VFS 读取——**xs 不附带任何磁盘 TCC 环境**。新增内置库 = 放入 `res/tcc` 重新构建。中文路径由 UTF-8 宽字符 IO 全链路保障。
 

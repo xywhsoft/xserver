@@ -155,12 +155,22 @@ int main(int argc, char** argv)
 		return 1;
 	}
 	g_XS_App = &tApp;
+	if ( !XS_ReloadRuntimeInit() ) {
+		printf("[xs] reload runtime init failed\n");
+		XS_EngineShutdown(&tApp);
+		XS_ConfigFree(&tApp);
+		return 1;
+	}
 
 
 	/* 装配（本轮：custom 完整路径；其余协议驱动后续接入） */
 	if ( !XS_AssembleServers(&tApp) ) {
 		printf("[xs] assemble failed, exit\n");
+		XS_ServersDrain(&tApp);
+		XS_ShutdownServers(&tApp);
 		XS_EngineShutdown(&tApp);
+		XS_ShutdownAfterEngine(&tApp);
+		XS_ReloadRuntimeUnit();
 		XS_ConfigFree(&tApp);
 		return 1;
 	}
@@ -182,6 +192,8 @@ int main(int argc, char** argv)
 	XS_ServersDrain(&tApp);
 	XS_ShutdownServers(&tApp);
 	XS_EngineShutdown(&tApp);
+	XS_ShutdownAfterEngine(&tApp);
+	XS_ReloadRuntimeUnit();
 	XS_ConfigFree(&tApp);
 	printf("[xs] bye\n");
 	return 0;

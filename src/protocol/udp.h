@@ -18,22 +18,34 @@ typedef struct XS_UdpRuntime {
 	XS_ServerInfo*		pServer;
 	XS_HostInfo*		pHost;		/* DefaultHost：回调挂载点 */
 	xnetudp*		pUdp;
+	XS_ServerGeneration*	pGeneration;
+	XS_ScriptRuntime*	pScript;
 } XS_UdpRuntime;
 
 static void XS_UdpOnReceive(xnetudp* pUdp, const xnetudpmessage* pMsg, ptr pData)
 {
 	XS_UdpRuntime* pRuntime = (XS_UdpRuntime*)pData;
-	XS_ScriptRuntime* pScript = (XS_ScriptRuntime*)pRuntime->pHost->Runtime;
+	XS_ScriptRuntime* pScript = pRuntime->pScript;
 
 	if ( pScript != NULL && pScript->procEventDgram != NULL ) {
+		XS_ScriptRuntime* pPrevious = XS_ScriptEnter(pScript);
+
 		pScript->procEventDgram(pRuntime->pHost, pUdp, pMsg);
+		XS_ScriptLeave(pPrevious);
 	}
 }
 
 static void XS_UdpOnClose(xnetudp* pUdp, xnetresult iResult, const xerror* pError, ptr pData)
 {
-	(void)iResult; (void)pError; (void)pData;
+	XS_UdpRuntime* pRuntime = (XS_UdpRuntime*)pData;
+	XS_ScriptRuntime* pScript = pRuntime->pScript;
+	XS_ServerGeneration* pGeneration = pRuntime->pGeneration;
+
+	(void)iResult; (void)pError;
 	xrtNetUdpDestroy(pUdp);		/* Close 完成后释放调用方引用 */
+	XS_ScriptRelease(pScript);
+	pRuntime->pScript = NULL;
+	XS_GenerationRelease(pGeneration);
 }
 
 static const xnetudpevents g_XS_UdpEvents = {
@@ -68,9 +80,20 @@ static bool XS_UdpStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap)
 	}
 	pRuntime->pServer = pServer;
 	pRuntime->pHost = pServer->DefaultHost;
+	pRuntime->pGeneration = (XS_ServerGeneration*)pServer->Generation;
+	pRuntime->pScript = XS_ScriptAcquireHost(pServer->DefaultHost);
+	if ( pRuntime->pScript == NULL || !XS_GenerationRetain(pRuntime->pGeneration) ) {
+		XS_ScriptRelease(pRuntime->pScript);
+		xrtFree(pRuntime);
+		snprintf(sErr, iErrCap, "udp server '%s' cannot acquire generation", pServer->Name);
+		return false;
+	}
 	pServer->Runtime = pRuntime;
 	pRuntime->pUdp = xrtNetUdpBind(pServer->Engine, &tAddr, 0, &tCfg, &g_XS_UdpEvents, pRuntime);
 	if ( pRuntime->pUdp == NULL ) {
+		XS_ScriptRelease(pRuntime->pScript);
+		XS_GenerationRelease(pRuntime->pGeneration);
+		pRuntime->pScript = NULL;
 		snprintf(sErr, iErrCap, "udp server '%s' bind failed (port %u)", pServer->Name, pServer->Port);
 		return false;
 	}

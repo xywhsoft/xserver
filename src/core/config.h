@@ -124,6 +124,10 @@ static void XS_ConfigHostFree(XS_HostInfo* pHost)
 	xrtFree((void*)pHost->TlsKey);
 	xrtFree((void*)pHost->DevInc);
 	xrtFree((void*)pHost->DevLib);
+	if ( pHost->RuntimeLock != NULL ) {
+		xrtMutexDestroy((xmutex*)pHost->RuntimeLock);
+		pHost->RuntimeLock = NULL;
+	}
 	xrtFree(pHost);
 }
 
@@ -134,6 +138,11 @@ static bool XS_ConfigParseHost(xvalue* pObj, XS_HostInfo* pHost, XS_ServerInfo* 
 	pHost->Server = pServer;
 	pHost->State = XS_RUN_STARTING;
 	pHost->Custom = pObj;
+	pHost->RuntimeLock = xrtMutexCreate();
+	if ( pHost->RuntimeLock == NULL ) {
+		snprintf(sErr, iErrCap, "out of memory");
+		return false;
+	}
 
 	if ( !XS_ConfigTakeBool(pObj, "enabled", &pHost->Enabled, sErr, iErrCap) ) return false;
 	if ( !XS_ConfigTakeString(pObj, "name", &pHost->Name, sErr, iErrCap) ) return false;
@@ -263,7 +272,12 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 		pServer->DefaultHost->Server = pServer;
 		pServer->DefaultHost->State = XS_RUN_STARTING;
 		pServer->DefaultHost->Custom = xrtValueObject();	/* 空 Custom，恒为对象 */
+		pServer->DefaultHost->RuntimeLock = xrtMutexCreate();
 		if ( pServer->DefaultHost->Custom == NULL || !XS_ConfigTrack(pApp, pServer->DefaultHost->Custom) ) {
+			snprintf(sErr, iErrCap, "out of memory");
+			return false;
+		}
+		if ( pServer->DefaultHost->RuntimeLock == NULL ) {
 			snprintf(sErr, iErrCap, "out of memory");
 			return false;
 		}
@@ -423,7 +437,13 @@ static void XS_ConfigFree(XS_App* pApp)
 		return;
 	}
 	for ( i = 0; i < pApp->ServerCount; i++ ) {
-		XS_ConfigServerFree(pApp->Servers[i]);
+		XS_ServerInfo* pServer = pApp->Servers[i];
+
+		/* 动态重载后的 server 由其配置快照拥有；根 XS_App 只借用槽位。 */
+		if ( pServer != NULL &&
+		     (pServer->ConfigOwner == NULL || pServer->ConfigOwner == (void*)pApp) ) {
+			XS_ConfigServerFree(pServer);
+		}
 	}
 	xrtFree(pApp->Servers);
 	for ( i = 0; i < pApp->TakenCount; i++ ) {

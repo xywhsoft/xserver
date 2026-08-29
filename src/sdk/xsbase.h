@@ -69,6 +69,7 @@ typedef struct XS_HostInfo {
 	/* 以下为尾部追加字段（ABI 纪律：只增不改） */
 	const char*			DevInc;		/* 脚本额外 include 目录（分号分隔，相对 appPath） */
 	const char*			DevLib;		/* 脚本额外库目录（分号分隔，相对 appPath） */
+	void*				RuntimeLock;	/* 宿主侧脚本代切换锁（不透明） */
 } XS_HostInfo;
 
 typedef struct XS_ServerInfo {
@@ -89,6 +90,9 @@ typedef struct XS_ServerInfo {
 	void*				Runtime;
 	struct xnetengine*		Engine;		/* 进程级引擎（custom 类应用的起点） */
 	xvalue*				Custom;		/* 配置文件中非预设字段的全部内容 */
+	/* 以下为尾部追加字段（ABI 纪律：只增不改） */
+	void*				Generation;	/* 服务代生命周期拥有者（不透明） */
+	void*				ConfigOwner;	/* 动态配置快照所有者（不透明） */
 } XS_ServerInfo;
 
 /* ============================================================
@@ -111,8 +115,8 @@ typedef int XS_RequestResult;
 
 #define XS_OK			0	/* 已写出完整响应，驱动消费 body 余量后继续 keep-alive */
 #define XS_FALLBACK		1	/* 未处理：GET/HEAD 落入静态层，其余 404 */
-#define XS_TAKEOVER		2	/* 应用接管连接：驱动引用流后不再触碰，
-					 * 应用在任意线程完成收发后自行 Close→Destroy */
+#define XS_TAKEOVER		2	/* 应用接管连接：可自行收发并最终 Close；不得替换事件表，
+					 * Close 终态由 xs Destroy 并释放 generation lease */
 
 typedef XS_RequestResult (*XS_RequestProc)(XS_HttpReq* pReq);
 
@@ -180,7 +184,7 @@ XS_API void xsEnumServers(XS_ServerEnumProc procEach, void* pUserData);
 XS_API void xsEnumHosts(XS_ServerInfo* pServer, XS_HostEnumProc procEach, void* pUserData);
 XS_API xvalue* xsConfigRoot(void);			/* xs.json 顶层 Custom */
 
-/* 重载（跨 server 访问不设限；失败时旧代原样服务，见设计 §10.2） */
+/* 重载（异步排队；返回值仅表示请求已受理。实际失败时旧代原样服务，见 §10.2） */
 XS_API bool xsReloadHost(XS_HostInfo* pHost);
 XS_API bool xsReloadServer(const char* sName);
 XS_API bool xsReloadAll(void);

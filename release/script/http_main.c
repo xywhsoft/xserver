@@ -171,7 +171,7 @@ XS_RequestResult RequestProc(XS_HttpReq* pReq)
 			return Reply(pReq, 200, "text/plain; charset=utf-8", arrNum, (size_t)iLen) ? XS_OK : XS_OK;
 		}
 		if ( PathIs(pReq, "/takeover") ) {
-			/* 演示接管：直接对裸流发提示，然后自行关闭并 Destroy */
+			/* 演示接管：直接对裸流发提示并 Close；终态 Destroy 由 xs 完成 */
 			const char* sMsg = "[xs3] connection taken over by script\n";
 			size_t iLen = strlen(sMsg);
 

@@ -97,15 +97,12 @@ void xsDestroyTCC(TCCState* pTcc)
 }
 
 /* —— 重载与定时器（src/runtime/reload.h）——
- * 回调内调用时走延迟执行（避免自毁当前调用栈）；空闲时同步执行 */
+ * 重载一律延迟到固定 worker，调用点永不在自己的 TCC 回调栈上卸载。 */
 
 bool xsReloadHost(XS_HostInfo* pHost)
 {
 	if ( pHost == NULL ) {
 		return false;
-	}
-	if ( !g_XS_ReloadBusy ) {
-		return XS_ReloadHostNow(pHost);
 	}
 	return XS_DeferReload(g_XS_App, pHost, NULL, false);
 }
@@ -125,9 +122,6 @@ bool xsReloadAll(void)
 	if ( g_XS_App == NULL ) {
 		return false;
 	}
-	if ( !g_XS_ReloadBusy ) {
-		return XS_ReloadAllNow(g_XS_App);
-	}
 	return XS_DeferReload(g_XS_App, NULL, NULL, true);
 }
 
@@ -146,10 +140,10 @@ bool xsTimerCancel(uint64 iTimerId)
 
 xvalue* xsSwapTake(XS_HostInfo* pHost)
 {
-	XS_ScriptRuntime* pRuntime = pHost != NULL ? (XS_ScriptRuntime*)pHost->Runtime : NULL;
+	XS_ScriptRuntime* pRuntime = g_XS_CurrentScript;
 	xvalue* pSwap;
 
-	if ( pRuntime == NULL || pRuntime->pSwap == NULL ) {
+	if ( pRuntime == NULL || pRuntime->pHost != pHost || pRuntime->pSwap == NULL ) {
 		return NULL;
 	}
 	pSwap = pRuntime->pSwap;

@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "../sdk/xsbase.h"
+#include "../runtime/generation.h"
 #include "tcc_host.h"
 
 typedef struct XS_ScriptRuntime {
@@ -17,8 +18,10 @@ typedef struct XS_ScriptRuntime {
 	uint64			tGeneration;	/* 代际（热重载语义见设计 §10） */
 	xvalue*			pSwap;		/* 旧代 ServiceSwap 导出、新代 xsSwapTake 取走 */
 	XS_HostInfo*		pHost;
-	bool			bRetired;	/* 已退役：无引用后 ServiceUnit + 销毁 */
-	struct XS_ScriptRuntime*	pRetiredNext;
+	volatile int32		iReferences;	/* host 所有权 1 + 连接/定时器引用 */
+	xatomic32		tRetired;	/* 退役后拒绝新增脚本资源 */
+	xatomic32		tUnitCalled;	/* ServiceUnit 全生命周期至多一次 */
+	xatomic32		tOwnerReleased;	/* host owner 引用至多撤销一次 */
 	XS_ServiceInitProc		procInit;
 	XS_ServiceUnitProc		procUnit;
 	XS_ServiceSwapProc		procSwap;
@@ -35,6 +38,95 @@ typedef struct XS_ScriptRuntime {
 	XS_WsPongProc			procWsPong;
 	XS_WsCloseProc			procWsClose;
 } XS_ScriptRuntime;
+
+/* 让脚本内创建的定时器绑定“正在执行的旧代”，而不是可变的 host->Runtime。 */
+static XRT_THREAD_LOCAL XS_ScriptRuntime* g_XS_CurrentScript = NULL;
+
+static XS_ScriptRuntime* XS_ScriptEnter(XS_ScriptRuntime* pRuntime)
+{
+	XS_ScriptRuntime* pPrevious = g_XS_CurrentScript;
+
+	g_XS_CurrentScript = pRuntime;
+	return pPrevious;
+}
+
+static void XS_ScriptLeave(XS_ScriptRuntime* pPrevious)
+{
+	g_XS_CurrentScript = pPrevious;
+}
+
+static bool XS_ScriptIsRetired(const XS_ScriptRuntime* pRuntime)
+{
+	return pRuntime == NULL ||
+	       xrtAtomic32Load(&pRuntime->tRetired, XMEMORY_ACQUIRE) != 0;
+}
+
+static bool XS_ScriptRetain(XS_ScriptRuntime* pRuntime)
+{
+	return pRuntime != NULL && !XS_ScriptIsRetired(pRuntime) &&
+	       xrtRefRetain(&pRuntime->iReferences) > 0;
+}
+
+static void XS_ScriptCallUnit(XS_ScriptRuntime* pRuntime)
+{
+	if ( pRuntime != NULL &&
+	     xrtAtomic32Exchange(&pRuntime->tUnitCalled, 1, XMEMORY_ACQ_REL) == 0 &&
+	     pRuntime->procUnit != NULL ) {
+		XS_ScriptRuntime* pPrevious = XS_ScriptEnter(pRuntime);
+
+		pRuntime->procUnit(pRuntime->pHost);
+		XS_ScriptLeave(pPrevious);
+	}
+}
+
+static XS_ScriptRuntime* XS_ScriptAcquireHost(XS_HostInfo* pHost)
+{
+	XS_ScriptRuntime* pRuntime = NULL;
+
+	if ( pHost == NULL || pHost->RuntimeLock == NULL ) {
+		return NULL;
+	}
+	xrtMutexLock((xmutex*)pHost->RuntimeLock);
+	pRuntime = (XS_ScriptRuntime*)pHost->Runtime;
+	if ( !XS_ScriptRetain(pRuntime) ) {
+		pRuntime = NULL;
+	}
+	xrtMutexUnlock((xmutex*)pHost->RuntimeLock);
+	return pRuntime;
+}
+
+static void XS_ScriptRelease(XS_ScriptRuntime* pRuntime)
+{
+	if ( pRuntime != NULL && xrtRefRelease(&pRuntime->iReferences) == 0 ) {
+		XS_ScriptCallUnit(pRuntime);
+		if ( pRuntime->pSwap != NULL ) {
+			xrtValueRelease(pRuntime->pSwap);
+		}
+		tcc_delete(pRuntime->pTcc);
+		xrtFree(pRuntime);
+	}
+}
+
+static void XS_ScriptBeginRetire(XS_ScriptRuntime* pRuntime)
+{
+	if ( pRuntime != NULL &&
+	     xrtAtomic32Exchange(&pRuntime->tRetired, 1, XMEMORY_ACQ_REL) == 0 ) {
+		XS_ServerGeneration* pGeneration =
+			pRuntime->pHost != NULL && pRuntime->pHost->Server != NULL ?
+			(XS_ServerGeneration*)pRuntime->pHost->Server->Generation : NULL;
+
+		XS_GenerationTimerCancelOwner(pGeneration, pRuntime);
+	}
+}
+
+static void XS_ScriptRetire(XS_ScriptRuntime* pRuntime)
+{
+	if ( pRuntime == NULL ) return;
+	XS_ScriptBeginRetire(pRuntime);
+	if ( xrtAtomic32Exchange(&pRuntime->tOwnerReleased, 1, XMEMORY_ACQ_REL) == 0 ) {
+		XS_ScriptRelease(pRuntime);	/* 撤销 host 所有权 */
+	}
+}
 
 /* 每个 host 固定一个 VFS 槽位路径：重载时同路径重挂（mount_memory 为替换语义），
  * 源挂载不再随代数累积——6 小时演练观察项的修复。
@@ -164,6 +256,10 @@ static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 	pRuntime->procWsClose = (XS_WsCloseProc)tcc_get_symbol(pTcc, XS_SYM_WS_CLOSE);
 	pRuntime->pHost = pHost;
 	pRuntime->tGeneration = ++g_XS_Generation;
+	pRuntime->iReferences = 1;
+	xrtAtomic32Init(&pRuntime->tRetired, 0);
+	xrtAtomic32Init(&pRuntime->tUnitCalled, 0);
+	xrtAtomic32Init(&pRuntime->tOwnerReleased, 0);
 
 	printf("[xs] script loaded: %s (%.1f KB gen %llu)\n", sDevPath, (double)iSize / 1024.0,
 		(unsigned long long)pRuntime->tGeneration);
@@ -174,9 +270,20 @@ static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 /* 挂载并初始化（ServiceInit 内可 xsSwapTake 取回交接数据） */
 static void XS_ScriptAttach(XS_HostInfo* pHost, XS_ScriptRuntime* pRuntime)
 {
+	XS_ScriptRuntime* pPrevious;
+
+	xrtMutexLock((xmutex*)pHost->RuntimeLock);
+	pPrevious = (XS_ScriptRuntime*)pHost->Runtime;
 	pHost->Runtime = pRuntime;
+	xrtMutexUnlock((xmutex*)pHost->RuntimeLock);
 	if ( pRuntime != NULL && pRuntime->procInit != NULL ) {
+		XS_ScriptRuntime* pContext = XS_ScriptEnter(pRuntime);
+
 		pRuntime->procInit(pHost);
+		XS_ScriptLeave(pContext);
+	}
+	if ( pPrevious != NULL && pPrevious != pRuntime ) {
+		XS_ScriptRetire(pPrevious);
 	}
 }
 
@@ -195,39 +302,42 @@ static bool XS_ScriptLoad(XS_HostInfo* pHost)
 /* 卸载阶段一：ServiceUnit（脚本仍可使用全部宿主能力，含关闭自己的监听器） */
 static void XS_ScriptUnitHost(XS_HostInfo* pHost)
 {
-	XS_ScriptRuntime* pRuntime = (XS_ScriptRuntime*)pHost->Runtime;
+	XS_ScriptRuntime* pRuntime;
 
-	if ( pRuntime != NULL && pRuntime->procUnit != NULL ) {
-		pRuntime->procUnit(pHost);
+	if ( pHost == NULL || pHost->RuntimeLock == NULL ) {
+		return;
+	}
+	xrtMutexLock((xmutex*)pHost->RuntimeLock);
+	pRuntime = (XS_ScriptRuntime*)pHost->Runtime;
+	pHost->Runtime = NULL;
+	xrtMutexUnlock((xmutex*)pHost->RuntimeLock);
+	XS_ScriptRetire(pRuntime);
+}
+
+/* custom 停机阶段：先通知脚本关闭自持资源，但保留 TCC owner 到引擎停止后。 */
+static void XS_ScriptRequestUnitHost(XS_HostInfo* pHost)
+{
+	XS_ScriptRuntime* pRuntime = XS_ScriptAcquireHost(pHost);
+
+	if ( pRuntime != NULL ) {
+		XS_ScriptCallUnit(pRuntime);
+		XS_ScriptRelease(pRuntime);
 	}
 }
 
-/* 卸载阶段二：TCC 状态销毁。
- * 必须等引擎 LiveObjects 排空（监听器/流的异步 Close 完成、worker 线程
- * 不再执行脚本代码）之后才能调用，否则释放中的代码页会在 worker 里炸。
- * 正式的按代 drain 判据随连接注册表落地（设计 §10.3），此处为停机同步排空。 */
-static void XS_ScriptDeleteHost(XS_HostInfo* pHost)
+static void XS_ScriptQuiesceHost(XS_HostInfo* pHost)
 {
-	XS_ScriptRuntime* pRuntime = (XS_ScriptRuntime*)pHost->Runtime;
+	XS_ScriptRuntime* pRuntime = NULL;
 
-	if ( pRuntime == NULL ) {
-		return;
+	if ( pHost == NULL || pHost->RuntimeLock == NULL ) return;
+	xrtMutexLock((xmutex*)pHost->RuntimeLock);
+	pRuntime = (XS_ScriptRuntime*)pHost->Runtime;
+	if ( pRuntime != NULL && xrtRefRetain(&pRuntime->iReferences) < 0 ) pRuntime = NULL;
+	xrtMutexUnlock((xmutex*)pHost->RuntimeLock);
+	if ( pRuntime != NULL ) {
+		XS_ScriptBeginRetire(pRuntime);
+		XS_ScriptRelease(pRuntime);
 	}
-	if ( pHost->Server != NULL && pHost->Server->Engine != NULL ) {
-		xnetenginestats tStats;
-		int iWait;
-
-		for ( iWait = 0; iWait < 50; iWait++ ) {
-			memset(&tStats, 0, sizeof(tStats));
-			if ( !xrtNetEngineStats(pHost->Server->Engine, &tStats) || tStats.LiveObjects == 0 ) {
-				break;
-			}
-			xrtSleep(100);
-		}
-	}
-	tcc_delete(pRuntime->pTcc);
-	xrtFree(pRuntime);
-	pHost->Runtime = NULL;
 }
 
 #endif

@@ -129,8 +129,9 @@ def behavior_matrix():
                 fail('behavior/reload-swap', f'body={body[:40]!r}')
             script.write_text(bad, encoding='utf-8')
             s5, _ = http_get('/reload')
-            if s5 != 500:
-                fail('behavior/reload-rollback-status', f'status={s5}')
+            if s5 != 200:
+                fail('behavior/reload-queue-status', f'status={s5}')
+            time.sleep(0.4)  # reload API 只确认固定 worker 已接收；编译结果异步落状态/日志
             _, body = http_get('/text')
             if b'RELOADED' not in body:
                 fail('behavior/reload-rollback', 'old gen lost')

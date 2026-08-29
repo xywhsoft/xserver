@@ -19,6 +19,10 @@
 /* 单 server 驱动启停（启动装配与在线重建共用） */
 static bool XS_ServerDriverStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap)
 {
+	if ( pServer->Generation == NULL && XS_GenerationCreate(pServer) == NULL ) {
+		snprintf(sErr, iErrCap, "server '%s' generation create failed", pServer->Name);
+		return false;
+	}
 	if ( strcmp(pServer->Class, "custom") == 0 ) {
 		pServer->State = XS_RUN_RUNNING;
 		printf("[xs] server '%s' custom ready (manual assembly)\n", pServer->Name);
@@ -42,7 +46,7 @@ static bool XS_ServerDriverStart(XS_ServerInfo* pServer, char* sErr, size_t iErr
 
 static void XS_ServerDriverStop(XS_ServerInfo* pServer)
 {
-	if ( pServer->State != XS_RUN_RUNNING ) {
+	if ( pServer->State != XS_RUN_RUNNING && pServer->State != XS_RUN_RELOAD_FAILED ) {
 		return;
 	}
 	pServer->State = XS_RUN_STOPPING;
@@ -58,6 +62,19 @@ static void XS_ServerDriverStop(XS_ServerInfo* pServer)
 	pServer->State = XS_RUN_STOPPED;
 }
 
+/* 进程退出才主动关闭旧连接；在线换代只 Stop listener 后自然排空。 */
+static void XS_ServerDriverCloseConnections(XS_ServerInfo* pServer)
+{
+	if ( pServer == NULL || pServer->Runtime == NULL ) return;
+	if ( strcmp(pServer->Class, "tcp") == 0 ) {
+		XS_TcpCloseConnections((XS_TcpRuntime*)pServer->Runtime);
+	} else if ( strcmp(pServer->Class, "http") == 0 ) {
+		XS_HttpCloseConnections((XS_HttpRuntime*)pServer->Runtime);
+	} else if ( strcmp(pServer->Class, "ws") == 0 ) {
+		XS_WsCloseConnections((XS_WsRuntime*)pServer->Runtime);
+	}
+}
+
 static void XS_ServerDriverUnit(XS_ServerInfo* pServer)
 {
 	if ( strcmp(pServer->Class, "tcp") == 0 ) {
@@ -70,14 +87,6 @@ static void XS_ServerDriverUnit(XS_ServerInfo* pServer)
 		XS_UdpUnit((XS_UdpRuntime*)pServer->Runtime);
 	}
 	pServer->Runtime = NULL;
-}
-
-/* 等 server 活动连接排空：驱动 Stop 已关全部连接，worker 上在执行的回调
- * 在引擎 After 定时器调度下必然先于本函数完成（After 投递到同一 Worker） */
-static bool XS_ServerDrain(XS_App* pApp, uint32 iMaxWaitMs)
-{
-	xrtSleep(iMaxWaitMs > 200 ? 200 : iMaxWaitMs);
-	return true;
 }
 
 static bool XS_HostHasScript(XS_HostInfo* pHost)
@@ -104,6 +113,11 @@ static bool XS_AssembleServers(XS_App* pApp)
 		if ( !pServer->Enabled ) {
 			printf("[xs] server '%s' disabled, skipped\n", pServer->Name);
 			continue;
+		}
+		/* ServiceInit 可能立刻创建 lifecycle timer，故 generation 必须先于脚本。 */
+		if ( pServer->Generation == NULL && XS_GenerationCreate(pServer) == NULL ) {
+			printf("[xs] server '%s' generation create failed\n", pServer->Name);
+			return false;
 		}
 		/* 脚本先行：custom/tcp/udp 必须有；http 可选（无脚本走纯静态） */
 		if ( XS_ClassNeedsScript(pServer->Class) || strcmp(pServer->Class, "http") == 0 ) {

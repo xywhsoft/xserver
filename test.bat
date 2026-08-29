@@ -31,7 +31,7 @@ python ../tools/smoke_ws.py
 if errorlevel 1 (echo SMOKE FAIL: ws behavior & exit /b 1)
 
 rem HTTP behavior check: routes, static, errors, keep-alive, takeover
-python -c "import http.client,sys;exec(open('../tools/smoke_http.py').read())"
+python ../tools/smoke_http.py
 if errorlevel 1 (echo SMOKE FAIL: http behavior & exit /b 1)
 
 rem TCC custom echo loop check
@@ -53,5 +53,15 @@ powershell -Command "Start-Sleep -Milliseconds 3000" >nul
 findstr /c:"engine stopped" xs_smoke.log >nul || (echo SMOKE FAIL: graceful stop & exit /b 1)
 findstr /c:"[xs] bye" xs_smoke.log >nul || (echo SMOKE FAIL: exit & exit /b 1)
 
-rem Functional test: config matrix / behavior / reload semantics / idlecd ..python toolsunc_test.pyif errorlevel 1 (echo FUNC FAIL & exit /b 1)cd releaseecho SMOKE PASS
+rem Functional test: config matrix / behavior / reload semantics / idle
+cd ..
+python tools\func_test.py
+if errorlevel 1 (echo FUNC FAIL & exit /b 1)
+
+rem Generation lifetime: keep-alive old generation + structural rebuild + exact finalization
+python tools\lifecycle_reload_test.py
+if errorlevel 1 (echo LIFECYCLE FAIL & exit /b 1)
+cd release
+
+echo SMOKE PASS
 exit /b 0
