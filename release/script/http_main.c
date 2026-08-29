@@ -141,6 +141,16 @@ XS_RequestResult RequestProc(XS_HttpReq* pReq)
 			}
 			return XS_OK;
 		}
+		if ( PathIs(pReq, "/reload-svr") ) {
+			bool bOk = xsReloadServer("main");
+			return ReplyLit(pReq, bOk ? 200 : 500, "text/plain; charset=utf-8",
+				bOk ? "server reload ok" : "server reload failed") ? XS_OK : XS_OK;
+		}
+		if ( PathIs(pReq, "/reload-all") ) {
+			bool bOk = xsReloadAll();
+			return ReplyLit(pReq, bOk ? 200 : 500, "text/plain; charset=utf-8",
+				bOk ? "all reload ok" : "all reload failed") ? XS_OK : XS_OK;
+		}
 		if ( PathIs(pReq, "/reload") ) {
 			bool bOk = xsReloadHost(pReq->host);
 			return ReplyLit(pReq, bOk ? 200 : 500, "text/plain; charset=utf-8",

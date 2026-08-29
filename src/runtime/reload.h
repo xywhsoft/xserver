@@ -26,6 +26,11 @@ static volatile bool g_XS_ReloadBusy = false;
 static XS_ScriptRuntime* g_XS_Retired = NULL;
 
 /* server 是否无活动连接（http/tcp 走注册表计数；custom 无 xs 侧视图 → false） */
+static bool XS_HostHasScript(XS_HostInfo* pHost);
+static bool XS_UdpStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap);
+static bool XS_WsStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap);
+static bool XS_ScriptLoad(XS_HostInfo* pHost);
+
 static bool XS_ReloadServerIdle(XS_ServerInfo* pServer)
 {
 	if ( strcmp(pServer->Class, "tcp") == 0 ) {
@@ -89,21 +94,15 @@ static void XS_RetiredEnqueue(XS_ScriptRuntime* pRuntime)
 }
 
 /* Host 级重载（并发窗口互斥；编译失败 = 回滚） */
-static bool XS_ReloadHostNow(XS_HostInfo* pHost)
+static bool XS_ReloadHostInner(XS_HostInfo* pHost)
 {
 	XS_ScriptRuntime* pOld;
 	XS_ScriptRuntime* pNew;
 	xvalue* pShared = NULL;
 
-	if ( g_XS_ReloadBusy ) {
-		printf("[xs] reload busy\n");
-		return false;
-	}
 	if ( pHost == NULL || pHost->Runtime == NULL ) {
 		return false;
 	}
-	g_XS_ReloadBusy = true;
-
 	pNew = XS_ScriptCompile(pHost);
 	if ( pNew == NULL ) {
 		printf("[xs] reload '%s' compile failed, old generation keeps serving\n",
@@ -112,7 +111,6 @@ static bool XS_ReloadHostNow(XS_HostInfo* pHost)
 		if ( pHost->Server != NULL ) {
 			pHost->Server->State = XS_RUN_RELOAD_FAILED;
 		}
-		g_XS_ReloadBusy = false;
 		return false;		/* 回滚语义 */
 	}
 	pOld = (XS_ScriptRuntime*)pHost->Runtime;
@@ -124,7 +122,9 @@ static bool XS_ReloadHostNow(XS_HostInfo* pHost)
 		}
 	}
 	pNew->pSwap = pShared;
-	XS_RetiredEnqueue(pOld);
+	{
+		uint64 tOldGen = pOld->tGeneration;
+		XS_RetiredEnqueue(pOld);
 	XS_ScriptAttach(pHost, pNew);
 	pHost->State = XS_RUN_RUNNING;
 	if ( pHost->Server != NULL ) {
@@ -132,9 +132,303 @@ static bool XS_ReloadHostNow(XS_HostInfo* pHost)
 	}
 	printf("[xs] reload '%s' ok (gen %llu -> %llu)\n",
 		pHost->Name != NULL ? pHost->Name : "?",
-		(unsigned long long)pOld->tGeneration, (unsigned long long)pNew->tGeneration);
-	g_XS_ReloadBusy = false;
+		(unsigned long long)tOldGen, (unsigned long long)pNew->tGeneration);
+	}
 	return true;
+}
+
+/* Host 级重载入口（并发窗口互斥；编译失败 = 回滚） */
+static bool XS_ReloadHostNow(XS_HostInfo* pHost)
+{
+	bool bOk;
+
+	if ( g_XS_ReloadBusy ) {
+		printf("[xs] reload busy\n");
+		return false;
+	}
+	g_XS_ReloadBusy = true;
+	bOk = XS_ReloadHostInner(pHost);
+	g_XS_ReloadBusy = false;
+	return bOk;
+}
+
+/* ============================================================
+ * Server 级配置重载（设计 §10.2 完整时序）
+ * 结构比对：配置未变 → 逐 host 脚本重载 + 证书热替换；
+ *          配置有变 → 驱动收口 → 新配置重建驱动 → 脚本重载。
+ * v1 比对字段：class/ip/port/tls/port_tls/backlog/recv_limit/devfile 拓扑
+ * ============================================================ */
+
+static bool XS_StrEq(const char* a, const char* b)
+{
+	if ( a == NULL || b == NULL ) {
+		return a == b;
+	}
+	return strcmp(a, b) == 0;
+}
+
+static bool XS_ServerStructEquals(XS_ServerInfo* pA, XS_ServerInfo* pB)
+{
+	if ( strcmp(pA->Class, pB->Class) != 0 ||
+	     !XS_StrEq(pA->IP, pB->IP) || pA->Port != pB->Port ||
+	     pA->TLS != pB->TLS || pA->PortTLS != pB->PortTLS ||
+	     pA->Backlog != pB->Backlog || pA->RecvLimit != pB->RecvLimit ||
+	     pA->HostCount != pB->HostCount ) {
+		return false;
+	}
+	{
+		uint32 i;
+
+		for ( i = 0; i < pA->HostCount; i++ ) {
+			XS_HostInfo* pHA = pA->Hosts[i];
+			XS_HostInfo* pHB = pB->Hosts[i];
+
+			if ( !XS_StrEq(pHA->Name, pHB->Name) || !XS_StrEq(pHA->Host, pHB->Host) ||
+			     !XS_StrEq(pHA->Path, pHB->Path) || !XS_StrEq(pHA->DevFile, pHB->DevFile) ||
+			     !XS_StrEq(pHA->TlsCert, pHB->TlsCert) || !XS_StrEq(pHA->TlsKey, pHB->TlsKey) ) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+/* 延迟重载请求（回调内调用 xsReload* 时避免自毁当前调用栈） */
+typedef struct XS_DeferredReload {
+	XS_App*			pApp;
+	XS_HostInfo*		pHost;		/* host 级（三选一） */
+	const char*		sServerName;	/* server 级（strdup） */
+	bool			bAll;
+} XS_DeferredReload;
+
+static void XS_DeferredFire(xnetworker* pWorker, uint64 iId, xnetresult iResult, ptr pData);
+static bool XS_ReloadServerNow(XS_App* pApp, const char* sName);
+static bool XS_ReloadAllNow(XS_App* pApp);
+
+static bool XS_DeferReload(XS_App* pApp, XS_HostInfo* pHost, const char* sName, bool bAll)
+{
+	XS_DeferredReload* pReq = (XS_DeferredReload*)xrtCalloc(1, sizeof(XS_DeferredReload));
+
+	if ( pReq == NULL || pApp->Engine == NULL ) {
+		xrtFree(pReq);
+		return false;
+	}
+	pReq->pApp = pApp;
+	pReq->pHost = pHost;
+	pReq->sServerName = sName != NULL ? xrtStrDup(sName) : NULL;
+	pReq->bAll = bAll;
+	return xrtNetEngineAfter(pApp->Engine, 0, 1000, XS_DeferredFire, pReq) != 0;
+}
+
+static void XS_DeferredFire(xnetworker* pWorker, uint64 iId, xnetresult iResult, ptr pData)
+{
+	XS_DeferredReload* pReq = (XS_DeferredReload*)pData;
+
+	(void)pWorker; (void)iId;
+	if ( iResult == XNET_RESULT_OK ) {
+		if ( pReq->pHost != NULL ) {
+			(void)XS_ReloadHostNow(pReq->pHost);
+		} else if ( pReq->sServerName != NULL ) {
+			(void)XS_ReloadServerNow(pReq->pApp, pReq->sServerName);
+		} else if ( pReq->bAll ) {
+			(void)XS_ReloadAllNow(pReq->pApp);
+		}
+	}
+	xrtFree((void*)pReq->sServerName);
+	xrtFree(pReq);
+}
+
+/* Server 级：重读配置 → 结构比对 → 分流 */
+static bool XS_ReloadServerNow(XS_App* pApp, const char* sName)
+{
+	XS_ServerInfo* pOld;
+	XS_App tFresh;
+	char sCfgPath[4096];
+	uint32 i;
+	bool bOk = true;
+
+	if ( g_XS_ReloadBusy ) {
+		printf("[xs] reload busy\n");
+		return false;
+	}
+	pOld = xsServerFind(sName);
+	if ( pOld == NULL ) {
+		return false;
+	}
+	snprintf(sCfgPath, sizeof(sCfgPath), "%.200s/xs.json", XS_AppPath());
+	g_XS_ReloadBusy = true;
+	if ( !XS_ConfigLoad(sCfgPath, &tFresh) ) {
+		printf("[xs] server reload: config re-parse failed: %s\n", tFresh.ParseError);
+		XS_ConfigFree(&tFresh);
+		pOld->State = XS_RUN_RELOAD_FAILED;
+		g_XS_ReloadBusy = false;
+		return false;
+	}
+	for ( i = 0; i < tFresh.ServerCount; i++ ) {
+		if ( strcmp(tFresh.Servers[i]->Name, sName) == 0 ) {
+			break;
+		}
+	}
+	if ( i >= tFresh.ServerCount ) {
+		printf("[xs] server reload: '%s' removed from config (shutdown via xsReloadAll)\n", sName);
+		XS_ConfigFree(&tFresh);
+		g_XS_ReloadBusy = false;
+		return false;
+	}
+	{
+		XS_ServerInfo* pNewCfg = tFresh.Servers[i];
+
+		if ( XS_ServerStructEquals(pOld, pNewCfg) ) {
+			char sErr[256];
+
+			sErr[0] = '\0';
+			/* 结构未变：证书热替换 + 逐 host 脚本重载（复用旧结构体） */
+			if ( pOld->TLS &&
+			     (strcmp(pOld->Class, "tcp") == 0 || strcmp(pOld->Class, "http") == 0 ||
+			      strcmp(pOld->Class, "ws") == 0) ) {
+				void* pDriver = pOld->Runtime;
+
+				/* 取驱动内的 TlsTable（各驱动布局不同，按类取） */
+				if ( strcmp(pOld->Class, "tcp") == 0 && pDriver != NULL ) {
+					(void)XS_TlsTableRefresh(pOld, &((XS_TcpRuntime*)pDriver)->tTls, sErr, sizeof(sErr));
+				} else if ( strcmp(pOld->Class, "http") == 0 && pDriver != NULL ) {
+					(void)XS_TlsTableRefresh(pOld, &((XS_HttpRuntime*)pDriver)->tTls, sErr, sizeof(sErr));
+				} else if ( strcmp(pOld->Class, "ws") == 0 && pDriver != NULL ) {
+					(void)XS_TlsTableRefresh(pOld, &((XS_WsRuntime*)pDriver)->tTls, sErr, sizeof(sErr));
+				}
+				if ( sErr[0] != '\0' ) {
+					printf("[xs] %s\n", sErr);
+				}
+			}
+			if ( pOld->DefaultHost->Runtime != NULL ) {
+				bOk = XS_ReloadHostInner(pOld->DefaultHost) && bOk;
+			}
+			for ( i = 0; i < pOld->HostCount; i++ ) {
+				if ( pOld->Hosts[i]->Runtime != NULL ) {
+					bOk = XS_ReloadHostInner(pOld->Hosts[i]) && bOk;
+				}
+			}
+			XS_ConfigFree(&tFresh);
+			g_XS_ReloadBusy = false;
+			return bOk;
+		}
+	}
+	/* 结构有变：v1 边界——不在线重建监听器，回退为脚本级并提示 */
+	printf("[xs] server reload '%s': structural change detected "
+		"(listener rebuild deferred, scripts only; restart process for listener changes)\n", sName);
+	if ( XS_HostHasScript(pOld->DefaultHost) ) {
+		bOk = XS_ReloadHostInner(pOld->DefaultHost) && bOk;
+	}
+	XS_ConfigFree(&tFresh);
+	g_XS_ReloadBusy = false;
+	return bOk;
+}
+
+/* All 级：重读配置 → 逐 server 分流（现存的按 server 级；新增的装配；消失的收口下线） */
+static bool XS_ReloadAllNow(XS_App* pApp)
+{
+	XS_App tFresh;
+	char sCfgPath[4096];
+	uint32 i, j;
+	bool bOk = true;
+
+	if ( g_XS_ReloadBusy ) {
+		return false;
+	}
+	snprintf(sCfgPath, sizeof(sCfgPath), "%.200s/xs.json", XS_AppPath());
+	g_XS_ReloadBusy = true;
+	if ( !XS_ConfigLoad(sCfgPath, &tFresh) ) {
+		printf("[xs] reload all: config re-parse failed: %s\n", tFresh.ParseError);
+		XS_ConfigFree(&tFresh);
+		g_XS_ReloadBusy = false;
+		return false;
+	}
+	/* 现存 server：在新配置中找同名 → 比对（v1：脚本级 + 证书热替换） */
+	for ( i = 0; i < pApp->ServerCount; i++ ) {
+		XS_ServerInfo* pOld = pApp->Servers[i];
+
+		for ( j = 0; j < tFresh.ServerCount; j++ ) {
+			if ( strcmp(tFresh.Servers[j]->Name, pOld->Name) == 0 ) {
+				break;
+			}
+		}
+		if ( j < tFresh.ServerCount && XS_ServerStructEquals(pOld, tFresh.Servers[j]) ) {
+			if ( pOld->DefaultHost->Runtime != NULL ) {
+				bOk = XS_ReloadHostInner(pOld->DefaultHost) && bOk;
+			}
+		} else if ( j >= tFresh.ServerCount ) {
+			printf("[xs] reload all: server '%s' removed from config "
+				"(v1: keep running, restart process to remove)\n", pOld->Name);
+		} else {
+			printf("[xs] reload all: server '%s' structural change "
+				"(v1: scripts only, restart for listener changes)\n", pOld->Name);
+			if ( XS_HostHasScript(pOld->DefaultHost) ) {
+				bOk = XS_ReloadHostInner(pOld->DefaultHost) && bOk;
+			}
+		}
+	}
+	/* 新增 server：装配（引擎与 VFS 环境共享） */
+	for ( j = 0; j < tFresh.ServerCount; j++ ) {
+		bool bExists = false;
+
+		for ( i = 0; i < pApp->ServerCount; i++ ) {
+			if ( strcmp(pApp->Servers[i]->Name, tFresh.Servers[j]->Name) == 0 ) {
+				bExists = true;
+				break;
+			}
+		}
+		if ( !bExists ) {
+			XS_ServerInfo* pAdd = tFresh.Servers[j];
+			char sErr[256];
+
+			sErr[0] = '\0';
+			pAdd->Engine = pApp->Engine;
+			tFresh.Servers[j] = NULL;		/* 移交所有权 */
+			{
+				XS_ServerInfo** pNewArr = (XS_ServerInfo**)xrtRealloc(pApp->Servers,
+					sizeof(XS_ServerInfo*) * (size_t)(pApp->ServerCount + 1));
+				if ( pNewArr != NULL ) {
+					pNewArr[pApp->ServerCount++] = pAdd;
+					pApp->Servers = pNewArr;
+					/* 脚本 + 驱动装配（复用启动装配路径，单 server 版） */
+					if ( XS_HostHasScript(pAdd->DefaultHost) ) {
+						(void)XS_ScriptLoad(pAdd->DefaultHost);
+					}
+					if ( strcmp(pAdd->Class, "custom") == 0 ) {
+						pAdd->State = XS_RUN_RUNNING;
+						printf("[xs] reload all: server '%s' added (custom)\n", pAdd->Name);
+					} else if ( strcmp(pAdd->Class, "http") == 0 ) {
+						if ( XS_HttpStart(pAdd, sErr, sizeof(sErr)) ) {
+							pAdd->State = XS_RUN_RUNNING;
+						} else {
+							printf("[xs] %s\n", sErr);
+						}
+					} else if ( strcmp(pAdd->Class, "tcp") == 0 ) {
+						if ( XS_TcpStart(pAdd, sErr, sizeof(sErr)) ) {
+							pAdd->State = XS_RUN_RUNNING;
+						} else {
+							printf("[xs] %s\n", sErr);
+						}
+					} else if ( strcmp(pAdd->Class, "udp") == 0 ) {
+						if ( XS_UdpStart(pAdd, sErr, sizeof(sErr)) ) {
+							pAdd->State = XS_RUN_RUNNING;
+						} else {
+							printf("[xs] %s\n", sErr);
+						}
+					} else if ( strcmp(pAdd->Class, "ws") == 0 ) {
+						if ( XS_WsStart(pAdd, sErr, sizeof(sErr)) ) {
+							pAdd->State = XS_RUN_RUNNING;
+						} else {
+							printf("[xs] %s\n", sErr);
+						}
+					}
+				}
+			}
+		}
+	}
+	XS_ConfigFree(&tFresh);
+	g_XS_ReloadBusy = false;
+	return bOk;
 }
 
 /* ============================================================

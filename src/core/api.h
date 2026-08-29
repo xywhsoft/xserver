@@ -96,49 +96,40 @@ void xsDestroyTCC(TCCState* pTcc)
 	}
 }
 
-/* —— 重载与定时器（src/runtime/reload.h）—— */
+/* —— 重载与定时器（src/runtime/reload.h）——
+ * 回调内调用时走延迟执行（避免自毁当前调用栈）；空闲时同步执行 */
 
 bool xsReloadHost(XS_HostInfo* pHost)
 {
-	return XS_ReloadHostNow(pHost);
+	if ( pHost == NULL ) {
+		return false;
+	}
+	if ( !g_XS_ReloadBusy ) {
+		return XS_ReloadHostNow(pHost);
+	}
+	return XS_DeferReload(g_XS_App, pHost, NULL, false);
 }
 
 bool xsReloadServer(const char* sName)
 {
-	XS_ServerInfo* pServer = xsServerFind(sName);
-	uint32 i;
-	bool bOk = true;
-
-	if ( pServer == NULL ) {
+	if ( sName == NULL ) {
 		return false;
 	}
-	if ( pServer->DefaultHost->Runtime != NULL ) {
-		bOk = XS_ReloadHostNow(pServer->DefaultHost) && bOk;
+	if ( !g_XS_ReloadBusy ) {
+		return XS_ReloadServerNow(g_XS_App, sName);
 	}
-	for ( i = 0; i < pServer->HostCount; i++ ) {
-		if ( pServer->Hosts[i]->Runtime != NULL ) {
-			bOk = XS_ReloadHostNow(pServer->Hosts[i]) && bOk;
-		}
-	}
-	return bOk;
+	return XS_DeferReload(g_XS_App, NULL, sName, false);
 }
 
 bool xsReloadAll(void)
 {
-	uint32 i;
-	bool bOk = true;
-
 	if ( g_XS_App == NULL ) {
 		return false;
 	}
-	for ( i = 0; i < g_XS_App->ServerCount; i++ ) {
-		XS_ServerInfo* pServer = g_XS_App->Servers[i];
-
-		if ( pServer->DefaultHost->Runtime != NULL ) {
-			bOk = XS_ReloadHostNow(pServer->DefaultHost) && bOk;
-		}
+	if ( !g_XS_ReloadBusy ) {
+		return XS_ReloadAllNow(g_XS_App);
 	}
-	return bOk;
+	return XS_DeferReload(g_XS_App, NULL, NULL, true);
 }
 
 uint64 xsTimerAfter(XS_HostInfo* pOwner, uint32 iMillisecond, XS_TimerProc proc, void* pUserData)

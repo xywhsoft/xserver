@@ -36,7 +36,34 @@ typedef struct XS_ScriptRuntime {
 	XS_WsCloseProc			procWsClose;
 } XS_ScriptRuntime;
 
-static uint32 g_XS_ScriptSeq = 0;
+/* 每个 host 固定一个 VFS 槽位路径：重载时同路径重挂（mount_memory 为替换语义），
+ * 源挂载不再随代数累积——6 小时演练观察项的修复。
+ * 注：host 结构体跨代复用（配置不变时），以 Server 名 + host 指针为键 */
+typedef struct XS_ScriptSlot {
+	const void*		pKey;
+	char			sPath[96];
+} XS_ScriptSlot;
+
+static XS_ScriptSlot g_XS_ScriptSlots[96];
+static uint32 g_XS_ScriptSlotCount = 0;
+
+static const char* XS_ScriptSlotPath(XS_HostInfo* pHost)
+{
+	uint32 i;
+
+	for ( i = 0; i < g_XS_ScriptSlotCount; i++ ) {
+		if ( g_XS_ScriptSlots[i].pKey == (const void*)pHost ) {
+			return g_XS_ScriptSlots[i].sPath;
+		}
+	}
+	if ( g_XS_ScriptSlotCount >= 96 ) {
+		return NULL;		/* 槽位耗尽：退回 clear_dynamic 由调用方处理 */
+	}
+	snprintf(g_XS_ScriptSlots[g_XS_ScriptSlotCount].sPath, 96,
+		"/xs/script/h%u.c", g_XS_ScriptSlotCount);
+	g_XS_ScriptSlots[g_XS_ScriptSlotCount].pKey = (const void*)pHost;
+	return g_XS_ScriptSlots[g_XS_ScriptSlotCount++].sPath;
+}
 
 /* devfile 相对 appPath 解析为绝对路径（UTF-8） */
 static str XS_ScriptDevPath(XS_HostInfo* pHost)
@@ -72,7 +99,21 @@ static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 		xrtFree(sDevPath);
 		return NULL;
 	}
-	snprintf(sVirtual, sizeof(sVirtual), "/xs/script/s%u.c", g_XS_ScriptSeq++);
+	{
+		const char* sSlot = XS_ScriptSlotPath(pHost);
+
+		if ( sSlot == NULL ) {
+			tcc_vfs_clear_dynamic();
+			sSlot = XS_ScriptSlotPath(pHost);	/* 清空后槽位表失效，重取 */
+			if ( sSlot == NULL ) {
+				printf("[xs] script slot exhausted\n");
+				xrtFree(pData);
+				xrtFree(sDevPath);
+				return NULL;
+			}
+		}
+		snprintf(sVirtual, sizeof(sVirtual), "%s", sSlot);
+	}
 	if ( !tcc_vfs_mount_memory(sVirtual, pData, iSize) ) {
 		printf("[xs] script vfs mount failed\n");
 		xrtFree(pData);

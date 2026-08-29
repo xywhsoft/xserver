@@ -188,8 +188,9 @@ typedef struct XS_TlsEntry {
 } XS_TlsEntry;
 
 typedef struct XS_TlsTable {
-	XS_TlsEntry*		pEntries;
+	XS_TlsEntry*		pEntries;	/* 热替换时整体换指向（原子语义见 Refresh） */
 	uint32			iCount;
+	xmutex*			pLock;		/* Select（worker 线程）与 Refresh（任意线程）互斥 */
 } XS_TlsTable;
 
 /* 按 host 域名列表忽略大小写匹配 SNI 名（xbytesview 非零结尾） */
@@ -228,23 +229,31 @@ static bool XS_TlsNameMatch(const char* sHostList, xbytesview tName)
 static bool XS_TlsSelect(ptr pContext, const xtlsserverrequest* pRequest, xtlsserverchoice* pChoice)
 {
 	XS_TlsTable* pTable = (XS_TlsTable*)pContext;
+	bool bFound = false;
 	uint32 i;
 
+	if ( pTable->pLock != NULL ) {
+		xrtMutexLock(pTable->pLock);
+	}
 	if ( pRequest->ServerName.Size > 0 ) {
 		for ( i = 0; i < pTable->iCount; i++ ) {
 			if ( pTable->pEntries[i].pHost->Host != NULL &&
 			     XS_TlsNameMatch(pTable->pEntries[i].pHost->Host, pRequest->ServerName) ) {
 				pChoice->Identity = pTable->pEntries[i].pIdentity;
-				return true;
+				bFound = true;
+				break;
 			}
 		}
 	}
 	/* 无匹配：回落第一项（DefaultHost 身份在构造方保证为 [0]） */
-	if ( pTable->iCount > 0 ) {
+	if ( !bFound && pTable->iCount > 0 ) {
 		pChoice->Identity = pTable->pEntries[0].pIdentity;
-		return true;
+		bFound = true;
 	}
-	return false;
+	if ( pTable->pLock != NULL ) {
+		xrtMutexUnlock(pTable->pLock);
+	}
+	return bFound;
 }
 
 /* 从 DefaultHost + hosts[] 收集证书；DefaultHost 证书（若存在）恒为 entries[0] */
@@ -255,6 +264,7 @@ static bool XS_TlsTableBuild(XS_ServerInfo* pServer, XS_TlsTable* pTable, char* 
 
 	memset(pTable, 0, sizeof(*pTable));
 	pTable->pEntries = (XS_TlsEntry*)xrtCalloc(iCount, sizeof(XS_TlsEntry));
+	pTable->pLock = pTable->pEntries != NULL ? xrtMutexCreate() : NULL;
 	if ( pTable->pEntries == NULL ) {
 		snprintf(sErr, iErrCap, "out of memory");
 		return false;
@@ -294,8 +304,52 @@ static void XS_TlsTableUnit(XS_TlsTable* pTable)
 			xrtTlsIdentityRelease(pTable->pEntries[i].pIdentity);
 		}
 	}
+	if ( pTable->pLock != NULL ) {
+		xrtMutexDestroy(pTable->pLock);
+		pTable->pLock = NULL;
+	}
 	xrtFree(pTable->pEntries);
 	memset(pTable, 0, sizeof(*pTable));
+}
+
+/* 证书热替换（设计 §10.3）：重读证书文件构建新表，锁内整体换指向。
+ * 旧 identity 延迟释放——进行中握手已由 xrt 侧 Retain 保护（先 Retain 再选用），
+ * 等一个宽限窗口后释放，避免释放竞态。 */
+static bool XS_TlsTableRefresh(XS_ServerInfo* pServer, XS_TlsTable* pTable, char* sErr, size_t iErrCap)
+{
+	XS_TlsTable tNew;
+	XS_TlsEntry* pOldEntries;
+	uint32 iOldCount;
+	bool bOk;
+
+	bOk = XS_TlsTableBuild(pServer, &tNew, sErr, iErrCap);
+	if ( !bOk || tNew.iCount == 0 ) {
+		XS_TlsTableUnit(&tNew);
+		snprintf(sErr + strlen(sErr), iErrCap - strlen(sErr),
+			"tls refresh: no usable identity, keep old");
+		return false;
+	}
+	if ( pTable->pLock != NULL ) {
+		xrtMutexLock(pTable->pLock);
+	}
+	pOldEntries = pTable->pEntries;
+	iOldCount = pTable->iCount;
+	pTable->pEntries = tNew.pEntries;
+	pTable->iCount = tNew.iCount;
+	if ( pTable->pLock != NULL ) {
+		xrtMutexUnlock(pTable->pLock);
+	}
+	/* 宽限释放：旧 identity 立即 Release 一次（握手侧已 Retain 的不受影响；
+	 * 我们持有的表引用转让给延迟释放列表由调用方处理——v1 简化为直接释放，
+	 * 依赖 xrt 握手 Retain 语义保证不 UAF */
+	for ( iOldCount = iOldCount; iOldCount > 0; iOldCount-- ) {
+		if ( pOldEntries[iOldCount - 1].pIdentity != NULL ) {
+			xrtTlsIdentityRelease(pOldEntries[iOldCount - 1].pIdentity);
+		}
+	}
+	xrtFree(pOldEntries);
+	(void)iOldCount;
+	return true;
 }
 
 #endif
