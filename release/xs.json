@@ -21,7 +21,14 @@
           "index": [
             "index.html"
           ],
-          "deny_dotfiles": true
+          "deny_dotfiles": true,
+          "headers": {
+            "X-XS-Static": "on",
+            "Cache-Control": "no-cache"
+          },
+          "error_pages": {
+            "404": "err404.html"
+          }
         }
       },
       "hosts": [

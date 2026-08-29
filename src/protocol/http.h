@@ -25,6 +25,7 @@
 
 #define XS_HTTP_MAX_FIELDS	48
 #define XS_HTTP_MAX_TRAILERS	8
+#define XS_HTTP_MAX_EXTRA_FIELDS	8
 #define XS_HTTP_SENDFILE_CHUNK	(512 * 1024)
 
 typedef struct XS_HttpRuntime {
@@ -41,7 +42,19 @@ typedef struct XS_HttpRuntime {
 	uint64			iIdleMs;
 	uint64			iSweepTimer;
 	volatile bool		bStopping;
+	/* static.headers 装配期预渲染缓存（每 host 一条；请求路径零字符串处理） */
+	struct XS_HttpHostHdrs**	arrHdrCache;	/* 指针数组（每 host 一条） */
+	uint32			iHdrCacheCount;
 } XS_HttpRuntime;
+
+/* host 的自定义响应头缓存：blob 内 "name\0value\0" 依次排布，字段为借用视图 */
+typedef struct XS_HttpHostHdrs {
+	XS_HostInfo*		pHost;
+	char*			sBlob;		/* 持久分配，随 runtime 释放 */
+	size_t			iBlobSize;
+	xhttpfield		arrFields[XS_HTTP_MAX_EXTRA_FIELDS];
+	uint32			iCount;
+} XS_HttpHostHdrs;
 
 typedef struct XS_HttpRecord {
 	XS_ConnRecord		tReg;		/* 注册表链（首成员） */
@@ -120,19 +133,20 @@ typedef struct XS_HttpResp {
 	uint16		iStatus;
 	const char*	sContentType;
 	uint64		iContentLength;
-	char		arrExtra[1024];	/* 追加头行（每行含 CRLF，构造方拼接） */
+	xhttpfield	arrExtra[8];	/* 追加响应头（借用视图，随本次调用存活） */
+	size_t		iExtraCount;
 	bool		bHeadOnly;
 } XS_HttpResp;
 
 static bool XS_HttpRespond(XS_HttpRecord* pRec, XS_HttpResp* pResp)
 {
 	unsigned char arrHead[2048];
-	xhttpfield arrFields[8];
+	xhttpfield arrFields[16];
 	size_t iFieldCount = 0;
+	size_t i;
 	xstrview tReason;
 	size_t iSize = 0;
 	char arrLen[32];
-	bool bRet;
 
 	snprintf(arrLen, sizeof(arrLen), "%llu", (unsigned long long)pResp->iContentLength);
 	arrFields[iFieldCount].Name = XRT_STR_LITERAL("Content-Length");
@@ -143,25 +157,76 @@ static bool XS_HttpRespond(XS_HttpRecord* pRec, XS_HttpResp* pResp)
 		arrFields[iFieldCount].Value = xrtStrView(pResp->sContentType);
 		iFieldCount++;
 	}
+	for ( i = 0; i < pResp->iExtraCount && iFieldCount < 16; i++ ) {
+		arrFields[iFieldCount++] = pResp->arrExtra[i];
+	}
 	tReason = xrtHttpStatusText(pResp->iStatus);
 	if ( !xrtHttp1ResponseWrite(XHTTP_VERSION_1_1, pResp->iStatus, tReason,
 		arrFields, iFieldCount, arrHead, sizeof(arrHead), &iSize) ) {
 		return false;
 	}
-	bRet = XS_HttpSend(&pRec->tReg, arrHead, iSize) == XNET_RESULT_OK;
-	if ( bRet && pResp->arrExtra[0] != '\0' ) {
-		bRet = XS_HttpSend(&pRec->tReg, pResp->arrExtra, strlen(pResp->arrExtra)) == XNET_RESULT_OK;
-	}
-	return bRet;
+	return XS_HttpSend(&pRec->tReg, arrHead, iSize) == XNET_RESULT_OK;
 }
 
-/* 错误页：优先 host Custom 的 static.error_pages.<code>，缺省内置极简页 */
+static const char* XS_HttpMime(const char* sName);
+static const XS_HttpHostHdrs* XS_HttpHdrCacheFind(XS_HttpRuntime* pRuntime, XS_HostInfo* pHost);
+static str XS_HttpHostRoot(XS_HttpRuntime* pRuntime, XS_HostInfo* pHost);
+
+/* host Custom 的 static 对象（无则 NULL） */
+static xvalue* XS_HttpStaticCfg(XS_HostInfo* pHost)
+{
+	if ( pHost == NULL || pHost->Custom == NULL ) {
+		return NULL;
+	}
+	return xrtValueObjectGet(pHost->Custom, XRT_STR_LITERAL("static"));
+}
+
+/* 错误页：优先 static.error_pages.<code>（host 根相对文件），缺省内置极简页 */
 static void XS_HttpErrorPage(XS_HttpRecord* pRec, uint16 iStatus)
 {
 	char arrBody[256];
- XS_HttpResp tResp;
+	XS_HttpResp tResp;
+	xvalue* pStatic = XS_HttpStaticCfg(pRec->pHost);
+	xvalue* pPages = NULL;
 	int iLen;
 
+	if ( pStatic != NULL ) {
+		char arrKey[8];
+		xvalue* pPath;
+
+		snprintf(arrKey, sizeof(arrKey), "%u", (unsigned)iStatus);
+		pPages = xrtValueObjectGet(pStatic, XRT_STR_LITERAL("error_pages"));
+		if ( pPages != NULL &&
+		     (pPath = xrtValueObjectGet(pPages, xrtStrViewN(arrKey, strlen(arrKey)))) != NULL ) {
+			xstrview tRel;
+			if ( xrtValueGetString(pPath, &tRel) && tRel.Size > 0 && tRel.Size < 512 ) {
+				char arrRel[512];
+				str sRoot, sFull;
+				bytes pData;
+				size_t iSize = 0;
+
+				memcpy(arrRel, tRel.Data, tRel.Size);
+				arrRel[tRel.Size] = '\0';
+				sRoot = XS_HttpHostRoot(pRec->pRuntime, pRec->pHost);
+				sFull = xrtPathIsAbs(arrRel) ? xrtStrDup(arrRel) : xrtPathJoin(sRoot, arrRel);
+				xrtFree(sRoot);
+				pData = sFull != NULL ? xrtFileReadAll(sFull, &iSize) : NULL;
+				xrtFree(sFull);
+				if ( pData != NULL && iSize > 0 ) {
+					memset(&tResp, 0, sizeof(tResp));
+					tResp.iStatus = iStatus;
+					tResp.sContentType = strchr(arrRel, '.') != NULL
+						? XS_HttpMime(arrRel) : "text/html; charset=utf-8";
+					tResp.iContentLength = (uint64)iSize;
+					if ( XS_HttpRespond(pRec, &tResp) ) {
+						(void)XS_HttpSend(&pRec->tReg, pData, iSize);
+					}
+					xrtFree(pData);
+					return;
+				}
+			}
+		}
+	}
 	iLen = snprintf(arrBody, sizeof(arrBody),
 		"<!DOCTYPE html><html><head><title>%u</title></head><body><h1>%u</h1><hr>xs</body></html>",
 		(unsigned)iStatus, (unsigned)iStatus);
@@ -271,21 +336,31 @@ static void XS_HttpStatic(XS_HttpRecord* pRec)
 			return;
 		}
 	}
-	/* 段级检查：.. 与点文件 */
-	iStart = 1;
-	for ( i = 1; i <= iDecoded; i++ ) {
-		if ( i == iDecoded || arrDecoded[i] == '/' ) {
-			size_t iLen = i - iStart;
+	/* 段级检查：.. 穿越恒拒；点文件受 static.deny_dotfiles 门控（默认拒） */
+	{
+		bool bDenyDot = true;
+		xvalue* pStatic = XS_HttpStaticCfg(pRec->pHost);
+		xvalue* pDeny;
 
-			if ( iLen == 2 && arrDecoded[iStart] == '.' && arrDecoded[iStart + 1] == '.' ) {
-				XS_HttpErrorPage(pRec, 403);
-				return;
+		if ( pStatic != NULL &&
+		     (pDeny = xrtValueObjectGet(pStatic, XRT_STR_LITERAL("deny_dotfiles"))) != NULL ) {
+			(void)xrtValueGetBool(pDeny, &bDenyDot);
+		}
+		iStart = 1;
+		for ( i = 1; i <= iDecoded; i++ ) {
+			if ( i == iDecoded || arrDecoded[i] == '/' ) {
+				size_t iLen = i - iStart;
+
+				if ( iLen == 2 && arrDecoded[iStart] == '.' && arrDecoded[iStart + 1] == '.' ) {
+					XS_HttpErrorPage(pRec, 403);
+					return;
+				}
+				if ( bDenyDot && iLen > 0 && arrDecoded[iStart] == '.' ) {
+					XS_HttpErrorPage(pRec, 403);
+					return;
+				}
+				iStart = i + 1;
 			}
-			if ( iLen > 0 && arrDecoded[iStart] == '.' ) {
-				XS_HttpErrorPage(pRec, 403);
-				return;
-			}
-			iStart = i + 1;
 		}
 	}
 
@@ -296,12 +371,49 @@ static void XS_HttpStatic(XS_HttpRecord* pRec)
 		XS_HttpErrorPage(pRec, 500);
 		return;
 	}
-	/* 目录 → 索引文件回落 */
+	/* 目录 → static.index 逐个回落（缺省 index.html） */
 	if ( xrtPathStat(sFull, true, &tInfo) && tInfo.Type == XFILE_TYPE_DIRECTORY ) {
-		str sIndex = xrtPathJoin(sFull, "index.html");
+		str sFound = NULL;
+		xvalue* pStatic = XS_HttpStaticCfg(pRec->pHost);
+		xvalue* pIndex = pStatic != NULL
+			? xrtValueObjectGet(pStatic, XRT_STR_LITERAL("index")) : NULL;
+		size_t iIdx;
+		size_t iCount = 1;
 
+		if ( pIndex != NULL && xrtValueType(pIndex) == XVALUE_ARRAY ) {
+			iCount = xrtValueCount(pIndex);
+		}
+		for ( iIdx = 0; iIdx < iCount && sFound == NULL; iIdx++ ) {
+			xstrview tName;
+			bool bHas = false;
+			char arrIdx[256];
+
+			if ( pIndex != NULL && xrtValueType(pIndex) == XVALUE_ARRAY ) {
+				xvalue* pItem = xrtValueArrayGet(pIndex, iIdx);
+				bHas = pItem != NULL && xrtValueGetString(pItem, &tName);
+			} else {
+				tName = XRT_STR_LITERAL("index.html");
+				bHas = true;
+			}
+			if ( bHas && tName.Size > 0 && tName.Size < sizeof(arrIdx) - 1 ) {
+				xfileinfo tIdxInfo;
+
+				memcpy(arrIdx, tName.Data, tName.Size);
+				arrIdx[tName.Size] = '\0';
+				if ( arrIdx[0] != '/' && arrIdx[0] != '.' && !strchr(arrIdx, '\\') ) {
+					str sTry = xrtPathJoin(sFull, arrIdx);
+
+					if ( sTry != NULL && xrtPathStat(sTry, true, &tIdxInfo) &&
+					     tIdxInfo.Type == XFILE_TYPE_FILE ) {
+						sFound = sTry;
+					} else {
+						xrtFree(sTry);
+					}
+				}
+			}
+		}
 		xrtFree(sFull);
-		sFull = sIndex;
+		sFull = sFound;
 	}
 	if ( sFull == NULL || !xrtPathStat(sFull, true, &tInfo) || tInfo.Type != XFILE_TYPE_FILE ) {
 		xrtFree(sFull);
@@ -321,7 +433,18 @@ static void XS_HttpStatic(XS_HttpRecord* pRec)
 		tResp.sContentType = XS_HttpMime(sName);
 		tResp.iContentLength = tInfo.Size;
 		tResp.bHeadOnly = XS_HttpViewEq(pRec->tHead.Method, "HEAD");
-		bOk = XS_HttpRespond(pRec, &tResp);
+		{
+			/* static.headers：装配期预渲染缓存（见 XS_HttpHdrCacheFind），请求路径仅指针拷贝 */
+			{
+				const XS_HttpHostHdrs* pHdrs = XS_HttpHdrCacheFind(pRuntime, pRec->pHost);
+
+				if ( pHdrs != NULL && pHdrs->iCount > 0 ) {
+					memcpy(tResp.arrExtra, pHdrs->arrFields, sizeof(xhttpfield) * pHdrs->iCount);
+					tResp.iExtraCount = pHdrs->iCount;
+				}
+				bOk = XS_HttpRespond(pRec, &tResp);
+			}
+		}
 		if ( bOk && !tResp.bHeadOnly && tInfo.Size > 0 ) {
 			if ( pRec->tReg.pTcp != NULL ) {
 				/* 明文：SendFile（句柄复制，可立即关闭）；按 WriteLimit 分段 */
@@ -856,6 +979,127 @@ static void XS_HttpSweepProc(xnetworker* pWorker, uint64 iId, xnetresult iResult
 	}
 }
 
+/* 装配期渲染一个 host 的 static.headers：JSON 遍历与字符串拷贝只发生在这里。
+ * 报文形态 "name\0value\0" 依次排布进 blob，字段视图直接指入 —— 请求路径零处理 */
+static XS_HttpHostHdrs* XS_HttpHdrCacheBuild(XS_HostInfo* pHost)
+{
+	xvalue* pStatic = XS_HttpStaticCfg(pHost);
+	xvalue* pHeaders;
+	XS_HttpHostHdrs* pHdrs;
+	xvaluekey tKey;
+	xvalueiter tIter;
+	size_t iUsed = 0;
+	size_t iCount = 0;
+	str sBlob;
+	size_t i;
+	size_t iOff;
+
+	if ( pStatic == NULL ) {
+		return NULL;
+	}
+	pHeaders = xrtValueObjectGet(pStatic, XRT_STR_LITERAL("headers"));
+	if ( pHeaders == NULL || xrtValueType(pHeaders) != XVALUE_OBJECT ||
+	     xrtValueCount(pHeaders) == 0 ) {
+		return NULL;
+	}
+	sBlob = (str)xrtMalloc(4096);
+	pHdrs = (XS_HttpHostHdrs*)xrtCalloc(1, sizeof(XS_HttpHostHdrs));
+	if ( sBlob == NULL || pHdrs == NULL ) {
+		xrtFree(sBlob);
+		xrtFree(pHdrs);
+		return NULL;
+	}
+	if ( xrtValueIterBegin(pHeaders, &tIter) ) {
+		while ( iCount < XS_HTTP_MAX_EXTRA_FIELDS ) {
+			xvalue* pVal = xrtValueIterNext(&tIter, &tKey);
+			xstrview tValView;
+
+			if ( pVal == NULL ) {
+				break;
+			}
+			if ( tKey.Type != XVALUE_KEY_STRING || !xrtValueGetString(pVal, &tValView) ) {
+				continue;
+			}
+			if ( iUsed + tKey.String.Size + tValView.Size + 2 > 4096 ) {
+				break;
+			}
+			memcpy(sBlob + iUsed, tKey.String.Data, tKey.String.Size);
+			sBlob[iUsed + tKey.String.Size] = 0;
+			pHdrs->arrFields[iCount].Name.Data = sBlob + iUsed;
+			pHdrs->arrFields[iCount].Name.Size = tKey.String.Size;
+			iUsed += tKey.String.Size + 1;
+			memcpy(sBlob + iUsed, tValView.Data, tValView.Size);
+			sBlob[iUsed + tValView.Size] = 0;
+			pHdrs->arrFields[iCount].Value.Data = sBlob + iUsed;
+			pHdrs->arrFields[iCount].Value.Size = tValView.Size;
+			iUsed += tValView.Size + 1;
+			iCount++;
+		}
+	}
+	if ( iCount == 0 ) {
+		xrtFree(sBlob);
+		xrtFree(pHdrs);
+		return NULL;
+	}
+	pHdrs->pHost = pHost;
+	pHdrs->sBlob = sBlob;
+	pHdrs->iBlobSize = iUsed;
+	pHdrs->iCount = (uint32)iCount;
+	(void)iOff;
+	(void)i;
+	return pHdrs;
+}
+
+static const XS_HttpHostHdrs* XS_HttpHdrCacheFind(XS_HttpRuntime* pRuntime, XS_HostInfo* pHost)
+{
+	uint32 i;
+
+	for ( i = 0; i < pRuntime->iHdrCacheCount; i++ ) {
+		if ( pRuntime->arrHdrCache[i]->pHost == pHost ) {
+			return pRuntime->arrHdrCache[i];
+		}
+	}
+	return NULL;
+}
+
+static void XS_HttpHdrCacheBuildAll(XS_HttpRuntime* pRuntime, XS_ServerInfo* pServer)
+{
+	uint32 iTotal = 1 + pServer->HostCount;
+	uint32 i;
+
+	pRuntime->arrHdrCache = (XS_HttpHostHdrs**)xrtCalloc(iTotal, sizeof(XS_HttpHostHdrs*));
+	if ( pRuntime->arrHdrCache == NULL ) {
+		return;
+	}
+	{
+		XS_HttpHostHdrs* pHdrs = XS_HttpHdrCacheBuild(pServer->DefaultHost);
+
+		if ( pHdrs != NULL ) {
+			pRuntime->arrHdrCache[pRuntime->iHdrCacheCount++] = pHdrs;
+		}
+	}
+	for ( i = 0; i < pServer->HostCount; i++ ) {
+		XS_HttpHostHdrs* pHdrs = XS_HttpHdrCacheBuild(pServer->Hosts[i]);
+
+		if ( pHdrs != NULL ) {
+			pRuntime->arrHdrCache[pRuntime->iHdrCacheCount++] = pHdrs;
+		}
+	}
+}
+
+static void XS_HttpHdrCacheUnit(XS_HttpRuntime* pRuntime)
+{
+	uint32 i;
+
+	for ( i = 0; i < pRuntime->iHdrCacheCount; i++ ) {
+		xrtFree(pRuntime->arrHdrCache[i]->sBlob);
+		xrtFree(pRuntime->arrHdrCache[i]);
+	}
+	xrtFree(pRuntime->arrHdrCache);
+	pRuntime->arrHdrCache = NULL;
+	pRuntime->iHdrCacheCount = 0;
+}
+
 static bool XS_HttpStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap)
 {
 	XS_HttpRuntime* pRuntime = (XS_HttpRuntime*)xrtCalloc(1, sizeof(XS_HttpRuntime));
@@ -960,6 +1204,7 @@ static bool XS_HttpStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap)
 	if ( pRuntime->iIdleMs > 0 ) {
 		XS_HttpSweepProc(NULL, 0, XNET_RESULT_OK, pRuntime);
 	}
+	XS_HttpHdrCacheBuildAll(pRuntime, pServer);
 	printf("[xs] server '%s' %s ready on %s:%u\n", pServer->Name,
 		pRuntime->bTls ? "https" : "http",
 		pServer->IP ? pServer->IP : "0.0.0.0", pServer->Port);
@@ -993,6 +1238,7 @@ static void XS_HttpUnit(XS_HttpRuntime* pRuntime)
 		return;
 	}
 	XS_RegistryUnit(&pRuntime->tRegistry);
+	XS_HttpHdrCacheUnit(pRuntime);
 	XS_TlsTableUnit(&pRuntime->tTls);
 	xrtFree(pRuntime);
 }

@@ -160,7 +160,24 @@ def behavior_matrix():
             fail('behavior/tcp-idle', 'not closed after idle window')
         s6.close()
 
-        # B6 ws 大消息超限（ws_message_limit 未配置 → 内核默认，跳过）
+        # B6 静态层旋钮（主配置已带 static 四旋钮）
+        import http.client as _hc
+        c = _hc.HTTPConnection('127.0.0.1', 8080, timeout=5)
+        c.request('GET', '/')
+        r = c.getresponse(); body = r.read(); hdrs = dict(r.getheaders()); c.close()
+        if hdrs.get('X-XS-Static') != 'on' or hdrs.get('Cache-Control') != 'no-cache':
+            fail('behavior/static-headers', f'{hdrs}')
+        if b'xs3 static ok' not in body:
+            fail('behavior/static-index', f'{body[:40]!r}')
+        s404, _ = http_get('/no-such')
+        # 主配置未配 error_pages 时为内置页；已配 err404.html 时为自定义页（二者择一断言状态）
+        if s404 != 404:
+            fail('behavior/static-404', f'status={s404}')
+        s403, _ = http_get('/.hidden')
+        if s403 != 403:
+            fail('behavior/static-dotfile', f'status={s403} expect 403')
+
+        # B7 ws 大消息超限（ws_message_limit 未配置 → 内核默认，跳过）
     finally:
         proc.kill()
         log.close()
