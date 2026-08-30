@@ -360,12 +360,22 @@ XS_RequestResult RequestProc(XS_HttpReq* pReq)
                 b'GET / HTTP/1.1\r\nConnection: close\r\n\r\n')
             legacy_status, legacy_body = raw_http(http_port,
                 b'GET / HTTP/1.0\r\nConnection: close\r\n\r\n')
+            extension_status, _ = raw_http(http_port,
+                b'PURGE / HTTP/1.1\r\nHost: default.example.com\r\nConnection: close\r\n\r\n')
+            lowercase_status, _ = raw_http(http_port,
+                b'get / HTTP/1.1\r\nHost: default.example.com\r\nConnection: close\r\n\r\n')
+            invalid_method_status, _ = raw_http(http_port,
+                b'GE(T / HTTP/1.1\r\nHost: default.example.com\r\nConnection: close\r\n\r\n')
             if port_status != 200 or b'admin script ok' not in port_body or \
                     duplicate_status != 400 or missing_status != 400 or \
+                    extension_status != 405 or lowercase_status != 405 or \
+                    invalid_method_status != 400 or \
                     legacy_status != 200 or b'xs3 static ok' not in legacy_body:
                 fail('behavior/vhost-host-rules',
                      f'port={port_status}/{port_body[:30]!r} duplicate={duplicate_status} '
-                     f'missing={missing_status} legacy={legacy_status}/{legacy_body[:30]!r}')
+                     f'missing={missing_status} extension={extension_status} '
+                     f'lowercase={lowercase_status} invalid_method={invalid_method_status} '
+                     f'legacy={legacy_status}/{legacy_body[:30]!r}')
         except (OSError, ValueError, IndexError) as exc:
             fail('behavior/vhost-host-rules', str(exc))
 

@@ -260,7 +260,6 @@ static bool XS_HttpRespond(XS_HttpRecord* pRec, XS_HttpResp* pResp)
 static const char* XS_HttpMime(const char* sName);
 static const XS_HttpHostHdrs* XS_HttpHdrCacheFind(XS_HttpRuntime* pRuntime, XS_HostInfo* pHost);
 static str XS_HttpHostRoot(XS_HttpRuntime* pRuntime, XS_HostInfo* pHost);
-static bool XS_HttpViewEq(xstrview tView, const char* sLiteral);
 
 static bool XS_HttpSafeRelative(xstrview tPath)
 {
@@ -370,7 +369,7 @@ static void XS_HttpErrorPage(XS_HttpRecord* pRec, uint16 iStatus)
 					XS_HttpSafeRelative(tRel) ?
 					XS_HttpRootOpenFile(pSite->pRoot, arrRel, &tInfo) : NULL;
 				if ( hFile != NULL ) {
-					bHeadOnly = XS_HttpViewEq(pRec->tHead.Method, "HEAD");
+					bHeadOnly = pRec->tHead.MethodCode == XHTTP_METHOD_HEAD;
 					memset(&tResp, 0, sizeof(tResp));
 					tResp.iStatus = iStatus;
 					tResp.sContentType = strchr(arrRel, '.') != NULL
@@ -400,7 +399,7 @@ static void XS_HttpErrorPage(XS_HttpRecord* pRec, uint16 iStatus)
 	tResp.iStatus = iStatus;
 	tResp.sContentType = "text/html; charset=utf-8";
 	tResp.iContentLength = (uint64)iLen;
-	tResp.bHeadOnly = XS_HttpViewEq(pRec->tHead.Method, "HEAD");
+	tResp.bHeadOnly = pRec->tHead.MethodCode == XHTTP_METHOD_HEAD;
 	if ( !XS_HttpRespond(pRec, &tResp) ||
 	     (!tResp.bHeadOnly &&
 	      XS_HttpSend(&pRec->tReg, arrBody, (size_t)iLen) != XNET_RESULT_OK) ) {
@@ -411,8 +410,6 @@ static void XS_HttpErrorPage(XS_HttpRecord* pRec, uint16 iStatus)
 /* ============================================================
  * 静态层（XS_FALLBACK，仅 GET/HEAD）
  * ============================================================ */
-
-static bool XS_HttpViewEq(xstrview tView, const char* sLiteral);
 
 static const char* XS_HttpMime(const char* sName)
 {
@@ -489,8 +486,8 @@ static void XS_HttpStatic(XS_HttpRecord* pRec)
 	bool bDirectory = false;
 	bool bHeadOnly;
 
-	if ( !XS_HttpViewEq(pRec->tHead.Method, "GET") &&
-	     !XS_HttpViewEq(pRec->tHead.Method, "HEAD") ) {
+	if ( (pRec->tHead.MethodCode != XHTTP_METHOD_GET) &&
+	     (pRec->tHead.MethodCode != XHTTP_METHOD_HEAD) ) {
 		XS_HttpErrorPage(pRec, 405);
 		return;
 	}
@@ -661,7 +658,7 @@ static void XS_HttpStatic(XS_HttpRecord* pRec)
 		}
 	}
 
-	bHeadOnly = XS_HttpViewEq(pRec->tHead.Method, "HEAD");
+	bHeadOnly = pRec->tHead.MethodCode == XHTTP_METHOD_HEAD;
 	{
 		XS_HttpResp tResp;
 
@@ -690,26 +687,6 @@ cleanup:
 	xrtFree(sSelected);
 	xrtFree(sDecoded);
 	xrtFree(sEncoded);
-}
-
-/* ============================================================
- * 视图比较
- * ============================================================ */
-
-static bool XS_HttpViewEq(xstrview tView, const char* sLiteral)
-{
-	size_t i;
-
-	for ( i = 0; sLiteral[i] != '\0'; i++ ) {}
-	if ( tView.Size != i ) {
-		return false;
-	}
-	for ( i = 0; i < tView.Size; i++ ) {
-		if ( tView.Data[i] != sLiteral[i] ) {
-			return false;
-		}
-	}
-	return true;
 }
 
 /* ============================================================

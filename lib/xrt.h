@@ -12533,6 +12533,26 @@ XRT_EXTERN_C_END
 
 
 
+/*
+	常用 HTTP 方法使用稳定枚举供解析热路径和上层分派直接比较。
+	OTHER 表示语法合法但未内置分类的方法；INVALID 表示空值或非法 token。
+*/
+typedef enum xhttpmethod {
+	XHTTP_METHOD_INVALID = 0,
+	XHTTP_METHOD_OTHER = 1,
+	XHTTP_METHOD_GET = 2,
+	XHTTP_METHOD_HEAD = 3,
+	XHTTP_METHOD_POST = 4,
+	XHTTP_METHOD_PUT = 5,
+	XHTTP_METHOD_DELETE = 6,
+	XHTTP_METHOD_CONNECT = 7,
+	XHTTP_METHOD_OPTIONS = 8,
+	XHTTP_METHOD_TRACE = 9,
+	XHTTP_METHOD_PATCH = 10
+} xhttpmethod;
+
+
+
 /* HTTP 版本使用可直接比较的主次版本编码。 */
 typedef enum xhttpversion {
 	XHTTP_VERSION_1_0 = 10,
@@ -12875,6 +12895,14 @@ XRT_API bool xrtHttpTokenValid(xstrview Text);
 
 /* 按 ASCII 大小写不敏感规则比较两个 token。 */
 XRT_API bool xrtHttpTokenEqual(xstrview Left, xstrview Right);
+
+
+
+/*
+	按大小写敏感规则分类 HTTP 方法。
+	合法扩展方法返回 OTHER；空值或非法 token 返回 INVALID。
+*/
+XRT_API xhttpmethod xrtHttpMethodParse(xstrview Method);
 
 
 
@@ -26607,6 +26635,7 @@ typedef struct xhttp1head {
 	xhttpfield* Fields;
 	size_t FieldCount;
 	size_t FieldCapacity;
+	xhttpmethod MethodCode;
 } xhttp1head;
 
 #endif
@@ -86718,6 +86747,103 @@ XRT_API bool xrtHttpTokenEqual(xstrview Left, xstrview Right)
 
 
 
+/* 按长度和字节直接分类常用方法，扩展方法只在未命中时扫描 token。 */
+XRT_API xhttpmethod xrtHttpMethodParse(xstrview Method)
+{
+	cstr sData;
+	size_t i;
+
+	if ( !__xrtHttpViewValid(Method) || (Method.Size == 0) ) {
+		return XHTTP_METHOD_INVALID;
+	}
+	sData = Method.Data;
+	switch ( Method.Size ) {
+	case 3:
+		if ( (sData[0] == 'G') &&
+			(sData[1] == 'E') &&
+			(sData[2] == 'T') ) {
+			return XHTTP_METHOD_GET;
+		}
+		if ( (sData[0] == 'P') &&
+			(sData[1] == 'U') &&
+			(sData[2] == 'T') ) {
+			return XHTTP_METHOD_PUT;
+		}
+		break;
+	case 4:
+		if ( (sData[0] == 'P') &&
+			(sData[1] == 'O') &&
+			(sData[2] == 'S') &&
+			(sData[3] == 'T') ) {
+			return XHTTP_METHOD_POST;
+		}
+		if ( (sData[0] == 'H') &&
+			(sData[1] == 'E') &&
+			(sData[2] == 'A') &&
+			(sData[3] == 'D') ) {
+			return XHTTP_METHOD_HEAD;
+		}
+		break;
+	case 5:
+		if ( (sData[0] == 'P') &&
+			(sData[1] == 'A') &&
+			(sData[2] == 'T') &&
+			(sData[3] == 'C') &&
+			(sData[4] == 'H') ) {
+			return XHTTP_METHOD_PATCH;
+		}
+		if ( (sData[0] == 'T') &&
+			(sData[1] == 'R') &&
+			(sData[2] == 'A') &&
+			(sData[3] == 'C') &&
+			(sData[4] == 'E') ) {
+			return XHTTP_METHOD_TRACE;
+		}
+		break;
+	case 6:
+		if ( (sData[0] == 'D') &&
+			(sData[1] == 'E') &&
+			(sData[2] == 'L') &&
+			(sData[3] == 'E') &&
+			(sData[4] == 'T') &&
+			(sData[5] == 'E') ) {
+			return XHTTP_METHOD_DELETE;
+		}
+		break;
+	case 7:
+		if ( (sData[0] == 'C') &&
+			(sData[1] == 'O') &&
+			(sData[2] == 'N') &&
+			(sData[3] == 'N') &&
+			(sData[4] == 'E') &&
+			(sData[5] == 'C') &&
+			(sData[6] == 'T') ) {
+			return XHTTP_METHOD_CONNECT;
+		}
+		if ( (sData[0] == 'O') &&
+			(sData[1] == 'P') &&
+			(sData[2] == 'T') &&
+			(sData[3] == 'I') &&
+			(sData[4] == 'O') &&
+			(sData[5] == 'N') &&
+			(sData[6] == 'S') ) {
+			return XHTTP_METHOD_OPTIONS;
+		}
+		break;
+	default:
+		break;
+	}
+
+	for ( i = 0; i < Method.Size; i++ ) {
+		if ( !__xrtHttpTokenByte((unsigned char)sData[i]) ) {
+			return XHTTP_METHOD_INVALID;
+		}
+	}
+	return XHTTP_METHOD_OTHER;
+}
+
+
+
 /* 按大小写敏感规则比较两个合法 HTTP 方法名。 */
 XRT_API bool xrtHttpMethodEqual(
 	xstrview Left,
@@ -86734,22 +86860,15 @@ XRT_API bool xrtHttpMethodEqual(
 /* 按 RFC 语义识别只读方法，供重试、Cookie 和缓存策略共同使用。 */
 XRT_API bool xrtHttpMethodSafe(xstrview Method)
 {
-	if ( !xrtHttpTokenValid(Method) ) {
+	switch ( xrtHttpMethodParse(Method) ) {
+	case XHTTP_METHOD_GET:
+	case XHTTP_METHOD_HEAD:
+	case XHTTP_METHOD_OPTIONS:
+	case XHTTP_METHOD_TRACE:
+		return true;
+	default:
 		return false;
 	}
-	return __xrtHttpViewEqual(
-		Method,
-		XRT_STR_LITERAL("GET")
-	) || __xrtHttpViewEqual(
-		Method,
-		XRT_STR_LITERAL("HEAD")
-	) || __xrtHttpViewEqual(
-		Method,
-		XRT_STR_LITERAL("OPTIONS")
-	) || __xrtHttpViewEqual(
-		Method,
-		XRT_STR_LITERAL("TRACE")
-	);
 }
 
 
@@ -86757,16 +86876,17 @@ XRT_API bool xrtHttpMethodSafe(xstrview Method)
 /* 幂等方法包含全部安全方法，以及具有替换或删除语义的 PUT、DELETE。 */
 XRT_API bool xrtHttpMethodIdempotent(xstrview Method)
 {
-	if ( xrtHttpMethodSafe(Method) ) {
+	switch ( xrtHttpMethodParse(Method) ) {
+	case XHTTP_METHOD_GET:
+	case XHTTP_METHOD_HEAD:
+	case XHTTP_METHOD_OPTIONS:
+	case XHTTP_METHOD_TRACE:
+	case XHTTP_METHOD_PUT:
+	case XHTTP_METHOD_DELETE:
 		return true;
+	default:
+		return false;
 	}
-	return __xrtHttpViewEqual(
-		Method,
-		XRT_STR_LITERAL("PUT")
-	) || __xrtHttpViewEqual(
-		Method,
-		XRT_STR_LITERAL("DELETE")
-	);
 }
 
 
@@ -86777,15 +86897,14 @@ XRT_API bool xrtHttpResponseContentAllowed(
 	uint16 iStatus
 )
 {
-	if ( !xrtHttpTokenValid(Method) ||
+	xhttpmethod MethodCode = xrtHttpMethodParse(Method);
+
+	if ( (MethodCode == XHTTP_METHOD_INVALID) ||
 		(iStatus < 100) ||
 		(iStatus > 999) ) {
 		return false;
 	}
-	if ( xrtHttpMethodEqual(
-		Method,
-		XRT_STR_LITERAL("HEAD")
-	) || (iStatus < 200) ||
+	if ( (MethodCode == XHTTP_METHOD_HEAD) || (iStatus < 200) ||
 		(iStatus == 204) ||
 		(iStatus == 205) ||
 		(iStatus == 304) ) {
@@ -86793,10 +86912,7 @@ XRT_API bool xrtHttpResponseContentAllowed(
 	}
 	if ( (iStatus >= 200) &&
 		(iStatus < 300) &&
-		xrtHttpMethodEqual(
-			Method,
-			XRT_STR_LITERAL("CONNECT")
-		) ) {
+		(MethodCode == XHTTP_METHOD_CONNECT) ) {
 		return false;
 	}
 	return true;
@@ -173325,7 +173441,8 @@ static bool __xrtHttp1RequestLine(
 	pHead->Target.Size = (size_t)(sSecond - (sFirst + 1));
 	Version.Data = sSecond + 1;
 	Version.Size = Line.Size - (size_t)(Version.Data - Line.Data);
-	if ( !xrtHttpTokenValid(pHead->Method) ) {
+	pHead->MethodCode = xrtHttpMethodParse(pHead->Method);
+	if ( pHead->MethodCode == XHTTP_METHOD_INVALID ) {
 		(void)__xrtHttp1Fail(
 			pHead, pInfo, XHTTP1_ERROR_METHOD, 0, 1,
 			XERR_PROTOCOL, sOperation,
@@ -175589,10 +175706,7 @@ XRT_API bool xrtWsUpgradeRequestCheck(
 	) ) {
 		return false;
 	}
-	if ( !__xrtWsUpgradeTextEqual(
-		Request.Method,
-		XRT_STR_LITERAL("GET")
-	) ) {
+	if ( Request.MethodCode != XHTTP_METHOD_GET ) {
 		return __xrtWsUpgradeError(
 			XERR_PROTOCOL,
 			XWS_HANDSHAKE_ERROR_METHOD,
@@ -180673,6 +180787,7 @@ XRT_API bool xrtHttpTargetParse(
 )
 {
 	xhttptarget Target = { 0 };
+	xhttpmethod MethodCode;
 
 	if ( !__xrtRangeValid(pTarget, sizeof(Target)) ||
 		!__xrtHttpViewValid(Method) ||
@@ -180684,13 +180799,14 @@ XRT_API bool xrtHttpTargetParse(
 		__xrtErrorSetInvalidArgument();
 		return false;
 	}
-	if ( !xrtHttpTokenValid(Method) || (Text.Size == 0) ) {
+	MethodCode = xrtHttpMethodParse(Method);
+	if ( (MethodCode == XHTTP_METHOD_INVALID) || (Text.Size == 0) ) {
 		return __xrtHttpTargetValueFail(pTarget);
 	}
 	Target.Method = Method;
 	Target.Text = Text;
 
-	if ( xrtHttpMethodEqual(Method, XRT_STR_LITERAL("CONNECT")) ) {
+	if ( MethodCode == XHTTP_METHOD_CONNECT ) {
 		if ( !xrtHttpHostParse(Text, &Target.Host) ||
 			(Target.Host.Host.Size == 0) ||
 			((Target.Host.Flags & XHTTP_AUTHORITY_HAS_PORT) == 0) ||
@@ -180705,7 +180821,7 @@ XRT_API bool xrtHttpTargetParse(
 	}
 
 	if ( (Text.Size == 1u) && (Text.Data[0] == '*') ) {
-		if ( !xrtHttpMethodEqual(Method, XRT_STR_LITERAL("OPTIONS")) ) {
+		if ( MethodCode != XHTTP_METHOD_OPTIONS ) {
 			return __xrtHttpTargetValueFail(pTarget);
 		}
 		Target.Form = XHTTP_TARGET_ASTERISK;
@@ -181559,8 +181675,11 @@ XRT_API bool xrtHttp1ResponseBodyPlan(
 	xhttp1bodyplan* pPlan
 )
 {
+	xhttpmethod MethodCode;
+
+	MethodCode = xrtHttpMethodParse(RequestMethod);
 	if ( !__xrtHttp1BodyHeadValid(pHead, XHTTP_RESPONSE) ||
-		!xrtHttpTokenValid(RequestMethod) ||
+		(MethodCode == XHTTP_METHOD_INVALID) ||
 		(pPlan == NULL) ) {
 		return __xrtHttp1BodyPlanFail(
 			pPlan, XHTTP1_ERROR_ARGUMENT, XERR_ARGUMENT,
@@ -181579,16 +181698,12 @@ XRT_API bool xrtHttp1ResponseBodyPlan(
 		pPlan->Mode = XHTTP1_BODY_TUNNEL;
 		return true;
 	}
-	if ( xrtHttpMethodEqual(
-		RequestMethod, XRT_STR_LITERAL("CONNECT")
-	) &&
+	if ( (MethodCode == XHTTP_METHOD_CONNECT) &&
 		(pHead->Status >= 200) && (pHead->Status < 300) ) {
 		pPlan->Mode = XHTTP1_BODY_TUNNEL;
 		return true;
 	}
-	if ( xrtHttpMethodEqual(
-		RequestMethod, XRT_STR_LITERAL("HEAD")
-	) ) {
+	if ( MethodCode == XHTTP_METHOD_HEAD ) {
 		pPlan->Mode = XHTTP1_BODY_NONE;
 		return true;
 	}

@@ -126,7 +126,7 @@ typedef struct XS_ServerInfo {
 typedef struct {
 	xnetstream*			tcp;		/* 与 tls 二选一非空：传输层裸指针 */
 	xtlsstream*			tls;		/*   可直接使用 xrt 全套流/发送 API */
-	const xhttp1head*		head;		/* http core 解析产物（字段为视图，回调内有效） */
+	const xhttp1head*		head;		/* 含 MethodCode；原始方法和字段视图在回调内有效 */
 	xhttp1body*			body;		/* 分帧状态机：定长 / chunked / 关闭 */
 	const XS_HostInfo*		host;
 	XS_ServerInfo*			server;

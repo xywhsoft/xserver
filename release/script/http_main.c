@@ -141,7 +141,7 @@ static XS_RequestResult ReplyReloadAccepted(XS_HttpReq* pReq, XS_ReloadId iId)
 XS_RequestResult RequestProc(XS_HttpReq* pReq)
 {
 	/* POST /echo：读 body 后回显（演示 xhttp1body 用法） */
-	if ( pReq->head->Method.Size == 4 && memcmp(pReq->head->Method.Data, "POST", 4) == 0 &&
+	if ( pReq->head->MethodCode == XHTTP_METHOD_POST &&
 	     PathIs(pReq, "/echo") ) {
 		unsigned char arrBuf[8192];
 		size_t iUsed = 0;
@@ -175,7 +175,7 @@ XS_RequestResult RequestProc(XS_HttpReq* pReq)
 		(void)iConsumed;
 		return Reply(pReq, 200, "application/octet-stream", arrBuf, iUsed) ? XS_OK : XS_OK;
 	}
-	if ( pReq->head->Method.Size == 3 && memcmp(pReq->head->Method.Data, "GET", 3) == 0 ) {
+	if ( pReq->head->MethodCode == XHTTP_METHOD_GET ) {
 		XS_ReloadId iStatusId;
 
 		if ( ReloadStatusId(pReq, &iStatusId) ) {
