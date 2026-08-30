@@ -195,8 +195,10 @@ static void XS_ConfigServerFree(XS_ServerInfo* pServer)
 	xrtFree((void*)pServer->IP);
 	xrtFree((void*)pServer->IPTLS);
 	XS_ConfigHostFree(pServer->DefaultHost);
-	for ( i = 0; i < pServer->HostCount; i++ ) {
-		XS_ConfigHostFree(pServer->Hosts[i]);
+	if ( pServer->Hosts != NULL ) {
+		for ( i = 0; i < pServer->HostCount; i++ ) {
+			XS_ConfigHostFree(pServer->Hosts[i]);
+		}
 	}
 	xrtFree(pServer->Hosts);
 	xrtFree(pServer);
@@ -354,13 +356,23 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 			snprintf(sErr, iErrCap, "field 'hosts' has too many entries");
 			return false;
 		}
-		pServer->HostCount = (uint32)xrtValueCount(pHosts);
-		if ( pServer->HostCount > 0 ) {
-			pServer->Hosts = (XS_HostInfo**)xrtCalloc(pServer->HostCount, sizeof(XS_HostInfo*));
-			if ( pServer->Hosts == NULL ) {
-				snprintf(sErr, iErrCap, "out of memory");
-				return false;
+		{
+			uint32 iHostCount = (uint32)xrtValueCount(pHosts);
+
+			if ( iHostCount > 0 ) {
+				XS_HostInfo** pHostArray =
+					(XS_HostInfo**)xrtCalloc(iHostCount, sizeof(XS_HostInfo*));
+
+				if ( pHostArray == NULL ) {
+					snprintf(sErr, iErrCap, "out of memory");
+					return false;
+				}
+				/* 指针与数量同时发布；失败清理永远看到一个可遍历状态。 */
+				pServer->Hosts = pHostArray;
+				pServer->HostCount = iHostCount;
 			}
+		}
+		if ( pServer->HostCount > 0 ) {
 			for ( i = 0; i < pServer->HostCount; i++ ) {
 				pHostObj = xrtValueArrayGet(pHosts, i);
 				if ( pHostObj == NULL || xrtValueType(pHostObj) != XVALUE_OBJECT ) {

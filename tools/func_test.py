@@ -10,6 +10,7 @@ import json
 import os
 import shutil
 import socket
+import ssl
 import struct
 import subprocess
 import sys
@@ -51,8 +52,21 @@ def config_matrix():
         ('static-type', '{"services":[{"class":"http","name":"x","port":1,'
                         '"host_default":{"static":[]}}]}', "field 'static' expect object"),
         ('static-header-invalid', '{"services":[{"class":"http","name":"x","port":1,'
-                                  '"host_default":{"static":{"headers":{"Bad Name":"x"}}}}]}',
-         'invalid HTTP field'),
+                                   '"host_default":{"static":{"headers":{"Bad Name":"x"}}}}]}',
+          'invalid HTTP field'),
+        ('static-header-framing', '{"services":[{"class":"http","name":"x","port":1,'
+                                   '"host_default":{"static":{"headers":'
+                                   '{"Transfer-Encoding":"chunked"}}}}]}',
+         'reserved response field'),
+        ('static-error-page-key', '{"services":[{"class":"http","name":"x","port":1,'
+                                  '"host_default":{"static":{"error_pages":'
+                                  '{"oops":"error.html"}}}}]}',
+         'expects 400..599 keys'),
+        ('static-root-missing', json.dumps({'services': [{
+            'class': 'http', 'name': 'x', 'port': 1,
+            'host_default': {'path': str(Path(tempfile.gettempdir()) /
+                                         'xs-root-must-not-exist-7b911c')}
+        }]}), 'cannot open static root'),
         ('ws-protocol-type', '{"services":[{"class":"ws","name":"x","port":1,'
                              '"devlang":"c","devfile":"script/ws_main.c",'
                              '"ws_protocol":1}]}', "ws_protocol' expect string"),
@@ -82,6 +96,32 @@ def config_matrix():
             fail(f'config/{name}', 'timeout (should fail-fast)')
         finally:
             os.unlink(path)
+
+    # dev_inc 相对路径只能基于可执行文件 appPath 解析，不得意外命中
+    # 进程当前工作目录中的同名诱饵头文件。
+    with tempfile.TemporaryDirectory(prefix='xs-dev-path-cwd-') as temp_dir:
+        temp_root = Path(temp_dir)
+        decoy = temp_root / 'decoy'
+        decoy.mkdir()
+        (decoy / 'cwd_only.h').write_text('#define CWD_ONLY 1\n', encoding='utf-8')
+        script = temp_root / 'main.c'
+        script.write_text(
+            '#include <xsbase.h>\n#include <cwd_only.h>\n'
+            'void ServiceInit(XS_HostInfo* p){(void)p;}\n', encoding='utf-8')
+        config = temp_root / 'xs.json'
+        config.write_text(json.dumps({'services': [{
+            'class': 'custom', 'name': 'cwd-probe', 'enabled': True,
+            'devlang': 'c', 'devfile': str(script), 'dev_inc': 'decoy'
+        }]}), encoding='utf-8')
+        try:
+            proc = subprocess.run(
+                [str(EXE), str(config)], capture_output=True, text=True,
+                timeout=10, cwd=str(temp_root))
+            if proc.returncode != 1 or 'script compile failed' not in proc.stdout + proc.stderr:
+                fail('config/dev-path-no-cwd-fallback',
+                     f'exit={proc.returncode} output={(proc.stdout + proc.stderr)[-200:]}')
+        except subprocess.TimeoutExpired:
+            fail('config/dev-path-no-cwd-fallback', 'timeout')
 
 
 def listener_failure_matrix():
@@ -178,6 +218,68 @@ def tls_identity_diagnostic_matrix():
                      f'exit={proc.returncode} output={output[-300:]}')
         except subprocess.TimeoutExpired:
             fail('tls/type-mismatch-diagnostic', 'process did not fail-fast')
+
+
+def tls_static_large_matrix():
+    """TLS 静态文件必须跨多轮背压完整发送，并保留 keep-alive 顺序。"""
+    used = set()
+    plain_port = free_port(socket.SOCK_STREAM, used)
+    tls_port = free_port(socket.SOCK_STREAM, used)
+    cert_path = RELEASE / 'tls' / 'xtps_cert.pem'
+    key_path = RELEASE / 'tls' / 'xtps_key.pem'
+
+    if not cert_path.exists() or not key_path.exists():
+        fail('tls/static-large', 'missing TLS fixture')
+        return
+    with tempfile.TemporaryDirectory(prefix='xs-tls-static-') as temp_dir:
+        temp_root = Path(temp_dir)
+        expected = b't' * (4 * 1024 * 1024)
+        (temp_root / 'large.bin').write_bytes(expected)
+        (temp_root / 'next.txt').write_bytes(b'next-response')
+        config_path = temp_root / 'xs.json'
+        config_path.write_text(json.dumps({'services': [{
+            'class': 'http', 'name': 'tls-static',
+            'ip': '127.0.0.1', 'port': plain_port,
+            'tls': True, 'ip_tls': '127.0.0.1', 'port_tls': tls_port,
+            'host_default': {
+                'path': str(temp_root),
+                'tls_cert': str(cert_path), 'tls_key': str(key_path)
+            }
+        }]}), encoding='utf-8')
+        log = open(temp_root / 'xs.log', 'w', encoding='utf-8')
+        proc = subprocess.Popen(
+            [str(EXE), str(config_path)], cwd=str(RELEASE),
+            stdout=log, stderr=subprocess.STDOUT)
+        try:
+            if not wait_port(tls_port):
+                fail('tls/static-large', 'TLS port not up')
+                return
+            context = ssl._create_unverified_context()
+            conn = http.client.HTTPSConnection(
+                '127.0.0.1', tls_port, timeout=20, context=context)
+            conn.request('GET', '/large.bin')
+            response = conn.getresponse()
+            body = response.read()
+            conn.request('GET', '/next.txt')
+            next_response = conn.getresponse()
+            next_body = next_response.read()
+            conn.close()
+            if response.status != 200 or body != expected:
+                fail('tls/static-large-complete',
+                     f'status={response.status} bytes={len(body)}')
+            if next_response.status != 200 or next_body != b'next-response':
+                fail('tls/static-large-keepalive',
+                     f'status={next_response.status} body={next_body!r}')
+        except (OSError, ssl.SSLError, http.client.HTTPException) as exc:
+            fail('tls/static-large', str(exc))
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+            log.close()
 
 
 # ============================================================
@@ -280,7 +382,69 @@ def behavior_matrix():
         '#include <string.h>\n', '#include <string.h>\n#include <libtcc.h>\n')
     fixture_text = fixture_text.replace(
         'XS_RequestResult RequestProc(XS_HttpReq* pReq)\n{',
-        '''static bool NestedCompile(void)
+        '''typedef struct TakeoverEchoContext {
+\txnetstream* tcp;
+\txtlsstream* tls;
+} TakeoverEchoContext;
+
+static int32 TakeoverEchoThread(void* pData)
+{
+\tTakeoverEchoContext* pCtx = (TakeoverEchoContext*)pData;
+\txfuture* pRecv;
+\txfutureresult tResult;
+
+\t/* RequestProc 返回后驱动才安装 pull 事件表；稍后从独立线程提交读取。 */
+\txrtSleep(20);
+\tpRecv = pCtx->tls != NULL ? xrtTlsStreamRecvAsync(pCtx->tls, 65536) :
+\t\txrtNetStreamRecvAsync(pCtx->tcp, 65536);
+\tif ( pRecv != NULL && xrtFutureWaitFor(pRecv, 5000000) == XWAIT_OK &&
+\t     xrtFutureResult(pRecv, &tResult) && tResult.State == XFUTURE_RESOLVED ) {
+\t\txbytesview tData = xrtNetBytesView((xnetbytes*)tResult.Value);
+
+\t\tif ( pCtx->tls != NULL ) {
+\t\t\txfuture* pSend = xrtTlsStreamSendAsync(pCtx->tls, tData.Data, tData.Size);
+\t\t\tif ( pSend != NULL ) xrtFutureDestroy(pSend);
+\t\t\t(void)xrtTlsStreamClose(pCtx->tls);
+\t\t} else {
+\t\t\t(void)xrtNetStreamSend(pCtx->tcp, tData.Data, tData.Size);
+\t\t\t(void)xrtNetStreamClose(pCtx->tcp);
+\t\t}
+\t} else if ( pCtx->tls != NULL ) {
+\t\t(void)xrtTlsStreamClose(pCtx->tls);
+\t} else {
+\t\t(void)xrtNetStreamClose(pCtx->tcp);
+\t}
+\txrtFutureDestroy(pRecv);
+\tif ( pCtx->tls != NULL ) xrtTlsStreamDestroy(pCtx->tls);
+\tif ( pCtx->tcp != NULL ) xrtNetStreamDestroy(pCtx->tcp);
+\txrtFree(pCtx);
+\treturn 0;
+}
+
+static bool TakeoverEchoStart(XS_HttpReq* pReq)
+{
+\tTakeoverEchoContext* pCtx = (TakeoverEchoContext*)xrtCalloc(1, sizeof(*pCtx));
+\txthread* pThread;
+
+\tif ( pCtx == NULL ) return false;
+\tpCtx->tls = pReq->tls != NULL ? xrtTlsStreamRef(pReq->tls) : NULL;
+\tpCtx->tcp = pReq->tcp != NULL ? xrtNetStreamRef(pReq->tcp) : NULL;
+\tif ( pCtx->tls == NULL && pCtx->tcp == NULL ) {
+\t\txrtFree(pCtx);
+\t\treturn false;
+\t}
+\tpThread = xrtThreadCreate(TakeoverEchoThread, pCtx, 0);
+\tif ( pThread == NULL ) {
+\t\tif ( pCtx->tls != NULL ) xrtTlsStreamDestroy(pCtx->tls);
+\t\tif ( pCtx->tcp != NULL ) xrtNetStreamDestroy(pCtx->tcp);
+\t\txrtFree(pCtx);
+\t\treturn false;
+\t}
+\txrtThreadDestroy(pThread); /* 运行线程自持引用，安全分离 */
+\treturn true;
+}
+
+static bool NestedCompile(void)
 {
 \tTCCState* pTcc = xsCreateTCC();
 \tint iOk = pTcc != NULL ? tcc_compile_string(pTcc,
@@ -295,6 +459,12 @@ XS_RequestResult RequestProc(XS_HttpReq* pReq)
 {''')
     fixture_text = fixture_text.replace(
         'if ( PathIs(pReq, "/text") ) {',
+        'if ( PathIs(pReq, "/takeover-echo") ) {\n'
+        '\t\t\tif ( !TakeoverEchoStart(pReq) ) {\n'
+        '\t\t\t\tif ( pReq->tls != NULL ) (void)xrtTlsStreamClose(pReq->tls);\n'
+        '\t\t\t\telse (void)xrtNetStreamClose(pReq->tcp);\n'
+        '\t\t\t}\n'
+        '\t\t\treturn XS_TAKEOVER;\n\t\t}\n\t\t'
         'if ( PathIs(pReq, "/nested") ) {\n'
         '\t\t\treturn ReplyLit(pReq, NestedCompile() ? 200 : 500, '
         '"text/plain", "nested") ? XS_OK : XS_OK;\n\t\t}\n\t\t'
@@ -398,6 +568,28 @@ XS_RequestResult RequestProc(XS_HttpReq* pReq)
                      f'second={second.status}/{second_body[:40]!r}')
         except (OSError, http.client.HTTPException) as exc:
             fail('behavior/vhost-keepalive', str(exc))
+
+        # TAKEOVER 安装终态事件后必须处于 pull 模式；客户端后续发送的字节
+        # 由应用 RecvAsync 读取并回显，不得被框架空 Read 回调吞掉。
+        try:
+            takeover = socket.create_connection(('127.0.0.1', http_port), timeout=3)
+            takeover.settimeout(6)
+            takeover.sendall(
+                b'GET /takeover-echo HTTP/1.1\r\nHost: default.example.com\r\n\r\n')
+            time.sleep(0.08)
+            payload = b'takeover-pull-echo'
+            takeover.sendall(payload)
+            echoed = b''
+            while len(echoed) < len(payload):
+                chunk = takeover.recv(1024)
+                if not chunk:
+                    break
+                echoed += chunk
+            takeover.close()
+            if echoed != payload:
+                fail('behavior/takeover-pull-read', f'echoed={echoed!r}')
+        except OSError as exc:
+            fail('behavior/takeover-pull-read', str(exc))
 
         try:
             port_status, port_body = raw_http(http_port,
@@ -711,6 +903,27 @@ XS_RequestResult RequestProc(XS_HttpReq* pReq)
                 fail('behavior/static-root-symlink',
                      f'status={link_status} body={link_body[:50]!r}')
 
+        # 大文件必须在有界写队列上经历多次背压后完整传输，且排空后
+        # 同一 keep-alive 连接必须能继续解析下一条请求。
+        try:
+            large_conn = _hc.HTTPConnection('127.0.0.1', http_port, timeout=15)
+            large_conn.request('GET', '/large.bin')
+            large_response = large_conn.getresponse()
+            large_body = large_response.read()
+            large_conn.request('GET', '/text')
+            next_response = large_conn.getresponse()
+            next_body = next_response.read()
+            large_conn.close()
+            if large_response.status != 200 or len(large_body) != 4 * 1024 * 1024 or \
+                    large_body != b'x' * (4 * 1024 * 1024):
+                fail('behavior/static-large-complete',
+                     f'status={large_response.status} bytes={len(large_body)}')
+            if next_response.status != 200 or b'xs3 http ok' not in next_body:
+                fail('behavior/static-large-keepalive',
+                     f'status={next_response.status} body={next_body[:40]!r}')
+        except (OSError, _hc.HTTPException) as exc:
+            fail('behavior/static-large-complete', str(exc))
+
         # Header 已发出后让客户端以 RST 中断大文件；驱动只能走连接终态，
         # 不得补发错误响应、悬挂 generation 或拖垮后续请求。
         try:
@@ -758,6 +971,7 @@ def main():
     config_matrix()
     listener_failure_matrix()
     tls_identity_diagnostic_matrix()
+    tls_static_large_matrix()
     behavior_matrix()
     if failures:
         print('FUNC TEST FAILURES (%d):' % len(failures))

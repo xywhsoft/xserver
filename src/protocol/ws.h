@@ -21,7 +21,8 @@
 #include "../script/script.h"
 #include "http.h"
 
-#define XS_WS_MAX_FIELDS	16
+#define XS_WS_MAX_FIELDS		16
+#define XS_WS_MESSAGE_RETAIN_LIMIT	(256 * 1024)
 
 typedef struct XS_WsRuntime {
 	XS_ServerInfo*		pServer;
@@ -528,6 +529,12 @@ static void XS_WsOnMessageEnd(xwsstream* pStream, ptr pData)
 		XS_ScriptLeave(pPrevious);
 	}
 	pConn->iMsgSize = 0;
+	/* 小/中等消息复用累积器；单次大消息的峰值不保留到连接终态。 */
+	if ( pConn->iMsgCap > XS_WS_MESSAGE_RETAIN_LIMIT ) {
+		xrtFree(pConn->pMsg);
+		pConn->pMsg = NULL;
+		pConn->iMsgCap = 0;
+	}
 	XS_WsStreamCallbackLeave(pConn, pStream);
 }
 

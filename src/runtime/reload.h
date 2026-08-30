@@ -715,6 +715,7 @@ static xvalue* XS_ReloadTakeHostSwap(XS_HostInfo* pOldHost)
 		XS_ScriptRuntime* pPrevious = XS_ScriptEnter(pScript);
 		bool bExported;
 
+		/* ABI 契约要求 Swap 只导出快照，不转移/清空旧代正在使用的状态。 */
 		bExported = pScript->procSwap(pOldHost, &pOut);
 		XS_ScriptLeave(pPrevious);
 		if ( bExported && pOut != NULL ) {
@@ -974,6 +975,13 @@ static bool XS_ReloadServerNow(XS_App* pApp, const char* sName)
 		XS_ReloadDiscardCandidate(pNew);
 		goto Done;
 	}
+	/* 越过 staging、执行 Swap/Init 前再做一次无副作用槽位预检。 */
+	if ( !(bHandoff ? XS_ServerDriverCanHandoff(pOld, pNew) :
+	       XS_ServerDriverCanActivate(pNew)) ) {
+		XS_ReloadSetError("listener preflight failed before script staging");
+		XS_ReloadDiscardCandidate(pNew);
+		goto Done;
+	}
 	if ( !XS_ReloadStageBegin() ) {
 		XS_ReloadDiscardCandidate(pNew);
 		goto Done;
@@ -1170,6 +1178,18 @@ static bool XS_ReloadAllAtomicNow(XS_App* pApp)
 			XS_ReloadSetError("removing custom server requires restart");
 			goto Done;
 		}
+	}
+	for ( i = 0; i < iDesired; i++ ) {
+		if ( pPlan[i].bReuse ) continue;
+		if ( pPlan[i].bHandoff ) {
+			if ( !XS_ServerDriverCanHandoff(pPlan[i].pOld, pPlan[i].pNew) ) break;
+		} else if ( !XS_ServerDriverCanActivate(pPlan[i].pNew) ) {
+			break;
+		}
+	}
+	if ( i != iDesired ) {
+		XS_ReloadSetError("listener preflight failed before script staging");
+		goto Done;
 	}
 	if ( !XS_ReloadStageBegin() ) goto Done;
 	for ( i = 0; i < iDesired; i++ ) {

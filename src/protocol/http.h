@@ -27,7 +27,9 @@
 #define XS_HTTP_MAX_FIELDS	48
 #define XS_HTTP_MAX_TRAILERS	8
 #define XS_HTTP_MAX_EXTRA_FIELDS	8
-#define XS_HTTP_SENDFILE_CHUNK	(512 * 1024)
+#define XS_HTTP_SENDFILE_CHUNK		(512 * 1024)
+#define XS_HTTP_TLS_FILE_CHUNK		(64 * 1024)
+#define XS_HTTP_HEAD_RETAIN_LIMIT	(64 * 1024)
 #define XS_HTTP_BODY_WINDOW	16384
 
 typedef struct XS_HttpRuntime {
@@ -40,7 +42,7 @@ typedef struct XS_HttpRuntime {
 	XS_ConnRegistry		tRegistry;
 	XS_ServerGeneration*	pGeneration;
 	xhttp1limits		tLimits;
-	uint64			iBodyLimit;	/* 0 = 内核默认 */
+	uint64			iBodyLimit;	/* 0 = recv_limit（整体 body 回调模型的有界默认） */
 	size_t			iReceiveLimit;	/* 完整请求回调模型的线路硬边界 */
 	uint64			iPathLimit;	/* 0 = 默认 2048 */
 	uint64			iIdleMs;
@@ -76,9 +78,46 @@ typedef struct XS_HttpRecord {
 	size_t			iProbeOffset;
 	unsigned char*		pHeadData;	/* pin 住 Head 借用的原始字节，覆盖 body 等待期 */
 	size_t			iHeadCapacity;
-	int			iPhase;		/* 0=HEAD 1=BODY_DRAIN */
+	int			iPhase;		/* 0=HEAD 1=BODY_DRAIN 2=BODY_WAIT 3=FILE_SEND */
 	bool			bWriteFailed;	/* 响应开始后任一写失败：禁止复用连接 */
+	/* 静态文件发送状态。TCP 持有文件和偏移；TLS 额外持有一个小的
+	 * 可重用明文块。状态随连接记录存活，Close 终态可统一回收。 */
+	xfile			hSendFile;
+	uint64			iSendOffset;
+	uint64			iSendRemaining;
+	unsigned char*		pSendData;
+	size_t			iSendDataSize;
+	size_t			iSendDataOffset;
+	bool			bSendPumping;
+	bool			bSendWake;
+	bool			bSendQueuedAll;
+	bool			bSendFinishPending;
+	bool			bSendClose;
 } XS_HttpRecord;
+
+static void XS_HttpFileSourceRelease(XS_HttpRecord* pRec)
+{
+	if ( pRec == NULL ) return;
+	if ( pRec->hSendFile != NULL ) xrtClose(pRec->hSendFile);
+	pRec->hSendFile = NULL;
+	xrtFree(pRec->pSendData);
+	pRec->pSendData = NULL;
+	pRec->iSendDataSize = 0;
+	pRec->iSendDataOffset = 0;
+}
+
+static void XS_HttpFileStateReset(XS_HttpRecord* pRec)
+{
+	if ( pRec == NULL ) return;
+	XS_HttpFileSourceRelease(pRec);
+	pRec->iSendOffset = 0;
+	pRec->iSendRemaining = 0;
+	pRec->bSendPumping = false;
+	pRec->bSendWake = false;
+	pRec->bSendQueuedAll = false;
+	pRec->bSendFinishPending = false;
+	pRec->bSendClose = false;
+}
 
 static bool XS_HttpRecordRetain(XS_HttpRecord* pRec)
 {
@@ -94,6 +133,7 @@ static void XS_HttpRecordRelease(XS_HttpRecord* pRec)
 	if ( xrtRefRelease(&pRec->tReg.iReferences) != 0 ) return;
 	pScript = pRec->tReg.pScript;
 	pGeneration = pRec->tReg.pGeneration;
+	XS_HttpFileStateReset(pRec);
 	xrtFree(pRec->pHeadData);
 	xrtFree(pRec);
 	XS_ScriptRelease(pScript);
@@ -261,6 +301,34 @@ static const char* XS_HttpMime(const char* sName);
 static const XS_HttpHostHdrs* XS_HttpHdrCacheFind(XS_HttpRuntime* pRuntime, XS_HostInfo* pHost);
 static str XS_HttpHostRoot(XS_HttpRuntime* pRuntime, XS_HostInfo* pHost);
 
+static bool XS_HttpStaticHeaderReserved(xstrview tName)
+{
+	static const xstrview arrReserved[] = {
+		XRT_STR_LITERAL("Content-Length"),
+		XRT_STR_LITERAL("Content-Type"),
+		XRT_STR_LITERAL("Transfer-Encoding"),
+		XRT_STR_LITERAL("Connection"),
+		XRT_STR_LITERAL("Keep-Alive"),
+		XRT_STR_LITERAL("Upgrade"),
+		XRT_STR_LITERAL("Trailer"),
+		XRT_STR_LITERAL("Proxy-Connection")
+	};
+	size_t i;
+
+	for ( i = 0; i < sizeof(arrReserved) / sizeof(arrReserved[0]); i++ ) {
+		if ( xrtStrCaseEqual(tName, arrReserved[i]) ) return true;
+	}
+	return false;
+}
+
+static bool XS_HttpErrorPageKeyValid(xstrview tKey)
+{
+	return tKey.Size == 3 && tKey.Data != NULL &&
+	       tKey.Data[0] >= '4' && tKey.Data[0] <= '5' &&
+	       tKey.Data[1] >= '0' && tKey.Data[1] <= '9' &&
+	       tKey.Data[2] >= '0' && tKey.Data[2] <= '9';
+}
+
 static bool XS_HttpSafeRelative(xstrview tPath)
 {
 	size_t i;
@@ -292,40 +360,133 @@ static xfile XS_HttpRootOpenFile(xroot pRoot, const char* sRel, xfileinfo* pInfo
 	return hFile;
 }
 
-/* 静态文件统一走有界分块发送：明文由 sendfile 零拷贝，TLS 仅持有
- * 一个固定大小的临时块。错误页不再把整个可配置文件读入内存。 */
+/* 返回 1=文件与传输队列均已排空，0=等待可写事件，-1=终态失败。
+ * 发送 API 可在本调用内同步触发 LowWater/Drain/Writable，bSendPumping
+ * 把这种重入合并为一次后续泵送，避免重复收尾。 */
+static int XS_HttpPumpFileData(XS_HttpRecord* pRec)
+{
+	int iResult = 0;
+
+	if ( pRec == NULL || pRec->iPhase != 3 ) return -1;
+	if ( pRec->bSendPumping ) {
+		pRec->bSendWake = true;
+		return 0;
+	}
+	pRec->bSendPumping = true;
+	do {
+		pRec->bSendWake = false;
+		iResult = 0;
+		if ( !pRec->bSendQueuedAll && pRec->tReg.pTcp != NULL ) {
+			while ( pRec->iSendRemaining > 0 ) {
+				size_t iWritable = xrtNetStreamWritable(pRec->tReg.pTcp);
+				uint64 iChunk = pRec->iSendRemaining;
+				xnetresult eSend;
+
+				if ( iWritable == 0 ) break;
+				if ( iChunk > XS_HTTP_SENDFILE_CHUNK ) iChunk = XS_HTTP_SENDFILE_CHUNK;
+				if ( iChunk > (uint64)iWritable ) iChunk = (uint64)iWritable;
+				if ( iChunk == 0 ) break;
+				eSend = xrtNetStreamSendFile(pRec->tReg.pTcp, pRec->hSendFile,
+					pRec->iSendOffset, (size_t)iChunk);
+				if ( eSend == XNET_RESULT_AGAIN ) break;
+				if ( eSend != XNET_RESULT_OK ) {
+					iResult = -1;
+					break;
+				}
+				pRec->iSendOffset += iChunk;
+				pRec->iSendRemaining -= iChunk;
+				XS_RegistryTouch(&pRec->tReg);
+			}
+		} else if ( !pRec->bSendQueuedAll ) {
+			while ( pRec->iSendRemaining > 0 ) {
+				xtlsresult eSend;
+				size_t iWritten = 0;
+
+				if ( pRec->iSendDataOffset == pRec->iSendDataSize ) {
+					size_t iChunk = pRec->iSendRemaining > XS_HTTP_TLS_FILE_CHUNK ?
+						XS_HTTP_TLS_FILE_CHUNK : (size_t)pRec->iSendRemaining;
+					size_t iRead = 0;
+
+					if ( pRec->pSendData == NULL ) {
+						pRec->pSendData = (unsigned char*)xrtMalloc(XS_HTTP_TLS_FILE_CHUNK);
+						if ( pRec->pSendData == NULL ) {
+							iResult = -1;
+							break;
+						}
+					}
+					if ( !xrtRead(pRec->hSendFile, pRec->pSendData, iChunk, &iRead) ||
+					     iRead == 0 ) {
+						iResult = -1;
+						break;
+					}
+					pRec->iSendDataSize = iRead;
+					pRec->iSendDataOffset = 0;
+				}
+				eSend = xrtTlsStreamSend(pRec->tReg.pTls,
+					pRec->pSendData + pRec->iSendDataOffset,
+					pRec->iSendDataSize - pRec->iSendDataOffset, &iWritten);
+				if ( iWritten > 0 ) {
+					pRec->iSendDataOffset += iWritten;
+					pRec->iSendOffset += iWritten;
+					pRec->iSendRemaining -= iWritten;
+					XS_RegistryTouch(&pRec->tReg);
+				}
+				if ( eSend == XTLS_ERROR || eSend == XTLS_CLOSED ) {
+					iResult = -1;
+					break;
+				}
+				if ( pRec->iSendDataOffset < pRec->iSendDataSize ||
+				     eSend == XTLS_AGAIN ) break;
+			}
+		}
+		if ( iResult < 0 ) break;
+		if ( !pRec->bSendQueuedAll && pRec->iSendRemaining == 0 ) {
+			pRec->bSendQueuedAll = true;
+			XS_HttpFileSourceRelease(pRec);
+		}
+		if ( pRec->bSendQueuedAll ) {
+			size_t iPending = pRec->tReg.pTls != NULL ?
+				xrtTlsStreamPending(pRec->tReg.pTls) :
+				xrtNetStreamPending(pRec->tReg.pTcp);
+
+			if ( iPending == 0 ) iResult = 1;
+		}
+	} while ( iResult == 0 && pRec->bSendWake );
+	pRec->bSendPumping = false;
+	return iResult;
+}
+
+/* 静态文件统一走有界、可恢复的分块发送。调用成功后始终接管
+ * hFile：同步完成时已关闭，异步完成时由 Record 持有到终态。 */
 static bool XS_HttpSendFileData(XS_HttpRecord* pRec, xfile hFile, uint64 iSize)
 {
-	if ( pRec->tReg.pTcp != NULL ) {
-		uint64 iOffset = 0;
+	int iPreviousPhase;
+	int iPump;
 
-		while ( iOffset < iSize ) {
-			uint64 iChunk = iSize - iOffset;
-
-			if ( iChunk > XS_HTTP_SENDFILE_CHUNK ) iChunk = XS_HTTP_SENDFILE_CHUNK;
-			if ( xrtNetStreamSendFile(pRec->tReg.pTcp, hFile,
-				iOffset, (size_t)iChunk) != XNET_RESULT_OK ) return false;
-			iOffset += iChunk;
-		}
+	if ( pRec == NULL || hFile == NULL || iSize == 0 || pRec->iPhase == 3 ) {
+		if ( hFile != NULL ) xrtClose(hFile);
+		return false;
+	}
+	iPreviousPhase = pRec->iPhase;
+	pRec->hSendFile = hFile;
+	pRec->iSendOffset = 0;
+	pRec->iSendRemaining = iSize;
+	pRec->bSendQueuedAll = false;
+	pRec->bSendFinishPending = false;
+	pRec->bSendClose = false;
+	pRec->iPhase = 3;
+	iPump = XS_HttpPumpFileData(pRec);
+	if ( iPump > 0 ) {
+		XS_HttpFileStateReset(pRec);
+		pRec->iPhase = iPreviousPhase;
 		return true;
 	}
-	{
-		unsigned char* pBuffer = (unsigned char*)xrtMalloc(XS_HTTP_SENDFILE_CHUNK);
-		uint64 iLeft = iSize;
-		bool bOk = pBuffer != NULL;
-
-		while ( bOk && iLeft > 0 ) {
-			size_t iChunk = iLeft > XS_HTTP_SENDFILE_CHUNK ?
-				XS_HTTP_SENDFILE_CHUNK : (size_t)iLeft;
-			size_t iRead = 0;
-
-			bOk = xrtRead(hFile, pBuffer, iChunk, &iRead) && iRead > 0 &&
-				XS_HttpSend(&pRec->tReg, pBuffer, iRead) == XNET_RESULT_OK;
-			if ( bOk ) iLeft -= iRead;
-		}
-		xrtFree(pBuffer);
-		return bOk;
+	if ( iPump < 0 ) {
+		XS_HttpFileStateReset(pRec);
+		pRec->iPhase = iPreviousPhase;
+		return false;
 	}
+	return true;
 }
 
 /* host Custom 的 static 对象（无则 NULL） */
@@ -381,12 +542,15 @@ static void XS_HttpErrorPage(XS_HttpRecord* pRec, uint16 iStatus)
 							sizeof(xhttpfield) * pSite->iCount);
 						tResp.iExtraCount = pSite->iCount;
 					}
-					if ( !XS_HttpRespond(pRec, &tResp) ||
-					     (!bHeadOnly && tInfo.Size > 0 &&
-					      !XS_HttpSendFileData(pRec, hFile, tInfo.Size)) ) {
+					if ( !XS_HttpRespond(pRec, &tResp) ) {
 						pRec->bWriteFailed = true;
+					} else if ( !bHeadOnly && tInfo.Size > 0 ) {
+						if ( !XS_HttpSendFileData(pRec, hFile, tInfo.Size) ) {
+							pRec->bWriteFailed = true;
+						}
+						hFile = NULL;	/* SendFileData 无论成败都接管 */
 					}
-					xrtClose(hFile);
+					if ( hFile != NULL ) xrtClose(hFile);
 					return;
 				}
 			}
@@ -672,9 +836,11 @@ static void XS_HttpStatic(XS_HttpRecord* pRec)
 			goto cleanup;
 		}
 	}
-	if ( !bHeadOnly && tInfo.Size > 0 &&
-	     !XS_HttpSendFileData(pRec, hFile, tInfo.Size) ) {
-		pRec->bWriteFailed = true;
+	if ( !bHeadOnly && tInfo.Size > 0 ) {
+		if ( !XS_HttpSendFileData(pRec, hFile, tInfo.Size) ) {
+			pRec->bWriteFailed = true;
+		}
+		hFile = NULL;	/* SendFileData 无论成败都接管 */
 	}
 
 cleanup:
@@ -742,13 +908,19 @@ static int XS_HttpBodyReady(XS_HttpRecord* pRec)
 	return iAvail >= pRec->pRuntime->iReceiveLimit ? -2 : 0;
 }
 
-static void XS_HttpFinishRequest(XS_HttpRecord* pRec, bool bClose)
+static void XS_HttpFinishRequestNow(XS_HttpRecord* pRec, bool bClose)
 {
 	xrtHttp1HeadInit(&pRec->tHead, pRec->arrFields, XS_HTTP_MAX_FIELDS);
 	pRec->pHost = NULL;
 	pRec->tReg.pHost = NULL;
 	pRec->iPhase = 0;
 	pRec->bWriteFailed = false;
+	/* 普通请求复用小 header 缓冲；偶发的大 Header 不保留到长连接终态。 */
+	if ( pRec->iHeadCapacity > XS_HTTP_HEAD_RETAIN_LIMIT ) {
+		xrtFree(pRec->pHeadData);
+		pRec->pHeadData = NULL;
+		pRec->iHeadCapacity = 0;
+	}
 	if ( bClose ) {
 		if ( pRec->tReg.pTls != NULL ) {
 			(void)xrtTlsStreamClose(pRec->tReg.pTls);
@@ -756,6 +928,18 @@ static void XS_HttpFinishRequest(XS_HttpRecord* pRec, bool bClose)
 			(void)xrtNetStreamClose(pRec->tReg.pTcp);
 		}
 	}
+}
+
+static void XS_HttpFinishRequest(XS_HttpRecord* pRec, bool bClose)
+{
+	/* 自定义大错误页可在任意解析错误路径上启动异步发送。此时
+	 * 只记录请求终态，待声明的 Content-Length 全部排空后再真正 Close。 */
+	if ( pRec != NULL && pRec->iPhase == 3 ) {
+		pRec->bSendFinishPending = true;
+		pRec->bSendClose = pRec->bSendClose || bClose;
+		return;
+	}
+	XS_HttpFinishRequestNow(pRec, bClose);
 }
 
 /* 用当前缓冲推进 body 解码；返回 1=完成 0=需要更多 -1=错误 */
@@ -796,11 +980,8 @@ static int XS_HttpDrainBody(XS_HttpRecord* pRec)
 	}
 }
 
-/* TAKEOVER 后仍保留框架终态事件：应用负责最终 Close，框架在 Close 中 Destroy。 */
-static void XS_HttpTakenOnRead(xnetstream* pStream, xnetbuf* pBuffer, ptr pData)
-{
-	(void)pStream; (void)pBuffer; (void)pData;
-}
+/* TAKEOVER 后仍保留框架终态事件：应用负责最终 Close，框架在 Close 中 Destroy。
+ * Read 必须为 NULL，否则 xrt 会进入 push 模式并拒绝应用的 pull/Future 读取。 */
 
 static void XS_HttpTakenOnEnd(xnetstream* pStream, ptr pData)
 {
@@ -819,13 +1000,8 @@ static void XS_HttpTakenOnClose(xnetstream* pStream, xnetresult iResult, const x
 }
 
 static const xnetstreamevents g_XS_HttpTakenEvents = {
-	NULL, XS_HttpTakenOnRead, XS_HttpTakenOnEnd, NULL, NULL, NULL, XS_HttpTakenOnClose
+	NULL, NULL, XS_HttpTakenOnEnd, NULL, NULL, NULL, XS_HttpTakenOnClose
 };
-
-static void XS_HttpTlsTakenOnRead(xtlsstream* pStream, const xnetbuf* pBuffer, ptr pData)
-{
-	(void)pStream; (void)pBuffer; (void)pData;
-}
 
 static void XS_HttpTlsTakenOnEnd(xtlsstream* pStream, ptr pData)
 {
@@ -844,7 +1020,7 @@ static void XS_HttpTlsTakenOnClose(xtlsstream* pStream, xnetresult iResult, cons
 }
 
 static const xtlsstreamevents g_XS_HttpTlsTakenEvents = {
-	NULL, XS_HttpTlsTakenOnRead, XS_HttpTlsTakenOnEnd, NULL, NULL, XS_HttpTlsTakenOnClose, NULL
+	NULL, NULL, XS_HttpTlsTakenOnEnd, NULL, NULL, XS_HttpTlsTakenOnClose, NULL
 };
 
 /* 回调与收尾（三态处理）。返回 true 继续下一请求，false 停止驱动 */
@@ -924,6 +1100,9 @@ static bool XS_HttpDispatch(XS_HttpRecord* pRec)
 			XS_HttpFinishRequest(pRec, true);
 			return false;
 		}
+		if ( pRec->iPhase == 3 ) {
+			return false;	/* LowWater/Writable/Drain 中续传并恢复 body 收尾 */
+		}
 	}
 	/* 排空 body 余量后进入下一请求 */
 	iDrain = XS_HttpDrainBody(pRec);
@@ -947,6 +1126,9 @@ static void XS_HttpDrive(XS_HttpRecord* pRec)
 	int iDrain;
 
 	for ( ; ; ) {
+		if ( pRec->iPhase == 3 ) {
+			return;	/* 静态响应未排空前不解析下一条 pipeline 请求 */
+		}
 		if ( pRec->iPhase == 2 ) {
 			int iReady;
 
@@ -1082,6 +1264,34 @@ static void XS_HttpDrive(XS_HttpRecord* pRec)
 	}
 }
 
+/* 写水位回落后继续文件发送。文件全部接受且队列排空后，才排空
+ * 当前请求 body 并进入下一条 keep-alive 请求。 */
+static void XS_HttpResumeFile(XS_HttpRecord* pRec)
+{
+	int iPump;
+	bool bFinish;
+	bool bClose;
+
+	if ( pRec == NULL || pRec->iPhase != 3 ) return;
+	iPump = XS_HttpPumpFileData(pRec);
+	if ( iPump == 0 ) return;
+	bFinish = pRec->bSendFinishPending;
+	bClose = pRec->bSendClose;
+	XS_HttpFileStateReset(pRec);
+	if ( iPump < 0 ) {
+		pRec->bWriteFailed = true;
+		XS_HttpFinishRequestNow(pRec, true);
+		return;
+	}
+	if ( bFinish ) {
+		XS_HttpFinishRequestNow(pRec, bClose);
+		if ( !bClose ) XS_HttpDrive(pRec);
+		return;
+	}
+	pRec->iPhase = 1;
+	XS_HttpDrive(pRec);
+}
+
 /* ============================================================
  * 事件 shim
  * ============================================================ */
@@ -1108,6 +1318,27 @@ static void XS_HttpOnEnd(xnetstream* pStream, ptr pData)
 	(void)xrtNetStreamClose(pStream);
 }
 
+static void XS_HttpOnLowWater(
+	xnetstream* pStream,
+	size_t iQueued,
+	ptr pData)
+{
+	XS_HttpRecord* pRec = (XS_HttpRecord*)pData;
+
+	(void)iQueued;
+	if ( !XS_HttpRecordRetain(pRec) ) return;
+	if ( xrtNetStreamRef(pStream) != NULL ) {
+		XS_HttpResumeFile(pRec);
+		xrtNetStreamDestroy(pStream);
+	}
+	XS_HttpRecordRelease(pRec);
+}
+
+static void XS_HttpOnDrain(xnetstream* pStream, ptr pData)
+{
+	XS_HttpOnLowWater(pStream, 0, pData);
+}
+
 static void XS_HttpOnClose(xnetstream* pStream, xnetresult iResult, const xerror* pError, ptr pData)
 {
 	XS_HttpRecord* pRec = (XS_HttpRecord*)pData;
@@ -1119,7 +1350,8 @@ static void XS_HttpOnClose(xnetstream* pStream, xnetresult iResult, const xerror
 }
 
 static const xnetstreamevents g_XS_HttpStreamEvents = {
-	NULL, XS_HttpOnRead, XS_HttpOnEnd, NULL, NULL, NULL, XS_HttpOnClose
+	NULL, XS_HttpOnRead, XS_HttpOnEnd, NULL,
+	XS_HttpOnLowWater, XS_HttpOnDrain, XS_HttpOnClose
 };
 
 static bool XS_HttpOnAccept(xnetlistener* pListener, xnetstream* pStream, ptr pData)
@@ -1194,6 +1426,23 @@ static void XS_HttpTlsOnEnd(xtlsstream* pStream, ptr pData)
 	(void)xrtTlsStreamClose(pStream);
 }
 
+static void XS_HttpTlsOnWritable(xtlsstream* pStream, ptr pData)
+{
+	XS_HttpRecord* pRec = (XS_HttpRecord*)pData;
+
+	if ( !XS_HttpRecordRetain(pRec) ) return;
+	if ( xrtTlsStreamRef(pStream) != NULL ) {
+		XS_HttpResumeFile(pRec);
+		xrtTlsStreamDestroy(pStream);
+	}
+	XS_HttpRecordRelease(pRec);
+}
+
+static void XS_HttpTlsOnDrain(xtlsstream* pStream, ptr pData)
+{
+	XS_HttpTlsOnWritable(pStream, pData);
+}
+
 static void XS_HttpTlsOnClose(xtlsstream* pStream, xnetresult iResult, const xerror* pError, ptr pData)
 {
 	XS_HttpRecord* pRec = (XS_HttpRecord*)pData;
@@ -1205,7 +1454,8 @@ static void XS_HttpTlsOnClose(xtlsstream* pStream, xnetresult iResult, const xer
 }
 
 static const xtlsstreamevents g_XS_HttpTlsStreamEvents = {
-	NULL, XS_HttpTlsOnRead, XS_HttpTlsOnEnd, NULL, NULL, XS_HttpTlsOnClose, NULL
+	NULL, XS_HttpTlsOnRead, XS_HttpTlsOnEnd,
+	XS_HttpTlsOnWritable, XS_HttpTlsOnDrain, XS_HttpTlsOnClose, NULL
 };
 
 static bool XS_HttpTlsOnAccept(xtlslistener* pListener, xtlsstream* pStream, ptr pData)
@@ -1328,10 +1578,23 @@ static XS_HttpHostHdrs* XS_HttpHdrCacheBuild(
 	if ( pHdrs == NULL ) return NULL;
 	pHdrs->pHost = pHost;
 	sRoot = XS_HttpHostRoot(NULL, pHost);
-	if ( sRoot != NULL ) {
-		pHdrs->pRoot = xrtRootOpen(sRoot);
-		xrtFree(sRoot);
+	if ( sRoot == NULL ) {
+		snprintf(sErr, iErrCap, "http host '%s' static root path allocation failed",
+			pHost->Name != NULL ? pHost->Name : "?");
+		goto failed;
 	}
+	pHdrs->pRoot = xrtRootOpen(sRoot);
+	if ( pHdrs->pRoot == NULL ) {
+		const xerror* pError = xrtGetError();
+		const char* sMessage = pError != NULL ? xrtErrorMessage(pError) : NULL;
+
+		snprintf(sErr, iErrCap, "http host '%s' cannot open static root '%s'%s%s",
+			pHost->Name != NULL ? pHost->Name : "?", sRoot,
+			sMessage != NULL ? ": " : "", sMessage != NULL ? sMessage : "");
+		xrtFree(sRoot);
+		goto failed;
+	}
+	xrtFree(sRoot);
 	if ( pStatic == NULL ) return pHdrs;
 	if ( xrtValueType(pStatic) != XVALUE_OBJECT ) {
 		snprintf(sErr, iErrCap, "http host '%s' custom field 'static' expect object",
@@ -1386,10 +1649,11 @@ static XS_HttpHostHdrs* XS_HttpHdrCacheBuild(
 
 				if ( pVal == NULL ) break;
 				if ( tKey.Type != XVALUE_KEY_STRING ||
+				     !XS_HttpErrorPageKeyValid(tKey.String) ||
 				     !xrtValueGetString(pVal, &tPath) ||
 				     !XS_HttpSafeRelative(tPath) ) {
 					snprintf(sErr, iErrCap,
-						"http host '%s' static.error_pages values expect safe relative strings",
+						"http host '%s' static.error_pages expects 400..599 keys and safe relative values",
 						pHost->Name != NULL ? pHost->Name : "?");
 					goto failed;
 				}
@@ -1420,9 +1684,10 @@ static XS_HttpHostHdrs* XS_HttpHdrCacheBuild(
 			if ( tKey.Type != XVALUE_KEY_STRING ||
 			     !xrtValueGetString(pVal, &tValView) ||
 			     !xrtHttpTokenValid(tKey.String) ||
-			     !xrtHttpFieldValueValid(tValView) ) {
+			     !xrtHttpFieldValueValid(tValView) ||
+			     XS_HttpStaticHeaderReserved(tKey.String) ) {
 				snprintf(sErr, iErrCap,
-					"http host '%s' static.headers contains invalid HTTP field",
+					"http host '%s' static.headers contains invalid HTTP field or reserved response field",
 					pHost->Name != NULL ? pHost->Name : "?");
 				goto failed;
 			}

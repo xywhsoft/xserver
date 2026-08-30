@@ -136,7 +136,7 @@ typedef int XS_RequestResult;
 
 #define XS_OK			0	/* 已写出完整响应，驱动消费 body 余量后继续 keep-alive */
 #define XS_FALLBACK		1	/* 未处理：GET/HEAD 落入静态层，其余 404 */
-#define XS_TAKEOVER		2	/* 应用接管连接：可自行收发并最终 Close；不得替换事件表，
+#define XS_TAKEOVER		2	/* 应用接管连接：用 pull/Future 自行收发并最终 Close；不得替换事件表，
 					 * Close 终态由 xs Destroy 并释放 generation lease */
 
 typedef XS_RequestResult (*XS_RequestProc)(XS_HttpReq* pReq);
@@ -171,7 +171,8 @@ typedef void (*XS_EventCloseProc)(XS_HostInfo* pHost, XS_StreamConn* pConn, xnet
 typedef void (*XS_EventDgramProc)(XS_HostInfo* pHost, xnetudp* pUdp, const xnetudpmessage* pMsg);
 
 /* 生命周期（全部可选导出；ServiceSwap 的交接数据在新代 ServiceInit 时经
- * xsSwapTake 取回，见设计 §10） */
+ * xsSwapTake 取回。Swap 必须是无破坏的快照导出：在新代正式发布前，旧代
+ * 仍可能继续服务或因极端 listener 终态而取消提交，见设计 §10） */
 typedef void (*XS_ServiceInitProc)(XS_HostInfo* pHost);
 typedef void (*XS_ServiceUnitProc)(XS_HostInfo* pHost);
 typedef bool (*XS_ServiceSwapProc)(XS_HostInfo* pHost, xvalue** ppShared);

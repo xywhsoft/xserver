@@ -18,6 +18,13 @@
 
 /* 进程级共享 TLS 上下文由 main 显式管理；装配线程只借用，避免惰性初始化竞态。 */
 static xtlscontext* g_XS_TlsContext;
+static xmutex* g_XS_TlsLogLock;
+static uint64 g_XS_TlsLogWindow;
+static uint32 g_XS_TlsLogCount;
+static uint32 g_XS_TlsLogSuppressed;
+
+#define XS_TLS_LOG_WINDOW_US	(10u * 1000u * 1000u)
+#define XS_TLS_LOG_BURST	8u
 
 static bool XS_TlsRuntimeInit(void)
 {
@@ -26,6 +33,9 @@ static bool XS_TlsRuntimeInit(void)
 	if ( g_XS_TlsContext != NULL ) return true;
 	xrtTlsContextConfigInit(&tCfg);
 	g_XS_TlsContext = xrtTlsContextCreate(&tCfg);
+	if ( g_XS_TlsContext != NULL && g_XS_TlsLogLock == NULL ) {
+		g_XS_TlsLogLock = xrtMutexCreate();
+	}
 	return g_XS_TlsContext != NULL;
 }
 
@@ -40,10 +50,37 @@ static void XS_TlsHandshakeError(
 	const xerror* pError,
 	ptr pData)
 {
+	uint64 tNow = (uint64)xrtNow();
+	uint32 iSuppressed = 0;
+	bool bPrint = true;
+
 	(void)pListener;
 	(void)pData;
-	printf("[xs] tls handshake failed: %s\n",
-		pError != NULL ? xrtErrorMessage(pError) : "unknown error");
+	if ( g_XS_TlsLogLock != NULL ) {
+		xrtMutexLock(g_XS_TlsLogLock);
+		if ( g_XS_TlsLogWindow == 0 || tNow < g_XS_TlsLogWindow ||
+		     tNow - g_XS_TlsLogWindow >= XS_TLS_LOG_WINDOW_US ) {
+			iSuppressed = g_XS_TlsLogSuppressed;
+			g_XS_TlsLogWindow = tNow;
+			g_XS_TlsLogCount = 0;
+			g_XS_TlsLogSuppressed = 0;
+		}
+		if ( g_XS_TlsLogCount < XS_TLS_LOG_BURST ) {
+			g_XS_TlsLogCount++;
+		} else {
+			g_XS_TlsLogSuppressed++;
+			bPrint = false;
+		}
+		xrtMutexUnlock(g_XS_TlsLogLock);
+	}
+	if ( iSuppressed > 0 ) {
+		printf("[xs] tls handshake failures suppressed: %u in previous window\n",
+			(unsigned)iSuppressed);
+	}
+	if ( bPrint ) {
+		printf("[xs] tls handshake failed: %s\n",
+			pError != NULL ? xrtErrorMessage(pError) : "unknown error");
+	}
 }
 
 static void XS_TlsRuntimeUnit(void)
@@ -52,6 +89,13 @@ static void XS_TlsRuntimeUnit(void)
 		xrtTlsContextRelease(g_XS_TlsContext);
 		g_XS_TlsContext = NULL;
 	}
+	if ( g_XS_TlsLogLock != NULL ) {
+		xrtMutexDestroy(g_XS_TlsLogLock);
+		g_XS_TlsLogLock = NULL;
+	}
+	g_XS_TlsLogWindow = 0;
+	g_XS_TlsLogCount = 0;
+	g_XS_TlsLogSuppressed = 0;
 }
 
 /* 相对路径按 appPath 解析（结果 xrtFree 释放） */

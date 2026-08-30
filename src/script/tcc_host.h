@@ -163,7 +163,7 @@ static TCCState* XS_TccCreate(void)
 
 /* host 级额外目录（dev_inc / dev_lib，分号分隔，相对 appPath 解析）：
  * 头目录同时注册 include 与 sysinclude（尖括号/引号都可命中），真实磁盘路径 */
-static void XS_TccAddHostPaths(TCCState* pTcc, const char* sList, bool bLib)
+static bool XS_TccAddHostPaths(TCCState* pTcc, const char* sList, bool bLib)
 {
 	const char* pSeg = sList;
 
@@ -174,30 +174,31 @@ static void XS_TccAddHostPaths(TCCState* pTcc, const char* sList, bool bLib)
 
 		while ( iLen > 0 && *pSeg == ' ' ) { pSeg++; iLen--; }
 		while ( iLen > 0 && pSeg[iLen - 1] == ' ' ) { iLen--; }
-		if ( iLen > 0 && iLen < sizeof(arrDir) - 1 ) {
+		if ( iLen >= sizeof(arrDir) - 1 ) return false;
+		if ( iLen > 0 ) {
 			str sAbs;
+			bool bOk = true;
 
 			memcpy(arrDir, pSeg, iLen);
 			arrDir[iLen] = '\0';
 			sAbs = xrtPathIsAbs(arrDir) ? xrtStrDup(arrDir) : xrtPathJoin(XS_AppPath(), arrDir);
-			if ( sAbs != NULL ) {
+			if ( sAbs == NULL ) return false;
+			/* 缺失目录按文档静默跳过；一旦存在，只注册基于 appPath
+			 * 解析的唯一绝对路径，不再回落到进程启动目录。 */
+			if ( xrtDirExists(sAbs) ) {
 				if ( bLib ) {
-					tcc_add_library_path(pTcc, sAbs);
-				} else if ( xrtDirExists(sAbs) ) {
-					tcc_add_include_path(pTcc, sAbs);
-					tcc_add_sysinclude_path(pTcc, sAbs);
+					bOk = tcc_add_library_path(pTcc, sAbs) >= 0;
+				} else {
+					bOk = tcc_add_include_path(pTcc, sAbs) >= 0 &&
+					      tcc_add_sysinclude_path(pTcc, sAbs) >= 0;
 				}
-				xrtFree(sAbs);
 			}
-			if ( bLib ) {
-				tcc_add_library_path(pTcc, arrDir);		/* 相对形式兜底 */
-			} else {
-				tcc_add_include_path(pTcc, arrDir);
-				tcc_add_sysinclude_path(pTcc, arrDir);
-			}
+			xrtFree(sAbs);
+			if ( !bOk ) return false;
 		}
 		pSeg = (pEnd != NULL) ? pEnd + 1 : NULL;
 	}
+	return true;
 }
 
 /* 带 host 环境的 TCC 创建：基础环境 + dev_inc/dev_lib（脚本编译用） */
@@ -210,10 +211,16 @@ static TCCState* XS_TccCreateForHost(XS_HostInfo* pHost)
 	}
 	if ( pHost != NULL ) {
 		if ( pHost->DevInc != NULL ) {
-			XS_TccAddHostPaths(pTcc, pHost->DevInc, false);
+			if ( !XS_TccAddHostPaths(pTcc, pHost->DevInc, false) ) {
+				tcc_delete(pTcc);
+				return NULL;
+			}
 		}
 		if ( pHost->DevLib != NULL ) {
-			XS_TccAddHostPaths(pTcc, pHost->DevLib, true);
+			if ( !XS_TccAddHostPaths(pTcc, pHost->DevLib, true) ) {
+				tcc_delete(pTcc);
+				return NULL;
+			}
 		}
 	}
 	return pTcc;
