@@ -34,13 +34,12 @@
 	#include <shellapi.h>
 #endif
 
-static volatile bool g_XS_Stop = false;
+static volatile sig_atomic_t g_XS_Stop = 0;
 
 
 #if defined(_WIN32) || defined(_WIN64)
 /* Windows 命令行参数是 ANSI（中文系统为 GBK），而 xrt 路径统一 UTF-8：
- * 入口处用宽字符命令行重建 UTF-8 argv，杜绝中文路径乱码（见设计 §16 开发规约）。
- * 该分配随进程生命周期，不释放 */
+ * 入口处用宽字符命令行重建 UTF-8 argv，杜绝中文路径乱码（见设计 §16 开发规约）。 */
 static char** XS_BuildUtf8Argv(int* piArgc)
 {
 	int iWideArgc = 0;
@@ -49,6 +48,8 @@ static char** XS_BuildUtf8Argv(int* piArgc)
 	int i;
 	int iLen;
 
+	if ( piArgc == NULL ) return NULL;
+	*piArgc = 0;
 	if ( pWideArgv == NULL || iWideArgc <= 0 ) {
 		LocalFree(pWideArgv);
 		return NULL;
@@ -59,27 +60,47 @@ static char** XS_BuildUtf8Argv(int* piArgc)
 		return NULL;
 	}
 	for ( i = 0; i < iWideArgc; i++ ) {
-		iLen = WideCharToMultiByte(CP_UTF8, 0, pWideArgv[i], -1, NULL, 0, NULL, NULL);
-		if ( iLen <= 0 ) {
-			continue;
-		}
+		iLen = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
+			pWideArgv[i], -1, NULL, 0, NULL, NULL);
+		if ( iLen <= 0 ) goto Failed;
 		pArgv[i] = (char*)xrtMalloc((size_t)iLen);
-		if ( pArgv[i] != NULL ) {
-			WideCharToMultiByte(CP_UTF8, 0, pWideArgv[i], -1, pArgv[i], iLen, NULL, NULL);
-		}
+		if ( pArgv[i] == NULL ||
+		     WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, pWideArgv[i], -1,
+			pArgv[i], iLen, NULL, NULL) != iLen ) goto Failed;
 	}
 	pArgv[iWideArgc] = NULL;
 	*piArgc = iWideArgc;
 	LocalFree(pWideArgv);
 	return pArgv;
+
+Failed:
+	xrtFree(pArgv[i]);
+	while ( i > 0 ) xrtFree(pArgv[--i]);
+	xrtFree(pArgv);
+	LocalFree(pWideArgv);
+	return NULL;
 }
 #endif
+
+static int XS_MainExit(int iCode, char** pOwnedArgv, int iOwnedArgc)
+{
+#if defined(_WIN32) || defined(_WIN64)
+	if ( pOwnedArgv != NULL ) {
+		for ( int i = 0; i < iOwnedArgc; i++ ) xrtFree(pOwnedArgv[i]);
+		xrtFree(pOwnedArgv);
+	}
+#else
+	(void)pOwnedArgv;
+	(void)iOwnedArgc;
+#endif
+	return iCode;
+}
 
 #if defined(_WIN32) || defined(_WIN64)
 static BOOL WINAPI XS_ConsoleProc(DWORD dwCtrlType)
 {
 	(void)dwCtrlType;
-	g_XS_Stop = true;
+	g_XS_Stop = 1;
 	return TRUE;
 }
 #endif
@@ -87,7 +108,7 @@ static BOOL WINAPI XS_ConsoleProc(DWORD dwCtrlType)
 static void XS_SignalProc(int iSignal)
 {
 	(void)iSignal;
-	g_XS_Stop = true;
+	g_XS_Stop = 1;
 }
 
 static void XS_Usage(void)
@@ -102,9 +123,16 @@ int main(int argc, char** argv)
 	XS_App tApp;
 	char sConfigPath[4200];
 	const char* sArgConfig = NULL;
+	char** pOwnedArgv = NULL;
+	int iOwnedArgc = 0;
 	int i;
 
 	setvbuf(stdout, NULL, _IONBF, 0);
+#if !defined(_WIN32) && !defined(_WIN64)
+	/* Linux sendfile 没有 MSG_NOSIGNAL；对端 RST 必须作为连接发送失败返回，
+	 * 不能让默认 SIGPIPE 终止整个服务器进程。 */
+	(void)signal(SIGPIPE, SIG_IGN);
+#endif
 #if defined(_WIN32) || defined(_WIN64)
 	{
 		int iUtf8Argc = 0;
@@ -113,6 +141,8 @@ int main(int argc, char** argv)
 		if ( pUtf8Argv != NULL ) {
 			argc = iUtf8Argc;
 			argv = pUtf8Argv;
+			pOwnedArgv = pUtf8Argv;
+			iOwnedArgc = iUtf8Argc;
 		}
 		SetConsoleOutputCP(CP_UTF8);
 	}
@@ -121,27 +151,34 @@ int main(int argc, char** argv)
 	for ( i = 1; i < argc; i++ ) {
 		if ( strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0 ) {
 			XS_Usage();
-			return 0;
+			return XS_MainExit(0, pOwnedArgv, iOwnedArgc);
 		} else if ( sArgConfig == NULL ) {
 			sArgConfig = argv[i];
 		} else {
 			printf("[xs] unexpected argument: %s\n", argv[i]);
 			XS_Usage();
-			return 1;
+			return XS_MainExit(1, pOwnedArgv, iOwnedArgc);
 		}
 	}
 
 	if ( sArgConfig != NULL ) {
-		snprintf(sConfigPath, sizeof(sConfigPath), "%s", sArgConfig);
+		i = snprintf(sConfigPath, sizeof(sConfigPath), "%s", sArgConfig);
 	} else {
-		snprintf(sConfigPath, sizeof(sConfigPath), "%s/xs.json", XS_AppPath());
+		const char* sAppPath = XS_AppPath();
+
+		i = sAppPath != NULL ? snprintf(sConfigPath, sizeof(sConfigPath),
+			"%s/xs.json", sAppPath) : -1;
+	}
+	if ( i < 0 || (size_t)i >= sizeof(sConfigPath) ) {
+		printf("[xs] config path is too long\n");
+		return XS_MainExit(1, pOwnedArgv, iOwnedArgc);
 	}
 
 	/* 配置装载（fail-fast，见设计 §5.4） */
 	if ( !XS_ConfigLoad(sConfigPath, &tApp) ) {
 		printf("[xs] config load failed: %s\n", tApp.ParseError);
 		XS_ConfigFree(&tApp);
-		return 1;
+		return XS_MainExit(1, pOwnedArgv, iOwnedArgc);
 	}
 	printf("[xs] config loaded: %s (%u servers)\n", sConfigPath, tApp.ServerCount);
 	if ( tApp.ServerCount == 0 ) {
@@ -152,21 +189,38 @@ int main(int argc, char** argv)
 	/* 引擎启动（进程级，常驻；见设计 §3.2） */
 	if ( !XS_EngineStartup(&tApp) ) {
 		XS_ConfigFree(&tApp);
-		return 1;
+		return XS_MainExit(1, pOwnedArgv, iOwnedArgc);
+	}
+	if ( !XS_GenerationReaperInit() ) {
+		printf("[xs] generation reaper init failed\n");
+		XS_EngineShutdown(&tApp);
+		XS_ConfigFree(&tApp);
+		return XS_MainExit(1, pOwnedArgv, iOwnedArgc);
+	}
+	if ( !XS_TlsRuntimeInit() ) {
+		printf("[xs] tls runtime init failed\n");
+		XS_GenerationReaperUnit();
+		XS_EngineShutdown(&tApp);
+		XS_ConfigFree(&tApp);
+		return XS_MainExit(1, pOwnedArgv, iOwnedArgc);
 	}
 	g_XS_App = &tApp;
 	if ( !XS_TopologyRuntimeInit(&tApp) ) {
 		printf("[xs] topology runtime init failed\n");
 		XS_EngineShutdown(&tApp);
+		XS_GenerationReaperUnit();
+		XS_TlsRuntimeUnit();
 		XS_ConfigFree(&tApp);
-		return 1;
+		return XS_MainExit(1, pOwnedArgv, iOwnedArgc);
 	}
 	if ( !XS_ReloadRuntimeInit(&tApp, sConfigPath) ) {
 		printf("[xs] reload runtime init failed\n");
 		XS_EngineShutdown(&tApp);
 		XS_TopologyRuntimeUnit();
+		XS_GenerationReaperUnit();
+		XS_TlsRuntimeUnit();
 		XS_ConfigFree(&tApp);
-		return 1;
+		return XS_MainExit(1, pOwnedArgv, iOwnedArgc);
 	}
 
 
@@ -177,10 +231,13 @@ int main(int argc, char** argv)
 		XS_ShutdownServers(&tApp);
 		XS_EngineShutdown(&tApp);
 		XS_ShutdownAfterEngine(&tApp);
+		XS_GenerationReaperDrain();
 		XS_ReloadRuntimeUnit();
 		XS_TopologyRuntimeUnit();
+		XS_GenerationReaperUnit();
+		XS_TlsRuntimeUnit();
 		XS_ConfigFree(&tApp);
-		return 1;
+		return XS_MainExit(1, pOwnedArgv, iOwnedArgc);
 	}
 	XS_ReloadRuntimeStart();
 
@@ -196,15 +253,19 @@ int main(int argc, char** argv)
 		xrtSleep(100);
 	}
 
-	/* 优雅停机：驱动收口 → ServiceUnit → 排空销毁 TCC → 引擎 Stop/Destroy → 配置释放 */
+	/* 优雅停机：停止接入并退役 builtin → 等待网络终态并停止引擎 →
+	 * 退役 custom → 排空 reaper 上的 ServiceUnit/终析构 → 配置释放。 */
 	printf("[xs] stopping\n");
 	XS_ServersDrain(&tApp);
 	XS_ShutdownServers(&tApp);
 	XS_EngineShutdown(&tApp);
 	XS_ShutdownAfterEngine(&tApp);
+	XS_GenerationReaperDrain();
 	XS_ReloadRuntimeUnit();
 	XS_TopologyRuntimeUnit();
+	XS_GenerationReaperUnit();
+	XS_TlsRuntimeUnit();
 	XS_ConfigFree(&tApp);
 	printf("[xs] bye\n");
-	return 0;
+	return XS_MainExit(0, pOwnedArgv, iOwnedArgc);
 }

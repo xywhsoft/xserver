@@ -13,13 +13,17 @@ VFS 布局（与 XS_TccCreate 的 include/lib 路径一一对应）：
 """
 from __future__ import annotations
 
+import hashlib
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 RES_TCC = ROOT / "res" / "tcc"
-PACK_TOOL = ROOT / "tools" / "tcc_vfs_lzma_pack.exe"
+PACK_TOOL = ROOT / "tools" / (
+    "tcc_vfs_lzma_pack.exe" if os.name == "nt" else "tcc_vfs_lzma_pack"
+)
 OUTPUT = ROOT / "src" / "script" / "tcc_builtin_resources.c"
 
 # (虚拟路径, 源文件) —— SDK 三件套来自源码目录，res 只承载 TCC 环境
@@ -39,6 +43,26 @@ RES_DIRS = [
 ]
 
 MIN_COMPRESS_SIZE = 64
+GENERATOR_FORMAT = b"xs-tcc-vfs-resource-format-v2\0"
+
+
+def input_digest(items: list[tuple[str, Path]], force_store: bool) -> str:
+    """资源内容没变时跳过 268 次 LZMA 子进程和大型 C 文件重写。"""
+    digest = hashlib.sha256(GENERATOR_FORMAT)
+    digest.update(b"store\0" if force_store else b"lzma\0")
+    digest.update(Path(__file__).read_bytes())
+    for source in (
+        ROOT / "tools" / "tcc_vfs_lzma_pack.c",
+        ROOT / "tcc" / "LzmaEnc.c",
+        ROOT / "tcc" / "LzFind.c",
+        ROOT / "tcc" / "CpuArch.c",
+    ):
+        digest.update(source.read_bytes())
+    for virtual, source in items:
+        digest.update(virtual.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(source.read_bytes())
+    return digest.hexdigest()
 
 
 def normalize_virtual_name(text: str) -> str:
@@ -95,8 +119,15 @@ def c_bytes(data: bytes) -> str:
 def main() -> int:
     force_store = "--store" in sys.argv
     items = collect()
+    source_hash = input_digest(items, force_store)
+    marker = f"input-sha256: {source_hash}"
+    if OUTPUT.is_file():
+        with OUTPUT.open("r", encoding="utf-8") as existing:
+            if marker in existing.readline():
+                print(f"cached {OUTPUT} ({source_hash[:12]})")
+                return 0
     parts = [
-        "/* 由 tools/gen_tcc_resources.py 生成，勿手改。VFS 构建源：res/tcc + SDK 三件套 */",
+        f"/* 由 tools/gen_tcc_resources.py 生成，勿手改；{marker} */",
         '#include "../../tcc/tcc_builtin_vfs.h"',
         "",
     ]

@@ -16,18 +16,42 @@
 #include "../runtime/listener_slot.h"
 #include "engine.h"
 
-/* 进程级共享 TLS 上下文（惰性创建） */
+/* 进程级共享 TLS 上下文由 main 显式管理；装配线程只借用，避免惰性初始化竞态。 */
+static xtlscontext* g_XS_TlsContext;
+
+static bool XS_TlsRuntimeInit(void)
+{
+	xtlscontextconfig tCfg;
+
+	if ( g_XS_TlsContext != NULL ) return true;
+	xrtTlsContextConfigInit(&tCfg);
+	g_XS_TlsContext = xrtTlsContextCreate(&tCfg);
+	return g_XS_TlsContext != NULL;
+}
+
 static xtlscontext* XS_TlsSharedContext(void)
 {
-	static xtlscontext* pContext = NULL;
+	return g_XS_TlsContext;
+}
 
-	if ( pContext == NULL ) {
-		xtlscontextconfig tCfg;
+/* 单连接握手失败不影响 listener，但必须留下可诊断根因。 */
+static void XS_TlsHandshakeError(
+	xtlslistener* pListener,
+	const xerror* pError,
+	ptr pData)
+{
+	(void)pListener;
+	(void)pData;
+	printf("[xs] tls handshake failed: %s\n",
+		pError != NULL ? xrtErrorMessage(pError) : "unknown error");
+}
 
-		xrtTlsContextConfigInit(&tCfg);
-		pContext = xrtTlsContextCreate(&tCfg);
+static void XS_TlsRuntimeUnit(void)
+{
+	if ( g_XS_TlsContext != NULL ) {
+		xrtTlsContextRelease(g_XS_TlsContext);
+		g_XS_TlsContext = NULL;
 	}
-	return pContext;
 }
 
 /* 相对路径按 appPath 解析（结果 xrtFree 释放） */
@@ -42,35 +66,96 @@ static str XS_TlsResolvePath(const char* sPath)
 	return xrtPathJoin(XS_AppPath(), sPath);
 }
 
-/* 从 PEM 文本提取指定标签的全部 DER 块；返回块数（0 失败），调用方逐块 xrtFree */
+/* 从 PEM 文本严格提取指定标签的全部 DER 块。任何残缺/不可解码块都使整链失败。 */
 typedef struct XS_TlsDer {
 	bytes			pData;
 	size_t			iSize;
 } XS_TlsDer;
 
-static uint32 XS_TlsPemBlocks(const char* sText, size_t iSize, const char* sLabel, XS_TlsDer** parrOut)
+static bool XS_TlsSizeMul(size_t iCount, size_t iElement, size_t* piBytes)
+{
+	if ( piBytes == NULL || (iCount != 0 && iElement > SIZE_MAX / iCount) ) {
+		return false;
+	}
+	*piBytes = iCount * iElement;
+	return true;
+}
+
+static size_t XS_TlsTokenCount(const char* sText, size_t iSize, const char* sToken)
+{
+	size_t iToken = strlen(sToken);
+	size_t i;
+	size_t iCount = 0;
+
+	if ( sText == NULL || iToken == 0 || iToken > iSize ) return 0;
+	for ( i = 0; iToken <= iSize - i; ) {
+		if ( memcmp(sText + i, sToken, iToken) == 0 ) {
+			iCount++;
+			i += iToken;
+		} else {
+			i++;
+		}
+	}
+	return iCount;
+}
+
+static void XS_TlsDerFree(XS_TlsDer* arrBlocks, uint32 iCount)
+{
+	uint32 i;
+
+	for ( i = 0; i < iCount; i++ ) xrtFree(arrBlocks[i].pData);
+	xrtFree(arrBlocks);
+}
+
+static bool XS_TlsPemBlocks(
+	const char* sText,
+	size_t iSize,
+	const char* sLabel,
+	XS_TlsDer** parrOut,
+	uint32* piCount)
 {
 	XS_TlsDer* arrBlocks = NULL;
 	uint32 iCount = 0;
 	size_t iOffset = 0;
+	char sBegin[96];
+	char sEnd[96];
+	size_t iBegin;
+	size_t iEnd;
+
+	*parrOut = NULL;
+	*piCount = 0;
+	if ( snprintf(sBegin, sizeof(sBegin), "-----BEGIN %s-----", sLabel) < 0 ||
+	     snprintf(sEnd, sizeof(sEnd), "-----END %s-----", sLabel) < 0 ) {
+		return false;
+	}
+	iBegin = XS_TlsTokenCount(sText, iSize, sBegin);
+	iEnd = XS_TlsTokenCount(sText, iSize, sEnd);
+	if ( iBegin == 0 || iBegin != iEnd || iBegin > UINT32_MAX ) return false;
 
 	for ( ; ; ) {
 		xpemblock tBlock;
 		bytes pDer;
 		size_t iDer = 0;
+		size_t iNewCount;
+		size_t iNewBytes;
 
 		if ( !xrtPemFind(sText + iOffset, iSize - iOffset, sLabel, &tBlock) ) {
 			break;
 		}
 		pDer = xrtPemDecodeNew(&tBlock, &iDer);
 		if ( pDer == NULL ) {
-			break;
+			goto failed;
+		}
+		iNewCount = (size_t)iCount + 1u;
+		if ( !XS_TlsSizeMul(iNewCount, sizeof(XS_TlsDer), &iNewBytes) ) {
+			xrtFree(pDer);
+			goto failed;
 		}
 		{
-			XS_TlsDer* pNew = (XS_TlsDer*)xrtRealloc(arrBlocks, sizeof(XS_TlsDer) * (size_t)(iCount + 1));
+			XS_TlsDer* pNew = (XS_TlsDer*)xrtRealloc(arrBlocks, iNewBytes);
 			if ( pNew == NULL ) {
 				xrtFree(pDer);
-				break;
+				goto failed;
 			}
 			arrBlocks = pNew;
 		}
@@ -80,12 +165,14 @@ static uint32 XS_TlsPemBlocks(const char* sText, size_t iSize, const char* sLabe
 		/* 越过本块继续找（Raw 视图相对 sText+iOffset） */
 		iOffset += (size_t)(tBlock.Raw.Data - (sText + iOffset)) + tBlock.Raw.Size;
 	}
-	if ( iCount == 0 ) {
-		xrtFree(arrBlocks);
-		arrBlocks = NULL;
-	}
+	if ( iCount != (uint32)iBegin ) goto failed;
 	*parrOut = arrBlocks;
-	return iCount;
+	*piCount = iCount;
+	return true;
+
+failed:
+	XS_TlsDerFree(arrBlocks, iCount);
+	return false;
 }
 
 /* 依次尝试 RSA / P-256 / P-384 构造身份 */
@@ -100,19 +187,39 @@ static xtlsidentity* XS_TlsBuildIdentity(XS_TlsDer* arrCerts, uint32 iCertCount,
 	xbytesview* arrViews;
 	uint32 i;
 	uint32 j;
+	size_t iKeyBlocks = 0;
+	size_t iViewsBytes;
 
-	for ( j = 0; j < 3 && pKeyDer == NULL; j++ ) {
-		if ( xrtPemFind(sKeyText, iKeySize, arrKeyLabels[j], &tKeyBlock) ) {
+	/* 密钥文件同样只接受一个完整且可识别的私钥块，避免静默忽略坏尾部。 */
+	for ( j = 0; j < 3; j++ ) {
+		char sBegin[96];
+		char sEnd[96];
+		size_t iBegin;
+		size_t iEnd;
+
+		(void)snprintf(sBegin, sizeof(sBegin), "-----BEGIN %s-----", arrKeyLabels[j]);
+		(void)snprintf(sEnd, sizeof(sEnd), "-----END %s-----", arrKeyLabels[j]);
+		iBegin = XS_TlsTokenCount(sKeyText, iKeySize, sBegin);
+		iEnd = XS_TlsTokenCount(sKeyText, iKeySize, sEnd);
+		if ( iBegin != iEnd ) return NULL;
+		iKeyBlocks += iBegin;
+		if ( iBegin == 1 && pKeyDer == NULL &&
+		     xrtPemFind(sKeyText, iKeySize, arrKeyLabels[j], &tKeyBlock) ) {
 			pKeyDer = xrtPemDecodeNew(&tKeyBlock, &iKeyDer);
 		}
 	}
-	if ( pKeyDer == NULL ) {
+	if ( iKeyBlocks != 1 || pKeyDer == NULL ) {
+		xrtFree(pKeyDer);
 		return NULL;
 	}
 	tKey.Data = (const unsigned char*)pKeyDer;
 	tKey.Size = iKeyDer;
 
-	arrViews = (xbytesview*)xrtCalloc(iCertCount, sizeof(xbytesview));
+	if ( !XS_TlsSizeMul((size_t)iCertCount, sizeof(xbytesview), &iViewsBytes) ) {
+		xrtFree(pKeyDer);
+		return NULL;
+	}
+	arrViews = (xbytesview*)xrtCalloc(1, iViewsBytes);
 	if ( arrViews != NULL ) {
 		for ( i = 0; i < iCertCount; i++ ) {
 			arrViews[i].Data = (const unsigned char*)arrCerts[i].pData;
@@ -134,20 +241,24 @@ static xtlsidentity* XS_TlsBuildIdentity(XS_TlsDer* arrCerts, uint32 iCertCount,
 /* 装载一个 host 的证书身份；无证书配置返回 NULL（合法） */
 static xtlsidentity* XS_TlsLoadHost(XS_HostInfo* pHost, char* sErr, size_t iErrCap)
 {
-	str sCertPath, sKeyPath;
-	bytes pCertText = NULL, pKeyText = NULL;
-	size_t iCertSize = 0, iKeySize = 0;
+	str sCertPath = NULL, sKeyPath = NULL, sCaPath = NULL;
+	bytes pCertText = NULL, pKeyText = NULL, pCaText = NULL;
+	size_t iCertSize = 0, iKeySize = 0, iCaSize = 0;
 	XS_TlsDer* arrCerts = NULL;
+	XS_TlsDer* arrCa = NULL;
 	uint32 iCertCount = 0;
+	uint32 iCaCount = 0;
 	xtlsidentity* pIdentity = NULL;
-	uint32 i;
+	size_t iCombinedBytes;
 
 	if ( pHost->TlsCert == NULL || pHost->TlsKey == NULL ) {
 		return NULL;
 	}
 	sCertPath = XS_TlsResolvePath(pHost->TlsCert);
 	sKeyPath = XS_TlsResolvePath(pHost->TlsKey);
-	if ( sCertPath == NULL || sKeyPath == NULL ) {
+	sCaPath = XS_TlsResolvePath(pHost->TlsCA);
+	if ( sCertPath == NULL || sKeyPath == NULL ||
+	     (pHost->TlsCA != NULL && sCaPath == NULL) ) {
 		snprintf(sErr, iErrCap, "tls cert path resolve failed");
 		goto done;
 	}
@@ -157,10 +268,44 @@ static xtlsidentity* XS_TlsLoadHost(XS_HostInfo* pHost, char* sErr, size_t iErrC
 		snprintf(sErr, iErrCap, "tls cert file read failed: %s", pHost->TlsCert);
 		goto done;
 	}
-	iCertCount = XS_TlsPemBlocks((const char*)pCertText, iCertSize, "CERTIFICATE", &arrCerts);
-	if ( iCertCount == 0 ) {
+	if ( !XS_TlsPemBlocks((const char*)pCertText, iCertSize, "CERTIFICATE",
+		&arrCerts, &iCertCount) ) {
 		snprintf(sErr, iErrCap, "tls cert parse failed: %s", pHost->TlsCert);
 		goto done;
+	}
+	if ( sCaPath != NULL ) {
+		XS_TlsDer* pCombined;
+
+		pCaText = xrtFileReadAll(sCaPath, &iCaSize);
+		if ( pCaText == NULL ) {
+			snprintf(sErr, iErrCap, "tls ca file read failed: %s", pHost->TlsCA);
+			goto done;
+		}
+		if ( !XS_TlsPemBlocks((const char*)pCaText, iCaSize, "CERTIFICATE",
+			&arrCa, &iCaCount) ) {
+			snprintf(sErr, iErrCap, "tls ca parse failed: %s", pHost->TlsCA);
+			goto done;
+		}
+		if ( iCaCount > UINT32_MAX - iCertCount ) {
+			snprintf(sErr, iErrCap, "tls certificate chain too long");
+			goto done;
+		}
+		if ( !XS_TlsSizeMul((size_t)iCertCount + (size_t)iCaCount,
+			sizeof(XS_TlsDer), &iCombinedBytes) ) {
+			snprintf(sErr, iErrCap, "tls certificate chain too long");
+			goto done;
+		}
+		pCombined = (XS_TlsDer*)xrtRealloc(arrCerts, iCombinedBytes);
+		if ( pCombined == NULL ) {
+			snprintf(sErr, iErrCap, "out of memory building tls certificate chain");
+			goto done;
+		}
+		arrCerts = pCombined;
+		memcpy(arrCerts + iCertCount, arrCa, sizeof(XS_TlsDer) * (size_t)iCaCount);
+		iCertCount += iCaCount;
+		xrtFree(arrCa);
+		arrCa = NULL;
+		iCaCount = 0;
 	}
 	pIdentity = XS_TlsBuildIdentity(arrCerts, iCertCount, (const char*)pKeyText, iKeySize);
 	if ( pIdentity == NULL ) {
@@ -168,14 +313,14 @@ static xtlsidentity* XS_TlsLoadHost(XS_HostInfo* pHost, char* sErr, size_t iErrC
 	}
 
 done:
-	for ( i = 0; i < iCertCount; i++ ) {
-		xrtFree(arrCerts[i].pData);
-	}
-	xrtFree(arrCerts);
+	XS_TlsDerFree(arrCerts, iCertCount);
+	XS_TlsDerFree(arrCa, iCaCount);
 	xrtFree(pCertText);
 	xrtFree(pKeyText);
+	xrtFree(pCaText);
 	xrtFree(sCertPath);
 	xrtFree(sKeyPath);
+	xrtFree(sCaPath);
 	return pIdentity;
 }
 
@@ -234,7 +379,7 @@ static bool XS_TlsSelect(ptr pContext, const xtlsserverrequest* pRequest, xtlsse
 			}
 		}
 	}
-	/* 无匹配：回落第一项（DefaultHost 身份在构造方保证为 [0]） */
+	/* 无匹配：回落第一项（优先 DefaultHost，否则为首个可用 vhost 身份）。 */
 	if ( !bFound && pTable->iCount > 0 ) {
 		pChoice->Identity = pTable->pEntries[0].pIdentity;
 		bFound = true;
@@ -258,10 +403,49 @@ static bool XS_TlsSlotSelect(ptr pContext, const xtlsserverrequest* pRequest, xt
 	pTable = (XS_TlsTable*)pSlot->pTlsContext;
 	if ( !pSlot->bClosing && pSlot->bAccepting && pTable != NULL ) {
 		bFound = XS_TlsSelect(pTable, pRequest, pChoice);
+		if ( bFound && pSlot->pGeneration != NULL ) {
+			pChoice->Cookie = pSlot->pGeneration->iCookie;
+		}
 	}
 	xrtMutexUnlock(pSlot->pLock);
 	XS_TopologyReadUnlock();
 	return bFound;
+}
+
+/* TLS listener 的 Accept 必须与 ClientHello 选择身份时看到同一 generation。 */
+static bool XS_TlsAcquireConnection(
+	XS_ListenerSlot* pSlot,
+	xtlsstream* pStream,
+	void** ppRuntime,
+	XS_ServerGeneration** ppGeneration)
+{
+	xtlssession* pSession;
+	uint64 iCookie = 0;
+
+	if ( pStream == NULL ) {
+		printf("[xs] tls accept rejected: null stream\n");
+		return false;
+	}
+	pSession = xrtTlsStreamSession(pStream);
+	if ( pSession == NULL ) {
+		printf("[xs] tls accept rejected: session unavailable\n");
+		return false;
+	}
+	if ( !xrtTlsServerCookie(pSession, &iCookie) ) {
+		printf("[xs] tls accept rejected: cookie unavailable\n");
+		return false;
+	}
+	if ( iCookie == 0 ) {
+		printf("[xs] tls accept rejected: empty generation cookie\n");
+		return false;
+	}
+	if ( !XS_ListenerSlotAcquireConnection(
+		pSlot, iCookie, ppRuntime, ppGeneration) ) {
+		printf("[xs] tls accept rejected: generation cookie %llu is no longer current\n",
+			(unsigned long long)iCookie);
+		return false;
+	}
+	return true;
 }
 
 /* 从启用的 DefaultHost + hosts[] 收集证书；首个可用身份是 SNI 回落。 */
@@ -269,9 +453,14 @@ static bool XS_TlsTableBuild(XS_ServerInfo* pServer, XS_TlsTable* pTable, char* 
 {
 	uint32 iCount = 1 + pServer->HostCount;
 	uint32 i;
+	size_t iEntriesBytes;
 
 	memset(pTable, 0, sizeof(*pTable));
-	pTable->pEntries = (XS_TlsEntry*)xrtCalloc(iCount, sizeof(XS_TlsEntry));
+	if ( !XS_TlsSizeMul((size_t)iCount, sizeof(XS_TlsEntry), &iEntriesBytes) ) {
+		snprintf(sErr, iErrCap, "too many tls hosts");
+		return false;
+	}
+	pTable->pEntries = (XS_TlsEntry*)xrtCalloc(1, iEntriesBytes);
 	pTable->pLock = pTable->pEntries != NULL ? xrtMutexCreate() : NULL;
 	if ( pTable->pEntries == NULL || pTable->pLock == NULL ) {
 		xrtFree(pTable->pEntries);
@@ -280,8 +469,9 @@ static bool XS_TlsTableBuild(XS_ServerInfo* pServer, XS_TlsTable* pTable, char* 
 		return false;
 	}
 	if ( pServer->DefaultHost->Enabled &&
-	     ((pServer->DefaultHost->TlsCert == NULL) != (pServer->DefaultHost->TlsKey == NULL)) ) {
-		snprintf(sErr, iErrCap, "tls host '%s' requires both tls_cert and tls_key",
+	     (((pServer->DefaultHost->TlsCert == NULL) != (pServer->DefaultHost->TlsKey == NULL)) ||
+	      (pServer->DefaultHost->TlsCA != NULL && pServer->DefaultHost->TlsCert == NULL)) ) {
+		snprintf(sErr, iErrCap, "tls host '%s' requires tls_cert/tls_key before tls_ca",
 			pServer->DefaultHost->Name);
 		return false;
 	}
@@ -297,8 +487,9 @@ static bool XS_TlsTableBuild(XS_ServerInfo* pServer, XS_TlsTable* pTable, char* 
 	}
 	for ( i = 0; i < pServer->HostCount; i++ ) {
 		if ( !pServer->Hosts[i]->Enabled ) continue;
-		if ( (pServer->Hosts[i]->TlsCert == NULL) != (pServer->Hosts[i]->TlsKey == NULL) ) {
-			snprintf(sErr, iErrCap, "tls host '%s' requires both tls_cert and tls_key",
+		if ( ((pServer->Hosts[i]->TlsCert == NULL) != (pServer->Hosts[i]->TlsKey == NULL)) ||
+		     (pServer->Hosts[i]->TlsCA != NULL && pServer->Hosts[i]->TlsCert == NULL) ) {
+			snprintf(sErr, iErrCap, "tls host '%s' requires tls_cert/tls_key before tls_ca",
 				pServer->Hosts[i]->Name);
 			return false;
 		}

@@ -164,7 +164,8 @@ XS_RequestResult RequestProc(XS_HttpReq* pReq)
 		tData.Size = iGot;
 		while ( xrtHttp1BodyRead(pReq->body, tData, false, &iConsumed, &tData, &tErr) == XHTTP1_BODY_DATA ) {
 			if ( iUsed + tData.Size <= sizeof(arrBuf) ) {
-				memcpy(arrBuf + iUsed, tData.Data, tData.Size);
+				/* chunked 解码视图可能指向 arrBuf 内部，源/目标允许重叠。 */
+				memmove(arrBuf + iUsed, tData.Data, tData.Size);
 				iUsed += tData.Size;
 			}
 			tData.Data = arrBuf;

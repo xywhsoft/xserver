@@ -112,7 +112,8 @@ static void XS_TopologyServerRelease(XS_ServerInfo* pServer)
 	if ( pServer == NULL ) return;
 	pGeneration = (XS_ServerGeneration*)pServer->Generation;
 	if ( pGeneration == NULL ) return;
-	/* 若这是最后一个引用，先完整执行 finalizer，再让停机观察到 lease=0。 */
+	/* 最后一个引用归零时只把 finalizer 交给 reaper；lease 是独立的
+	 * 公开借用计数，停机后续会另行 Drain reaper 再拆其依赖。 */
 	XS_GenerationRelease(pGeneration);
 	xrtAtomic32FetchSub(&g_XS_TopologyLeases, 1, XMEMORY_ACQ_REL);
 }

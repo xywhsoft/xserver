@@ -24475,6 +24475,7 @@ typedef struct xtlsserverrequest {
 typedef struct xtlsserverchoice {
 	const xtlsidentity* Identity;
 	size_t Protocol;
+	uint64 Cookie;	/* 由选择器写入，并随服务端会话保留的宿主代标识 */
 } xtlsserverchoice;
 
 
@@ -24562,6 +24563,14 @@ XRT_API xtlsresult xrtTlsServerKeyUpdate(
 XRT_API bool xrtTlsServerName(
 	const xtlssession* pSession,
 	xbytesview* pServerName
+);
+
+
+
+/* 返回选择器随本次握手保存的宿主 cookie；未设置时仍成功返回 0。 */
+XRT_API bool xrtTlsServerCookie(
+	const xtlssession* pSession,
+	uint64* pCookie
 );
 
 
@@ -47845,6 +47854,7 @@ typedef struct xtlsserverselection {
 	xbytesview Protocols;
 	const xtlsidentity* Identity;
 	size_t Protocol;
+	uint64 Cookie;
 	xtlsversion Version;
 	xtlscipher Cipher;
 	xtlssignature Signature;
@@ -47878,6 +47888,7 @@ typedef struct xtlsserverstate {
 	size_t SecretCapacity;
 	size_t HashSize;
 	size_t RecordOffset;
+	uint64 Cookie;
 	const xtlsidentity* Identity;
 	xtlsserverselectproc Select;
 	ptr SelectContext;
@@ -146846,6 +146857,38 @@ XRT_API bool xrtTlsServerName(
 
 
 
+/* 读取动态选择器随已选身份提交的宿主 cookie。 */
+XRT_API bool xrtTlsServerCookie(
+	const xtlssession* pSession,
+	uint64* pCookie
+)
+{
+	xtlsserverstate* pState;
+
+	if ( (pSession == NULL) || (pCookie == NULL) ) {
+		return __xrtTlsServerError(
+			XERR_ARGUMENT, XTLS_ERROR_ARGUMENT, "get-tls-server-cookie",
+			"TLS server session or cookie output is null"
+		);
+	}
+	if ( xrtTlsSessionRole(pSession) != XTLS_SERVER ) {
+		return __xrtTlsServerError(
+			XERR_ARGUMENT, XTLS_ERROR_ARGUMENT, "get-tls-server-cookie",
+			"TLS session is not a server"
+		);
+	}
+	pState = (xtlsserverstate*)__xrtTlsSessionRoleData(
+		(xtlssession*)pSession
+	);
+	if ( pState == NULL ) {
+		return false;
+	}
+	*pCookie = pState->Cookie;
+	return true;
+}
+
+
+
 /* 把当前输入、输出和应用背压统一转换成等待位。 */
 bool __xrtTlsServerWait(
 	xtlssession* pSession,
@@ -147529,6 +147572,7 @@ typedef struct xtlsserverflight {
 	size_t OutputSize;
 	size_t Protocol;
 	size_t HashSize;
+	uint64 Cookie;
 	xtlscipher Cipher;
 	xtlssignature Signature;
 	uint8 ClientHandshake[XTLS_SERVER_SECRET_MAX_SIZE];
@@ -148051,6 +148095,7 @@ static bool __xrtTlsServerSelect(
 	Choice.Protocol = __xrtTlsServerProtocolDefault(
 		pState, pSelection->Protocols
 	);
+	Choice.Cookie = 0;
 	Request.ServerName = pSelection->ServerName;
 	Request.Protocols = pSelection->Protocols;
 	if ( (pState->Select != NULL) && !pState->Select(
@@ -148081,6 +148126,7 @@ static bool __xrtTlsServerSelect(
 			"TLS server could not retain the selected identity"
 		);
 	}
+	pSelection->Cookie = Choice.Cookie;
 	pSelection->Protocol = Choice.Protocol;
 	IdentityType = xrtTlsIdentityType(pSelection->Identity);
 	Result = xrtTlsCipherSelect(
@@ -149129,6 +149175,7 @@ static void __xrtTlsServerFlightCommit(
 		pState->Resumed = pFlight->Resumed;
 	#endif
 	pState->HashSize = pFlight->HashSize;
+	pState->Cookie = pFlight->Cookie;
 	pState->Version = XTLS_VERSION_13;
 	pState->Cipher = pFlight->Cipher;
 	pState->Signature = pFlight->Signature;
@@ -149216,6 +149263,7 @@ xtlsresult __xrtTlsServerFirstFlight(
 		goto cleanup;
 	}
 	Flight.Protocol = Selection.Protocol;
+	Flight.Cookie = Selection.Cookie;
 	if ( !__xrtTlsServerNameCopy(&Selection, &Flight) ||
 		!__xrtTlsServerHelloFlight(
 			pSession, pState, &Selection, pMessage,
@@ -149954,6 +150002,7 @@ xtlsresult __xrtTlsServer12FirstFlight(
 	pState->Signature = pSelection->Signature;
 	pState->Group = pSelection->Group;
 	pState->HashSize = pCipher->HashSize;
+	pState->Cookie = pSelection->Cookie;
 	pState->Step = XTLS_SERVER_WAIT_CLIENT_KEY_EXCHANGE;
 	pSession->Version = XTLS_VERSION_12;
 	pSession->Cipher = pSelection->Cipher;

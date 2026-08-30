@@ -66,6 +66,7 @@
       "enabled": true,
       "class": "custom",
       "name": "echo",
+      "port": 9099,
       "devlang": "c",
       "devfile": "script/custom_main.c"
     },

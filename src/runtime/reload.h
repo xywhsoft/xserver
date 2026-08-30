@@ -45,6 +45,7 @@ typedef struct XS_ReloadIntent {
 	XS_ReloadSourceFile*		pSources;
 	uint64				iRevision;
 	bool				bSuperseded;
+	bool				bStaging;	/* 已进入 Swap/Init 副作用区 */
 	bool				bCommitted;
 	char				sError[256];
 } XS_ReloadIntent;
@@ -88,6 +89,28 @@ static XS_ReloadResult* XS_ReloadResultFindLocked(XS_ReloadId iId)
 	if ( iId == 0 ) return NULL;
 	pResult = &g_XS_Reload.arrResults[iId % XS_RELOAD_RESULT_CAPACITY];
 	return pResult->Id == iId ? pResult : NULL;
+}
+
+/* latest-wins 可在一个慢 active 存在时连续产生很多终态 ticket。顺序 ID
+ * 若恰好绕回 active 所在环槽，跳过该 ID，而不是无谓拒绝新的期望状态。 */
+static XS_ReloadResult* XS_ReloadResultReserveLocked(XS_ReloadId* piId)
+{
+	XS_ReloadId iCandidate = g_XS_Reload.iNextId;
+	uint32 i;
+
+	for ( i = 0; i < XS_RELOAD_RESULT_CAPACITY; i++ ) {
+		XS_ReloadResult* pSlot;
+
+		iCandidate++;
+		if ( iCandidate == 0 ) iCandidate++;
+		pSlot = &g_XS_Reload.arrResults[iCandidate % XS_RELOAD_RESULT_CAPACITY];
+		if ( pSlot->Id == 0 || XS_ReloadStateFinal(pSlot->State) ) {
+			g_XS_Reload.iNextId = iCandidate;
+			*piId = iCandidate;
+			return pSlot;
+		}
+	}
+	return NULL;
 }
 
 static void XS_ReloadResultUpdateLocked(
@@ -201,11 +224,30 @@ static bool XS_ReloadCommitBegin(void)
 
 	if ( pIntent == NULL || g_XS_Reload.pLock == NULL ) return false;
 	xrtMutexLock(g_XS_Reload.pLock);
-	if ( g_XS_Reload.bStopping || g_XS_Reload.pActive != pIntent || pIntent->bSuperseded ) {
+	if ( (g_XS_Reload.bStopping && !pIntent->bStaging) ||
+	     g_XS_Reload.pActive != pIntent || pIntent->bSuperseded ) {
 		xrtMutexUnlock(g_XS_Reload.pLock);
 		return false;
 	}
 	return true;
+}
+
+/* 所有可失败的编译、校验和 endpoint 预绑定完成后才越过此线性点。
+ * 此后新期望状态排在本 intent 之后，不再取消已经开始产生副作用的 Init。 */
+static bool XS_ReloadStageBegin(void)
+{
+	XS_ReloadIntent* pIntent = g_XS_ReloadCurrent;
+	bool bOk = false;
+
+	if ( pIntent == NULL || g_XS_Reload.pLock == NULL ) return false;
+	xrtMutexLock(g_XS_Reload.pLock);
+	if ( !g_XS_Reload.bStopping && g_XS_Reload.pActive == pIntent &&
+	     !pIntent->bSuperseded ) {
+		pIntent->bStaging = true;
+		bOk = true;
+	}
+	xrtMutexUnlock(g_XS_Reload.pLock);
+	return bOk;
 }
 
 static void XS_ReloadCommitEnd(bool bCommitted)
@@ -277,15 +319,17 @@ static XS_ReloadId XS_ReloadSubmit(
 			break;
 		}
 	}
-	iId = g_XS_Reload.iNextId + 1;
-	pSlot = &g_XS_Reload.arrResults[iId % XS_RELOAD_RESULT_CAPACITY];
-	if ( (pSlot->Id != 0 && !XS_ReloadStateFinal(pSlot->State)) ||
-	     (g_XS_Reload.iPendingCount >= XS_RELOAD_PENDING_LIMIT && !bReplacesPending) ) {
+	if ( g_XS_Reload.iPendingCount >= XS_RELOAD_PENDING_LIMIT && !bReplacesPending ) {
 		xrtMutexUnlock(g_XS_Reload.pLock);
 		XS_ReloadIntentFree(pIntent);
 		return 0;
 	}
-	g_XS_Reload.iNextId = iId;
+	pSlot = XS_ReloadResultReserveLocked(&iId);
+	if ( pSlot == NULL ) {
+		xrtMutexUnlock(g_XS_Reload.pLock);
+		XS_ReloadIntentFree(pIntent);
+		return 0;
+	}
 	pIntent->iId = iId;
 	memset(pSlot, 0, sizeof(*pSlot));
 	pSlot->Id = iId;
@@ -316,6 +360,7 @@ static XS_ReloadId XS_ReloadSubmit(
 	}
 	XS_ReloadPendingTailRefreshLocked();
 	if ( g_XS_Reload.pActive != NULL && !g_XS_Reload.pActive->bCommitted &&
+	     !g_XS_Reload.pActive->bStaging &&
 	     XS_ReloadIntentDominates(pIntent, g_XS_Reload.pActive) ) {
 		g_XS_Reload.pActive->bSuperseded = true;
 	}
@@ -476,7 +521,8 @@ static void XS_ReloadQuiesce(void)
 	if ( !g_XS_Reload.bStopping ) {
 		g_XS_Reload.bAccepting = false;
 		g_XS_Reload.bStopping = true;
-		if ( g_XS_Reload.pActive != NULL && !g_XS_Reload.pActive->bCommitted ) {
+		if ( g_XS_Reload.pActive != NULL && !g_XS_Reload.pActive->bCommitted &&
+		     !g_XS_Reload.pActive->bStaging ) {
 			g_XS_Reload.pActive->bSuperseded = true;
 		}
 	}
@@ -565,6 +611,26 @@ static bool XS_BindIpEquals(const char* pA, const char* pB)
 	return strcmp(a, b) == 0;
 }
 
+static const char* XS_ServerTlsBindIp(const XS_ServerInfo* pServer)
+{
+	if ( pServer->IPTLS != NULL && pServer->IPTLS[0] != '\0' ) return pServer->IPTLS;
+	return (pServer->IP == NULL || pServer->IP[0] == '\0') ? "0.0.0.0" : pServer->IP;
+}
+
+static bool XS_ServerEndpointEquals(
+	const XS_ServerInfo* pA,
+	bool bTlsA,
+	const XS_ServerInfo* pB,
+	bool bTlsB)
+{
+	const char* sIpA = bTlsA ? XS_ServerTlsBindIp(pA) : pA->IP;
+	const char* sIpB = bTlsB ? XS_ServerTlsBindIp(pB) : pB->IP;
+	uint16 iPortA = bTlsA ? pA->PortTLS : pA->Port;
+	uint16 iPortB = bTlsB ? pB->PortTLS : pB->Port;
+
+	return iPortA == iPortB && XS_BindIpEquals(sIpA, sIpB);
+}
+
 /* listener 创建后固化的部分必须一致，其他配置可经稳定槽位换整个 generation。 */
 static bool XS_ServerCanHandoffEndpoint(XS_ServerInfo* pOld, XS_ServerInfo* pNew)
 {
@@ -573,7 +639,8 @@ static bool XS_ServerCanHandoffEndpoint(XS_ServerInfo* pOld, XS_ServerInfo* pNew
 	       XS_BindIpEquals(pOld->IP, pNew->IP) && pOld->Port == pNew->Port &&
 	       pOld->TLS == pNew->TLS && pOld->Backlog == pNew->Backlog &&
 	       pOld->RecvLimit == pNew->RecvLimit &&
-	       pOld->PortTLS == pNew->PortTLS && XS_StrEq(pOld->IPTLS, pNew->IPTLS);
+	       (!pOld->TLS || (pOld->PortTLS == pNew->PortTLS &&
+	        XS_BindIpEquals(XS_ServerTlsBindIp(pOld), XS_ServerTlsBindIp(pNew))));
 }
 
 /* 两代不能同时绑定同一传输端点时，优先走稳定 listener 切槽。 */
@@ -584,8 +651,12 @@ static bool XS_ServerBindConflicts(XS_ServerInfo* pOld, XS_ServerInfo* pNew)
 
 	if ( !pOld->Enabled || !pNew->Enabled || strcmp(pOld->Class, "custom") == 0 ||
 	     strcmp(pNew->Class, "custom") == 0 ) return false;
-	return bOldUdp == bNewUdp && pOld->Port == pNew->Port &&
-	       XS_BindIpEquals(pOld->IP, pNew->IP);
+	if ( bOldUdp != bNewUdp ) return false;
+	if ( XS_ServerEndpointEquals(pOld, false, pNew, false) ) return true;
+	if ( bOldUdp ) return false;
+	return (pNew->TLS && XS_ServerEndpointEquals(pOld, false, pNew, true)) ||
+	       (pOld->TLS && XS_ServerEndpointEquals(pOld, true, pNew, false)) ||
+	       (pOld->TLS && pNew->TLS && XS_ServerEndpointEquals(pOld, true, pNew, true));
 }
 
 static bool XS_ReloadClassSupported(XS_ServerInfo* pServer, const char* sScope)
@@ -608,18 +679,6 @@ static bool XS_ReloadEngineConfigCompatible(const XS_App* pCurrent, const XS_App
 	printf("[xs] reload rejected: engine.workers is process-immutable (%u -> %u); restart required\n",
 		pCurrent->EngineWorkers, pFresh->EngineWorkers);
 	return false;
-}
-
-static XS_App* XS_ReloadTakeSnapshot(XS_App* pFresh)
-{
-	XS_App* pOwner = (XS_App*)xrtMalloc(sizeof(XS_App));
-
-	if ( pOwner == NULL ) {
-		return NULL;
-	}
-	*pOwner = *pFresh;
-	memset(pFresh, 0, sizeof(*pFresh));
-	return pOwner;
 }
 
 static XS_HostInfo* XS_ReloadServerHostAt(XS_ServerInfo* pServer, uint32 iIndex)
@@ -654,9 +713,16 @@ static xvalue* XS_ReloadTakeHostSwap(XS_HostInfo* pOldHost)
 	if ( pScript != NULL && pScript->procSwap != NULL ) {
 		xvalue* pOut = NULL;
 		XS_ScriptRuntime* pPrevious = XS_ScriptEnter(pScript);
+		bool bExported;
 
-		if ( pScript->procSwap(pOldHost, &pOut) && pOut != NULL ) pShared = pOut;
+		bExported = pScript->procSwap(pOldHost, &pOut);
 		XS_ScriptLeave(pPrevious);
+		if ( bExported && pOut != NULL ) {
+			pShared = pOut;
+		} else if ( pOut != NULL ) {
+			/* false 表示未导出；实现仍写出对象时由宿主兜底释放。 */
+			xrtValueRelease(pOut);
+		}
 	}
 	XS_ScriptRelease(pScript);
 	return pShared;
@@ -666,7 +732,6 @@ static xvalue* XS_ReloadTakeHostSwap(XS_HostInfo* pOldHost)
  * 随后为候选 host 装入脚本但保持 not-ready，直到拓扑提交。 */
 static bool XS_ReloadPrepareServer(
 	XS_ServerInfo* pServer,
-	XS_ServerInfo* pOld,
 	bool bStartEndpoint,
 	char* sErr,
 	size_t iErrCap)
@@ -731,10 +796,7 @@ static bool XS_ReloadPrepareServer(
 		XS_ScriptRuntime* pRuntime = pScripts[i];
 
 		if ( pRuntime != NULL ) {
-			XS_HostInfo* pOldHost = XS_ReloadMatchOldHost(pOld, pHost, i);
-
-			pRuntime->pSwap = XS_ReloadTakeHostSwap(pOldHost);
-			XS_ScriptPrepare(pHost, pRuntime);
+			XS_ScriptStagePrepared(pRuntime);
 			(void)XS_ScriptMountPrepared(pHost, pRuntime);
 			pScripts[i] = NULL;	/* 所有权已转入候选 host */
 		}
@@ -753,6 +815,28 @@ Done:
 	return bOk;
 }
 
+/* endpoint 已全部验证且 intent 已越过 staging 线性点后才执行旧代 Swap
+ * 与候选 Init。此后的提交只包含预检过的指针/槽位切换。 */
+static void XS_ReloadInitializeCandidateScripts(
+	XS_ServerInfo* pServer,
+	XS_ServerInfo* pOld)
+{
+	uint32 i;
+
+	if ( pServer == NULL || !pServer->Enabled ) return;
+	for ( i = 0; i < 1 + pServer->HostCount; i++ ) {
+		XS_HostInfo* pHost = XS_ReloadServerHostAt(pServer, i);
+		XS_ScriptRuntime* pRuntime = (XS_ScriptRuntime*)pHost->Runtime;
+
+		if ( pRuntime != NULL ) {
+			XS_HostInfo* pOldHost = XS_ReloadMatchOldHost(pOld, pHost, i);
+
+			pRuntime->pSwap = XS_ReloadTakeHostSwap(pOldHost);
+			XS_ScriptInitializePrepared(pHost, pRuntime);
+		}
+	}
+}
+
 static void XS_ReloadActivateCandidateScripts(XS_ServerInfo* pServer)
 {
 	uint32 i;
@@ -765,6 +849,7 @@ static void XS_ReloadActivateCandidateScripts(XS_ServerInfo* pServer)
 		if ( pRuntime != NULL ) XS_ScriptActivatePrepared(pRuntime);
 		pHost->State = pHost->Enabled && pServer->Enabled ? XS_RUN_RUNNING : XS_RUN_STOPPED;
 	}
+	(void)XS_GenerationPublish((XS_ServerGeneration*)pServer->Generation);
 	pServer->State = pServer->Enabled ? XS_RUN_RUNNING : XS_RUN_STOPPED;
 }
 
@@ -773,6 +858,7 @@ static void XS_ReloadDiscardCandidateScripts(XS_ServerInfo* pServer)
 	uint32 i;
 
 	if ( pServer == NULL ) return;
+	XS_GenerationDiscard((XS_ServerGeneration*)pServer->Generation);
 	for ( i = 0; i < 1 + pServer->HostCount; i++ ) {
 		XS_HostInfo* pHost = XS_ReloadServerHostAt(pServer, i);
 		XS_ScriptRuntime* pRuntime = (XS_ScriptRuntime*)pHost->Runtime;
@@ -783,20 +869,16 @@ static void XS_ReloadDiscardCandidateScripts(XS_ServerInfo* pServer)
 
 static void XS_ReloadDiscardCandidate(XS_ServerInfo* pServer)
 {
-	XS_App* pOwner;
+	XS_ConfigRevision* pOwner;
 
 	if ( pServer == NULL ) return;
 	if ( pServer->Generation == NULL ) {
-		pOwner = (XS_App*)pServer->ConfigOwner;
-		if ( pOwner != NULL ) {
-			XS_ConfigFree(pOwner);
-			xrtFree(pOwner);
-		}
+		pOwner = (XS_ConfigRevision*)pServer->ConfigOwner;
+		if ( pOwner != NULL ) XS_ConfigRevisionRelease(pOwner);
 		return;
 	}
 	XS_ReloadDiscardCandidateScripts(pServer);
 	if ( pServer->Runtime != NULL ) {
-		pServer->State = XS_RUN_RUNNING;
 		XS_ServerDriverStop(pServer);
 		XS_ServerDriverCloseConnections(pServer);
 	}
@@ -808,7 +890,7 @@ static bool XS_ReloadServerNow(XS_App* pApp, const char* sName)
 	XS_ServerInfo* pOld = NULL;
 	XS_ServerInfo* pNew;
 	XS_App tFresh;
-	XS_App* pOwner;
+	XS_ConfigRevision* pRevision;
 	xvalue* pOldRoot = NULL;
 	char sErr[256];
 	uint32 i;
@@ -827,13 +909,11 @@ static bool XS_ReloadServerNow(XS_App* pApp, const char* sName)
 		printf("[xs] server reload: config re-parse failed: %s\n", tFresh.ParseError);
 		XS_ReloadSetError(tFresh.ParseError);
 		XS_ConfigFree(&tFresh);
-		pOld->State = XS_RUN_RELOAD_FAILED;
 		goto Done;
 	}
 	if ( !XS_ReloadEngineConfigCompatible(pApp, &tFresh) ) {
 		XS_ReloadSetError("engine.workers changed; restart required");
 		XS_ConfigFree(&tFresh);
-		pOld->State = XS_RUN_RELOAD_FAILED;
 		goto Done;
 	}
 	for ( i = 0; i < tFresh.ServerCount; i++ ) {
@@ -870,24 +950,35 @@ static bool XS_ReloadServerNow(XS_App* pApp, const char* sName)
 		goto Done;
 	}
 
-	pOwner = XS_ReloadTakeSnapshot(&tFresh);
-	if ( pOwner == NULL ) {
+	pRevision = XS_ConfigRevisionTake(&tFresh);
+	if ( pRevision == NULL ) {
 		XS_ReloadSetError("out of memory while owning config snapshot");
 		XS_ConfigFree(&tFresh);
 		goto Done;
 	}
-	pOwner->Engine = pApp->Engine;
-	pNew = pOwner->Servers[i];
+	pRevision->App.Engine = pApp->Engine;
+	pNew = pRevision->App.Servers[i];
+	if ( !XS_ConfigRevisionRetain(pRevision) ) {
+		XS_ConfigRevisionRelease(pRevision);
+		XS_ReloadSetError("cannot retain config revision");
+		goto Done;
+	}
 	pNew->Engine = pApp->Engine;
-	pNew->ConfigOwner = pOwner;
+	pNew->ConfigOwner = pRevision;
+	XS_ConfigRevisionRelease(pRevision); /* 构建引用转交给候选 generation */
 	sErr[0] = '\0';
-	if ( !XS_ReloadPrepareServer(pNew, pOld, !bHandoff, sErr, sizeof(sErr)) ) {
+	if ( !XS_ReloadPrepareServer(pNew, !bHandoff, sErr, sizeof(sErr)) ) {
 		printf("[xs] server reload '%s': candidate failed: %s; old generation unchanged\n",
 			sName, sErr);
 		XS_ReloadSetError(sErr);
 		XS_ReloadDiscardCandidate(pNew);
 		goto Done;
 	}
+	if ( !XS_ReloadStageBegin() ) {
+		XS_ReloadDiscardCandidate(pNew);
+		goto Done;
+	}
+	XS_ReloadInitializeCandidateScripts(pNew, pOld);
 	bCommitGate = XS_ReloadCommitBegin();
 	if ( bCommitGate ) {
 		if ( XS_TopologyWriteLock() ) {
@@ -901,7 +992,8 @@ static bool XS_ReloadServerNow(XS_App* pApp, const char* sName)
 				XS_ServerDriverActivate(pNew)) ) {
 				if ( !bHandoff ) XS_ServerDriverDeactivate(pOld);
 				pApp->Servers[i] = pNew;
-				pOldRoot = XS_TopologyRootReplaceLocked(pApp, pOwner->Root);
+				pOldRoot = XS_TopologyRootReplaceLocked(pApp,
+					((XS_ConfigRevision*)pNew->ConfigOwner)->App.Root);
 				XS_ReloadActivateCandidateScripts(pNew);
 				bTopologyChanged = true;
 			}
@@ -952,36 +1044,21 @@ static int32 XS_ReloadFindServerIndex(
 	return -1;
 }
 
-/* 从当前 intent 已冻结的配置字节重新构造独立 owner。每个候选 generation
- * 独占一个完整 XS_App 快照，沿用既有终态 finalizer，无共享 owner 环。 */
-static XS_ServerInfo* XS_ReloadCloneConfiguredServer(XS_App* pApp, const char* sName)
+/* 一个 reload-all revision 只解析一次；每个非复用候选持有同一 revision
+ * 的独立引用，最后一个 generation 终态后再整体释放配置树。 */
+static XS_ServerInfo* XS_ReloadAttachConfiguredServer(
+	XS_App* pApp,
+	XS_ConfigRevision* pRevision,
+	uint32 iIndex)
 {
-	XS_App tFresh;
-	XS_App* pOwner;
-	int32 iIndex;
 	XS_ServerInfo* pServer;
 
-	if ( !XS_ReloadLoadConfig(&tFresh) ) {
-		XS_ReloadSetError(tFresh.ParseError);
-		XS_ConfigFree(&tFresh);
-		return NULL;
-	}
-	iIndex = XS_ReloadFindServerIndex(tFresh.Servers, tFresh.ServerCount, sName);
-	if ( iIndex < 0 ) {
-		XS_ConfigFree(&tFresh);
-		XS_ReloadSetError("desired server disappeared from immutable snapshot");
-		return NULL;
-	}
-	pOwner = XS_ReloadTakeSnapshot(&tFresh);
-	if ( pOwner == NULL ) {
-		XS_ConfigFree(&tFresh);
-		XS_ReloadSetError("out of memory while cloning desired server");
-		return NULL;
-	}
-	pOwner->Engine = pApp->Engine;
-	pServer = pOwner->Servers[(uint32)iIndex];
+	if ( pApp == NULL || pRevision == NULL ||
+	     iIndex >= pRevision->App.ServerCount ||
+	     !XS_ConfigRevisionRetain(pRevision) ) return NULL;
+	pServer = pRevision->App.Servers[iIndex];
 	pServer->Engine = pApp->Engine;
-	pServer->ConfigOwner = pOwner;
+	pServer->ConfigOwner = pRevision;
 	return pServer;
 }
 
@@ -990,6 +1067,8 @@ static XS_ServerInfo* XS_ReloadCloneConfiguredServer(XS_App* pApp, const char* s
 static bool XS_ReloadAllAtomicNow(XS_App* pApp)
 {
 	XS_App tDesired;
+	XS_ConfigRevision* pRevision = NULL;
+	XS_App* pDesired = NULL;
 	XS_ServerInfo** pCurrent = NULL;
 	XS_ServerInfo** pNextTopology = NULL;
 	XS_ServerInfo** pOldTopology = NULL;
@@ -1014,7 +1093,14 @@ static bool XS_ReloadAllAtomicNow(XS_App* pApp)
 		XS_ReloadSetError("engine.workers changed; restart required");
 		goto Done;
 	}
-	iDesired = tDesired.ServerCount;
+	pRevision = XS_ConfigRevisionTake(&tDesired);
+	if ( pRevision == NULL ) {
+		XS_ReloadSetError("out of memory while owning config revision");
+		goto Done;
+	}
+	pDesired = &pRevision->App;
+	pDesired->Engine = pApp->Engine;
+	iDesired = pDesired->ServerCount;
 	if ( !XS_TopologyServerSnapshot(&pCurrent, &iCurrent) ) {
 		XS_ReloadSetError("cannot snapshot current topology");
 		goto Done;
@@ -1030,7 +1116,7 @@ static bool XS_ReloadAllAtomicNow(XS_App* pApp)
 	}
 
 	for ( i = 0; i < iDesired; i++ ) {
-		XS_ServerInfo* pWanted = tDesired.Servers[i];
+		XS_ServerInfo* pWanted = pDesired->Servers[i];
 		int32 iOld = XS_ReloadFindServerIndex(pCurrent, iCurrent, pWanted->Name);
 		XS_ServerInfo* pOld = iOld >= 0 ? pCurrent[(uint32)iOld] : NULL;
 		XS_ServerInfo* pNew;
@@ -1061,13 +1147,16 @@ static bool XS_ReloadAllAtomicNow(XS_App* pApp)
 				goto Done;
 			}
 		}
-		pNew = XS_ReloadCloneConfiguredServer(pApp, pWanted->Name);
-		if ( pNew == NULL ) goto Done;
+		pNew = XS_ReloadAttachConfiguredServer(pApp, pRevision, i);
+		if ( pNew == NULL ) {
+			XS_ReloadSetError("cannot retain configured server revision");
+			goto Done;
+		}
 		pPlan[i].pNew = pNew;
 		pPlan[i].bHandoff = bHandoff;
 		pNextTopology[i] = pNew;
 		sErr[0] = '\0';
-		if ( !XS_ReloadPrepareServer(pNew, pOld, !bHandoff, sErr, sizeof(sErr)) ) {
+		if ( !XS_ReloadPrepareServer(pNew, !bHandoff, sErr, sizeof(sErr)) ) {
 			printf("[xs] reload all: candidate '%s' failed: %s; active revision unchanged\n",
 				pWanted->Name, sErr);
 			XS_ReloadSetError(sErr);
@@ -1080,6 +1169,12 @@ static bool XS_ReloadAllAtomicNow(XS_App* pApp)
 				pCurrent[i]->Name);
 			XS_ReloadSetError("removing custom server requires restart");
 			goto Done;
+		}
+	}
+	if ( !XS_ReloadStageBegin() ) goto Done;
+	for ( i = 0; i < iDesired; i++ ) {
+		if ( !pPlan[i].bReuse ) {
+			XS_ReloadInitializeCandidateScripts(pPlan[i].pNew, pPlan[i].pOld);
 		}
 	}
 
@@ -1143,7 +1238,7 @@ static bool XS_ReloadAllAtomicNow(XS_App* pApp)
 		pApp->Servers = pNextTopology;
 		pApp->ServerCount = iDesired;
 		pNextTopology = NULL;
-		pOldRoot = XS_TopologyRootReplaceLocked(pApp, tDesired.Root);
+		pOldRoot = XS_TopologyRootReplaceLocked(pApp, pDesired->Root);
 		for ( i = 0; i < iDesired; i++ ) {
 			if ( !pPlan[i].bReuse ) XS_ReloadActivateCandidateScripts(pPlan[i].pNew);
 		}
@@ -1199,6 +1294,7 @@ Done:
 	xrtFree(pCurrentUsed);
 	xrtFree(pPlan);
 	XS_ConfigFree(&tDesired);
+	XS_ConfigRevisionRelease(pRevision); /* 撤销本次 reconcile 的构建引用 */
 	return bOk;
 }
 

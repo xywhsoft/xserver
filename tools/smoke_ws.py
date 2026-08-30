@@ -1,12 +1,17 @@
 """xs3 冒烟基线：WebSocket 断言（握手 101、文本回显、二进制回显、坏握手 400）。"""
 import base64
+import argparse
 import os
 import socket
 import struct
 import sys
 import time
 
-HOST, PORT = '127.0.0.1', 9098
+parser = argparse.ArgumentParser(add_help=False)
+parser.add_argument('--port', type=int, default=9098)
+args = parser.parse_args()
+
+HOST, PORT = '127.0.0.1', args.port
 failures = []
 
 

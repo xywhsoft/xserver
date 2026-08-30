@@ -21,6 +21,7 @@ typedef struct XS_ScriptRuntime {
 	volatile int32		iReferences;	/* host 所有权 1 + 连接/定时器引用 */
 	xatomic32		tRetired;	/* 退役后拒绝新增脚本资源 */
 	xatomic32		tReady;		/* ServiceInit 完整返回后才允许异步回调 */
+	xatomic32		tInitialized;	/* 候选是否已经执行 Init；决定失败补偿是否调用 Unit */
 	xatomic32		tUnitCalled;	/* ServiceUnit 全生命周期至多一次 */
 	xatomic32		tOwnerReleased;	/* host owner 引用至多撤销一次 */
 	xmutex*			pInitLock;	/* 阻挡 ServiceInit 中创建后抢先触发的 timer */
@@ -84,12 +85,15 @@ static bool XS_ScriptRetain(XS_ScriptRuntime* pRuntime)
 static bool XS_ScriptWaitReady(XS_ScriptRuntime* pRuntime)
 {
 	bool bReady;
+	XS_ServerGeneration* pGeneration;
 
 	if ( pRuntime == NULL || pRuntime->pInitLock == NULL ) return false;
 	xrtMutexLock(pRuntime->pInitLock);
 	bReady = xrtAtomic32Load(&pRuntime->tReady, XMEMORY_ACQUIRE) != 0;
 	xrtMutexUnlock(pRuntime->pInitLock);
-	return bReady;
+	pGeneration = pRuntime->pHost != NULL && pRuntime->pHost->Server != NULL ?
+		(XS_ServerGeneration*)pRuntime->pHost->Server->Generation : NULL;
+	return bReady && XS_GenerationWaitPublished(pGeneration);
 }
 
 static void XS_ScriptCallUnit(XS_ScriptRuntime* pRuntime)
@@ -154,14 +158,6 @@ static void XS_ScriptRetire(XS_ScriptRuntime* pRuntime)
 	}
 }
 
-/* 启动装配和 reload controller 均串行编译脚本；mount_memory 对同路径
- * 是替换语义，因此全进程只需一个有界槽位。tcc_add_file 返回时源已
- * 编译进当前 TCCState，存活代不依赖后续挂载内容。 */
-static const char* XS_ScriptSlotPath(void)
-{
-	return "/xs/script/current.c";
-}
-
 /* devfile 相对 appPath 解析为绝对路径（UTF-8） */
 static str XS_ScriptDevPath(XS_HostInfo* pHost)
 {
@@ -174,7 +170,7 @@ static str XS_ScriptDevPath(XS_HostInfo* pHost)
 	return xrtPathJoin(XS_AppPath(), pHost->DevFile);
 }
 
-static uint64 g_XS_Generation = 0;
+static xatomic64 g_XS_Generation;
 
 /* 编译（不挂载不初始化）；失败返回 NULL。热重载先编译、成功才换代 = 回滚语义 */
 static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
@@ -198,27 +194,31 @@ static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 		xrtFree(sDevPath);
 		return NULL;
 	}
-	snprintf(sVirtual, sizeof(sVirtual), "%s", XS_ScriptSlotPath());
+	pTcc = XS_TccCreateForHost(pHost);	/* 每个候选先拥有独立编译状态 */
+	if ( pTcc == NULL ) {
+		printf("[xs] tcc create failed\n");
+		xrtFree(pData);
+		xrtFree(sDevPath);
+		return NULL;
+	}
+	/* 唯一路径避免并行候选互相覆盖源码；add_file 返回后立即卸载。 */
+	snprintf(sVirtual, sizeof(sVirtual), "/xs/script/%p.c", (void*)pTcc);
 	if ( !tcc_vfs_mount_memory(sVirtual, pData, iSize) ) {
 		printf("[xs] script vfs mount failed\n");
+		tcc_delete(pTcc);
 		xrtFree(pData);
 		xrtFree(sDevPath);
 		return NULL;
 	}
 	xrtFree(pData);		/* mount_memory 深拷贝，源缓冲即弃 */
-
-	pTcc = XS_TccCreateForHost(pHost);	/* 基础环境 + host 的 dev_inc/dev_lib */
-	if ( pTcc == NULL ) {
-		printf("[xs] tcc create failed\n");
-		xrtFree(sDevPath);
-		return NULL;
-	}
 	if ( tcc_add_file(pTcc, sVirtual) < 0 ) {
+		(void)tcc_vfs_unmount(sVirtual);
 		printf("[xs] script compile failed: %s\n", sDevPath);
 		tcc_delete(pTcc);
 		xrtFree(sDevPath);
 		return NULL;
 	}
+	(void)tcc_vfs_unmount(sVirtual);
 	if ( tcc_relocate(pTcc) < 0 ) {
 		printf("[xs] script relocate failed: %s\n", sDevPath);
 		tcc_delete(pTcc);
@@ -248,7 +248,8 @@ static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 	pRuntime->procWsPong = (XS_WsPongProc)tcc_get_symbol(pTcc, XS_SYM_WS_PONG);
 	pRuntime->procWsClose = (XS_WsCloseProc)tcc_get_symbol(pTcc, XS_SYM_WS_CLOSE);
 	pRuntime->pHost = pHost;
-	pRuntime->tGeneration = ++g_XS_Generation;
+	pRuntime->tGeneration = xrtAtomic64FetchAdd(
+		&g_XS_Generation, 1, XMEMORY_RELAXED) + 1u;
 	pRuntime->iReferences = 1;
 	pRuntime->pInitLock = xrtMutexCreate();
 	if ( pRuntime->pInitLock == NULL ) {
@@ -259,6 +260,7 @@ static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 	}
 	xrtAtomic32Init(&pRuntime->tRetired, 0);
 	xrtAtomic32Init(&pRuntime->tReady, 0);
+	xrtAtomic32Init(&pRuntime->tInitialized, 0);
 	xrtAtomic32Init(&pRuntime->tUnitCalled, 0);
 	xrtAtomic32Init(&pRuntime->tOwnerReleased, 0);
 
@@ -268,19 +270,33 @@ static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 	return pRuntime;
 }
 
-/* 初始化候选并保持 init 锁，直到 Publish/Discard 给出唯一结论。这样 Init 创建的
- * timer 不可能在候选是否发布尚未确定时进入脚本。 */
-static void XS_ScriptPrepare(XS_HostInfo* pHost, XS_ScriptRuntime* pRuntime)
+/* 候选先进入 staging 并保持 init 锁。reload 会先完成所有脚本编译和 endpoint
+ * 预绑定，越过不可逆 staging 线性点后才执行 Swap/Init。 */
+static void XS_ScriptStagePrepared(XS_ScriptRuntime* pRuntime)
+{
+	if ( pRuntime == NULL ) return;
+	xrtMutexLock(pRuntime->pInitLock);
+	/* pInitLock 有意保持到唯一的 Publish/Discard。 */
+}
+
+/* init 锁已由本 controller 线程持有。Init 创建的 timer 会等待同一个锁，
+ * 因而在整个 generation 发布前不会进入脚本。 */
+static void XS_ScriptInitializePrepared(XS_HostInfo* pHost, XS_ScriptRuntime* pRuntime)
 {
 	if ( pHost == NULL || pRuntime == NULL ) return;
-	xrtMutexLock(pRuntime->pInitLock);
 	if ( pRuntime->procInit != NULL ) {
 		XS_ScriptRuntime* pContext = XS_ScriptEnter(pRuntime);
 
 		pRuntime->procInit(pHost);
 		XS_ScriptLeave(pContext);
 	}
-	/* pInitLock 有意保持到唯一的 Publish/Discard。 */
+	xrtAtomic32Store(&pRuntime->tInitialized, 1, XMEMORY_RELEASE);
+}
+
+static void XS_ScriptPrepare(XS_HostInfo* pHost, XS_ScriptRuntime* pRuntime)
+{
+	XS_ScriptStagePrepared(pRuntime);
+	XS_ScriptInitializePrepared(pHost, pRuntime);
 }
 
 /* 把已 Init 的脚本装入候选 host，但不设 ready。server 候选驱动可以
@@ -321,6 +337,10 @@ static XS_ScriptRuntime* XS_ScriptPublishPrepared(
 static void XS_ScriptDiscardPrepared(XS_ScriptRuntime* pRuntime)
 {
 	if ( pRuntime == NULL ) return;
+	/* 纯编译/绑定阶段尚未执行 Init 时，不得为它调用 ServiceUnit。 */
+	if ( xrtAtomic32Load(&pRuntime->tInitialized, XMEMORY_ACQUIRE) == 0 ) {
+		xrtAtomic32Store(&pRuntime->tUnitCalled, 1, XMEMORY_RELEASE);
+	}
 	XS_ScriptBeginRetire(pRuntime);
 	xrtMutexUnlock(pRuntime->pInitLock);
 	XS_ScriptRetire(pRuntime);

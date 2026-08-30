@@ -87,7 +87,7 @@ static const XS_TccSymbol g_XS_TccSymbols[] = {
 	{ "tcc_vfs_fopen",		(const void*)tcc_vfs_fopen },
 	{ "tcc_vfs_fclose",		(const void*)tcc_vfs_fclose },
 	{ "tcc_vfs_mount_memory",	(const void*)tcc_vfs_mount_memory },
-	{ "tcc_vfs_clear_dynamic",	(const void*)tcc_vfs_clear_dynamic },
+	{ "tcc_vfs_unmount",		(const void*)tcc_vfs_unmount },
 };
 
 #ifdef XS_USE_SQLITE
@@ -142,6 +142,7 @@ static TCCState* XS_TccCreate(void)
 	/* Windows 导入库（tcc\lib 下的 .def 文件）：内存模式下 msvcrt 与 kernel32
 	 * 自动挂载，其余需显式声明——这是脚本使用 进程/COM(Excel)/Socket/Shell
 	 * 等 系统 API 的解析通道（与保留的 def 文件一一对应） */
+#if defined(_WIN32) || defined(_WIN64)
 	tcc_add_library(pTcc, "user32");
 	tcc_add_library(pTcc, "gdi32");
 	tcc_add_library(pTcc, "shell32");
@@ -149,6 +150,7 @@ static TCCState* XS_TccCreate(void)
 	tcc_add_library(pTcc, "oleaut32");
 	tcc_add_library(pTcc, "ws2_32");
 	tcc_add_library(pTcc, "imm32");
+#endif
 
 	XS_TccAddSymbols(pTcc, g_XS_XrtSymbols, sizeof(g_XS_XrtSymbols) / sizeof(g_XS_XrtSymbols[0]));
 	XS_TccAddSymbols(pTcc, g_XS_ApiSymbols, sizeof(g_XS_ApiSymbols) / sizeof(g_XS_ApiSymbols[0]));

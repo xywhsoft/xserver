@@ -28,13 +28,12 @@
 #define XS_HTTP_MAX_TRAILERS	8
 #define XS_HTTP_MAX_EXTRA_FIELDS	8
 #define XS_HTTP_SENDFILE_CHUNK	(512 * 1024)
+#define XS_HTTP_BODY_WINDOW	16384
 
 typedef struct XS_HttpRuntime {
 	XS_ServerInfo*		pServer;
 	XS_HostInfo*		pDefaultHost;
 	bool			bTls;
-	xnetlistener*		pListener;
-	xtlslistener*		pTlsListener;
 	XS_ListenerSlot*	pListenerSlot;
 	XS_TlsTable		tTls;
 	XS_VHostTable		tVHosts;
@@ -42,9 +41,10 @@ typedef struct XS_HttpRuntime {
 	XS_ServerGeneration*	pGeneration;
 	xhttp1limits		tLimits;
 	uint64			iBodyLimit;	/* 0 = 内核默认 */
+	size_t			iReceiveLimit;	/* 完整请求回调模型的线路硬边界 */
 	uint64			iPathLimit;	/* 0 = 默认 2048 */
 	uint64			iIdleMs;
-	uint64			iSweepTimer;
+	XS_GenerationTimer	tSweepTimer;
 	xatomic32		tStopping;
 	/* static.headers 装配期预渲染缓存（每 host 一条；请求路径零字符串处理） */
 	struct XS_HttpHostHdrs**	arrHdrCache;	/* 指针数组（每 host 一条） */
@@ -54,6 +54,7 @@ typedef struct XS_HttpRuntime {
 /* host 的自定义响应头缓存：blob 内 "name\0value\0" 依次排布，字段为借用视图 */
 typedef struct XS_HttpHostHdrs {
 	XS_HostInfo*		pHost;
+	xroot			pRoot;		/* 锚定 host 根，所有静态文件操作都在根内解析 */
 	char*			sBlob;		/* 持久分配，随 runtime 释放 */
 	size_t			iBlobSize;
 	xhttpfield		arrFields[XS_HTTP_MAX_EXTRA_FIELDS];
@@ -67,20 +68,36 @@ typedef struct XS_HttpRecord {
 	xhttp1head		tHead;
 	xhttpfield		arrFields[XS_HTTP_MAX_FIELDS];
 	xhttp1body		tBody;
+	xhttp1body		tProbeBody;	/* 增量完整性探针，不消费 transport buffer */
 	xhttp1bodyplan		tPlan;
 	xhttpfield		arrTrailers[XS_HTTP_MAX_TRAILERS];
+	xhttpfield		arrProbeTrailers[XS_HTTP_MAX_TRAILERS];
 	xhttp1bodylimits	tBodyLimits;
+	size_t			iProbeOffset;
 	unsigned char*		pHeadData;	/* pin 住 Head 借用的原始字节，覆盖 body 等待期 */
 	size_t			iHeadCapacity;
 	int			iPhase;		/* 0=HEAD 1=BODY_DRAIN */
-	bool			bTakenOver;
+	bool			bWriteFailed;	/* 响应开始后任一写失败：禁止复用连接 */
 } XS_HttpRecord;
 
-static void XS_HttpRecordFree(XS_HttpRecord* pRec)
+static bool XS_HttpRecordRetain(XS_HttpRecord* pRec)
 {
+	return pRec != NULL && xrtRefRetain(&pRec->tReg.iReferences) > 0;
+}
+
+static void XS_HttpRecordRelease(XS_HttpRecord* pRec)
+{
+	XS_ScriptRuntime* pScript;
+	XS_ServerGeneration* pGeneration;
+
 	if ( pRec == NULL ) return;
+	if ( xrtRefRelease(&pRec->tReg.iReferences) != 0 ) return;
+	pScript = pRec->tReg.pScript;
+	pGeneration = pRec->tReg.pGeneration;
 	xrtFree(pRec->pHeadData);
 	xrtFree(pRec);
+	XS_ScriptRelease(pScript);
+	XS_GenerationConnectionRelease(pGeneration);
 }
 
 /* ============================================================
@@ -117,6 +134,15 @@ static size_t XS_HttpPeek(XS_HttpRecord* pRec, void* pOut, size_t iSize)
 	return xrtNetBufPeek(xrtNetStreamBuffer(pRec->tReg.pTcp), 0, pOut, iSize);
 }
 
+static size_t XS_HttpPeekAt(XS_HttpRecord* pRec, size_t iOffset, void* pOut, size_t iSize)
+{
+	if ( pRec->tReg.pTls != NULL ) {
+		const xnetbuf* pBuf = xrtTlsStreamBuffer(pRec->tReg.pTls);
+		return pBuf != NULL ? xrtNetBufPeek(pBuf, iOffset, pOut, iSize) : 0;
+	}
+	return xrtNetBufPeek(xrtNetStreamBuffer(pRec->tReg.pTcp), iOffset, pOut, iSize);
+}
+
 static size_t XS_HttpAvail(XS_HttpRecord* pRec)
 {
 	const xnetbuf* pBuf;
@@ -136,6 +162,19 @@ static xhttp1status XS_HttpParseHead(XS_HttpRecord* pRec, xhttp1errorinfo* pErr)
 	}
 	return xrtHttp1RequestParseBuffer((xnetbuf*)xrtNetStreamBuffer(pRec->tReg.pTcp),
 		&pRec->tHead, &pRec->pRuntime->tLimits, pErr);
+}
+
+static uint16 XS_HttpHeadErrorStatus(xhttp1error iError)
+{
+	switch ( iError ) {
+	case XHTTP1_ERROR_HEAD_TOO_LARGE:
+	case XHTTP1_ERROR_START_LINE_TOO_LARGE:
+	case XHTTP1_ERROR_FIELD_LINE_TOO_LARGE:
+	case XHTTP1_ERROR_TOO_MANY_FIELDS:
+		return 431;
+	default:
+		return 400;
+	}
 }
 
 /* xhttp1head 的所有字符串/字段都借用解析输入。网络 Header 消费后 body 可能在
@@ -178,12 +217,15 @@ typedef struct XS_HttpResp {
 static bool XS_HttpRespond(XS_HttpRecord* pRec, XS_HttpResp* pResp)
 {
 	unsigned char arrHead[2048];
+	unsigned char* pHead = arrHead;
 	xhttpfield arrFields[16];
 	size_t iFieldCount = 0;
 	size_t i;
 	xstrview tReason;
 	size_t iSize = 0;
+	xhttpversion eVersion;
 	char arrLen[32];
+	bool bResult;
 
 	snprintf(arrLen, sizeof(arrLen), "%llu", (unsigned long long)pResp->iContentLength);
 	arrFields[iFieldCount].Name = XRT_STR_LITERAL("Content-Length");
@@ -198,16 +240,94 @@ static bool XS_HttpRespond(XS_HttpRecord* pRec, XS_HttpResp* pResp)
 		arrFields[iFieldCount++] = pResp->arrExtra[i];
 	}
 	tReason = xrtHttpStatusText(pResp->iStatus);
-	if ( !xrtHttp1ResponseWrite(XHTTP_VERSION_1_1, pResp->iStatus, tReason,
-		arrFields, iFieldCount, arrHead, sizeof(arrHead), &iSize) ) {
+	eVersion = pRec->tHead.Version == XHTTP_VERSION_1_0 ?
+		XHTTP_VERSION_1_0 : XHTTP_VERSION_1_1;
+	if ( !xrtHttp1ResponseWrite(eVersion, pResp->iStatus, tReason,
+		arrFields, iFieldCount, NULL, 0, &iSize) ) {
 		return false;
 	}
-	return XS_HttpSend(&pRec->tReg, arrHead, iSize) == XNET_RESULT_OK;
+	if ( iSize > sizeof(arrHead) ) {
+		pHead = (unsigned char*)xrtMalloc(iSize);
+		if ( pHead == NULL ) return false;
+	}
+	bResult = xrtHttp1ResponseWrite(eVersion, pResp->iStatus, tReason,
+		arrFields, iFieldCount, pHead, iSize, &iSize) &&
+		XS_HttpSend(&pRec->tReg, pHead, iSize) == XNET_RESULT_OK;
+	if ( pHead != arrHead ) xrtFree(pHead);
+	return bResult;
 }
 
 static const char* XS_HttpMime(const char* sName);
 static const XS_HttpHostHdrs* XS_HttpHdrCacheFind(XS_HttpRuntime* pRuntime, XS_HostInfo* pHost);
 static str XS_HttpHostRoot(XS_HttpRuntime* pRuntime, XS_HostInfo* pHost);
+static bool XS_HttpViewEq(xstrview tView, const char* sLiteral);
+
+static bool XS_HttpSafeRelative(xstrview tPath)
+{
+	size_t i;
+
+	if ( tPath.Size == 0 || tPath.Data == NULL ) return false;
+	for ( i = 0; i < tPath.Size; i++ ) {
+		unsigned char c = (unsigned char)tPath.Data[i];
+
+		if ( c == 0 || c < 0x20u || c == 0x7fu || c == '\\' ) return false;
+	}
+	return xrtPathIsLocal(tPath, XPATH_NATIVE);
+}
+
+static xfile XS_HttpRootOpenFile(xroot pRoot, const char* sRel, xfileinfo* pInfo)
+{
+	xfileoptions tOpt;
+	xfile hFile;
+
+	if ( pRoot == NULL || sRel == NULL || sRel[0] == '\0' || pInfo == NULL ) return NULL;
+	xrtFileOptionsInit(&tOpt);
+	tOpt.Flags = XFILE_READ;
+	tOpt.Share = XFILE_SHARE_READ;
+	hFile = xrtRootFileOpen(pRoot, sRel, &tOpt);
+	if ( hFile == NULL ) return NULL;
+	if ( !xrtFileStat(hFile, pInfo) || pInfo->Type != XFILE_TYPE_FILE ) {
+		xrtClose(hFile);
+		return NULL;
+	}
+	return hFile;
+}
+
+/* 静态文件统一走有界分块发送：明文由 sendfile 零拷贝，TLS 仅持有
+ * 一个固定大小的临时块。错误页不再把整个可配置文件读入内存。 */
+static bool XS_HttpSendFileData(XS_HttpRecord* pRec, xfile hFile, uint64 iSize)
+{
+	if ( pRec->tReg.pTcp != NULL ) {
+		uint64 iOffset = 0;
+
+		while ( iOffset < iSize ) {
+			uint64 iChunk = iSize - iOffset;
+
+			if ( iChunk > XS_HTTP_SENDFILE_CHUNK ) iChunk = XS_HTTP_SENDFILE_CHUNK;
+			if ( xrtNetStreamSendFile(pRec->tReg.pTcp, hFile,
+				iOffset, (size_t)iChunk) != XNET_RESULT_OK ) return false;
+			iOffset += iChunk;
+		}
+		return true;
+	}
+	{
+		unsigned char* pBuffer = (unsigned char*)xrtMalloc(XS_HTTP_SENDFILE_CHUNK);
+		uint64 iLeft = iSize;
+		bool bOk = pBuffer != NULL;
+
+		while ( bOk && iLeft > 0 ) {
+			size_t iChunk = iLeft > XS_HTTP_SENDFILE_CHUNK ?
+				XS_HTTP_SENDFILE_CHUNK : (size_t)iLeft;
+			size_t iRead = 0;
+
+			bOk = xrtRead(hFile, pBuffer, iChunk, &iRead) && iRead > 0 &&
+				XS_HttpSend(&pRec->tReg, pBuffer, iRead) == XNET_RESULT_OK;
+			if ( bOk ) iLeft -= iRead;
+		}
+		xrtFree(pBuffer);
+		return bOk;
+	}
+}
 
 /* host Custom 的 static 对象（无则 NULL） */
 static xvalue* XS_HttpStaticCfg(XS_HostInfo* pHost)
@@ -238,27 +358,36 @@ static void XS_HttpErrorPage(XS_HttpRecord* pRec, uint16 iStatus)
 			xstrview tRel;
 			if ( xrtValueGetString(pPath, &tRel) && tRel.Size > 0 && tRel.Size < 512 ) {
 				char arrRel[512];
-				str sRoot, sFull;
-				bytes pData;
-				size_t iSize = 0;
+				const XS_HttpHostHdrs* pSite = XS_HttpHdrCacheFind(
+					pRec->pRuntime, pRec->pHost);
+				xfile hFile;
+				xfileinfo tInfo;
+				bool bHeadOnly;
 
 				memcpy(arrRel, tRel.Data, tRel.Size);
 				arrRel[tRel.Size] = '\0';
-				sRoot = XS_HttpHostRoot(pRec->pRuntime, pRec->pHost);
-				sFull = xrtPathIsAbs(arrRel) ? xrtStrDup(arrRel) : xrtPathJoin(sRoot, arrRel);
-				xrtFree(sRoot);
-				pData = sFull != NULL ? xrtFileReadAll(sFull, &iSize) : NULL;
-				xrtFree(sFull);
-				if ( pData != NULL && iSize > 0 ) {
+				hFile = pSite != NULL && pSite->pRoot != NULL &&
+					XS_HttpSafeRelative(tRel) ?
+					XS_HttpRootOpenFile(pSite->pRoot, arrRel, &tInfo) : NULL;
+				if ( hFile != NULL ) {
+					bHeadOnly = XS_HttpViewEq(pRec->tHead.Method, "HEAD");
 					memset(&tResp, 0, sizeof(tResp));
 					tResp.iStatus = iStatus;
 					tResp.sContentType = strchr(arrRel, '.') != NULL
 						? XS_HttpMime(arrRel) : "text/html; charset=utf-8";
-					tResp.iContentLength = (uint64)iSize;
-					if ( XS_HttpRespond(pRec, &tResp) ) {
-						(void)XS_HttpSend(&pRec->tReg, pData, iSize);
+					tResp.iContentLength = tInfo.Size;
+					tResp.bHeadOnly = bHeadOnly;
+					if ( pSite->iCount > 0 ) {
+						memcpy(tResp.arrExtra, pSite->arrFields,
+							sizeof(xhttpfield) * pSite->iCount);
+						tResp.iExtraCount = pSite->iCount;
 					}
-					xrtFree(pData);
+					if ( !XS_HttpRespond(pRec, &tResp) ||
+					     (!bHeadOnly && tInfo.Size > 0 &&
+					      !XS_HttpSendFileData(pRec, hFile, tInfo.Size)) ) {
+						pRec->bWriteFailed = true;
+					}
+					xrtClose(hFile);
 					return;
 				}
 			}
@@ -271,8 +400,11 @@ static void XS_HttpErrorPage(XS_HttpRecord* pRec, uint16 iStatus)
 	tResp.iStatus = iStatus;
 	tResp.sContentType = "text/html; charset=utf-8";
 	tResp.iContentLength = (uint64)iLen;
-	if ( XS_HttpRespond(pRec, &tResp) ) {
-		(void)XS_HttpSend(&pRec->tReg, arrBody, (size_t)iLen);
+	tResp.bHeadOnly = XS_HttpViewEq(pRec->tHead.Method, "HEAD");
+	if ( !XS_HttpRespond(pRec, &tResp) ||
+	     (!tResp.bHeadOnly &&
+	      XS_HttpSend(&pRec->tReg, arrBody, (size_t)iLen) != XNET_RESULT_OK) ) {
+		pRec->bWriteFailed = true;
 	}
 }
 
@@ -303,7 +435,19 @@ static const char* XS_HttpMime(const char* sName)
 		return "application/octet-stream";
 	}
 	for ( i = 0; i < sizeof(arrMime) / sizeof(arrMime[0]); i++ ) {
-		if ( strcmp(sName + j, arrMime[i].sExt) == 0 ) {
+		const char* sLeft = sName + j;
+		const char* sRight = arrMime[i].sExt;
+		size_t k = 0;
+
+		for ( ; ; k++ ) {
+			unsigned char a = (unsigned char)sLeft[k];
+			unsigned char b = (unsigned char)sRight[k];
+
+			if ( a >= 'A' && a <= 'Z' ) a = (unsigned char)(a + ('a' - 'A'));
+			if ( b >= 'A' && b <= 'Z' ) b = (unsigned char)(b + ('a' - 'A'));
+			if ( a != b || a == 0 ) break;
+		}
+		if ( sLeft[k] == '\0' && sRight[k] == '\0' ) {
 			return arrMime[i].sMime;
 		}
 	}
@@ -323,27 +467,30 @@ static str XS_HttpHostRoot(XS_HttpRuntime* pRuntime, XS_HostInfo* pHost)
 		return xrtStrDup(pHost->Path);
 	}
 	sPath = xrtPathJoin(XS_AppPath(), pHost->Path);
-	return sPath != NULL ? sPath : xrtStrDup(pHost->Path);
+	return sPath;
 }
 
 static void XS_HttpStatic(XS_HttpRecord* pRec)
 {
 	XS_HttpRuntime* pRuntime = pRec->pRuntime;
-	char arrPath[1024];
-	char arrDecoded[900];
+	const XS_HttpHostHdrs* pSite;
+	xhttptarget tParsedTarget;
+	xstrview tTarget;
+	char* sEncoded = NULL;
+	char* sDecoded = NULL;
+	char* sRel = NULL;
+	char* sSelected = NULL;
+	xfile hFile = NULL;
+	xfileinfo tInfo;
+	size_t iEncoded;
 	size_t iDecoded = 0;
 	size_t iStart;
 	size_t i;
-	str sRoot;
-	str sFull;
-	xfileinfo tInfo;
-	xhttpfield* pField;
-	xhttptarget tParsedTarget;
-	xstrview tTarget;
+	bool bDirectory = false;
+	bool bHeadOnly;
 
-	/* 方法限制 */
-	if ( !(XS_HttpViewEq(pRec->tHead.Method, "GET")) &&
-	     !(XS_HttpViewEq(pRec->tHead.Method, "HEAD")) ) {
+	if ( !XS_HttpViewEq(pRec->tHead.Method, "GET") &&
+	     !XS_HttpViewEq(pRec->tHead.Method, "HEAD") ) {
 		XS_HttpErrorPage(pRec, 405);
 		return;
 	}
@@ -355,35 +502,59 @@ static void XS_HttpStatic(XS_HttpRecord* pRec)
 	if ( tTarget.Size == 0 && tParsedTarget.Form == XHTTP_TARGET_ABSOLUTE ) {
 		tTarget = XRT_STR_LITERAL("/");
 	}
-	/* 取有效 request-target 的 path（origin/absolute-form 统一）。 */
-	for ( i = 0; i < tTarget.Size && tTarget.Data[i] != '?'; i++ ) {}
-	if ( i == 0 || i >= sizeof(arrPath) ) {
+	for ( iEncoded = 0;
+	      iEncoded < tTarget.Size && tTarget.Data[iEncoded] != '?';
+	      iEncoded++ ) {}
+	if ( iEncoded == 0 || iEncoded == SIZE_MAX ) {
 		XS_HttpErrorPage(pRec, 400);
 		return;
 	}
-	memcpy(arrPath, tTarget.Data, i);
-	arrPath[i] = '\0';
-	/* 解码 + 安全过滤（% 解码后统一检查） */
-	if ( !xrtPercentDecode(xrtStrViewN(arrPath, i), arrDecoded, sizeof(arrDecoded) - 1, &iDecoded) ) {
-		XS_HttpErrorPage(pRec, 400);
-		return;
+	sEncoded = (char*)xrtMalloc(iEncoded + 1u);
+	sDecoded = (char*)xrtMalloc(iEncoded + 1u);
+	if ( sEncoded == NULL || sDecoded == NULL ) {
+		XS_HttpErrorPage(pRec, 500);
+		goto cleanup;
 	}
-	arrDecoded[iDecoded] = '\0';
-	if ( arrDecoded[0] != '/' ) {
+	memcpy(sEncoded, tTarget.Data, iEncoded);
+	sEncoded[iEncoded] = '\0';
+	if ( !xrtPercentDecode(xrtStrViewN(sEncoded, iEncoded),
+		sDecoded, iEncoded, &iDecoded) ) {
 		XS_HttpErrorPage(pRec, 400);
-		return;
+		goto cleanup;
 	}
+	sDecoded[iDecoded] = '\0';
 	if ( pRuntime->iPathLimit > 0 && iDecoded > pRuntime->iPathLimit ) {
 		XS_HttpErrorPage(pRec, 414);
-		return;
+		goto cleanup;
+	}
+	if ( iDecoded == 0 || sDecoded[0] != '/' ) {
+		XS_HttpErrorPage(pRec, 400);
+		goto cleanup;
+	}
+	if ( iDecoded > 1 && sDecoded[1] == '/' ) {
+		XS_HttpErrorPage(pRec, 403);
+		goto cleanup;
 	}
 	for ( i = 0; i < iDecoded; i++ ) {
-		if ( arrDecoded[i] == '\\' ) {
+		unsigned char c = (unsigned char)sDecoded[i];
+
+		if ( c == 0 || c < 0x20u || c == 0x7fu ) {
+			XS_HttpErrorPage(pRec, 400);
+			goto cleanup;
+		}
+		if ( c == '\\' ) {
 			XS_HttpErrorPage(pRec, 403);
-			return;
+			goto cleanup;
 		}
 	}
-	/* 段级检查：.. 穿越恒拒；点文件受 static.deny_dotfiles 门控（默认拒） */
+	sRel = sDecoded + 1;
+	if ( sRel[0] != '\0' && !xrtPathIsLocal(
+		xrtStrViewN(sRel, iDecoded - 1u), XPATH_NATIVE) ) {
+		XS_HttpErrorPage(pRec, 403);
+		goto cleanup;
+	}
+
+	/* 词法检查负责策略，xroot 负责最终的链接/重解析点根约束。 */
 	{
 		bool bDenyDot = true;
 		xvalue* pStatic = XS_HttpStaticCfg(pRec->pHost);
@@ -395,45 +566,56 @@ static void XS_HttpStatic(XS_HttpRecord* pRec)
 		}
 		iStart = 1;
 		for ( i = 1; i <= iDecoded; i++ ) {
-			if ( i == iDecoded || arrDecoded[i] == '/' ) {
+			if ( i == iDecoded || sDecoded[i] == '/' ) {
 				size_t iLen = i - iStart;
 
-				if ( iLen == 2 && arrDecoded[iStart] == '.' && arrDecoded[iStart + 1] == '.' ) {
+				if ( iLen == 2 && sDecoded[iStart] == '.' && sDecoded[iStart + 1] == '.' ) {
 					XS_HttpErrorPage(pRec, 403);
-					return;
+					goto cleanup;
 				}
-				if ( bDenyDot && iLen > 0 && arrDecoded[iStart] == '.' ) {
+				if ( bDenyDot && iLen > 0 && sDecoded[iStart] == '.' ) {
 					XS_HttpErrorPage(pRec, 403);
-					return;
+					goto cleanup;
 				}
 				iStart = i + 1;
 			}
 		}
 	}
 
-	sRoot = XS_HttpHostRoot(pRuntime, pRec->pHost);
-	sFull = xrtPathJoin(sRoot, arrDecoded + 1);
-	xrtFree(sRoot);
-	if ( sFull == NULL ) {
+	pSite = XS_HttpHdrCacheFind(pRuntime, pRec->pHost);
+	if ( pSite == NULL ) {
 		XS_HttpErrorPage(pRec, 500);
-		return;
+		goto cleanup;
 	}
-	/* 目录 → static.index 逐个回落（缺省 index.html） */
-	if ( xrtPathStat(sFull, true, &tInfo) && tInfo.Type == XFILE_TYPE_DIRECTORY ) {
-		str sFound = NULL;
-		xvalue* pStatic = XS_HttpStaticCfg(pRec->pHost);
-		xvalue* pIndex = pStatic != NULL
-			? xrtValueObjectGet(pStatic, XRT_STR_LITERAL("index")) : NULL;
-		size_t iIdx;
-		size_t iCount = 1;
+	if ( pSite->pRoot == NULL ) {
+		XS_HttpErrorPage(pRec, 404);
+		goto cleanup;
+	}
+	if ( sRel[0] == '\0' ) {
+		bDirectory = true;
+	} else if ( !xrtRootStat(pSite->pRoot, sRel, true, &tInfo) ) {
+		XS_HttpErrorPage(pRec, 404);
+		goto cleanup;
+	} else if ( tInfo.Type == XFILE_TYPE_DIRECTORY ) {
+		bDirectory = true;
+	} else if ( tInfo.Type != XFILE_TYPE_FILE ) {
+		XS_HttpErrorPage(pRec, 404);
+		goto cleanup;
+	}
 
-		if ( pIndex != NULL && xrtValueType(pIndex) == XVALUE_ARRAY ) {
-			iCount = xrtValueCount(pIndex);
-		}
-		for ( iIdx = 0; iIdx < iCount && sFound == NULL; iIdx++ ) {
+	if ( bDirectory ) {
+		xvalue* pStatic = XS_HttpStaticCfg(pRec->pHost);
+		xvalue* pIndex = pStatic != NULL ?
+			xrtValueObjectGet(pStatic, XRT_STR_LITERAL("index")) : NULL;
+		size_t iCount = pIndex != NULL && xrtValueType(pIndex) == XVALUE_ARRAY ?
+			xrtValueCount(pIndex) : 1u;
+		size_t iIdx;
+
+		for ( iIdx = 0; iIdx < iCount && hFile == NULL; iIdx++ ) {
 			xstrview tName;
-			bool bHas = false;
-			char arrIdx[256];
+			bool bHas;
+			size_t iBase = strlen(sRel);
+			size_t iNeed;
 
 			if ( pIndex != NULL && xrtValueType(pIndex) == XVALUE_ARRAY ) {
 				xvalue* pItem = xrtValueArrayGet(pIndex, iIdx);
@@ -442,112 +624,72 @@ static void XS_HttpStatic(XS_HttpRecord* pRec)
 				tName = XRT_STR_LITERAL("index.html");
 				bHas = true;
 			}
-			if ( bHas && tName.Size > 0 && tName.Size < sizeof(arrIdx) - 1 ) {
-				xfileinfo tIdxInfo;
-
-				memcpy(arrIdx, tName.Data, tName.Size);
-				arrIdx[tName.Size] = '\0';
-				if ( arrIdx[0] != '/' && arrIdx[0] != '.' && !strchr(arrIdx, '\\') ) {
-					str sTry = xrtPathJoin(sFull, arrIdx);
-
-					if ( sTry != NULL && xrtPathStat(sTry, true, &tIdxInfo) &&
-					     tIdxInfo.Type == XFILE_TYPE_FILE ) {
-						sFound = sTry;
-					} else {
-						xrtFree(sTry);
-					}
-				}
+			if ( !bHas || !XS_HttpSafeRelative(tName) || tName.Data[0] == '.' ||
+			     iBase > SIZE_MAX - tName.Size - 2u ) continue;
+			iNeed = iBase + (iBase > 0 ? 1u : 0u) + tName.Size + 1u;
+			sSelected = (char*)xrtMalloc(iNeed);
+			if ( sSelected == NULL ) {
+				XS_HttpErrorPage(pRec, 500);
+				goto cleanup;
+			}
+			if ( iBase > 0 ) {
+				memcpy(sSelected, sRel, iBase);
+				sSelected[iBase++] = '/';
+			}
+			memcpy(sSelected + iBase, tName.Data, tName.Size);
+			sSelected[iBase + tName.Size] = '\0';
+			hFile = XS_HttpRootOpenFile(pSite->pRoot, sSelected, &tInfo);
+			if ( hFile == NULL ) {
+				xrtFree(sSelected);
+				sSelected = NULL;
 			}
 		}
-		xrtFree(sFull);
-		sFull = sFound;
+		if ( hFile == NULL ) {
+			XS_HttpErrorPage(pRec, 404);
+			goto cleanup;
+		}
+	} else {
+		sSelected = xrtStrDup(sRel);
+		if ( sSelected == NULL ) {
+			XS_HttpErrorPage(pRec, 500);
+			goto cleanup;
+		}
+		hFile = XS_HttpRootOpenFile(pSite->pRoot, sSelected, &tInfo);
+		if ( hFile == NULL ) {
+			XS_HttpErrorPage(pRec, 404);
+			goto cleanup;
+		}
 	}
-	if ( sFull == NULL || !xrtPathStat(sFull, true, &tInfo) || tInfo.Type != XFILE_TYPE_FILE ) {
-		xrtFree(sFull);
-		XS_HttpErrorPage(pRec, 404);
-		return;
-	}
+
+	bHeadOnly = XS_HttpViewEq(pRec->tHead.Method, "HEAD");
 	{
 		XS_HttpResp tResp;
-		const char* sName = sFull;
-		bool bOk;
-		(void)pField;
-		for ( ; *sName != '\0'; sName++ ) {}
-		for ( ; sName > sFull && sName[-1] != '/' && sName[-1] != '\\'; sName-- ) {}
 
 		memset(&tResp, 0, sizeof(tResp));
 		tResp.iStatus = 200;
-		tResp.sContentType = XS_HttpMime(sName);
+		tResp.sContentType = XS_HttpMime(sSelected);
 		tResp.iContentLength = tInfo.Size;
-		tResp.bHeadOnly = XS_HttpViewEq(pRec->tHead.Method, "HEAD");
-		{
-			/* static.headers：装配期预渲染缓存（见 XS_HttpHdrCacheFind），请求路径仅指针拷贝 */
-			{
-				const XS_HttpHostHdrs* pHdrs = XS_HttpHdrCacheFind(pRuntime, pRec->pHost);
-
-				if ( pHdrs != NULL && pHdrs->iCount > 0 ) {
-					memcpy(tResp.arrExtra, pHdrs->arrFields, sizeof(xhttpfield) * pHdrs->iCount);
-					tResp.iExtraCount = pHdrs->iCount;
-				}
-				bOk = XS_HttpRespond(pRec, &tResp);
-			}
+		tResp.bHeadOnly = bHeadOnly;
+		if ( pSite->iCount > 0 ) {
+			memcpy(tResp.arrExtra, pSite->arrFields,
+				sizeof(xhttpfield) * pSite->iCount);
+			tResp.iExtraCount = pSite->iCount;
 		}
-		if ( bOk && !tResp.bHeadOnly && tInfo.Size > 0 ) {
-			if ( pRec->tReg.pTcp != NULL ) {
-				/* 明文：SendFile（句柄复制，可立即关闭）；按 WriteLimit 分段 */
-				xfileoptions tOpt;
-				xfile hFile;
-				uint64 iOffset = 0;
-
-				xrtFileOptionsInit(&tOpt);
-				tOpt.Flags = XFILE_READ;
-				tOpt.Share = XFILE_SHARE_READ;
-				hFile = xrtFileOpen(sFull, &tOpt);
-				if ( hFile != NULL ) {
-					while ( iOffset < tInfo.Size ) {
-						uint64 iChunk = tInfo.Size - iOffset;
-						if ( iChunk > XS_HTTP_SENDFILE_CHUNK ) {
-							iChunk = XS_HTTP_SENDFILE_CHUNK;
-						}
-						if ( xrtNetStreamSendFile(pRec->tReg.pTcp, hFile, iOffset, (size_t)iChunk) != XNET_RESULT_OK ) {
-							break;
-						}
-						iOffset += iChunk;
-					}
-					xrtClose(hFile);
-				}
-			} else {
-				/* tcps：读发循环 */
-				xfileoptions tOpt;
-				xfile hFile;
-				unsigned char* pBuf = (unsigned char*)xrtMalloc(XS_HTTP_SENDFILE_CHUNK);
-
-				xrtFileOptionsInit(&tOpt);
-				tOpt.Flags = XFILE_READ;
-				tOpt.Share = XFILE_SHARE_READ;
-				hFile = xrtFileOpen(sFull, &tOpt);
-				if ( hFile != NULL && pBuf != NULL ) {
-					uint64 iLeft = tInfo.Size;
-					while ( iLeft > 0 ) {
-						size_t iChunk = iLeft > XS_HTTP_SENDFILE_CHUNK ? XS_HTTP_SENDFILE_CHUNK : (size_t)iLeft;
-						size_t iRead = 0;
-						if ( !xrtRead(hFile, pBuf, iChunk, &iRead) || iRead == 0 ) {
-							break;
-						}
-						if ( XS_HttpSend(&pRec->tReg, pBuf, iRead) != XNET_RESULT_OK ) {
-							break;
-						}
-						iLeft -= iRead;
-					}
-				}
-				xrtFree(pBuf);
-				if ( hFile != NULL ) {
-					xrtClose(hFile);
-				}
-			}
+		if ( !XS_HttpRespond(pRec, &tResp) ) {
+			pRec->bWriteFailed = true;
+			goto cleanup;
 		}
 	}
-	xrtFree(sFull);
+	if ( !bHeadOnly && tInfo.Size > 0 &&
+	     !XS_HttpSendFileData(pRec, hFile, tInfo.Size) ) {
+		pRec->bWriteFailed = true;
+	}
+
+cleanup:
+	if ( hFile != NULL ) xrtClose(hFile);
+	xrtFree(sSelected);
+	xrtFree(sDecoded);
+	xrtFree(sEncoded);
 }
 
 /* ============================================================
@@ -574,47 +716,59 @@ static bool XS_HttpViewEq(xstrview tView, const char* sLiteral)
  * body 排空与 keep-alive 循环
  * ============================================================ */
 
-/* body 就绪判断（不消费真实 body 状态；CHUNKED 用抛弃式探针） */
-static bool XS_HttpBodyReady(XS_HttpRecord* pRec)
+/* body 完整性增量探针：1=完整，0=等待，-1=协议/状态错误，-2=线路上限。
+ * 探针只推进独立 Reader 与偏移，transport buffer 留给脚本使用。 */
+static int XS_HttpBodyReady(XS_HttpRecord* pRec)
 {
 	size_t iAvail = XS_HttpAvail(pRec);
-	unsigned char* pCopy;
-	xhttp1body tProbe;
-	xhttp1errorinfo tErr;
-	size_t iConsumed = 0;
-	xbytesview tData;
-	bool bDone;
+	unsigned char arrChunk[XS_HTTP_BODY_WINDOW];
 
 	if ( pRec->tPlan.Mode == XHTTP1_BODY_NONE ) {
-		return true;
+		return 1;
 	}
 	if ( pRec->tPlan.Mode == XHTTP1_BODY_FIXED ) {
-		return iAvail >= (size_t)pRec->tPlan.Length;
+		if ( pRec->tPlan.Length > (uint64)SIZE_MAX ) return -1;
+		if ( iAvail >= (size_t)pRec->tPlan.Length ) return 1;
+		return iAvail >= pRec->pRuntime->iReceiveLimit ? -2 : 0;
 	}
-	/* CHUNKED / CLOSE：探针体全量判定 */
-	pCopy = (unsigned char*)xrtMalloc(iAvail > 0 ? iAvail : 1);
-	if ( pCopy == NULL ) {
-		return true;		/* 判定失败按就绪处理，回调内自行兜底 */
+	if ( pRec->tPlan.Mode != XHTTP1_BODY_CHUNKED || pRec->iProbeOffset > iAvail ) {
+		return -1;
 	}
-	iAvail = XS_HttpPeek(pRec, pCopy, iAvail);
-	if ( !xrtHttp1BodyInit(&tProbe, &pRec->tPlan, NULL, 0, &pRec->tBodyLimits) ) {
-		xrtFree(pCopy);
-		return true;
-	}
-	tData.Data = pCopy;
-	tData.Size = iAvail;
-	bDone = false;
-	while ( xrtHttp1BodyRead(&tProbe, tData, false, &iConsumed, &tData, &tErr) == XHTTP1_BODY_DATA ) {
-		if ( iConsumed >= iAvail ) {
-			break;
+	while ( pRec->iProbeOffset < iAvail ) {
+		size_t iGot = iAvail - pRec->iProbeOffset;
+		size_t iLocal = 0;
+
+		if ( iGot > sizeof(arrChunk) ) iGot = sizeof(arrChunk);
+		if ( XS_HttpPeekAt(pRec, pRec->iProbeOffset, arrChunk, iGot) != iGot ) {
+			return 0;
 		}
-		tData.Data = pCopy + iConsumed;
-		tData.Size = iAvail - iConsumed;
+		while ( iLocal < iGot ) {
+			xbytesview tInput;
+			xbytesview tData;
+			xhttp1errorinfo tErr;
+			xhttp1bodystatus iStatus;
+			size_t iConsumed = 0;
+
+			tInput.Data = arrChunk + iLocal;
+			tInput.Size = iGot - iLocal;
+			iStatus = xrtHttp1BodyRead(&pRec->tProbeBody, tInput, false,
+				&iConsumed, &tData, &tErr);
+			if ( iConsumed > tInput.Size ) return -1;
+			iLocal += iConsumed;
+			pRec->iProbeOffset += iConsumed;
+			if ( iStatus == XHTTP1_BODY_DONE ) return 1;
+			if ( iStatus == XHTTP1_BODY_ERROR ) {
+				return tErr.Code == XHTTP1_ERROR_BODY_TOO_LARGE ? -2 : -1;
+			}
+			if ( iStatus == XHTTP1_BODY_FIELDS ) return -1;
+			if ( iConsumed == 0 ) {
+				if ( iStatus != XHTTP1_BODY_MORE ) return -1;
+				return iAvail >= pRec->pRuntime->iReceiveLimit ? -2 : 0;
+			}
+		}
 	}
-	bDone = (tProbe.Mode == XHTTP1_BODY_NONE || tProbe.Remaining == 0) ||
-		xrtHttp1BodyRead(&tProbe, tData, true, &iConsumed, &tData, &tErr) == XHTTP1_BODY_DONE;
-	xrtFree(pCopy);
-	return bDone;
+	if ( xrtHttp1BodyDone(&pRec->tProbeBody) ) return 1;
+	return iAvail >= pRec->pRuntime->iReceiveLimit ? -2 : 0;
 }
 
 static void XS_HttpFinishRequest(XS_HttpRecord* pRec, bool bClose)
@@ -623,6 +777,7 @@ static void XS_HttpFinishRequest(XS_HttpRecord* pRec, bool bClose)
 	pRec->pHost = NULL;
 	pRec->tReg.pHost = NULL;
 	pRec->iPhase = 0;
+	pRec->bWriteFailed = false;
 	if ( bClose ) {
 		if ( pRec->tReg.pTls != NULL ) {
 			(void)xrtTlsStreamClose(pRec->tReg.pTls);
@@ -635,7 +790,7 @@ static void XS_HttpFinishRequest(XS_HttpRecord* pRec, bool bClose)
 /* 用当前缓冲推进 body 解码；返回 1=完成 0=需要更多 -1=错误 */
 static int XS_HttpDrainBody(XS_HttpRecord* pRec)
 {
-	unsigned char arrChunk[16384];
+	unsigned char arrChunk[XS_HTTP_BODY_WINDOW];
 	xhttp1errorinfo tErr;
 
 	for ( ; ; ) {
@@ -685,15 +840,11 @@ static void XS_HttpTakenOnEnd(xnetstream* pStream, ptr pData)
 static void XS_HttpTakenOnClose(xnetstream* pStream, xnetresult iResult, const xerror* pError, ptr pData)
 {
 	XS_HttpRecord* pRec = (XS_HttpRecord*)pData;
-	XS_ScriptRuntime* pScript = pRec->tReg.pScript;
-	XS_ServerGeneration* pGeneration = pRec->tReg.pGeneration;
 
 	(void)iResult; (void)pError;
-	xrtNetStreamDestroy(pStream);
 	XS_RegistryRemove(pRec->tReg.pRegistry, &pRec->tReg);
-	XS_HttpRecordFree(pRec);
-	XS_ScriptRelease(pScript);
-	XS_GenerationConnectionRelease(pGeneration);
+	xrtNetStreamDestroy(pStream);
+	XS_HttpRecordRelease(pRec);
 }
 
 static const xnetstreamevents g_XS_HttpTakenEvents = {
@@ -714,15 +865,11 @@ static void XS_HttpTlsTakenOnEnd(xtlsstream* pStream, ptr pData)
 static void XS_HttpTlsTakenOnClose(xtlsstream* pStream, xnetresult iResult, const xerror* pError, ptr pData)
 {
 	XS_HttpRecord* pRec = (XS_HttpRecord*)pData;
-	XS_ScriptRuntime* pScript = pRec->tReg.pScript;
-	XS_ServerGeneration* pGeneration = pRec->tReg.pGeneration;
 
 	(void)iResult; (void)pError;
-	xrtTlsStreamDestroy(pStream);
 	XS_RegistryRemove(pRec->tReg.pRegistry, &pRec->tReg);
-	XS_HttpRecordFree(pRec);
-	XS_ScriptRelease(pScript);
-	XS_GenerationConnectionRelease(pGeneration);
+	xrtTlsStreamDestroy(pStream);
+	XS_HttpRecordRelease(pRec);
 }
 
 static const xtlsstreamevents g_XS_HttpTlsTakenEvents = {
@@ -739,6 +886,7 @@ static bool XS_HttpDispatch(XS_HttpRecord* pRec)
 	uint64 iWireBefore = pRec->tBody.WireBytes;
 	uint64 iWireUsed;
 	int iDrain;
+	bool bClose;
 
 	tReq.tcp = pRec->tReg.pTcp;
 	tReq.tls = pRec->tReg.pTls;
@@ -774,19 +922,37 @@ static bool XS_HttpDispatch(XS_HttpRecord* pRec)
 	}
 	if ( iWireUsed > 0 ) XS_HttpConsume(pRec, (size_t)iWireUsed);
 	if ( eResult == XS_TAKEOVER ) {
+		bool bInstalled;
+
 		/* 应用接管仍属于本 generation；终态 Close 才出表并释放引用。 */
 		pRec->tReg.pScript = pScript;
-		pRec->bTakenOver = true;
 		if ( pRec->tReg.pTls != NULL ) {
-			(void)xrtTlsStreamSetEvents(pRec->tReg.pTls, &g_XS_HttpTlsTakenEvents, pRec);
+			bInstalled = xrtTlsStreamSetEvents(
+				pRec->tReg.pTls, &g_XS_HttpTlsTakenEvents, pRec);
 		} else {
-			(void)xrtNetStreamSetEvents(pRec->tReg.pTcp, &g_XS_HttpTakenEvents, pRec);
+			bInstalled = xrtNetStreamSetEvents(
+				pRec->tReg.pTcp, &g_XS_HttpTakenEvents, pRec);
+		}
+		if ( !bInstalled ) {
+			pRec->tReg.pScript = NULL;
+			XS_ScriptRelease(pScript);
+			XS_HttpFinishRequest(pRec, true);
+			return false;
 		}
 		return false;
 	}
 	XS_ScriptRelease(pScript);
+	if ( eResult != XS_OK && eResult != XS_FALLBACK ) {
+		/* ABI 外的返回值没有可恢复语义；禁止误当作成功后复用连接。 */
+		XS_HttpFinishRequest(pRec, true);
+		return false;
+	}
 	if ( eResult == XS_FALLBACK ) {
 		XS_HttpStatic(pRec);
+		if ( pRec->bWriteFailed ) {
+			XS_HttpFinishRequest(pRec, true);
+			return false;
+		}
 	}
 	/* 排空 body 余量后进入下一请求 */
 	iDrain = XS_HttpDrainBody(pRec);
@@ -798,9 +964,9 @@ static bool XS_HttpDispatch(XS_HttpRecord* pRec)
 		pRec->iPhase = 1;
 		return false;
 	}
-	XS_HttpFinishRequest(pRec,
-		(pRec->tHead.Flags & XHTTP1_CONNECTION_CLOSE) != 0);
-	return !pRec->bTakenOver;
+	bClose = (pRec->tHead.Flags & XHTTP1_CONNECTION_CLOSE) != 0;
+	XS_HttpFinishRequest(pRec, bClose);
+	return !bClose;
 }
 
 static void XS_HttpDrive(XS_HttpRecord* pRec)
@@ -811,8 +977,16 @@ static void XS_HttpDrive(XS_HttpRecord* pRec)
 
 	for ( ; ; ) {
 		if ( pRec->iPhase == 2 ) {
+			int iReady;
+
 			/* body 等待期：数据到达后重新判定就绪 */
-			if ( !XS_HttpBodyReady(pRec) ) {
+			iReady = XS_HttpBodyReady(pRec);
+			if ( iReady < 0 ) {
+				XS_HttpErrorPage(pRec, iReady == -2 ? 413 : 400);
+				XS_HttpFinishRequest(pRec, true);
+				return;
+			}
+			if ( iReady == 0 ) {
 				return;
 			}
 			if ( !XS_HttpDispatch(pRec) ) {
@@ -821,6 +995,8 @@ static void XS_HttpDrive(XS_HttpRecord* pRec)
 			continue;
 		}
 		if ( pRec->iPhase == 1 ) {
+			bool bClose;
+
 			iDrain = XS_HttpDrainBody(pRec);
 			if ( iDrain < 0 ) {
 				XS_HttpErrorPage(pRec, 400);
@@ -830,11 +1006,9 @@ static void XS_HttpDrive(XS_HttpRecord* pRec)
 			if ( iDrain == 0 ) {
 				return;
 			}
-			XS_HttpFinishRequest(pRec,
-				(pRec->tHead.Flags & XHTTP1_CONNECTION_CLOSE) != 0);
-			if ( pRec->bTakenOver ) {
-				return;
-			}
+			bClose = (pRec->tHead.Flags & XHTTP1_CONNECTION_CLOSE) != 0;
+			XS_HttpFinishRequest(pRec, bClose);
+			if ( bClose ) return;
 		}
 		/* phase == HEAD */
 		pRec->pHost = pRuntime->pDefaultHost;
@@ -842,9 +1016,13 @@ static void XS_HttpDrive(XS_HttpRecord* pRec)
 		xrtHttp1HeadInit(&pRec->tHead, pRec->arrFields, XS_HTTP_MAX_FIELDS);
 		switch ( XS_HttpParseHead(pRec, &tErr) ) {
 		case XHTTP1_MORE:
+			if ( XS_HttpAvail(pRec) >= pRuntime->iReceiveLimit ) {
+				XS_HttpErrorPage(pRec, 431);
+				XS_HttpFinishRequest(pRec, true);
+			}
 			return;
 		case XHTTP1_ERROR:
-			XS_HttpErrorPage(pRec, 400);
+			XS_HttpErrorPage(pRec, XS_HttpHeadErrorStatus(tErr.Code));
 			XS_HttpFinishRequest(pRec, true);
 			return;
 		default:
@@ -879,8 +1057,22 @@ static void XS_HttpDrive(XS_HttpRecord* pRec)
 			return;
 		}
 		xrtHttp1BodyLimitsInit(&pRec->tBodyLimits);
-		if ( pRuntime->iBodyLimit > 0 ) {
-			pRec->tBodyLimits.MaxBody = pRuntime->iBodyLimit;
+		pRec->tBodyLimits.MaxBody = pRuntime->iBodyLimit > 0 ?
+			pRuntime->iBodyLimit : (uint64)pRuntime->iReceiveLimit;
+		pRec->tBodyLimits.MaxTrailers = XS_HTTP_MAX_TRAILERS;
+		/* Reader 的 trailer 解析要求完整连续区；窗口上限防止分块探针零推进。 */
+		if ( pRec->tBodyLimits.MaxTrailer > XS_HTTP_BODY_WINDOW ) {
+			pRec->tBodyLimits.MaxTrailer = XS_HTTP_BODY_WINDOW;
+		}
+		if ( pRec->tBodyLimits.MaxTrailerLine > pRec->tBodyLimits.MaxTrailer ) {
+			pRec->tBodyLimits.MaxTrailerLine = pRec->tBodyLimits.MaxTrailer;
+		}
+		if ( pRec->tPlan.Mode == XHTTP1_BODY_FIXED &&
+		     (pRec->tPlan.Length > pRec->tBodyLimits.MaxBody ||
+		      pRec->tPlan.Length > (uint64)pRuntime->iReceiveLimit) ) {
+			XS_HttpErrorPage(pRec, 413);
+			XS_HttpFinishRequest(pRec, true);
+			return;
 		}
 		if ( !xrtHttp1BodyInit(&pRec->tBody, &pRec->tPlan,
 			pRec->arrTrailers, XS_HTTP_MAX_TRAILERS, &pRec->tBodyLimits) ) {
@@ -888,14 +1080,30 @@ static void XS_HttpDrive(XS_HttpRecord* pRec)
 			XS_HttpFinishRequest(pRec, true);
 			return;
 		}
+		pRec->iProbeOffset = 0;
+		if ( !xrtHttp1BodyInit(&pRec->tProbeBody, &pRec->tPlan,
+			pRec->arrProbeTrailers, XS_HTTP_MAX_TRAILERS, &pRec->tBodyLimits) ) {
+			XS_HttpErrorPage(pRec, 400);
+			XS_HttpFinishRequest(pRec, true);
+			return;
+		}
 		XS_HttpConsume(pRec, pRec->tHead.Bytes);
 
 		/* body 就绪检查：回调时保证请求体完整（分段到达时等待）。
-		 * FIXED 按字节数精确判断；CHUNKED 用抛弃式探针体判断；
-		 * 流式大 body 场景应由脚本用 XS_TAKEOVER 自行处理 */
-		if ( !XS_HttpBodyReady(pRec) ) {
-			pRec->iPhase = 2;
-			return;
+		 * FIXED 按字节数判断；CHUNKED 用独立增量 reader 探测且不消费网络数据。
+		 * recv_limit 是等待完整请求期间的线路硬边界，填满仍未完成则拒绝。 */
+		{
+			int iReady = XS_HttpBodyReady(pRec);
+
+			if ( iReady < 0 ) {
+				XS_HttpErrorPage(pRec, iReady == -2 ? 413 : 400);
+				XS_HttpFinishRequest(pRec, true);
+				return;
+			}
+			if ( iReady == 0 ) {
+				pRec->iPhase = 2;
+				return;
+			}
 		}
 		if ( !XS_HttpDispatch(pRec) ) {
 			return;
@@ -911,9 +1119,16 @@ static void XS_HttpOnRead(xnetstream* pStream, xnetbuf* pBuffer, ptr pData)
 {
 	XS_HttpRecord* pRec = (XS_HttpRecord*)pData;
 
-	(void)pStream; (void)pBuffer;
+	(void)pBuffer;
+	if ( !XS_HttpRecordRetain(pRec) ) return;
+	if ( xrtNetStreamRef(pStream) == NULL ) {
+		XS_HttpRecordRelease(pRec);
+		return;
+	}
 	XS_RegistryTouch(&pRec->tReg);
 	XS_HttpDrive(pRec);
+	xrtNetStreamDestroy(pStream);
+	XS_HttpRecordRelease(pRec);
 }
 
 static void XS_HttpOnEnd(xnetstream* pStream, ptr pData)
@@ -925,15 +1140,11 @@ static void XS_HttpOnEnd(xnetstream* pStream, ptr pData)
 static void XS_HttpOnClose(xnetstream* pStream, xnetresult iResult, const xerror* pError, ptr pData)
 {
 	XS_HttpRecord* pRec = (XS_HttpRecord*)pData;
-	XS_ScriptRuntime* pScript = pRec->tReg.pScript;
-	XS_ServerGeneration* pGeneration = pRec->tReg.pGeneration;
 
 	(void)iResult; (void)pError;
-	xrtNetStreamDestroy(pStream);
 	XS_RegistryRemove(pRec->tReg.pRegistry, &pRec->tReg);
-	XS_HttpRecordFree(pRec);
-	XS_ScriptRelease(pScript);
-	XS_GenerationConnectionRelease(pGeneration);
+	xrtNetStreamDestroy(pStream);
+	XS_HttpRecordRelease(pRec);
 }
 
 static const xnetstreamevents g_XS_HttpStreamEvents = {
@@ -948,28 +1159,31 @@ static bool XS_HttpOnAccept(xnetlistener* pListener, xnetstream* pStream, ptr pD
 	XS_HttpRecord* pRec = (XS_HttpRecord*)xrtCalloc(1, sizeof(XS_HttpRecord));
 
 	(void)pListener;
-	if ( pRec == NULL ||
-	     !XS_ListenerSlotAcquireConnection(pSlot, (void**)&pRuntime, &pGeneration) ) {
-		XS_HttpRecordFree(pRec);
+	if ( pRec == NULL ) return false;
+	pRec->tReg.iReferences = 1;
+	if ( !XS_ListenerSlotAcquireConnection(pSlot, 0, (void**)&pRuntime, &pGeneration) ) {
+		XS_HttpRecordRelease(pRec);
 		return false;
 	}
+	pRec->tReg.pGeneration = pGeneration;
 	if ( xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) != 0 ) {
-		XS_GenerationConnectionRelease(pGeneration);
-		XS_HttpRecordFree(pRec);
+		XS_HttpRecordRelease(pRec);
 		return false;
 	}
 	pRec->pRuntime = pRuntime;
 	pRec->pHost = pRuntime->pDefaultHost;
 	pRec->tReg.pHost = pRuntime->pDefaultHost;
 	pRec->tReg.pTcp = pStream;
-	pRec->tReg.pGeneration = pGeneration;
 	xrtHttp1HeadInit(&pRec->tHead, pRec->arrFields, XS_HTTP_MAX_FIELDS);
 	if ( !XS_RegistryAdd(&pRuntime->tRegistry, &pRec->tReg) ) {
-		XS_GenerationConnectionRelease(pGeneration);
-		XS_HttpRecordFree(pRec);
+		XS_HttpRecordRelease(pRec);
 		return false;
 	}
-	(void)xrtNetStreamSetData(pStream, pRec);
+	if ( !xrtNetStreamSetData(pStream, pRec) ) {
+		XS_RegistryRemove(&pRuntime->tRegistry, &pRec->tReg);
+		XS_HttpRecordRelease(pRec);
+		return false;
+	}
 	return true;
 }
 
@@ -977,8 +1191,8 @@ static void XS_HttpOnListenerClose(xnetlistener* pListener, ptr pData)
 {
 	XS_ListenerSlot* pSlot = (XS_ListenerSlot*)pData;
 
+	XS_ListenerSlotResourceClose(pSlot, XS_LISTENER_RESOURCE_PLAIN);
 	xrtNetListenerDestroy(pListener);
-	XS_ListenerSlotResourceClose(pSlot);
 }
 
 static const xnetlistenerevents g_XS_HttpListenerEvents = {
@@ -991,9 +1205,16 @@ static void XS_HttpTlsOnRead(xtlsstream* pStream, const xnetbuf* pBuffer, ptr pD
 {
 	XS_HttpRecord* pRec = (XS_HttpRecord*)pData;
 
-	(void)pStream; (void)pBuffer;
+	(void)pBuffer;
+	if ( !XS_HttpRecordRetain(pRec) ) return;
+	if ( xrtTlsStreamRef(pStream) == NULL ) {
+		XS_HttpRecordRelease(pRec);
+		return;
+	}
 	XS_RegistryTouch(&pRec->tReg);
 	XS_HttpDrive(pRec);
+	xrtTlsStreamDestroy(pStream);
+	XS_HttpRecordRelease(pRec);
 }
 
 static void XS_HttpTlsOnEnd(xtlsstream* pStream, ptr pData)
@@ -1005,15 +1226,11 @@ static void XS_HttpTlsOnEnd(xtlsstream* pStream, ptr pData)
 static void XS_HttpTlsOnClose(xtlsstream* pStream, xnetresult iResult, const xerror* pError, ptr pData)
 {
 	XS_HttpRecord* pRec = (XS_HttpRecord*)pData;
-	XS_ScriptRuntime* pScript = pRec->tReg.pScript;
-	XS_ServerGeneration* pGeneration = pRec->tReg.pGeneration;
 
 	(void)iResult; (void)pError;
-	xrtTlsStreamDestroy(pStream);
 	XS_RegistryRemove(pRec->tReg.pRegistry, &pRec->tReg);
-	XS_HttpRecordFree(pRec);
-	XS_ScriptRelease(pScript);
-	XS_GenerationConnectionRelease(pGeneration);
+	xrtTlsStreamDestroy(pStream);
+	XS_HttpRecordRelease(pRec);
 }
 
 static const xtlsstreamevents g_XS_HttpTlsStreamEvents = {
@@ -1028,28 +1245,31 @@ static bool XS_HttpTlsOnAccept(xtlslistener* pListener, xtlsstream* pStream, ptr
 	XS_HttpRecord* pRec = (XS_HttpRecord*)xrtCalloc(1, sizeof(XS_HttpRecord));
 
 	(void)pListener;
-	if ( pRec == NULL ||
-	     !XS_ListenerSlotAcquireConnection(pSlot, (void**)&pRuntime, &pGeneration) ) {
-		XS_HttpRecordFree(pRec);
+	if ( pRec == NULL ) return false;
+	pRec->tReg.iReferences = 1;
+	if ( !XS_TlsAcquireConnection(pSlot, pStream, (void**)&pRuntime, &pGeneration) ) {
+		XS_HttpRecordRelease(pRec);
 		return false;
 	}
+	pRec->tReg.pGeneration = pGeneration;
 	if ( xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) != 0 ) {
-		XS_GenerationConnectionRelease(pGeneration);
-		XS_HttpRecordFree(pRec);
+		XS_HttpRecordRelease(pRec);
 		return false;
 	}
 	pRec->pRuntime = pRuntime;
 	pRec->pHost = pRuntime->pDefaultHost;
 	pRec->tReg.pHost = pRuntime->pDefaultHost;
 	pRec->tReg.pTls = pStream;
-	pRec->tReg.pGeneration = pGeneration;
 	xrtHttp1HeadInit(&pRec->tHead, pRec->arrFields, XS_HTTP_MAX_FIELDS);
 	if ( !XS_RegistryAdd(&pRuntime->tRegistry, &pRec->tReg) ) {
-		XS_GenerationConnectionRelease(pGeneration);
-		XS_HttpRecordFree(pRec);
+		XS_HttpRecordRelease(pRec);
 		return false;
 	}
-	(void)xrtTlsStreamSetEvents(pStream, &g_XS_HttpTlsStreamEvents, pRec);
+	if ( !xrtTlsStreamSetEvents(pStream, &g_XS_HttpTlsStreamEvents, pRec) ) {
+		XS_RegistryRemove(&pRuntime->tRegistry, &pRec->tReg);
+		XS_HttpRecordRelease(pRec);
+		return false;
+	}
 	return true;
 }
 
@@ -1057,12 +1277,12 @@ static void XS_HttpTlsOnListenerClose(xtlslistener* pListener, ptr pData)
 {
 	XS_ListenerSlot* pSlot = (XS_ListenerSlot*)pData;
 
+	XS_ListenerSlotResourceClose(pSlot, XS_LISTENER_RESOURCE_TLS);
 	xrtTlsListenerDestroy(pListener);
-	XS_ListenerSlotResourceClose(pSlot);
 }
 
 static const xtlslistenerevents g_XS_HttpTlsListenerEvents = {
-	XS_HttpTlsOnAccept, NULL, NULL, XS_HttpTlsOnListenerClose
+	XS_HttpTlsOnAccept, XS_TlsHandshakeError, NULL, XS_HttpTlsOnListenerClose
 };
 
 /* ============================================================
@@ -1072,8 +1292,10 @@ static const xtlslistenerevents g_XS_HttpTlsListenerEvents = {
 static void XS_HttpSweepProc(xnetworker* pWorker, uint64 iId, xnetresult iResult, ptr pData)
 {
 	XS_HttpRuntime* pRuntime = (XS_HttpRuntime*)pData;
+	XS_ServerGeneration* pGeneration = XS_GenerationTimerFinish(&pRuntime->tSweepTimer);
 
 	(void)pWorker; (void)iId;
+	if ( pGeneration == NULL ) return;
 	if ( iResult == XNET_RESULT_OK &&
 	     xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) == 0 ) {
 		(void)XS_RegistrySweepIdle(&pRuntime->tRegistry, pRuntime->iIdleMs);
@@ -1082,16 +1304,16 @@ static void XS_HttpSweepProc(xnetworker* pWorker, uint64 iId, xnetresult iResult
 
 			if ( iInterval > 1000 ) iInterval = 1000;
 			if ( iInterval < 10 ) iInterval = 10;
-			if ( XS_GenerationRetain(pRuntime->pGeneration) ) {
-				pRuntime->iSweepTimer = xrtNetEngineAfter(pRuntime->pServer->Engine, 0,
-					iInterval * 1000, XS_HttpSweepProc, pData);
-				if ( pRuntime->iSweepTimer == 0 ) {
-					XS_GenerationRelease(pRuntime->pGeneration);
-				}
+			if ( XS_GenerationTimerSchedule(pRuntime->pGeneration,
+				iInterval * 1000, XS_HttpSweepProc, pData,
+				pRuntime, &pRuntime->tSweepTimer) != 0 &&
+			     xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) != 0 ) {
+				XS_GenerationTimerCancelOwner(pRuntime->pGeneration, pRuntime);
 			}
 		}
 	}
-	XS_GenerationRelease(pRuntime->pGeneration);
+	XS_GenerationActivityRelease(pGeneration);
+	XS_GenerationRelease(pGeneration);
 }
 
 static bool XS_HttpScheduleSweep(XS_HttpRuntime* pRuntime)
@@ -1100,60 +1322,164 @@ static bool XS_HttpScheduleSweep(XS_HttpRuntime* pRuntime)
 
 	if ( iInterval > 1000 ) iInterval = 1000;
 	if ( iInterval < 10 ) iInterval = 10;
-	if ( !XS_GenerationRetain(pRuntime->pGeneration) ) return false;
-	pRuntime->iSweepTimer = xrtNetEngineAfter(pRuntime->pServer->Engine, 0,
-		iInterval * 1000, XS_HttpSweepProc, pRuntime);
-	if ( pRuntime->iSweepTimer == 0 ) {
-		XS_GenerationRelease(pRuntime->pGeneration);
-		return false;
-	}
-	return true;
+	return XS_GenerationTimerSchedule(pRuntime->pGeneration,
+		iInterval * 1000, XS_HttpSweepProc, pRuntime,
+		pRuntime, &pRuntime->tSweepTimer) != 0;
 }
 
 /* 装配期渲染一个 host 的 static.headers：JSON 遍历与字符串拷贝只发生在这里。
  * 报文形态 "name\0value\0" 依次排布进 blob，字段视图直接指入 —— 请求路径零处理 */
-static XS_HttpHostHdrs* XS_HttpHdrCacheBuild(XS_HostInfo* pHost)
+static void XS_HttpHdrCacheDiscard(XS_HttpHostHdrs* pHdrs)
+{
+	if ( pHdrs == NULL ) return;
+	if ( pHdrs->pRoot != NULL ) xrtRootClose(pHdrs->pRoot);
+	xrtFree(pHdrs->sBlob);
+	xrtFree(pHdrs);
+}
+
+static XS_HttpHostHdrs* XS_HttpHdrCacheBuild(
+	XS_HostInfo* pHost,
+	char* sErr,
+	size_t iErrCap)
 {
 	xvalue* pStatic = XS_HttpStaticCfg(pHost);
 	xvalue* pHeaders;
+	xvalue* pOption;
 	XS_HttpHostHdrs* pHdrs;
 	xvaluekey tKey;
 	xvalueiter tIter;
 	size_t iUsed = 0;
 	size_t iCount = 0;
-	str sBlob;
-	size_t i;
-	size_t iOff;
+	str sBlob = NULL;
+	str sRoot;
 
-	if ( pStatic == NULL ) {
-		return NULL;
+	pHdrs = (XS_HttpHostHdrs*)xrtCalloc(1, sizeof(XS_HttpHostHdrs));
+	if ( pHdrs == NULL ) return NULL;
+	pHdrs->pHost = pHost;
+	sRoot = XS_HttpHostRoot(NULL, pHost);
+	if ( sRoot != NULL ) {
+		pHdrs->pRoot = xrtRootOpen(sRoot);
+		xrtFree(sRoot);
+	}
+	if ( pStatic == NULL ) return pHdrs;
+	if ( xrtValueType(pStatic) != XVALUE_OBJECT ) {
+		snprintf(sErr, iErrCap, "http host '%s' custom field 'static' expect object",
+			pHost->Name != NULL ? pHost->Name : "?");
+		goto failed;
+	}
+	pOption = xrtValueObjectGet(pStatic, XRT_STR_LITERAL("deny_dotfiles"));
+	if ( pOption != NULL ) {
+		bool bValue;
+
+		if ( !xrtValueGetBool(pOption, &bValue) ) {
+			snprintf(sErr, iErrCap,
+				"http host '%s' static.deny_dotfiles expect bool",
+				pHost->Name != NULL ? pHost->Name : "?");
+			goto failed;
+		}
+	}
+	pOption = xrtValueObjectGet(pStatic, XRT_STR_LITERAL("index"));
+	if ( pOption != NULL ) {
+		size_t i;
+
+		if ( xrtValueType(pOption) != XVALUE_ARRAY ) {
+			snprintf(sErr, iErrCap, "http host '%s' static.index expect array",
+				pHost->Name != NULL ? pHost->Name : "?");
+			goto failed;
+		}
+		for ( i = 0; i < xrtValueCount(pOption); i++ ) {
+			xvalue* pItem = xrtValueArrayGet(pOption, i);
+			xstrview tName;
+
+			if ( pItem == NULL || !xrtValueGetString(pItem, &tName) ||
+			     !XS_HttpSafeRelative(tName) || tName.Data[0] == '.' ) {
+				snprintf(sErr, iErrCap,
+					"http host '%s' static.index[%llu] expect safe relative string",
+					pHost->Name != NULL ? pHost->Name : "?",
+					(unsigned long long)i);
+				goto failed;
+			}
+		}
+	}
+	pOption = xrtValueObjectGet(pStatic, XRT_STR_LITERAL("error_pages"));
+	if ( pOption != NULL ) {
+		if ( xrtValueType(pOption) != XVALUE_OBJECT ) {
+			snprintf(sErr, iErrCap, "http host '%s' static.error_pages expect object",
+				pHost->Name != NULL ? pHost->Name : "?");
+			goto failed;
+		}
+		if ( xrtValueIterBegin(pOption, &tIter) ) {
+			for ( ;; ) {
+				xvalue* pVal = xrtValueIterNext(&tIter, &tKey);
+				xstrview tPath;
+
+				if ( pVal == NULL ) break;
+				if ( tKey.Type != XVALUE_KEY_STRING ||
+				     !xrtValueGetString(pVal, &tPath) ||
+				     !XS_HttpSafeRelative(tPath) ) {
+					snprintf(sErr, iErrCap,
+						"http host '%s' static.error_pages values expect safe relative strings",
+						pHost->Name != NULL ? pHost->Name : "?");
+					goto failed;
+				}
+			}
+		}
 	}
 	pHeaders = xrtValueObjectGet(pStatic, XRT_STR_LITERAL("headers"));
-	if ( pHeaders == NULL || xrtValueType(pHeaders) != XVALUE_OBJECT ||
-	     xrtValueCount(pHeaders) == 0 ) {
-		return NULL;
+	if ( pHeaders == NULL ) {
+		return pHdrs;
 	}
-	sBlob = (str)xrtMalloc(4096);
-	pHdrs = (XS_HttpHostHdrs*)xrtCalloc(1, sizeof(XS_HttpHostHdrs));
-	if ( sBlob == NULL || pHdrs == NULL ) {
-		xrtFree(sBlob);
-		xrtFree(pHdrs);
-		return NULL;
+	if ( xrtValueType(pHeaders) != XVALUE_OBJECT ) {
+		snprintf(sErr, iErrCap, "http host '%s' static.headers expect object",
+			pHost->Name != NULL ? pHost->Name : "?");
+		goto failed;
 	}
+	if ( xrtValueCount(pHeaders) > XS_HTTP_MAX_EXTRA_FIELDS ) {
+		snprintf(sErr, iErrCap, "http host '%s' static.headers exceeds %u fields",
+			pHost->Name != NULL ? pHost->Name : "?", XS_HTTP_MAX_EXTRA_FIELDS);
+		goto failed;
+	}
+	if ( xrtValueCount(pHeaders) == 0 ) return pHdrs;
 	if ( xrtValueIterBegin(pHeaders, &tIter) ) {
-		while ( iCount < XS_HTTP_MAX_EXTRA_FIELDS ) {
+		for ( ;; ) {
 			xvalue* pVal = xrtValueIterNext(&tIter, &tKey);
 			xstrview tValView;
 
-			if ( pVal == NULL ) {
-				break;
+			if ( pVal == NULL ) break;
+			if ( tKey.Type != XVALUE_KEY_STRING ||
+			     !xrtValueGetString(pVal, &tValView) ||
+			     !xrtHttpTokenValid(tKey.String) ||
+			     !xrtHttpFieldValueValid(tValView) ) {
+				snprintf(sErr, iErrCap,
+					"http host '%s' static.headers contains invalid HTTP field",
+					pHost->Name != NULL ? pHost->Name : "?");
+				goto failed;
 			}
-			if ( tKey.Type != XVALUE_KEY_STRING || !xrtValueGetString(pVal, &tValView) ) {
-				continue;
+			if ( tValView.Size > SIZE_MAX - 2u ||
+			     tKey.String.Size > SIZE_MAX - tValView.Size - 2u ||
+			     iUsed > SIZE_MAX - (tKey.String.Size + tValView.Size + 2u) ) {
+				snprintf(sErr, iErrCap, "http host '%s' static.headers is too large",
+					pHost->Name != NULL ? pHost->Name : "?");
+				goto failed;
 			}
-			if ( iUsed + tKey.String.Size + tValView.Size + 2 > 4096 ) {
-				break;
-			}
+			iUsed += tKey.String.Size + tValView.Size + 2u;
+			iCount++;
+		}
+	}
+	sBlob = (str)xrtMalloc(iUsed);
+	if ( sBlob == NULL ) {
+		snprintf(sErr, iErrCap, "out of memory building static.headers");
+		goto failed;
+	}
+	iUsed = 0;
+	iCount = 0;
+	if ( xrtValueIterBegin(pHeaders, &tIter) ) {
+		for ( ;; ) {
+			xvalue* pVal = xrtValueIterNext(&tIter, &tKey);
+			xstrview tValView;
+
+			if ( pVal == NULL ) break;
+			(void)xrtValueGetString(pVal, &tValView);
 			memcpy(sBlob + iUsed, tKey.String.Data, tKey.String.Size);
 			sBlob[iUsed + tKey.String.Size] = 0;
 			pHdrs->arrFields[iCount].Name.Data = sBlob + iUsed;
@@ -1169,16 +1495,16 @@ static XS_HttpHostHdrs* XS_HttpHdrCacheBuild(XS_HostInfo* pHost)
 	}
 	if ( iCount == 0 ) {
 		xrtFree(sBlob);
-		xrtFree(pHdrs);
-		return NULL;
+		return pHdrs;
 	}
-	pHdrs->pHost = pHost;
 	pHdrs->sBlob = sBlob;
 	pHdrs->iBlobSize = iUsed;
 	pHdrs->iCount = (uint32)iCount;
-	(void)iOff;
-	(void)i;
 	return pHdrs;
+
+failed:
+	XS_HttpHdrCacheDiscard(pHdrs);
+	return NULL;
 }
 
 static const XS_HttpHostHdrs* XS_HttpHdrCacheFind(XS_HttpRuntime* pRuntime, XS_HostInfo* pHost)
@@ -1193,31 +1519,37 @@ static const XS_HttpHostHdrs* XS_HttpHdrCacheFind(XS_HttpRuntime* pRuntime, XS_H
 	return NULL;
 }
 
-static void XS_HttpHdrCacheBuildAll(XS_HttpRuntime* pRuntime, XS_ServerInfo* pServer)
+static bool XS_HttpHdrCacheBuildAll(
+	XS_HttpRuntime* pRuntime,
+	XS_ServerInfo* pServer,
+	char* sErr,
+	size_t iErrCap)
 {
 	uint32 iTotal = 1 + pServer->HostCount;
 	uint32 i;
 
 	pRuntime->arrHdrCache = (XS_HttpHostHdrs**)xrtCalloc(iTotal, sizeof(XS_HttpHostHdrs*));
 	if ( pRuntime->arrHdrCache == NULL ) {
-		return;
+		return false;
 	}
 	{
-		XS_HttpHostHdrs* pHdrs = pServer->DefaultHost->Enabled ?
-			XS_HttpHdrCacheBuild(pServer->DefaultHost) : NULL;
+		XS_HttpHostHdrs* pHdrs;
 
-		if ( pHdrs != NULL ) {
+		if ( pServer->DefaultHost->Enabled ) {
+			pHdrs = XS_HttpHdrCacheBuild(pServer->DefaultHost, sErr, iErrCap);
+			if ( pHdrs == NULL ) return false;
 			pRuntime->arrHdrCache[pRuntime->iHdrCacheCount++] = pHdrs;
 		}
 	}
 	for ( i = 0; i < pServer->HostCount; i++ ) {
-		XS_HttpHostHdrs* pHdrs = pServer->Hosts[i]->Enabled ?
-			XS_HttpHdrCacheBuild(pServer->Hosts[i]) : NULL;
+		XS_HttpHostHdrs* pHdrs;
 
-		if ( pHdrs != NULL ) {
-			pRuntime->arrHdrCache[pRuntime->iHdrCacheCount++] = pHdrs;
-		}
+		if ( !pServer->Hosts[i]->Enabled ) continue;
+		pHdrs = XS_HttpHdrCacheBuild(pServer->Hosts[i], sErr, iErrCap);
+		if ( pHdrs == NULL ) return false;
+		pRuntime->arrHdrCache[pRuntime->iHdrCacheCount++] = pHdrs;
 	}
+	return true;
 }
 
 static void XS_HttpHdrCacheUnit(XS_HttpRuntime* pRuntime)
@@ -1225,8 +1557,7 @@ static void XS_HttpHdrCacheUnit(XS_HttpRuntime* pRuntime)
 	uint32 i;
 
 	for ( i = 0; i < pRuntime->iHdrCacheCount; i++ ) {
-		xrtFree(pRuntime->arrHdrCache[i]->sBlob);
-		xrtFree(pRuntime->arrHdrCache[i]);
+		XS_HttpHdrCacheDiscard(pRuntime->arrHdrCache[i]);
 	}
 	xrtFree(pRuntime->arrHdrCache);
 	pRuntime->arrHdrCache = NULL;
@@ -1242,8 +1573,10 @@ static bool XS_HttpStartEx(
 {
 	XS_HttpRuntime* pRuntime = (XS_HttpRuntime*)xrtCalloc(1, sizeof(XS_HttpRuntime));
 	xhttp1limits tDef;
+	xnetlistenconfig tNetDef;
 	xnetaddr tAddr;
-	int64 iVal = 0;
+	xnetaddr tTlsAddr;
+	uint64 iVal = 0;
 	uint32 i;
 	bool bHasRequestProc = false;
 
@@ -1275,6 +1608,12 @@ static bool XS_HttpStartEx(
 		snprintf(sErr, iErrCap, "http server '%s' addr parse failed", pServer->Name);
 		return false;
 	}
+	if ( pServer->TLS && !xrtNetAddrParse(&tTlsAddr,
+		pServer->IPTLS ? pServer->IPTLS : (pServer->IP ? pServer->IP : "0.0.0.0"),
+		pServer->PortTLS) ) {
+		snprintf(sErr, iErrCap, "https server '%s' tls addr parse failed", pServer->Name);
+		return false;
+	}
 	if ( !XS_RegistryInit(&pRuntime->tRegistry) ) {
 		snprintf(sErr, iErrCap, "registry init failed");
 		return false;
@@ -1284,28 +1623,55 @@ static bool XS_HttpStartEx(
 	}
 
 	/* 限额旋钮：header_limit / path_limit / body_limit / idle_timeout */
+	xrtNetListenConfigInit(&tNetDef);
+	pRuntime->iReceiveLimit = pServer->RecvLimit > 0 ?
+		pServer->RecvLimit : tNetDef.Stream.ReadLimit;
 	xrtHttp1LimitsInit(&tDef);
 	pRuntime->tLimits = tDef;
-	(void)XS_CustomGetInt(pServer->Custom, "header_limit", &iVal);
-	if ( iVal > 0 && (uint64)iVal < (uint64)XS_HTTP_MAX_FIELDS ) {
-		pRuntime->tLimits.MaxFields = (size_t)iVal;
+	if ( !XS_CustomReadUInt(pServer->Custom, "header_limit", &iVal,
+		sErr, iErrCap) ) return false;
+	if ( iVal > (uint64)SIZE_MAX ) {
+		snprintf(sErr, iErrCap, "custom field 'header_limit' out of range");
+		return false;
 	}
-	iVal = 0;
-	(void)XS_CustomGetInt(pServer->Custom, "path_limit", &iVal);
-	pRuntime->iPathLimit = (iVal > 0) ? (uint64)iVal : 2048;
-	iVal = 0;
-	(void)XS_CustomGetInt(pServer->Custom, "body_limit", &iVal);
-	pRuntime->iBodyLimit = (iVal > 0) ? (uint64)iVal : 0;
-	iVal = 0;
-	(void)XS_CustomGetInt(pServer->Custom, "idle_timeout", &iVal);
-	pRuntime->iIdleMs = (iVal > 0) ? (uint64)iVal : 0;
+	if ( iVal > 0 ) pRuntime->tLimits.MaxHead = (size_t)iVal;
+	if ( pRuntime->tLimits.MaxFields > XS_HTTP_MAX_FIELDS ) {
+		pRuntime->tLimits.MaxFields = XS_HTTP_MAX_FIELDS;
+	}
+	if ( !XS_CustomReadUInt(pServer->Custom, "path_limit", &iVal,
+		sErr, iErrCap) ) return false;
+	pRuntime->iPathLimit = iVal > 0 ? iVal : 2048;
+	if ( !XS_CustomReadUInt(pServer->Custom, "body_limit", &iVal,
+		sErr, iErrCap) ) return false;
+	pRuntime->iBodyLimit = iVal;
+	if ( pRuntime->tLimits.MaxHead > pRuntime->iReceiveLimit ) {
+		snprintf(sErr, iErrCap,
+			"http server '%s' header_limit exceeds recv_limit", pServer->Name);
+		return false;
+	}
+	if ( pRuntime->iBodyLimit > (uint64)pRuntime->iReceiveLimit ) {
+		snprintf(sErr, iErrCap,
+			"http server '%s' body_limit exceeds recv_limit", pServer->Name);
+		return false;
+	}
+	if ( !XS_CustomReadUInt(pServer->Custom, "idle_timeout", &iVal,
+		sErr, iErrCap) ) return false;
+	pRuntime->iIdleMs = iVal;
+	if ( !XS_HttpHdrCacheBuildAll(pRuntime, pServer, sErr, iErrCap) ) {
+		if ( sErr[0] == '\0' ) {
+			snprintf(sErr, iErrCap, "http static site cache allocation failed");
+		}
+		return false;
+	}
 
 	if ( pServer->TLS ) {
 		if ( XS_TlsSharedContext() == NULL ||
 		     !XS_TlsTableBuild(pServer, &pRuntime->tTls, sErr, iErrCap) ||
 		     pRuntime->tTls.iCount == 0 ) {
-			snprintf(sErr + strlen(sErr), iErrCap - strlen(sErr),
-				"https server '%s' has no usable tls identity", pServer->Name);
+			if ( sErr[0] == '\0' ) {
+				snprintf(sErr, iErrCap,
+					"https server '%s' has no usable tls identity", pServer->Name);
+			}
 			return false;
 		}
 		pRuntime->bTls = true;
@@ -1319,8 +1685,9 @@ static bool XS_HttpStartEx(
 		}
 	}
 
-	if ( bStartEndpoint && !pServer->TLS ) {
+	if ( bStartEndpoint ) {
 		xnetlistenconfig tListen;
+		xnetlistener* pListener;
 
 		xrtNetListenConfigInit(&tListen);
 		tListen.Address = tAddr;
@@ -1329,14 +1696,14 @@ static bool XS_HttpStartEx(
 		if ( pServer->Backlog > 0 ) {
 			tListen.Backlog = (int)pServer->Backlog;
 		}
-		if ( pServer->RecvLimit > 0 ) {
-			tListen.Stream.ReadLimit = pServer->RecvLimit;
-		}
-		if ( !XS_ListenerSlotResourceAdd(pRuntime->pListenerSlot) ) return false;
-		pRuntime->pListener = xrtNetListen(pServer->Engine, &tListen,
+		XS_StreamApplyReceiveLimit(&tListen.Stream, pServer->RecvLimit);
+		if ( !XS_ListenerSlotResourceAdd(pRuntime->pListenerSlot,
+		     XS_LISTENER_RESOURCE_PLAIN) ) return false;
+		pListener = xrtNetListen(pServer->Engine, &tListen,
 			&g_XS_HttpListenerEvents, &g_XS_HttpStreamEvents, pRuntime->pListenerSlot);
-		if ( pRuntime->pListener == NULL ) {
-			XS_ListenerSlotResourceCancel(pRuntime->pListenerSlot);
+		if ( pListener == NULL ) {
+			XS_ListenerSlotResourceCancel(pRuntime->pListenerSlot,
+				XS_LISTENER_RESOURCE_PLAIN);
 			XS_ListenerSlotDestroyEmpty(pRuntime->pListenerSlot);
 			pRuntime->pListenerSlot = NULL;
 			const xerror* pErr = xrtGetError();
@@ -1344,44 +1711,64 @@ static bool XS_HttpStartEx(
 				pServer->Name, pServer->Port, pErr ? xrtErrorMessage(pErr) : "unknown");
 			return false;
 		}
-	} else if ( bStartEndpoint ) {
+		if ( !XS_ListenerSlotResourceAttach(pRuntime->pListenerSlot,
+		     XS_LISTENER_RESOURCE_PLAIN, pListener) ) {
+			XS_ListenerSlotDestroyEmpty(pRuntime->pListenerSlot);
+			pRuntime->pListenerSlot = NULL;
+			snprintf(sErr, iErrCap, "http server '%s' listener closed during start",
+				pServer->Name);
+			return false;
+		}
+	}
+	if ( bStartEndpoint && pServer->TLS ) {
 		xtlslistenerconfig tTlsListen;
 		xtlscontext* pContext = XS_TlsSharedContext();
+		xtlslistener* pTlsListener;
 
-		xrtNetListenConfigInit(&tTlsListen.Listen);
-		tTlsListen.Listen.Address = tAddr;
+		xrtTlsListenerConfigInit(&tTlsListen);
+		tTlsListen.Listen.Address = tTlsAddr;
 		tTlsListen.Listen.ReuseAddress = true;
 		tTlsListen.Listen.ExclusiveAddress = false;
 		if ( pServer->Backlog > 0 ) {
 			tTlsListen.Listen.Backlog = (int)pServer->Backlog;
 		}
-		if ( pServer->RecvLimit > 0 ) {
-			tTlsListen.Listen.Stream.ReadLimit = pServer->RecvLimit;
-		}
-		xrtTlsServerConfigInit(&tTlsListen.Tls);
+		XS_StreamApplyReceiveLimit(&tTlsListen.Listen.Stream, pServer->RecvLimit);
 		tTlsListen.Tls.Context = pContext;
 		tTlsListen.Tls.Identity = pRuntime->tTls.pEntries[0].pIdentity;
 		tTlsListen.Tls.Select = XS_TlsSlotSelect;
 		tTlsListen.Tls.SelectContext = pRuntime->pListenerSlot;
-		if ( !XS_ListenerSlotResourceAdd(pRuntime->pListenerSlot) ) return false;
-		pRuntime->pTlsListener = xrtTlsListenerStart(pServer->Engine, &tTlsListen,
-			&g_XS_HttpTlsListenerEvents, &g_XS_HttpTlsStreamEvents, pRuntime->pListenerSlot);
-		if ( pRuntime->pTlsListener == NULL ) {
-			XS_ListenerSlotResourceCancel(pRuntime->pListenerSlot);
-			XS_ListenerSlotDestroyEmpty(pRuntime->pListenerSlot);
-			pRuntime->pListenerSlot = NULL;
-			snprintf(sErr, iErrCap, "https server '%s' listen failed (port %u)", pServer->Name, pServer->Port);
+		if ( !XS_ListenerSlotResourceAdd(pRuntime->pListenerSlot,
+		     XS_LISTENER_RESOURCE_TLS) ) return false;
+		pTlsListener = xrtTlsListenerStart(pServer->Engine, &tTlsListen,
+			&g_XS_HttpTlsListenerEvents, NULL, pRuntime->pListenerSlot);
+		if ( pTlsListener == NULL ) {
+			XS_ListenerSlotResourceCancel(pRuntime->pListenerSlot,
+				XS_LISTENER_RESOURCE_TLS);
+			snprintf(sErr, iErrCap, "https server '%s' listen failed (port %u)", pServer->Name, pServer->PortTLS);
+			return false;
+		}
+		if ( !XS_ListenerSlotResourceAttach(pRuntime->pListenerSlot,
+		     XS_LISTENER_RESOURCE_TLS, pTlsListener) ) {
+			snprintf(sErr, iErrCap, "https server '%s' listener closed during start",
+				pServer->Name);
 			return false;
 		}
 	}
 	if ( pRuntime->iIdleMs > 0 ) {
-		(void)XS_HttpScheduleSweep(pRuntime);
+		if ( !XS_HttpScheduleSweep(pRuntime) ) {
+			snprintf(sErr, iErrCap, "http server '%s' idle timer start failed", pServer->Name);
+			return false;
+		}
 	}
-	XS_HttpHdrCacheBuildAll(pRuntime, pServer);
-	printf("[xs] server '%s' %s %s on %s:%u\n", pServer->Name,
-		pRuntime->bTls ? "https" : "http",
+	printf("[xs] server '%s' http%s %s on %s:%u", pServer->Name,
+		pRuntime->bTls ? "+https" : "",
 		bStartEndpoint ? (bAcceptEndpoint ? "ready" : "bound") : "prepared",
 		pServer->IP ? pServer->IP : "0.0.0.0", pServer->Port);
+	if ( pRuntime->bTls ) {
+		printf(" and %s:%u", pServer->IPTLS ? pServer->IPTLS :
+			(pServer->IP ? pServer->IP : "0.0.0.0"), pServer->PortTLS);
+	}
+	printf("\n");
 	return true;
 }
 
@@ -1395,38 +1782,33 @@ static bool XS_HttpHandoff(XS_HttpRuntime* pOld, XS_HttpRuntime* pNew)
 	if ( !XS_ListenerSlotHandoff(pSlot, pOld, pNew, pNew->pGeneration,
 		pNew->bTls ? (void*)&pNew->tTls : NULL) ) return false;
 	pNew->pListenerSlot = pSlot;
-	pNew->pListener = pOld->pListener;
-	pNew->pTlsListener = pOld->pTlsListener;
 	pOld->pListenerSlot = NULL;
-	pOld->pListener = NULL;
-	pOld->pTlsListener = NULL;
 	return true;
 }
 
 static void XS_HttpStop(XS_HttpRuntime* pRuntime)
 {
 	XS_ListenerSlot* pSlot;
+	XS_ListenerResources tResources;
 
 	if ( pRuntime == NULL ) {
 		return;
 	}
-	xrtAtomic32Store(&pRuntime->tStopping, 1, XMEMORY_RELEASE);
-	if ( pRuntime->iSweepTimer != 0 ) {
-		(void)xrtNetEngineTimerCancel(pRuntime->pServer->Engine, pRuntime->iSweepTimer);
-		pRuntime->iSweepTimer = 0;
-	}
+	if ( xrtAtomic32Exchange(&pRuntime->tStopping, 1, XMEMORY_ACQ_REL) != 0 ) return;
+	XS_GenerationTimerCancelOwner(pRuntime->pGeneration, pRuntime);
 	XS_RegistryStopAccepting(&pRuntime->tRegistry);
 	pSlot = pRuntime->pListenerSlot;
-	if ( pSlot != NULL ) XS_ListenerSlotBeginClose(pSlot, pRuntime);
-	if ( pRuntime->pListener != NULL ) {
-		xrtNetListenerClose(pRuntime->pListener);
-		pRuntime->pListener = NULL;
-	}
-	if ( pRuntime->pTlsListener != NULL ) {
-		xrtTlsListenerClose(pRuntime->pTlsListener);
-		pRuntime->pTlsListener = NULL;
-	}
 	pRuntime->pListenerSlot = NULL;
+	if ( pSlot != NULL && XS_ListenerSlotBeginClose(pSlot, pRuntime, &tResources) ) {
+		if ( tResources.pPlain != NULL ) {
+			xrtNetListenerClose(tResources.pPlain);
+			xrtNetListenerDestroy(tResources.pPlain);
+		}
+		if ( tResources.pTls != NULL ) {
+			xrtTlsListenerClose(tResources.pTls);
+			xrtTlsListenerDestroy(tResources.pTls);
+		}
+	}
 }
 
 static void XS_HttpCloseConnections(XS_HttpRuntime* pRuntime)

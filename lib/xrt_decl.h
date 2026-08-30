@@ -26622,6 +26622,7 @@ typedef struct xtlsserverrequest {
 typedef struct xtlsserverchoice {
 	const xtlsidentity* Identity;
 	size_t Protocol;
+	uint64 Cookie;	/* 由选择器写入，并随服务端会话保留的宿主代标识 */
 } xtlsserverchoice;
 
 
@@ -26709,6 +26710,14 @@ XRT_API xtlsresult xrtTlsServerKeyUpdate(
 XRT_API bool xrtTlsServerName(
 	const xtlssession* pSession,
 	xbytesview* pServerName
+);
+
+
+
+/* 返回选择器随本次握手保存的宿主 cookie；未设置时仍成功返回 0。 */
+XRT_API bool xrtTlsServerCookie(
+	const xtlssession* pSession,
+	uint64* pCookie
 );
 
 

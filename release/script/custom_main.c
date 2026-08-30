@@ -114,6 +114,24 @@ static str BuildBanner(XS_HostInfo* pHost)
 	return sBanner;
 }
 
+static uint16 EchoPort(XS_HostInfo* pHost)
+{
+	int64 iPort = 9099;
+	xvalue* pValue = pHost != NULL && pHost->Server != NULL &&
+		pHost->Server->Custom != NULL ?
+		xrtValueObjectGet(pHost->Server->Custom, XRT_STR_LITERAL("port")) : NULL;
+
+	if ( pValue != NULL ) {
+		int64 iConfigured;
+
+		if ( xrtValueGetInt(pValue, &iConfigured) &&
+		     iConfigured > 0 && iConfigured <= 65535 ) {
+			iPort = iConfigured;
+		}
+	}
+	return (uint16)iPort;
+}
+
 void ServiceInit(XS_HostInfo* pHost)
 {
 	xnetlistenconfig tListen;
@@ -122,7 +140,7 @@ void ServiceInit(XS_HostInfo* pHost)
 	g_Banner = BuildBanner(pHost);
 	g_BannerSize = g_Banner != NULL ? xrtStrView(g_Banner).Size : 0;
 
-	if ( !xrtNetAddrParse(&tAddr, "0.0.0.0", 9099) ) {
+	if ( !xrtNetAddrParse(&tAddr, "0.0.0.0", EchoPort(pHost)) ) {
 		return;
 	}
 	xrtNetListenConfigInit(&tListen);

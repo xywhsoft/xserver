@@ -4,19 +4,23 @@
 输出：逐项 PASS/FAIL，任一失败非零退出。
 """
 import base64
+import argparse
 import http.client
 import json
 import os
+import shutil
 import socket
 import struct
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 RELEASE = ROOT / 'release'
+EXE = RELEASE / 'xs.exe'
 failures = []
 
 
@@ -35,7 +39,23 @@ def config_matrix():
         ('dup-name', '{"services":[{"class":"tcp","name":"x","port":1},{"class":"tcp","name":"x","port":2}]}', 'duplicate'),
         ('missing-port', '{"services":[{"class":"tcp","name":"x"}]}', 'port'),
         ('tls-on-udp', '{"services":[{"class":"udp","name":"x","port":1,"tls":true}]}', 'tls'),
+        ('udp-recv-range', '{"services":[{"class":"udp","name":"x","port":1,'
+                           '"recv_limit":65536}]}', 'UDP datagram limit'),
         ('type-error', '{"services":[{"class":"tcp","name":"x","port":"80"}]}', 'expect int'),
+        ('engine-type', '{"engine":1,"services":[]}', "field 'engine' expect object"),
+        ('engine-workers-range', '{"engine":{"workers":-1},"services":[]}', 'engine.workers'),
+        ('custom-int-type', '{"services":[{"class":"http","name":"x","port":1,'
+                            '"header_limit":"large"}]}', "header_limit' expect int"),
+        ('custom-int-negative', '{"services":[{"class":"http","name":"x","port":1,'
+                                '"idle_timeout":-1}]}', "idle_timeout' expect non-negative"),
+        ('static-type', '{"services":[{"class":"http","name":"x","port":1,'
+                        '"host_default":{"static":[]}}]}', "field 'static' expect object"),
+        ('static-header-invalid', '{"services":[{"class":"http","name":"x","port":1,'
+                                  '"host_default":{"static":{"headers":{"Bad Name":"x"}}}}]}',
+         'invalid HTTP field'),
+        ('ws-protocol-type', '{"services":[{"class":"ws","name":"x","port":1,'
+                             '"devlang":"c","devfile":"script/ws_main.c",'
+                             '"ws_protocol":1}]}', "ws_protocol' expect string"),
         ('dup-host-name', '{"services":[{"class":"http","name":"x","port":1,"hosts":['
                           '{"name":"a","host":"a.example"},{"name":"a","host":"b.example"}]}]}',
          'duplicate host name'),
@@ -51,7 +71,7 @@ def config_matrix():
             path = fp.name
         try:
             proc = subprocess.run(
-                [str(RELEASE / 'xs.exe'), path],
+                [str(EXE), path],
                 capture_output=True, text=True, timeout=10, cwd=str(RELEASE))
             out = proc.stdout + proc.stderr
             if proc.returncode != 1:
@@ -62,6 +82,53 @@ def config_matrix():
             fail(f'config/{name}', 'timeout (should fail-fast)')
         finally:
             os.unlink(path)
+
+
+def listener_failure_matrix():
+    """第二个 TLS endpoint 失败时，第一个 plain listener 必须完整回滚。"""
+    used = set()
+    plain_port = free_port(socket.SOCK_STREAM, used)
+    tls_blocker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    if hasattr(socket, 'SO_EXCLUSIVEADDRUSE'):
+        tls_blocker.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+    tls_blocker.bind(('127.0.0.1', 0))
+    tls_blocker.listen(1)
+    tls_port = int(tls_blocker.getsockname()[1])
+    config = {
+        'services': [{
+            'class': 'http', 'name': 'partial-listener',
+            'ip': '127.0.0.1', 'port': plain_port,
+            'tls': True, 'ip_tls': '127.0.0.1', 'port_tls': tls_port,
+            'host_default': {
+                'name': 'default',
+                'tls_cert': str(RELEASE / 'tls' / 'xtps_cert.pem'),
+                'tls_key': str(RELEASE / 'tls' / 'xtps_key.pem'),
+            },
+        }],
+    }
+    with tempfile.NamedTemporaryFile('w', suffix='.json', delete=False,
+                                     encoding='utf-8') as fp:
+        json.dump(config, fp)
+        path = fp.name
+    try:
+        proc = subprocess.run(
+            [str(EXE), path], capture_output=True, text=True,
+            timeout=20, cwd=str(RELEASE))
+        if proc.returncode != 1 or 'listen failed' not in proc.stdout + proc.stderr:
+            fail('listener/partial-tls-failure',
+                 f'exit={proc.returncode} output={(proc.stdout + proc.stderr)[-200:]}')
+        probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            probe.bind(('127.0.0.1', plain_port))
+        except OSError as exc:
+            fail('listener/plain-rollback-release', str(exc))
+        finally:
+            probe.close()
+    except subprocess.TimeoutExpired:
+        fail('listener/partial-tls-failure', 'process did not fail-fast')
+    finally:
+        tls_blocker.close()
+        os.unlink(path)
 
 
 # ============================================================
@@ -117,8 +184,73 @@ def raw_http(port, request):
     return status, body
 
 
+def raw_http_parts(port, parts):
+    with socket.create_connection(('127.0.0.1', port), timeout=5) as sock:
+        sock.settimeout(5)
+        for part in parts:
+            sock.sendall(part)
+            time.sleep(0.01)
+        data = b''
+        while True:
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            data += chunk
+    status = int(data.split(b'\r\n', 1)[0].split()[1])
+    body = data.split(b'\r\n\r\n', 1)[1] if b'\r\n\r\n' in data else b''
+    return status, body
+
+
 def behavior_matrix():
     cfg = json.load(open(RELEASE / 'xs.json', encoding='utf-8'))
+    if os.name != 'nt':
+        for service in cfg.get('services', []):
+            if service.get('name') in {'crt_probe', 'include_probe'}:
+                service['enabled'] = False
+    fixture = tempfile.TemporaryDirectory(prefix='xs-func-fixture-')
+    fixture_root = Path(fixture.name)
+    fixture_main = fixture_root / 'http_main.c'
+    fixture_admin = fixture_root / 'admin_main.c'
+    fixture_wwwroot = fixture_root / 'wwwroot'
+    outside_secret = fixture_root / 'outside-secret.txt'
+    shutil.copy2(RELEASE / 'script' / 'http_main.c', fixture_main)
+    shutil.copy2(RELEASE / 'hosts' / 'admin' / 'main.c', fixture_admin)
+    shutil.copytree(RELEASE / 'wwwroot', fixture_wwwroot)
+    (fixture_wwwroot / 'large.bin').write_bytes(b'x' * (4 * 1024 * 1024))
+    outside_secret.write_text('must-not-escape-static-root', encoding='utf-8')
+    symlink_ready = False
+    try:
+        os.symlink(outside_secret, fixture_wwwroot / 'outside-link')
+        symlink_ready = True
+    except OSError:
+        pass
+    # 仅测试夹具增加 nested TCC 入口；不改 tracked 示例脚本。它会与 reload
+    # 编译并发执行，覆盖动态 VFS mount/unmount 与全局虚拟 FD 表。
+    fixture_text = fixture_main.read_text(encoding='utf-8')
+    fixture_text = fixture_text.replace(
+        '#include <string.h>\n', '#include <string.h>\n#include <libtcc.h>\n')
+    fixture_text = fixture_text.replace(
+        'XS_RequestResult RequestProc(XS_HttpReq* pReq)\n{',
+        '''static bool NestedCompile(void)
+{
+\tTCCState* pTcc = xsCreateTCC();
+\tint iOk = pTcc != NULL ? tcc_compile_string(pTcc,
+\t\t"#include <stddef.h>\\nint xs_nested(void){return (int)sizeof(size_t);}") : -1;
+
+\tif ( iOk >= 0 ) iOk = tcc_relocate(pTcc);
+\txsDestroyTCC(pTcc);
+\treturn iOk >= 0;
+}
+
+XS_RequestResult RequestProc(XS_HttpReq* pReq)
+{''')
+    fixture_text = fixture_text.replace(
+        'if ( PathIs(pReq, "/text") ) {',
+        'if ( PathIs(pReq, "/nested") ) {\n'
+        '\t\t\treturn ReplyLit(pReq, NestedCompile() ? 200 : 500, '
+        '"text/plain", "nested") ? XS_OK : XS_OK;\n\t\t}\n\t\t'
+        'if ( PathIs(pReq, "/text") ) {')
+    fixture_main.write_text(fixture_text, encoding='utf-8')
     ports = {}
     used_ports = set()
     for s in cfg['services']:
@@ -128,8 +260,22 @@ def behavior_matrix():
             ports[s.get('name')] = s['port']
         if s.get('name') == 'tcp-echo':
             s['idle_timeout'] = 3000
+        elif s.get('name') == 'main':
+            # 让 HTTP Header/body 线路硬边界可在小数据量下回归。
+            s['recv_limit'] = 32768
+            s['header_limit'] = 32768
+            s['body_limit'] = 16384
+            s['host_default']['devfile'] = str(fixture_main)
+            s['host_default']['path'] = str(fixture_wwwroot)
+            for host in s.get('hosts', []):
+                if host.get('name') == 'admin':
+                    host['devfile'] = str(fixture_admin)
+        elif s.get('name') == 'ws-echo':
+            # MaxHead 大于 ReadLimit，专门验证缓冲填满时不会永久 MORE。
+            s['recv_limit'] = 4096
     http_port = ports['main']
     tcp_port = ports['tcp-echo']
+    ws_port = ports['ws-echo']
 
     def local_http(path, host_header=None, method='GET', body=None):
         return http_get(path, host_header=host_header, port=http_port, method=method, body=body)
@@ -162,7 +308,7 @@ def behavior_matrix():
 
     log = open(tempfile.gettempdir() + '/xs_func.log', 'w')
     proc = subprocess.Popen(
-        [str(RELEASE / 'xs.exe'), 'func_test_config.json'],
+        [str(EXE), 'func_test_config.json'],
         cwd=str(RELEASE), stdout=log, stderr=subprocess.STDOUT)
     try:
         if not wait_port(http_port):
@@ -223,16 +369,71 @@ def behavior_matrix():
         except (OSError, ValueError, IndexError) as exc:
             fail('behavior/vhost-host-rules', str(exc))
 
-        # B2 body 上限：body_limit=262144 → 300KB body 触发 400/断连
+        # B2 body 上限：body_limit=16384 → 超限请求明确 413/断连。
         try:
             s3, _ = local_http('/echo', method='POST', body=b'x' * 300000)
-            if s3 != 400:
-                fail('behavior/body-limit', f'status={s3} expect 400')
+            if s3 != 413:
+                fail('behavior/body-limit', f'status={s3} expect 413')
         except (http.client.HTTPException, ConnectionError):
             pass  # 服务端直接断连也符合分帧错误处理
 
+        # 增量 chunked 三态：跨 Read 分段仍完整交给脚本；畸形和累计超限
+        # 分别进入 400/413，不得误当 READY 调业务回调。
+        chunk_head = (
+            b'POST /echo HTTP/1.1\r\nHost: default.example.com\r\n'
+            b'Transfer-Encoding: chunked\r\nConnection: close\r\n\r\n')
+        try:
+            chunk_status, chunk_body = raw_http_parts(
+                http_port, (chunk_head, b'4\r\nte', b'st\r\n0\r', b'\n\r\n'))
+            malformed_status, _ = raw_http_parts(
+                http_port, (chunk_head, b'Z\r\nbad\r\n0\r\n\r\n'))
+            over_status, _ = raw_http_parts(
+                http_port, (chunk_head, b'4e20\r\n'))
+            if chunk_status != 200 or b'test' not in chunk_body:
+                fail('behavior/chunked-fragmented',
+                     f'status={chunk_status} body={chunk_body[:50]!r}')
+            if malformed_status != 400:
+                fail('behavior/chunked-malformed', f'status={malformed_status}')
+            if over_status != 413:
+                fail('behavior/chunked-over-limit', f'status={over_status}')
+        except (OSError, ValueError, IndexError) as exc:
+            fail('behavior/chunked-state', str(exc))
+
+        # ReadLimit 恰好填满且 Header 仍不完整时，HTTP/WS 都必须终止而非卡死。
+        for protocol, port, limit in (('http', http_port, 32768), ('ws', ws_port, 4096)):
+            try:
+                request = bytearray(b'GET / HTTP/1.1\r\nHost: x\r\n')
+                while len(request) + 3012 < limit:
+                    request += b'X-Fill: ' + b'a' * 3000 + b'\r\n'
+                tail = b'X-Tail: '
+                request += tail + b'b' * (limit - len(request) - len(tail))
+                assert len(request) == limit
+                with socket.create_connection(('127.0.0.1', port), timeout=3) as boundary:
+                    boundary.settimeout(3)
+                    boundary.sendall(request)
+                    response = boundary.recv(1024)
+                if b' 431 ' not in response.split(b'\r\n', 1)[0]:
+                    fail(f'behavior/{protocol}-receive-boundary', response[:80])
+            except OSError as exc:
+                fail(f'behavior/{protocol}-receive-boundary', str(exc))
+
+        # 解析器主动判定字段数量超限时也必须返回 431，而不是落入通用 400。
+        too_many_fields = (
+            b'GET / HTTP/1.1\r\nHost: default.example.com\r\n' +
+            b''.join(f'X-{index}: v\r\n'.encode() for index in range(64)) +
+            b'Connection: close\r\n\r\n'
+        )
+        for protocol, port in (('http', http_port), ('ws', ws_port)):
+            try:
+                field_status, _ = raw_http(port, too_many_fields)
+                if field_status != 431:
+                    fail(f'behavior/{protocol}-field-limit',
+                         f'status={field_status} expect 431')
+            except (OSError, ValueError, IndexError) as exc:
+                fail(f'behavior/{protocol}-field-limit', str(exc))
+
         # B3 重载语义：换代 / 回滚 / swap
-        script = RELEASE / 'script' / 'http_main.c'
+        script = fixture_main
         src = script.read_text(encoding='utf-8')
         mod = src.replace('"xs3 http ok"', '"xs3 func RELOADED"')
         bad = src.replace('RequestProc(XS_HttpReq', 'RequestProc(XS_HttpReq BROKEN')
@@ -273,9 +474,9 @@ def behavior_matrix():
 
             script.write_text(bad, encoding='utf-8')
             try:
-                failed_result = wait_reload(submit_reload())
-                if failed_result['status'] != 'failed':
-                    fail('behavior/reload-failed-status', f'result={failed_result}')
+                failed_results = [wait_reload(submit_reload()) for _ in range(6)]
+                if any(result['status'] != 'failed' for result in failed_results):
+                    fail('behavior/reload-failed-status', f'results={failed_results}')
             except (AssertionError, KeyError, ValueError, json.JSONDecodeError) as exc:
                 fail('behavior/reload-queue-status', str(exc))
             _, body = local_http('/text')
@@ -289,7 +490,7 @@ def behavior_matrix():
                 pass
 
         # B3b 次级 host 入口同样发布完整 server generation。
-        admin_script_path = RELEASE / 'hosts' / 'admin' / 'main.c'
+        admin_script_path = fixture_admin
         admin_src = admin_script_path.read_text(encoding='utf-8')
         admin_mod = admin_src.replace('xs3 admin script ok', 'xs3 admin RELOADED')
         try:
@@ -310,6 +511,81 @@ def behavior_matrix():
                 wait_reload(submit_reload('/reload', host_header='admin.example.com'))
             except (AssertionError, KeyError, ValueError, json.JSONDecodeError):
                 pass
+
+        # B3c nested TCC 与 reload 并发：各 worker 复用自己的 keep-alive，
+        # 同时 controller 反复 mount/unmount 新代源码。
+        nested_errors = []
+        nested_start = threading.Event()
+
+        def nested_worker():
+            connection = http.client.HTTPConnection('127.0.0.1', http_port, timeout=8)
+            try:
+                nested_start.wait(3)
+                for _ in range(12):
+                    connection.request('GET', '/nested')
+                    response = connection.getresponse()
+                    body = response.read()
+                    if response.status != 200 or body != b'nested':
+                        raise AssertionError(f'{response.status}/{body[:40]!r}')
+            except (OSError, http.client.HTTPException, AssertionError) as exc:
+                nested_errors.append(str(exc))
+            finally:
+                connection.close()
+
+        nested_threads = [threading.Thread(target=nested_worker) for _ in range(4)]
+        for thread in nested_threads:
+            thread.start()
+        nested_start.set()
+        try:
+            nested_ids = [submit_reload() for _ in range(6)]
+            nested_results = [wait_reload(reload_id, timeout=20) for reload_id in nested_ids]
+            if nested_results[-1]['status'] != 'succeeded':
+                nested_errors.append(f'latest reload={nested_results[-1]}')
+        except (AssertionError, KeyError, ValueError, json.JSONDecodeError) as exc:
+            nested_errors.append(str(exc))
+        for thread in nested_threads:
+            thread.join(timeout=20)
+            if thread.is_alive():
+                nested_errors.append('worker timeout')
+        if nested_errors:
+            fail('behavior/tcc-vfs-concurrent', '; '.join(nested_errors[:4]))
+
+        # B3d 结果环：一个进入 Init 的慢 active 占住模槽时，连续超过环容量
+        # 的 latest-wins ticket 仍应扫描其他终态槽，而不是全部返回 503。
+        ring_cfg = json.loads(cfg_path.read_text(encoding='utf-8'))
+        for service in ring_cfg['services']:
+            if service.get('name') == 'main':
+                service['host_default']['init_delay_ms'] = 5000
+        cfg_path.write_text(json.dumps(ring_cfg, ensure_ascii=False, indent=2), encoding='utf-8')
+        ring_ids = []
+        try:
+            ring_ids.append(submit_reload())
+            time.sleep(1.0)  # 让 active 越过 staging 线性点进入 ServiceInit
+            ring_conn = http.client.HTTPConnection('127.0.0.1', http_port, timeout=8)
+            try:
+                for _ in range(270):
+                    ring_conn.request('GET', '/reload')
+                    response = ring_conn.getresponse()
+                    payload = response.read()
+                    if response.status != 202:
+                        raise AssertionError(f'status={response.status} body={payload[:80]!r}')
+                    ring_ids.append(int(json.loads(payload)['reload_id']))
+            finally:
+                ring_conn.close()
+        except (OSError, http.client.HTTPException, AssertionError,
+                ValueError, KeyError, json.JSONDecodeError) as exc:
+            fail('behavior/reload-result-ring-submit', str(exc))
+        finally:
+            cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding='utf-8')
+        if ring_ids:
+            try:
+                ring_slow = wait_reload(ring_ids[0], timeout=12)
+                ring_latest = wait_reload(ring_ids[-1], timeout=25)
+                if ring_slow['status'] != 'succeeded' or ring_latest['status'] != 'succeeded':
+                    fail('behavior/reload-result-ring-latest',
+                         f'slow={ring_slow} latest={ring_latest}')
+            except (AssertionError, KeyError, ValueError, json.JSONDecodeError) as exc:
+                fail('behavior/reload-result-ring-latest', str(exc))
 
         # B4 定时器
         local_http('/tick')
@@ -341,23 +617,84 @@ def behavior_matrix():
             fail('behavior/static-headers', f'{hdrs}')
         if b'xs3 static ok' not in body:
             fail('behavior/static-index', f'{body[:40]!r}')
-        s404, _ = local_http('/no-such')
-        # 主配置未配 error_pages 时为内置页；已配 err404.html 时为自定义页（二者择一断言状态）
-        if s404 != 404:
-            fail('behavior/static-404', f'status={s404}')
+        s404, body404 = local_http('/no-such')
+        if s404 != 404 or b'custom 404 page' not in body404:
+            fail('behavior/static-404', f'status={s404} body={body404[:60]!r}')
         s403, _ = local_http('/.hidden')
         if s403 != 403:
             fail('behavior/static-dotfile', f'status={s403} expect 403')
 
+        # 根句柄边界：解码后的 rooted path/NUL/反斜杠/父级段均不得进入文件层。
+        static_escape_cases = (
+            ('double-slash', '//Windows/win.ini', {400, 403}),
+            ('encoded-slash', '/%2FWindows/win.ini', {400, 403}),
+            ('encoded-nul', '/bad%00name', {400}),
+            ('encoded-backslash', '/%5CWindows%5Cwin.ini', {403}),
+            ('parent', '/../outside-secret.txt', {403}),
+        )
+        for case_name, target, expected in static_escape_cases:
+            try:
+                status, escaped_body = raw_http(
+                    http_port,
+                    f'GET {target} HTTP/1.1\r\nHost: default.example.com\r\n'
+                    'Connection: close\r\n\r\n'.encode())
+                if status not in expected or b'must-not-escape-static-root' in escaped_body:
+                    fail(f'behavior/static-root-{case_name}',
+                         f'status={status} body={escaped_body[:50]!r}')
+            except (OSError, ValueError, IndexError) as exc:
+                fail(f'behavior/static-root-{case_name}', str(exc))
+        if symlink_ready:
+            link_status, link_body = local_http('/outside-link')
+            if link_status == 200 or b'must-not-escape-static-root' in link_body:
+                fail('behavior/static-root-symlink',
+                     f'status={link_status} body={link_body[:50]!r}')
+
+        # Header 已发出后让客户端以 RST 中断大文件；驱动只能走连接终态，
+        # 不得补发错误响应、悬挂 generation 或拖垮后续请求。
+        try:
+            reset_client = socket.create_connection(('127.0.0.1', http_port), timeout=3)
+            reset_client.settimeout(3)
+            reset_client.sendall(
+                b'GET /large.bin HTTP/1.1\r\nHost: default.example.com\r\n\r\n')
+            response_head = b''
+            while b'\r\n\r\n' not in response_head and len(response_head) < 8192:
+                response_head += reset_client.recv(1024)
+            linger_format = 'hh' if os.name == 'nt' else 'ii'
+            reset_client.setsockopt(
+                socket.SOL_SOCKET, socket.SO_LINGER, struct.pack(linger_format, 1, 0))
+            reset_client.close()
+            time.sleep(0.2)
+            health_status, health_body = local_http('/text')
+            if b' 200 ' not in response_head.split(b'\r\n', 1)[0] or \
+                    health_status != 200 or b'xs3 http ok' not in health_body:
+                fail('behavior/static-send-failure',
+                     f'head={response_head[:60]!r} health={health_status}/{health_body[:30]!r}')
+        except (OSError, ValueError) as exc:
+            fail('behavior/static-send-failure',
+                 f'{exc}; server_exit={proc.poll()}')
+
         # B7 ws 大消息超限（ws_message_limit 未配置 → 内核默认，跳过）
     finally:
-        proc.kill()
+        if proc.poll() is None:
+            proc.kill()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
         log.close()
         cfg_path.unlink(missing_ok=True)
+        fixture.cleanup()
 
 
 def main():
+    global EXE
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--exe', type=Path, default=EXE)
+    args = parser.parse_args()
+    EXE = args.exe.resolve()
     config_matrix()
+    listener_failure_matrix()
     behavior_matrix()
     if failures:
         print('FUNC TEST FAILURES (%d):' % len(failures))

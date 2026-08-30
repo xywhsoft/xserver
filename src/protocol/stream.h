@@ -23,24 +23,48 @@ typedef struct XS_TcpRuntime {
 	XS_ServerInfo*		pServer;
 	XS_HostInfo*		pHost;		/* DefaultHost：回调挂载点 */
 	bool			bTls;
-	xnetlistener*		pListener;	/* 明文模式 */
-	xtlslistener*		pTlsListener;	/* tcps 模式 */
 	XS_ListenerSlot*	pListenerSlot;
 	XS_TlsTable		tTls;
 	XS_ConnRegistry	tRegistry;
 	XS_ServerGeneration*	pGeneration;
 	uint64			iIdleMs;	/* 0 = 关闭 idle 保护 */
-	uint64			iSweepTimer;
+	XS_GenerationTimer	tSweepTimer;
 	xatomic32		tStopping;
 } XS_TcpRuntime;
 
-/* Custom 旋钮只读（不弹出，键仍留给应用读取） */
-static bool XS_CustomGetInt(xvalue* pCustom, const char* sKey, int64* pOut)
+/* Custom 旋钮只读（不弹出，键仍留给应用读取）。
+ * 文档化的资源上限一律为非负整数；类型错误不能静默退回默认值。 */
+static bool XS_CustomReadUInt(
+	xvalue* pCustom,
+	const char* sKey,
+	uint64* pOut,
+	char* sErr,
+	size_t iErrCap)
 {
 	xvalue* pVal = (pCustom != NULL) ? xrtValueObjectGet(pCustom, xrtStrViewN(sKey, strlen(sKey))) : NULL;
+	int64 iValue = 0;
 
 	*pOut = 0;
-	return pVal != NULL && xrtValueGetInt(pVal, pOut);
+	if ( pVal == NULL ) return true;
+	if ( !xrtValueGetInt(pVal, &iValue) ) {
+		snprintf(sErr, iErrCap, "custom field '%s' expect int", sKey);
+		return false;
+	}
+	if ( iValue < 0 ) {
+		snprintf(sErr, iErrCap, "custom field '%s' expect non-negative int", sKey);
+		return false;
+	}
+	*pOut = (uint64)iValue;
+	return true;
+}
+
+/* recv_limit 是缓冲硬上限；当它小于 xrt 默认单次读取块时，同步缩小
+ * ReadSize，避免一份合法的小上限配置在底层只报泛化 listen failed。 */
+static void XS_StreamApplyReceiveLimit(xnetstreamconfig* pConfig, size_t iLimit)
+{
+	if ( pConfig == NULL || iLimit == 0 ) return;
+	pConfig->ReadLimit = iLimit;
+	if ( pConfig->ReadSize > iLimit ) pConfig->ReadSize = iLimit;
 }
 
 static void XS_TcpConnView(XS_ConnRecord* pRecord, XS_StreamConn* pConn)
@@ -49,13 +73,40 @@ static void XS_TcpConnView(XS_ConnRecord* pRecord, XS_StreamConn* pConn)
 	pConn->tls = pRecord->pTls;
 }
 
+/* 终态可能在发送 API 内同步重入。记录所有权由 Close 撤销，但脚本、
+ * generation 与记录本身必须活到所有在途回调退出。 */
+static bool XS_TcpRecordRetain(XS_ConnRecord* pRecord)
+{
+	return pRecord != NULL && xrtRefRetain(&pRecord->iReferences) > 0;
+}
+
+static void XS_TcpRecordRelease(XS_ConnRecord* pRecord)
+{
+	XS_ScriptRuntime* pScript;
+	XS_ServerGeneration* pGeneration;
+
+	if ( pRecord == NULL || xrtRefRelease(&pRecord->iReferences) != 0 ) return;
+	pScript = pRecord->pScript;
+	pGeneration = pRecord->pGeneration;
+	xrtFree(pRecord);
+	XS_ScriptRelease(pScript);
+	XS_GenerationConnectionRelease(pGeneration);
+}
+
 /* —— 明文流事件 shim —— */
 
 static void XS_TcpOnOpen(xnetstream* pStream, ptr pData)
 {
 	XS_ConnRecord* pRecord = (XS_ConnRecord*)pData;
 	XS_StreamConn tConn;
-	XS_ScriptRuntime* pScript = pRecord->pScript;
+	XS_ScriptRuntime* pScript;
+
+	if ( !XS_TcpRecordRetain(pRecord) ) return;
+	if ( xrtNetStreamRef(pStream) == NULL ) {
+		XS_TcpRecordRelease(pRecord);
+		return;
+	}
+	pScript = pRecord->pScript;
 
 	XS_RegistryTouch(pRecord);
 	if ( pScript != NULL && pScript->procEventOpen != NULL ) {
@@ -65,14 +116,22 @@ static void XS_TcpOnOpen(xnetstream* pStream, ptr pData)
 		pScript->procEventOpen(pRecord->pHost, &tConn);
 		XS_ScriptLeave(pPrevious);
 	}
-	(void)pStream;
+	xrtNetStreamDestroy(pStream);
+	XS_TcpRecordRelease(pRecord);
 }
 
 static void XS_TcpOnRead(xnetstream* pStream, xnetbuf* pBuffer, ptr pData)
 {
 	XS_ConnRecord* pRecord = (XS_ConnRecord*)pData;
 	XS_StreamConn tConn;
-	XS_ScriptRuntime* pScript = pRecord->pScript;
+	XS_ScriptRuntime* pScript;
+
+	if ( !XS_TcpRecordRetain(pRecord) ) return;
+	if ( xrtNetStreamRef(pStream) == NULL ) {
+		XS_TcpRecordRelease(pRecord);
+		return;
+	}
+	pScript = pRecord->pScript;
 
 	XS_RegistryTouch(pRecord);
 	if ( pScript != NULL && pScript->procEventData != NULL ) {
@@ -82,7 +141,8 @@ static void XS_TcpOnRead(xnetstream* pStream, xnetbuf* pBuffer, ptr pData)
 		pScript->procEventData(pRecord->pHost, &tConn, pBuffer);
 		XS_ScriptLeave(pPrevious);
 	}
-	(void)pStream;
+	xrtNetStreamDestroy(pStream);
+	XS_TcpRecordRelease(pRecord);
 }
 
 static void XS_TcpOnEnd(xnetstream* pStream, ptr pData)
@@ -96,7 +156,6 @@ static void XS_TcpOnClose(xnetstream* pStream, xnetresult iResult, const xerror*
 	XS_ConnRecord* pRecord = (XS_ConnRecord*)pData;
 	XS_StreamConn tConn;
 	XS_ScriptRuntime* pScript = pRecord->pScript;
-	XS_ServerGeneration* pGeneration = pRecord->pGeneration;
 
 	if ( pScript != NULL && pScript->procEventClose != NULL ) {
 		XS_ScriptRuntime* pPrevious = XS_ScriptEnter(pScript);
@@ -105,11 +164,9 @@ static void XS_TcpOnClose(xnetstream* pStream, xnetresult iResult, const xerror*
 		pScript->procEventClose(pRecord->pHost, &tConn, iResult, pError);
 		XS_ScriptLeave(pPrevious);
 	}
-	xrtNetStreamDestroy(pStream);
 	XS_RegistryRemove(pRecord->pRegistry, pRecord);
-	xrtFree(pRecord);
-	XS_ScriptRelease(pScript);
-	XS_GenerationConnectionRelease(pGeneration);
+	xrtNetStreamDestroy(pStream);
+	XS_TcpRecordRelease(pRecord);
 }
 
 static const xnetstreamevents g_XS_TcpStreamEvents = {
@@ -129,33 +186,34 @@ static bool XS_TcpOnAccept(xnetlistener* pListener, xnetstream* pStream, ptr pDa
 	XS_ScriptRuntime* pScript;
 
 	(void)pListener;
-	if ( pRecord == NULL ||
-	     !XS_ListenerSlotAcquireConnection(pSlot, (void**)&pRuntime, &pGeneration) ) {
-		xrtFree(pRecord);
+	if ( pRecord == NULL ) return false;
+	pRecord->iReferences = 1;
+	if ( !XS_ListenerSlotAcquireConnection(pSlot, 0, (void**)&pRuntime, &pGeneration) ) {
+		XS_TcpRecordRelease(pRecord);
 		return false;		/* 拒绝接入（库立即关闭该流） */
 	}
+	pRecord->pGeneration = pGeneration;
 	if ( xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) != 0 ) {
-		XS_GenerationConnectionRelease(pGeneration);
-		xrtFree(pRecord);
+		XS_TcpRecordRelease(pRecord);
 		return false;
 	}
 	pScript = XS_ScriptAcquireHost(pRuntime->pHost);
 	if ( pScript == NULL ) {
-		XS_GenerationConnectionRelease(pGeneration);
-		xrtFree(pRecord);
+		XS_TcpRecordRelease(pRecord);
 		return false;
 	}
 	pRecord->pHost = pRuntime->pHost;
 	pRecord->pTcp = pStream;
-	pRecord->pGeneration = pGeneration;
 	pRecord->pScript = pScript;
 	if ( !XS_RegistryAdd(&pRuntime->tRegistry, pRecord) ) {
-		XS_ScriptRelease(pScript);
-		XS_GenerationConnectionRelease(pGeneration);
-		xrtFree(pRecord);
+		XS_TcpRecordRelease(pRecord);
 		return false;
 	}
-	(void)xrtNetStreamSetData(pStream, pRecord);	/* Accept 运行于目标流 Worker，合法 */
+	if ( !xrtNetStreamSetData(pStream, pRecord) ) {
+		XS_RegistryRemove(&pRuntime->tRegistry, pRecord);
+		XS_TcpRecordRelease(pRecord);
+		return false;
+	}
 	XS_TcpOnOpen(pStream, (ptr)pRecord);		/* 补发 Open（事件表 Open 位留空防双发） */
 	return true;
 }
@@ -164,8 +222,8 @@ static void XS_TcpOnListenerClose(xnetlistener* pListener, ptr pData)
 {
 	XS_ListenerSlot* pSlot = (XS_ListenerSlot*)pData;
 
+	XS_ListenerSlotResourceClose(pSlot, XS_LISTENER_RESOURCE_PLAIN);
 	xrtNetListenerDestroy(pListener);
-	XS_ListenerSlotResourceClose(pSlot);
 }
 
 static const xnetlistenerevents g_XS_TcpListenerEvents = {
@@ -180,7 +238,14 @@ static void XS_TlsOnOpen(xtlsstream* pStream, ptr pData)
 {
 	XS_ConnRecord* pRecord = (XS_ConnRecord*)pData;
 	XS_StreamConn tConn;
-	XS_ScriptRuntime* pScript = pRecord->pScript;
+	XS_ScriptRuntime* pScript;
+
+	if ( !XS_TcpRecordRetain(pRecord) ) return;
+	if ( xrtTlsStreamRef(pStream) == NULL ) {
+		XS_TcpRecordRelease(pRecord);
+		return;
+	}
+	pScript = pRecord->pScript;
 
 	XS_RegistryTouch(pRecord);
 	if ( pScript != NULL && pScript->procEventOpen != NULL ) {
@@ -190,14 +255,22 @@ static void XS_TlsOnOpen(xtlsstream* pStream, ptr pData)
 		pScript->procEventOpen(pRecord->pHost, &tConn);
 		XS_ScriptLeave(pPrevious);
 	}
-	(void)pStream;
+	xrtTlsStreamDestroy(pStream);
+	XS_TcpRecordRelease(pRecord);
 }
 
 static void XS_TlsOnRead(xtlsstream* pStream, const xnetbuf* pBuffer, ptr pData)
 {
 	XS_ConnRecord* pRecord = (XS_ConnRecord*)pData;
 	XS_StreamConn tConn;
-	XS_ScriptRuntime* pScript = pRecord->pScript;
+	XS_ScriptRuntime* pScript;
+
+	if ( !XS_TcpRecordRetain(pRecord) ) return;
+	if ( xrtTlsStreamRef(pStream) == NULL ) {
+		XS_TcpRecordRelease(pRecord);
+		return;
+	}
+	pScript = pRecord->pScript;
 
 	XS_RegistryTouch(pRecord);
 	if ( pScript != NULL && pScript->procEventData != NULL ) {
@@ -207,7 +280,8 @@ static void XS_TlsOnRead(xtlsstream* pStream, const xnetbuf* pBuffer, ptr pData)
 		pScript->procEventData(pRecord->pHost, &tConn, (xnetbuf*)pBuffer);	/* 仅 Peek；tcps 消费走 xrtTlsStreamConsume */
 		XS_ScriptLeave(pPrevious);
 	}
-	(void)pStream;
+	xrtTlsStreamDestroy(pStream);
+	XS_TcpRecordRelease(pRecord);
 }
 
 static void XS_TlsOnEnd(xtlsstream* pStream, ptr pData)
@@ -221,7 +295,6 @@ static void XS_TlsOnClose(xtlsstream* pStream, xnetresult iResult, const xerror*
 	XS_ConnRecord* pRecord = (XS_ConnRecord*)pData;
 	XS_StreamConn tConn;
 	XS_ScriptRuntime* pScript = pRecord->pScript;
-	XS_ServerGeneration* pGeneration = pRecord->pGeneration;
 
 	if ( pScript != NULL && pScript->procEventClose != NULL ) {
 		XS_ScriptRuntime* pPrevious = XS_ScriptEnter(pScript);
@@ -230,11 +303,9 @@ static void XS_TlsOnClose(xtlsstream* pStream, xnetresult iResult, const xerror*
 		pScript->procEventClose(pRecord->pHost, &tConn, iResult, pError);
 		XS_ScriptLeave(pPrevious);
 	}
-	xrtTlsStreamDestroy(pStream);
 	XS_RegistryRemove(pRecord->pRegistry, pRecord);
-	xrtFree(pRecord);
-	XS_ScriptRelease(pScript);
-	XS_GenerationConnectionRelease(pGeneration);
+	xrtTlsStreamDestroy(pStream);
+	XS_TcpRecordRelease(pRecord);
 }
 
 static const xtlsstreamevents g_XS_TlsStreamEvents = {
@@ -254,33 +325,34 @@ static bool XS_TlsOnAccept(xtlslistener* pListener, xtlsstream* pStream, ptr pDa
 	XS_ScriptRuntime* pScript;
 
 	(void)pListener;
-	if ( pRecord == NULL ||
-	     !XS_ListenerSlotAcquireConnection(pSlot, (void**)&pRuntime, &pGeneration) ) {
-		xrtFree(pRecord);
+	if ( pRecord == NULL ) return false;
+	pRecord->iReferences = 1;
+	if ( !XS_TlsAcquireConnection(pSlot, pStream, (void**)&pRuntime, &pGeneration) ) {
+		XS_TcpRecordRelease(pRecord);
 		return false;
 	}
+	pRecord->pGeneration = pGeneration;
 	if ( xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) != 0 ) {
-		XS_GenerationConnectionRelease(pGeneration);
-		xrtFree(pRecord);
+		XS_TcpRecordRelease(pRecord);
 		return false;
 	}
 	pScript = XS_ScriptAcquireHost(pRuntime->pHost);
 	if ( pScript == NULL ) {
-		XS_GenerationConnectionRelease(pGeneration);
-		xrtFree(pRecord);
+		XS_TcpRecordRelease(pRecord);
 		return false;
 	}
 	pRecord->pHost = pRuntime->pHost;
 	pRecord->pTls = pStream;
-	pRecord->pGeneration = pGeneration;
 	pRecord->pScript = pScript;
 	if ( !XS_RegistryAdd(&pRuntime->tRegistry, pRecord) ) {
-		XS_ScriptRelease(pScript);
-		XS_GenerationConnectionRelease(pGeneration);
-		xrtFree(pRecord);
+		XS_TcpRecordRelease(pRecord);
 		return false;
 	}
-	(void)xrtTlsStreamSetEvents(pStream, &g_XS_TlsStreamEvents, pRecord);	/* Accept 在目标流 Worker，合法 */
+	if ( !xrtTlsStreamSetEvents(pStream, &g_XS_TlsStreamEvents, pRecord) ) {
+		XS_RegistryRemove(&pRuntime->tRegistry, pRecord);
+		XS_TcpRecordRelease(pRecord);
+		return false;
+	}
 	return true;
 }
 
@@ -288,13 +360,13 @@ static void XS_TlsOnListenerClose(xtlslistener* pListener, ptr pData)
 {
 	XS_ListenerSlot* pSlot = (XS_ListenerSlot*)pData;
 
+	XS_ListenerSlotResourceClose(pSlot, XS_LISTENER_RESOURCE_TLS);
 	xrtTlsListenerDestroy(pListener);
-	XS_ListenerSlotResourceClose(pSlot);
 }
 
 static const xtlslistenerevents g_XS_TlsListenerEvents = {
 	XS_TlsOnAccept,
-	NULL,			/* HandshakeError：握手失败由库内部关闭 */
+	XS_TlsHandshakeError,
 	NULL,			/* Error */
 	XS_TlsOnListenerClose
 };
@@ -304,8 +376,10 @@ static const xtlslistenerevents g_XS_TlsListenerEvents = {
 static void XS_TcpSweepProc(xnetworker* pWorker, uint64 iId, xnetresult iResult, ptr pData)
 {
 	XS_TcpRuntime* pRuntime = (XS_TcpRuntime*)pData;
+	XS_ServerGeneration* pGeneration = XS_GenerationTimerFinish(&pRuntime->tSweepTimer);
 
 	(void)pWorker; (void)iId;
+	if ( pGeneration == NULL ) return;
 	if ( iResult == XNET_RESULT_OK &&
 	     xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) == 0 ) {
 		(void)XS_RegistrySweepIdle(&pRuntime->tRegistry, pRuntime->iIdleMs);
@@ -318,16 +392,16 @@ static void XS_TcpSweepProc(xnetworker* pWorker, uint64 iId, xnetresult iResult,
 			if ( iInterval < 10 ) {
 				iInterval = 10;
 			}
-			if ( XS_GenerationRetain(pRuntime->pGeneration) ) {
-				pRuntime->iSweepTimer = xrtNetEngineAfter(pRuntime->pServer->Engine, 0,
-					iInterval * 1000, XS_TcpSweepProc, pData);
-				if ( pRuntime->iSweepTimer == 0 ) {
-					XS_GenerationRelease(pRuntime->pGeneration);
-				}
+			if ( XS_GenerationTimerSchedule(pRuntime->pGeneration,
+				iInterval * 1000, XS_TcpSweepProc, pData,
+				pRuntime, &pRuntime->tSweepTimer) != 0 &&
+			     xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) != 0 ) {
+				XS_GenerationTimerCancelOwner(pRuntime->pGeneration, pRuntime);
 			}
 		}
 	}
-	XS_GenerationRelease(pRuntime->pGeneration);
+	XS_GenerationActivityRelease(pGeneration);
+	XS_GenerationRelease(pGeneration);
 }
 
 static bool XS_TcpScheduleSweep(XS_TcpRuntime* pRuntime)
@@ -336,14 +410,9 @@ static bool XS_TcpScheduleSweep(XS_TcpRuntime* pRuntime)
 
 	if ( iInterval > 1000 ) iInterval = 1000;
 	if ( iInterval < 10 ) iInterval = 10;
-	if ( !XS_GenerationRetain(pRuntime->pGeneration) ) return false;
-	pRuntime->iSweepTimer = xrtNetEngineAfter(pRuntime->pServer->Engine, 0,
-		iInterval * 1000, XS_TcpSweepProc, pRuntime);
-	if ( pRuntime->iSweepTimer == 0 ) {
-		XS_GenerationRelease(pRuntime->pGeneration);
-		return false;
-	}
-	return true;
+	return XS_GenerationTimerSchedule(pRuntime->pGeneration,
+		iInterval * 1000, XS_TcpSweepProc, pRuntime,
+		pRuntime, &pRuntime->tSweepTimer) != 0;
 }
 
 /* —— 启动 / 停止 —— */
@@ -358,7 +427,8 @@ static bool XS_TcpStartEx(
 	XS_TcpRuntime* pRuntime = (XS_TcpRuntime*)xrtCalloc(1, sizeof(XS_TcpRuntime));
 	XS_ScriptRuntime* pScript = (XS_ScriptRuntime*)pServer->DefaultHost->Runtime;
 	xnetaddr tAddr;
-	int64 iIdle = 0;
+	xnetaddr tTlsAddr;
+	uint64 iIdle = 0;
 
 	if ( pRuntime == NULL ) {
 		snprintf(sErr, iErrCap, "out of memory");
@@ -378,12 +448,19 @@ static bool XS_TcpStartEx(
 		snprintf(sErr, iErrCap, "tcp server '%s' addr parse failed", pServer->Name);
 		return false;
 	}
+	if ( pServer->TLS && !xrtNetAddrParse(&tTlsAddr,
+		pServer->IPTLS ? pServer->IPTLS : (pServer->IP ? pServer->IP : "0.0.0.0"),
+		pServer->PortTLS) ) {
+		snprintf(sErr, iErrCap, "tcps server '%s' tls addr parse failed", pServer->Name);
+		return false;
+	}
 	if ( !XS_RegistryInit(&pRuntime->tRegistry) ) {
 		snprintf(sErr, iErrCap, "registry init failed");
 		return false;
 	}
-	(void)XS_CustomGetInt(pServer->Custom, "idle_timeout", &iIdle);
-	pRuntime->iIdleMs = (iIdle > 0) ? (uint64)iIdle : 0;
+	if ( !XS_CustomReadUInt(pServer->Custom, "idle_timeout", &iIdle,
+		sErr, iErrCap) ) return false;
+	pRuntime->iIdleMs = iIdle;
 
 	if ( pServer->TLS ) {
 		if ( XS_TlsSharedContext() == NULL ) {
@@ -406,8 +483,9 @@ static bool XS_TcpStartEx(
 		}
 	}
 
-	if ( bStartEndpoint && !pServer->TLS ) {
+	if ( bStartEndpoint ) {
 		xnetlistenconfig tListen;
+		xnetlistener* pListener;
 
 		xrtNetListenConfigInit(&tListen);
 		tListen.Address = tAddr;
@@ -416,16 +494,16 @@ static bool XS_TcpStartEx(
 		if ( pServer->Backlog > 0 ) {
 			tListen.Backlog = (int)pServer->Backlog;
 		}
-		if ( pServer->RecvLimit > 0 ) {
-			tListen.Stream.ReadLimit = pServer->RecvLimit;
-		}
-		if ( !XS_ListenerSlotResourceAdd(pRuntime->pListenerSlot) ) {
+		XS_StreamApplyReceiveLimit(&tListen.Stream, pServer->RecvLimit);
+		if ( !XS_ListenerSlotResourceAdd(pRuntime->pListenerSlot,
+		     XS_LISTENER_RESOURCE_PLAIN) ) {
 			return false;
 		}
-		pRuntime->pListener = xrtNetListen(pServer->Engine, &tListen,
+		pListener = xrtNetListen(pServer->Engine, &tListen,
 			&g_XS_TcpListenerEvents, &g_XS_TcpStreamEvents, pRuntime->pListenerSlot);
-		if ( pRuntime->pListener == NULL ) {
-			XS_ListenerSlotResourceCancel(pRuntime->pListenerSlot);
+		if ( pListener == NULL ) {
+			XS_ListenerSlotResourceCancel(pRuntime->pListenerSlot,
+				XS_LISTENER_RESOURCE_PLAIN);
 			XS_ListenerSlotDestroyEmpty(pRuntime->pListenerSlot);
 			pRuntime->pListenerSlot = NULL;
 			const xerror* pErr = xrtGetError();
@@ -433,47 +511,67 @@ static bool XS_TcpStartEx(
 				pServer->Port, pErr != NULL ? xrtErrorMessage(pErr) : "unknown");
 			return false;
 		}
-	} else if ( bStartEndpoint ) {
+		if ( !XS_ListenerSlotResourceAttach(pRuntime->pListenerSlot,
+		     XS_LISTENER_RESOURCE_PLAIN, pListener) ) {
+			XS_ListenerSlotDestroyEmpty(pRuntime->pListenerSlot);
+			pRuntime->pListenerSlot = NULL;
+			snprintf(sErr, iErrCap, "tcp server '%s' listener closed during start",
+				pServer->Name);
+			return false;
+		}
+	}
+	if ( bStartEndpoint && pServer->TLS ) {
 		xtlslistenerconfig tTlsListen;
 		xtlscontext* pContext = XS_TlsSharedContext();
+		xtlslistener* pTlsListener;
 
-		xrtNetListenConfigInit(&tTlsListen.Listen);
-		tTlsListen.Listen.Address = tAddr;
+		xrtTlsListenerConfigInit(&tTlsListen);
+		tTlsListen.Listen.Address = tTlsAddr;
 		tTlsListen.Listen.ReuseAddress = true;
 		tTlsListen.Listen.ExclusiveAddress = false;
 		if ( pServer->Backlog > 0 ) {
 			tTlsListen.Listen.Backlog = (int)pServer->Backlog;
 		}
-		if ( pServer->RecvLimit > 0 ) {
-			tTlsListen.Listen.Stream.ReadLimit = pServer->RecvLimit;
-		}
-		xrtTlsServerConfigInit(&tTlsListen.Tls);
+		XS_StreamApplyReceiveLimit(&tTlsListen.Listen.Stream, pServer->RecvLimit);
 		tTlsListen.Tls.Context = pContext;
 		tTlsListen.Tls.Identity = pRuntime->tTls.pEntries[0].pIdentity;	/* 无 SNI 回落 */
 		tTlsListen.Tls.Select = XS_TlsSlotSelect;
 		tTlsListen.Tls.SelectContext = pRuntime->pListenerSlot;
-		if ( !XS_ListenerSlotResourceAdd(pRuntime->pListenerSlot) ) {
+		if ( !XS_ListenerSlotResourceAdd(pRuntime->pListenerSlot,
+		     XS_LISTENER_RESOURCE_TLS) ) {
 			return false;
 		}
-		pRuntime->pTlsListener = xrtTlsListenerStart(pServer->Engine, &tTlsListen,
-			&g_XS_TlsListenerEvents, &g_XS_TlsStreamEvents, pRuntime->pListenerSlot);
-		if ( pRuntime->pTlsListener == NULL ) {
-			XS_ListenerSlotResourceCancel(pRuntime->pListenerSlot);
-			XS_ListenerSlotDestroyEmpty(pRuntime->pListenerSlot);
-			pRuntime->pListenerSlot = NULL;
-			snprintf(sErr, iErrCap, "tcps server '%s' listen failed (port %u)", pServer->Name, pServer->Port);
+		pTlsListener = xrtTlsListenerStart(pServer->Engine, &tTlsListen,
+			&g_XS_TlsListenerEvents, NULL, pRuntime->pListenerSlot);
+		if ( pTlsListener == NULL ) {
+			XS_ListenerSlotResourceCancel(pRuntime->pListenerSlot,
+				XS_LISTENER_RESOURCE_TLS);
+			snprintf(sErr, iErrCap, "tcps server '%s' listen failed (port %u)", pServer->Name, pServer->PortTLS);
+			return false;
+		}
+		if ( !XS_ListenerSlotResourceAttach(pRuntime->pListenerSlot,
+		     XS_LISTENER_RESOURCE_TLS, pTlsListener) ) {
+			snprintf(sErr, iErrCap, "tcps server '%s' listener closed during start",
+				pServer->Name);
 			return false;
 		}
 	}
 
 	if ( pRuntime->iIdleMs > 0 ) {
-		(void)XS_TcpScheduleSweep(pRuntime);
+		if ( !XS_TcpScheduleSweep(pRuntime) ) {
+			snprintf(sErr, iErrCap, "tcp server '%s' idle timer start failed", pServer->Name);
+			return false;
+		}
 	}
-	printf("[xs] server '%s' %s %s on %s:%u%s\n", pServer->Name,
-		pRuntime->bTls ? "tcps" : "tcp",
+	printf("[xs] server '%s' tcp%s %s on %s:%u", pServer->Name,
+		pRuntime->bTls ? "+tcps" : "",
 		bStartEndpoint ? (bAcceptEndpoint ? "ready" : "bound") : "prepared",
-		pServer->IP ? pServer->IP : "0.0.0.0", pServer->Port,
-		pRuntime->iIdleMs > 0 ? " (idle protected)" : "");
+		pServer->IP ? pServer->IP : "0.0.0.0", pServer->Port);
+	if ( pRuntime->bTls ) {
+		printf(" and %s:%u", pServer->IPTLS ? pServer->IPTLS :
+			(pServer->IP ? pServer->IP : "0.0.0.0"), pServer->PortTLS);
+	}
+	printf("%s\n", pRuntime->iIdleMs > 0 ? " (idle protected)" : "");
 	return true;
 }
 
@@ -487,38 +585,33 @@ static bool XS_TcpHandoff(XS_TcpRuntime* pOld, XS_TcpRuntime* pNew)
 	if ( !XS_ListenerSlotHandoff(pSlot, pOld, pNew, pNew->pGeneration,
 		pNew->bTls ? (void*)&pNew->tTls : NULL) ) return false;
 	pNew->pListenerSlot = pSlot;
-	pNew->pListener = pOld->pListener;
-	pNew->pTlsListener = pOld->pTlsListener;
 	pOld->pListenerSlot = NULL;
-	pOld->pListener = NULL;
-	pOld->pTlsListener = NULL;
 	return true;
 }
 
 static void XS_TcpStop(XS_TcpRuntime* pRuntime)
 {
 	XS_ListenerSlot* pSlot;
+	XS_ListenerResources tResources;
 
 	if ( pRuntime == NULL ) {
 		return;
 	}
-	xrtAtomic32Store(&pRuntime->tStopping, 1, XMEMORY_RELEASE);
-	if ( pRuntime->iSweepTimer != 0 ) {
-		(void)xrtNetEngineTimerCancel(pRuntime->pServer->Engine, pRuntime->iSweepTimer);
-		pRuntime->iSweepTimer = 0;
-	}
+	if ( xrtAtomic32Exchange(&pRuntime->tStopping, 1, XMEMORY_ACQ_REL) != 0 ) return;
+	XS_GenerationTimerCancelOwner(pRuntime->pGeneration, pRuntime);
 	XS_RegistryStopAccepting(&pRuntime->tRegistry);
 	pSlot = pRuntime->pListenerSlot;
-	if ( pSlot != NULL ) XS_ListenerSlotBeginClose(pSlot, pRuntime);
-	if ( pRuntime->pListener != NULL ) {
-		xrtNetListenerClose(pRuntime->pListener);	/* Close 回调里 Destroy */
-		pRuntime->pListener = NULL;
-	}
-	if ( pRuntime->pTlsListener != NULL ) {
-		xrtTlsListenerClose(pRuntime->pTlsListener);
-		pRuntime->pTlsListener = NULL;
-	}
 	pRuntime->pListenerSlot = NULL;
+	if ( pSlot != NULL && XS_ListenerSlotBeginClose(pSlot, pRuntime, &tResources) ) {
+		if ( tResources.pPlain != NULL ) {
+			xrtNetListenerClose(tResources.pPlain);
+			xrtNetListenerDestroy(tResources.pPlain);
+		}
+		if ( tResources.pTls != NULL ) {
+			xrtTlsListenerClose(tResources.pTls);
+			xrtTlsListenerDestroy(tResources.pTls);
+		}
+	}
 }
 
 static void XS_TcpCloseConnections(XS_TcpRuntime* pRuntime)

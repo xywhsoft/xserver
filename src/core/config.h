@@ -31,6 +31,13 @@ typedef struct XS_App {
 	xvalue**			Taken;
 } XS_App;
 
+/* 一次 reload 解析得到的不可变配置 revision。reload-all 的多个新
+ * generation 共享同一棵配置树；最后一个 generation 终态后才整体释放。 */
+typedef struct XS_ConfigRevision {
+	volatile int32		iReferences;
+	XS_App			App;
+} XS_ConfigRevision;
+
 /* ============================================================
  * 内部：预设标量字段提取（严格类型；标量键 Remove 即弃）
  * 注意：XRT_STR_LITERAL 仅可用于字符串字面量（sizeof 求长），
@@ -78,8 +85,8 @@ static bool XS_ConfigTakeString(xvalue* pObj, const char* sKey, const char** pOu
 {
 	xvalue* pVal = xrtValueObjectGet(pObj, XS_ConfigKey(sKey));
 	xstrview tView;
+	str sCopy;
 
-	*pOut = NULL;		/* 缺省值 */
 	if ( pVal == NULL ) {
 		return true;
 	}
@@ -87,7 +94,13 @@ static bool XS_ConfigTakeString(xvalue* pObj, const char* sKey, const char** pOu
 		snprintf(sErr, iErrCap, "field '%s' expect string", sKey);
 		return false;
 	}
-	*pOut = xrtStrDupN(tView.Data, tView.Size);
+	sCopy = xrtStrDupN(tView.Data, tView.Size);
+	if ( sCopy == NULL ) {
+		snprintf(sErr, iErrCap, "out of memory reading field '%s'", sKey);
+		return false;
+	}
+	xrtFree((void*)*pOut);
+	*pOut = sCopy;
 	(void)xrtValueObjectRemove(pObj, XS_ConfigKey(sKey));
 	return true;
 }
@@ -95,7 +108,11 @@ static bool XS_ConfigTakeString(xvalue* pObj, const char* sKey, const char** pOu
 /* 追踪一棵 Take 得到 / 新建的子树，卸载时统一释放 */
 static bool XS_ConfigTrack(XS_App* pApp, xvalue* pValue)
 {
-	xvalue** pNew = (xvalue**)xrtRealloc(pApp->Taken, sizeof(xvalue*) * (size_t)(pApp->TakenCount + 1));
+	xvalue** pNew;
+
+	if ( pApp->TakenCount == UINT32_MAX ) return false;
+	pNew = (xvalue**)xrtRealloc(pApp->Taken,
+		sizeof(xvalue*) * ((size_t)pApp->TakenCount + 1u));
 
 	if ( pNew == NULL ) {
 		return false;
@@ -190,24 +207,25 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 	xvalue* pHostDefault;
 	xvalue* pHosts;
 	xvalue* pHostObj;
-	const char* sSvcDevLang = NULL;
-	const char* sSvcDevFile = NULL;
-	const char* sSvcPath = NULL;
-	const char* sSvcDevInc = NULL;
-	const char* sSvcDevLib = NULL;
 	int64 iVal;
+	bool bHasPortTls;
 	uint32 i;
 
 	pServer->Enabled = true;
 	pServer->State = XS_RUN_STARTING;
 	pServer->Custom = pObj;
+	pServer->DefaultHost = (XS_HostInfo*)xrtCalloc(1, sizeof(XS_HostInfo));
+	if ( pServer->DefaultHost == NULL ) {
+		snprintf(sErr, iErrCap, "out of memory");
+		return false;
+	}
 
 	/* 服务级脚本字段：作为 DefaultHost 的缺省来源（host_default 优先覆盖） */
-	if ( !XS_ConfigTakeString(pObj, "devlang", &sSvcDevLang, sErr, iErrCap) ) return false;
-	if ( !XS_ConfigTakeString(pObj, "devfile", &sSvcDevFile, sErr, iErrCap) ) return false;
-	if ( !XS_ConfigTakeString(pObj, "path", &sSvcPath, sErr, iErrCap) ) return false;
-	if ( !XS_ConfigTakeString(pObj, "dev_inc", &sSvcDevInc, sErr, iErrCap) ) return false;
-	if ( !XS_ConfigTakeString(pObj, "dev_lib", &sSvcDevLib, sErr, iErrCap) ) return false;
+	if ( !XS_ConfigTakeString(pObj, "devlang", &pServer->DefaultHost->DevLang, sErr, iErrCap) ) return false;
+	if ( !XS_ConfigTakeString(pObj, "devfile", &pServer->DefaultHost->DevFile, sErr, iErrCap) ) return false;
+	if ( !XS_ConfigTakeString(pObj, "path", &pServer->DefaultHost->Path, sErr, iErrCap) ) return false;
+	if ( !XS_ConfigTakeString(pObj, "dev_inc", &pServer->DefaultHost->DevInc, sErr, iErrCap) ) return false;
+	if ( !XS_ConfigTakeString(pObj, "dev_lib", &pServer->DefaultHost->DevLib, sErr, iErrCap) ) return false;
 
 	if ( !XS_ConfigTakeBool(pObj, "enabled", &pServer->Enabled, sErr, iErrCap) ) return false;
 	if ( !XS_ConfigTakeString(pObj, "class", &pServer->Class, sErr, iErrCap) ) return false;
@@ -216,7 +234,7 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 		return false;
 	}
 	if ( !XS_ConfigTakeString(pObj, "name", &pServer->Name, sErr, iErrCap) ) return false;
-	if ( pServer->Name == NULL ) {
+	if ( pServer->Name == NULL || pServer->Name[0] == '\0' ) {
 		snprintf(sErr, iErrCap, "field 'name' required");
 		return false;
 	}
@@ -229,11 +247,15 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 	}
 	pServer->Backlog = (uint32)iVal;
 	if ( !XS_ConfigTakeInt(pObj, "recv_limit", &iVal, sErr, iErrCap) ) return false;
-	if ( iVal < 0 ) {
+	if ( iVal < 0 || (uint64)iVal > (uint64)SIZE_MAX ) {
 		snprintf(sErr, iErrCap, "field 'recv_limit' out of range");
 		return false;
 	}
 	pServer->RecvLimit = (size_t)iVal;
+	if ( strcmp(pServer->Class, "udp") == 0 && pServer->RecvLimit > 65535u ) {
+		snprintf(sErr, iErrCap, "field 'recv_limit' exceeds UDP datagram limit 65535");
+		return false;
+	}
 
 	if ( strcmp(pServer->Class, "custom") != 0 ) {
 		if ( !XS_ConfigTakeInt(pObj, "port", &iVal, sErr, iErrCap) ) return false;
@@ -243,22 +265,33 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 		}
 		pServer->Port = (uint16)iVal;
 		if ( pServer->TLS ) {
+			const char* sPlainIp;
+			const char* sTlsIp;
+
 			if ( strcmp(pServer->Class, "udp") == 0 ) {
 				snprintf(sErr, iErrCap, "field 'tls' not supported on udp");
 				return false;
 			}
+			bHasPortTls = xrtValueObjectGet(pObj, XRT_STR_LITERAL("port_tls")) != NULL;
 			if ( !XS_ConfigTakeInt(pObj, "port_tls", &iVal, sErr, iErrCap) ) return false;
-			pServer->PortTLS = (iVal > 0 && iVal <= 65535) ? (uint16)iVal : 443;
+			if ( bHasPortTls && (iVal <= 0 || iVal > 65535) ) {
+				snprintf(sErr, iErrCap, "field 'port_tls' out of range (1-65535)");
+				return false;
+			}
+			pServer->PortTLS = bHasPortTls ? (uint16)iVal : 443;
 			if ( !XS_ConfigTakeString(pObj, "ip_tls", &pServer->IPTLS, sErr, iErrCap) ) return false;
+			sPlainIp = (pServer->IP == NULL || pServer->IP[0] == '\0') ? "0.0.0.0" : pServer->IP;
+			sTlsIp = (pServer->IPTLS == NULL || pServer->IPTLS[0] == '\0') ? sPlainIp : pServer->IPTLS;
+			if ( pServer->PortTLS == pServer->Port && strcmp(sPlainIp, sTlsIp) == 0 ) {
+				snprintf(sErr, iErrCap,
+					"plain and tls listeners for server '%s' must use different endpoints",
+					pServer->Name);
+				return false;
+			}
 		}
 	}
 
-	/* DefaultHost：恒存在。host_default 以 Take 移交后解析 */
-	pServer->DefaultHost = (XS_HostInfo*)xrtCalloc(1, sizeof(XS_HostInfo));
-	if ( pServer->DefaultHost == NULL ) {
-		snprintf(sErr, iErrCap, "out of memory");
-		return false;
-	}
+	/* DefaultHost：恒存在。host_default 以 Take 移交后覆盖服务级缺省。 */
 	pHostDefault = xrtValueObjectTake(pObj, XRT_STR_LITERAL("host_default"));
 	if ( pHostDefault != NULL ) {
 		if ( !XS_ConfigTrack(pApp, pHostDefault) ) {
@@ -293,32 +326,6 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 			return false;
 		}
 	}
-	/* 服务级字段补缺（host_default 未覆盖处） */
-	if ( pServer->DefaultHost->DevLang == NULL ) {
-		pServer->DefaultHost->DevLang = sSvcDevLang;
-	} else {
-		xrtFree((void*)sSvcDevLang);
-	}
-	if ( pServer->DefaultHost->DevFile == NULL ) {
-		pServer->DefaultHost->DevFile = sSvcDevFile;
-	} else {
-		xrtFree((void*)sSvcDevFile);
-	}
-	if ( pServer->DefaultHost->Path == NULL ) {
-		pServer->DefaultHost->Path = sSvcPath;
-	} else {
-		xrtFree((void*)sSvcPath);
-	}
-	if ( pServer->DefaultHost->DevInc == NULL ) {
-		pServer->DefaultHost->DevInc = sSvcDevInc;
-	} else {
-		xrtFree((void*)sSvcDevInc);
-	}
-	if ( pServer->DefaultHost->DevLib == NULL ) {
-		pServer->DefaultHost->DevLib = sSvcDevLib;
-	} else {
-		xrtFree((void*)sSvcDevLib);
-	}
 	if ( pServer->DefaultHost->Name == NULL ) {
 		pServer->DefaultHost->Name = xrtStrDupN("default", 7);
 	}
@@ -341,6 +348,10 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 		}
 		if ( xrtValueType(pHosts) != XVALUE_ARRAY ) {
 			snprintf(sErr, iErrCap, "field 'hosts' expect array");
+			return false;
+		}
+		if ( xrtValueCount(pHosts) > (size_t)UINT32_MAX - 1u ) {
+			snprintf(sErr, iErrCap, "field 'hosts' has too many entries");
 			return false;
 		}
 		pServer->HostCount = (uint32)xrtValueCount(pHosts);
@@ -423,11 +434,21 @@ static bool XS_ConfigBuild(const char* sSource, xvalue* pRoot, XS_App* pApp)
 
 	/* 根级 engine 旋钮：仅消费 engine.workers，其余留在根 Custom */
 	pEngine = xrtValueObjectGet(pRoot, XRT_STR_LITERAL("engine"));
-	if ( pEngine != NULL && xrtValueType(pEngine) == XVALUE_OBJECT ) {
+	if ( pEngine != NULL ) {
+		if ( xrtValueType(pEngine) != XVALUE_OBJECT ) {
+			snprintf(pApp->ParseError, sizeof(pApp->ParseError),
+				"field 'engine' expect object");
+			return false;
+		}
 		if ( !XS_ConfigTakeInt(pEngine, "workers", &iWorkers, pApp->ParseError, sizeof(pApp->ParseError)) ) {
 			return false;
 		}
-		pApp->EngineWorkers = (iWorkers > 0 && iWorkers <= 1024) ? (uint32)iWorkers : 0;
+		if ( iWorkers < 0 || iWorkers > 1024 ) {
+			snprintf(pApp->ParseError, sizeof(pApp->ParseError),
+				"field 'engine.workers' expect integer in range 0..1024");
+			return false;
+		}
+		pApp->EngineWorkers = (uint32)iWorkers;
 	}
 
 	/* services：以 Take 移交（各 server 的 Custom 指向其中对象） */
@@ -443,6 +464,10 @@ static bool XS_ConfigBuild(const char* sSource, xvalue* pRoot, XS_App* pApp)
 	}
 	if ( xrtValueType(pServices) != XVALUE_ARRAY ) {
 		snprintf(pApp->ParseError, sizeof(pApp->ParseError), "field 'services' expect array");
+		return false;
+	}
+	if ( xrtValueCount(pServices) > (size_t)UINT32_MAX - 1u ) {
+		snprintf(pApp->ParseError, sizeof(pApp->ParseError), "field 'services' has too many entries");
 		return false;
 	}
 	pApp->ServerCount = (uint32)xrtValueCount(pServices);
@@ -486,8 +511,8 @@ static bool XS_ConfigLoad(const char* sPath, XS_App* pApp)
 	return XS_ConfigBuild(sPath, xrtJsonParseFile(sPath), pApp);
 }
 
-/* reload coordinator 先冻结文件字节，再从同一份内存反复构建候选，避免一次
- * reconcile 内不同 server 观察到不同的 xs.json 内容。 */
+/* reload coordinator 先冻结文件字节，并让一个 intent 只解析出一个共享的
+ * ConfigRevision，避免同一次 reconcile 内不同 server 观察到不同的 xs.json。 */
 static bool XS_ConfigLoadMemory(
 	const char* sSource,
 	const void* pData,
@@ -528,12 +553,49 @@ static void XS_ConfigFree(XS_App* pApp)
 	memset(pApp, 0, sizeof(XS_App));
 }
 
+/* 把局部解析结果转成引用计数 revision。成功后 pFresh 被清空。 */
+static XS_ConfigRevision* XS_ConfigRevisionTake(XS_App* pFresh)
+{
+	XS_ConfigRevision* pRevision;
+
+	if ( pFresh == NULL ) return NULL;
+	pRevision = (XS_ConfigRevision*)xrtCalloc(1, sizeof(XS_ConfigRevision));
+	if ( pRevision == NULL ) return NULL;
+	pRevision->iReferences = 1;
+	pRevision->App = *pFresh;
+	memset(pFresh, 0, sizeof(*pFresh));
+	return pRevision;
+}
+
+static bool XS_ConfigRevisionRetain(XS_ConfigRevision* pRevision)
+{
+	return pRevision != NULL && xrtRefRetain(&pRevision->iReferences) > 0;
+}
+
+static void XS_ConfigRevisionRelease(XS_ConfigRevision* pRevision)
+{
+	uint32 i;
+
+	if ( pRevision == NULL || xrtRefRelease(&pRevision->iReferences) != 0 ) return;
+	/* 根 XS_App 会跳过从动态 revision 借入的 server；revision 自己终态时
+	 * 则把本 revision 的对象临时标成本 App 所有，再复用统一释放器。 */
+	for ( i = 0; i < pRevision->App.ServerCount; i++ ) {
+		XS_ServerInfo* pServer = pRevision->App.Servers[i];
+
+		if ( pServer != NULL && pServer->ConfigOwner == pRevision ) {
+			pServer->ConfigOwner = &pRevision->App;
+		}
+	}
+	XS_ConfigFree(&pRevision->App);
+	xrtFree(pRevision);
+}
+
 /* 空对象序列化为 "{}"，非空才打印 */
 static void XS_ConfigPrintCustom(const char* sIndent, xvalue* pCustom)
 {
 	str sJson = xrtJsonStringify(pCustom, false, NULL);
 
-	if ( sJson != NULL && sJson[1] != '}' ) {
+	if ( sJson != NULL && !(sJson[0] == '{' && sJson[1] == '}' && sJson[2] == '\0') ) {
 		printf("[xs] %s%s\n", sIndent, sJson);
 	}
 	xrtFree(sJson);

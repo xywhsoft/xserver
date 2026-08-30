@@ -28,9 +28,21 @@ static const char* XS_AppPath(void)
 
 	if ( !bInit ) {
 	#if defined(_WIN32) || defined(_WIN64)
-		DWORD iLen = GetModuleFileNameA(NULL, sPath, (DWORD)(sizeof(sPath) - 1));
+		wchar_t arrWide[4096];
+		DWORD iWideLen = GetModuleFileNameW(NULL, arrWide,
+			(DWORD)(sizeof(arrWide) / sizeof(arrWide[0])));
+		int iLen;
 		char* sSlash;
-		if ( iLen == 0 || iLen >= sizeof(sPath) - 1 ) {
+
+		if ( iWideLen == 0 || iWideLen >= sizeof(arrWide) / sizeof(arrWide[0]) ) {
+			snprintf(sPath, sizeof(sPath), ".");
+			return sPath;
+		}
+		iLen = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
+			arrWide, (int)iWideLen, NULL, 0, NULL, NULL);
+		if ( iLen <= 0 || (size_t)iLen >= sizeof(sPath) ||
+		     WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
+			arrWide, (int)iWideLen, sPath, iLen, NULL, NULL) != iLen ) {
 			snprintf(sPath, sizeof(sPath), ".");
 			return sPath;
 		}
@@ -40,7 +52,12 @@ static const char* XS_AppPath(void)
 			sSlash = strrchr(sPath, '/');
 		}
 		if ( sSlash != NULL ) {
-			*sSlash = '\0';
+			/* 驱动器根目录必须保留反斜杠，否则 "C:" 是相对路径。 */
+			if ( sSlash == sPath + 2 && sPath[1] == ':' ) {
+				sSlash[1] = '\0';
+			} else {
+				*sSlash = '\0';
+			}
 		} else {
 			snprintf(sPath, sizeof(sPath), ".");
 		}
@@ -54,7 +71,8 @@ static const char* XS_AppPath(void)
 		sPath[iLen] = '\0';
 		sSlash = strrchr(sPath, '/');
 		if ( sSlash != NULL ) {
-			*sSlash = '\0';
+			if ( sSlash == sPath ) sPath[1] = '\0';
+			else *sSlash = '\0';
 		} else {
 			snprintf(sPath, sizeof(sPath), ".");
 		}

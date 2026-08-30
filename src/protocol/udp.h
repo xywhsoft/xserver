@@ -18,7 +18,6 @@
 typedef struct XS_UdpRuntime {
 	XS_ServerInfo*		pServer;
 	XS_HostInfo*		pHost;		/* DefaultHost：回调挂载点 */
-	xnetudp*		pUdp;
 	XS_ListenerSlot*	pListenerSlot;
 	XS_ServerGeneration*	pGeneration;
 	XS_ScriptRuntime*	pScript;
@@ -32,7 +31,7 @@ static void XS_UdpOnReceive(xnetudp* pUdp, const xnetudpmessage* pMsg, ptr pData
 	XS_ServerGeneration* pGeneration = NULL;
 	XS_ScriptRuntime* pScript;
 
-	if ( !XS_ListenerSlotAcquireConnection(pSlot, (void**)&pRuntime, &pGeneration) ) return;
+	if ( !XS_ListenerSlotAcquireConnection(pSlot, 0, (void**)&pRuntime, &pGeneration) ) return;
 	if ( xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) != 0 ) {
 		XS_GenerationConnectionRelease(pGeneration);
 		return;
@@ -52,8 +51,8 @@ static void XS_UdpOnClose(xnetudp* pUdp, xnetresult iResult, const xerror* pErro
 	XS_ListenerSlot* pSlot = (XS_ListenerSlot*)pData;
 
 	(void)iResult; (void)pError;
+	XS_ListenerSlotResourceClose(pSlot, XS_LISTENER_RESOURCE_UDP);
 	xrtNetUdpDestroy(pUdp);		/* Close 完成后释放调用方引用 */
-	XS_ListenerSlotResourceClose(pSlot);
 }
 
 static const xnetudpevents g_XS_UdpEvents = {
@@ -74,6 +73,7 @@ static bool XS_UdpStartEx(
 	XS_ScriptRuntime* pScript = (XS_ScriptRuntime*)pServer->DefaultHost->Runtime;
 	xnetaddr tAddr;
 	xnetudpconfig tCfg;
+	xnetudp* pUdp;
 
 	if ( pRuntime == NULL ) {
 		snprintf(sErr, iErrCap, "out of memory");
@@ -105,17 +105,26 @@ static bool XS_UdpStartEx(
 		pRuntime->pListenerSlot = XS_ListenerSlotCreate(pRuntime, pRuntime->pGeneration,
 			NULL, bAcceptEndpoint);
 		if ( pRuntime->pListenerSlot == NULL ||
-		     !XS_ListenerSlotResourceAdd(pRuntime->pListenerSlot) ) {
+		     !XS_ListenerSlotResourceAdd(pRuntime->pListenerSlot,
+			XS_LISTENER_RESOURCE_UDP) ) {
 			snprintf(sErr, iErrCap, "udp server '%s' listener slot failed", pServer->Name);
 			return false;
 		}
-		pRuntime->pUdp = xrtNetUdpBind(pServer->Engine, &tAddr, 0, &tCfg,
+		pUdp = xrtNetUdpBind(pServer->Engine, &tAddr, 0, &tCfg,
 			&g_XS_UdpEvents, pRuntime->pListenerSlot);
-		if ( pRuntime->pUdp == NULL ) {
-			XS_ListenerSlotResourceCancel(pRuntime->pListenerSlot);
+		if ( pUdp == NULL ) {
+			XS_ListenerSlotResourceCancel(pRuntime->pListenerSlot,
+				XS_LISTENER_RESOURCE_UDP);
 			XS_ListenerSlotDestroyEmpty(pRuntime->pListenerSlot);
 			pRuntime->pListenerSlot = NULL;
 			snprintf(sErr, iErrCap, "udp server '%s' bind failed (port %u)", pServer->Name, pServer->Port);
+			return false;
+		}
+		if ( !XS_ListenerSlotResourceAttach(pRuntime->pListenerSlot,
+			XS_LISTENER_RESOURCE_UDP, pUdp) ) {
+			XS_ListenerSlotDestroyEmpty(pRuntime->pListenerSlot);
+			pRuntime->pListenerSlot = NULL;
+			snprintf(sErr, iErrCap, "udp server '%s' listener attach failed", pServer->Name);
 			return false;
 		}
 	}
@@ -133,25 +142,26 @@ static bool XS_UdpHandoff(XS_UdpRuntime* pOld, XS_UdpRuntime* pNew)
 	pSlot = pOld->pListenerSlot;
 	if ( !XS_ListenerSlotHandoff(pSlot, pOld, pNew, pNew->pGeneration, NULL) ) return false;
 	pNew->pListenerSlot = pSlot;
-	pNew->pUdp = pOld->pUdp;
 	pOld->pListenerSlot = NULL;
-	pOld->pUdp = NULL;
 	return true;
 }
 
 static void XS_UdpStop(XS_UdpRuntime* pRuntime)
 {
 	XS_ListenerSlot* pSlot;
+	XS_ListenerResources tResources;
 
-	if ( pRuntime == NULL || pRuntime->pUdp == NULL ) {
+	if ( pRuntime == NULL ) {
 		return;
 	}
-	xrtAtomic32Store(&pRuntime->tStopping, 1, XMEMORY_RELEASE);
+	if ( xrtAtomic32Exchange(&pRuntime->tStopping, 1, XMEMORY_ACQ_REL) != 0 ) return;
 	pSlot = pRuntime->pListenerSlot;
-	if ( pSlot != NULL ) XS_ListenerSlotBeginClose(pSlot, pRuntime);
-	xrtNetUdpClose(pRuntime->pUdp);		/* Close 回调里 Destroy */
-	pRuntime->pUdp = NULL;
 	pRuntime->pListenerSlot = NULL;
+	if ( pSlot != NULL && XS_ListenerSlotBeginClose(pSlot, pRuntime, &tResources) &&
+	     tResources.pUdp != NULL ) {
+		xrtNetUdpClose((xnetudp*)tResources.pUdp);	/* Close 回调里 Destroy */
+		xrtNetUdpDestroy((xnetudp*)tResources.pUdp);
+	}
 }
 
 static void XS_UdpUnit(XS_UdpRuntime* pRuntime)

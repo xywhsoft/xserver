@@ -37,31 +37,30 @@ static bool XS_ServerDriverStartEx(
 	}
 	if ( strcmp(pServer->Class, "http") == 0 ) {
 		if ( XS_HttpStartEx(pServer, bStartEndpoint, bAcceptEndpoint, sErr, iErrCap) ) return true;
+		XS_HttpStop((XS_HttpRuntime*)pServer->Runtime);
 		XS_ServerDriverUnit(pServer);
 		return false;
 	}
 	if ( strcmp(pServer->Class, "tcp") == 0 ) {
 		if ( XS_TcpStartEx(pServer, bStartEndpoint, bAcceptEndpoint, sErr, iErrCap) ) return true;
+		XS_TcpStop((XS_TcpRuntime*)pServer->Runtime);
 		XS_ServerDriverUnit(pServer);
 		return false;
 	}
 	if ( strcmp(pServer->Class, "ws") == 0 ) {
 		if ( XS_WsStartEx(pServer, bStartEndpoint, bAcceptEndpoint, sErr, iErrCap) ) return true;
+		XS_WsStop((XS_WsRuntime*)pServer->Runtime);
 		XS_ServerDriverUnit(pServer);
 		return false;
 	}
 	if ( strcmp(pServer->Class, "udp") == 0 ) {
 		if ( XS_UdpStartEx(pServer, bStartEndpoint, bAcceptEndpoint, sErr, iErrCap) ) return true;
+		XS_UdpStop((XS_UdpRuntime*)pServer->Runtime);
 		XS_ServerDriverUnit(pServer);
 		return false;
 	}
 	snprintf(sErr, iErrCap, "unknown class '%s'", pServer->Class);
 	return false;
-}
-
-static bool XS_ServerDriverStart(XS_ServerInfo* pServer, char* sErr, size_t iErrCap)
-{
-	return XS_ServerDriverStartEx(pServer, true, true, sErr, iErrCap);
 }
 
 static XS_ListenerSlot* XS_ServerDriverListenerSlot(
@@ -157,10 +156,7 @@ static void XS_ServerDriverDeactivate(XS_ServerInfo* pServer)
 
 static void XS_ServerDriverStop(XS_ServerInfo* pServer)
 {
-	if ( pServer->State != XS_RUN_RUNNING && pServer->State != XS_RUN_RELOAD_FAILED ) {
-		return;
-	}
-	pServer->State = XS_RUN_STOPPING;
+	if ( pServer == NULL ) return;
 	if ( strcmp(pServer->Class, "tcp") == 0 ) {
 		XS_TcpStop((XS_TcpRuntime*)pServer->Runtime);
 	} else if ( strcmp(pServer->Class, "http") == 0 ) {
@@ -170,7 +166,6 @@ static void XS_ServerDriverStop(XS_ServerInfo* pServer)
 	} else if ( strcmp(pServer->Class, "udp") == 0 ) {
 		XS_UdpStop((XS_UdpRuntime*)pServer->Runtime);
 	}
-	pServer->State = XS_RUN_STOPPED;
 }
 
 /* 进程退出才主动关闭旧连接；在线换代只 Stop listener 后自然排空。 */
@@ -277,19 +272,59 @@ static bool XS_AssembleServers(XS_App* pApp)
 		/* 脚本先行：HTTP/WS 编译每个启用 host；HTTP 可纯静态，WS 必须有脚本。 */
 		if ( !XS_ServerScriptsLoad(pServer) ) return false;
 
-		if ( XS_ServerDriverStart(pServer, sErr, sizeof(sErr)) ) {
-			pServer->DefaultHost->State = pServer->DefaultHost->Enabled ?
-				XS_RUN_RUNNING : XS_RUN_STOPPED;
-			for ( uint32 j = 0; j < pServer->HostCount; j++ ) {
-				pServer->Hosts[j]->State = pServer->Hosts[j]->Enabled ?
-					XS_RUN_RUNNING : XS_RUN_STOPPED;
-			}
-			pServer->State = XS_RUN_RUNNING;
+		if ( XS_ServerDriverStartEx(pServer, true, false, sErr, sizeof(sErr)) ) {
+			pServer->State = XS_RUN_STARTING;
 		} else {
 			printf("[xs] %s\n", sErr);
 			return false;
 		}
 	}
+	/* 所有 listener 都先以 bound/not-accepting 状态存在；一次写侧提交统一
+	 * 开放端点并发布 generation，任何 Accept 只会看到完整启动拓扑。 */
+	if ( !XS_TopologyWriteLock() ) return false;
+	for ( i = 0; i < pApp->ServerCount; i++ ) {
+		pServer = pApp->Servers[i];
+		if ( pServer->Enabled && strcmp(pServer->Class, "custom") != 0 &&
+		     !XS_ServerDriverCanActivate(pServer) ) break;
+	}
+	if ( i != pApp->ServerCount ) {
+		XS_TopologyWriteUnlock();
+		printf("[xs] server '%s' initial listener activation precheck failed\n",
+			pApp->Servers[i]->Name);
+		return false;
+	}
+	for ( i = 0; i < pApp->ServerCount; i++ ) {
+		pServer = pApp->Servers[i];
+		if ( pServer->Enabled && strcmp(pServer->Class, "custom") != 0 &&
+		     !XS_ServerDriverActivate(pServer) ) break;
+	}
+	if ( i != pApp->ServerCount ) {
+		uint32 j;
+
+		for ( j = 0; j < i; j++ ) {
+			XS_ServerInfo* pActivated = pApp->Servers[j];
+
+			if ( pActivated->Enabled && strcmp(pActivated->Class, "custom") != 0 ) {
+				XS_ServerDriverDeactivate(pActivated);
+			}
+		}
+		XS_TopologyWriteUnlock();
+		printf("[xs] server '%s' initial listener activation failed\n",
+			pApp->Servers[i]->Name);
+		return false;
+	}
+	for ( i = 0; i < pApp->ServerCount; i++ ) {
+		pServer = pApp->Servers[i];
+		(void)XS_GenerationPublish((XS_ServerGeneration*)pServer->Generation);
+		pServer->DefaultHost->State = pServer->Enabled && pServer->DefaultHost->Enabled ?
+			XS_RUN_RUNNING : XS_RUN_STOPPED;
+		for ( uint32 j = 0; j < pServer->HostCount; j++ ) {
+			pServer->Hosts[j]->State = pServer->Enabled && pServer->Hosts[j]->Enabled ?
+				XS_RUN_RUNNING : XS_RUN_STOPPED;
+		}
+		pServer->State = pServer->Enabled ? XS_RUN_RUNNING : XS_RUN_STOPPED;
+	}
+	XS_TopologyWriteUnlock();
 	return true;
 }
 

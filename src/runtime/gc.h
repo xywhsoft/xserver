@@ -64,12 +64,19 @@ static void XS_GenerationFinalize(XS_ServerGeneration* pGeneration)
 		xrtMutexDestroy(pGeneration->pTimerLock);
 		pGeneration->pTimerLock = NULL;
 	}
+	if ( pGeneration->pPublishCond != NULL ) {
+		xrtCondDestroy(pGeneration->pPublishCond);
+		pGeneration->pPublishCond = NULL;
+	}
+	if ( pGeneration->pPublishLock != NULL ) {
+		xrtMutexDestroy(pGeneration->pPublishLock);
+		pGeneration->pPublishLock = NULL;
+	}
 	xrtFree(pGeneration);
 
-	/* 动态快照拥有完整 xvalue 树；初始配置仅在结构换代时释放 server。 */
+	/* 动态 generation 共享不可变配置 revision；最后一个终态者释放整棵树。 */
 	if ( pConfigOwner != NULL ) {
-		XS_ConfigFree((XS_App*)pConfigOwner);
-		xrtFree(pConfigOwner);
+		XS_ConfigRevisionRelease((XS_ConfigRevision*)pConfigOwner);
 	} else if ( bFreeServer ) {
 		XS_ConfigServerFree(pServer);
 	}

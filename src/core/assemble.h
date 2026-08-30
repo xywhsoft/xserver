@@ -54,9 +54,7 @@ static void XS_ShutdownServers(XS_App* pApp)
 		XS_ServerInfo* pServer = pApp->Servers[i];
 
 		if ( pServer == NULL || strcmp(pServer->Class, "custom") == 0 ) continue;
-		pServer->State = XS_RUN_STOPPED;
-		if ( pServer->DefaultHost != NULL ) pServer->DefaultHost->State = XS_RUN_STOPPED;
-		/* 动态配置快照可能在同步 finalizer 中释放 server，先清借用槽位。 */
+		/* 动态配置快照将由 reaper finalizer 释放，先清根 App 的借用槽位。 */
 		if ( pServer->ConfigOwner != NULL ) pApp->Servers[i] = NULL;
 		(void)XS_GcRetireServer(pServer, false);
 	}
@@ -74,7 +72,6 @@ static void XS_ShutdownAfterEngine(XS_App* pApp)
 		XS_ServerInfo* pServer = pApp->Servers[i];
 
 		if ( pServer == NULL || strcmp(pServer->Class, "custom") != 0 ) continue;
-		pServer->State = XS_RUN_STOPPED;
 		if ( pServer->ConfigOwner != NULL ) pApp->Servers[i] = NULL;
 		(void)XS_GcRetireServer(pServer, false);
 	}

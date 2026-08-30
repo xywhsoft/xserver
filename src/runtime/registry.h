@@ -17,6 +17,7 @@ typedef struct XS_ScriptRuntime XS_ScriptRuntime;
 
 typedef struct XS_ConnRecord {
 	struct XS_ConnRecord*	pNext;
+	volatile int32		iReferences;	/* 连接所有权 1 + 正在执行的协议回调 */
 	XS_HostInfo*		pHost;
 	struct XS_ConnRegistry*	pRegistry;
 	XS_ServerGeneration*	pGeneration;
@@ -44,6 +45,7 @@ static bool XS_RegistryAdd(XS_ConnRegistry* pReg, XS_ConnRecord* pRecord)
 {
 	bool bAdded = false;
 
+	if ( pReg == NULL || pReg->pLock == NULL || pRecord == NULL ) return false;
 	xrtMutexLock(pReg->pLock);
 	if ( !pReg->bClosing ) {
 		xrtAtomic64Init(&pRecord->tLastActive, (uint64)xrtNow());
@@ -61,6 +63,7 @@ static void XS_RegistryRemove(XS_ConnRegistry* pReg, XS_ConnRecord* pRecord)
 {
 	XS_ConnRecord** ppLink;
 
+	if ( pReg == NULL || pReg->pLock == NULL || pRecord == NULL ) return;
 	xrtMutexLock(pReg->pLock);
 	for ( ppLink = &pReg->pHead; *ppLink != NULL; ppLink = &(*ppLink)->pNext ) {
 		if ( *ppLink == pRecord ) {
@@ -80,6 +83,7 @@ static void XS_RegistryTouch(XS_ConnRecord* pRecord)
 /* 关闭全部连接（graceful）。Close 事件触发后由各自 Close shim 出表。 */
 static void XS_RegistryStopAccepting(XS_ConnRegistry* pReg)
 {
+	if ( pReg == NULL || pReg->pLock == NULL ) return;
 	xrtMutexLock(pReg->pLock);
 	pReg->bClosing = true;
 	xrtMutexUnlock(pReg->pLock);
@@ -89,6 +93,7 @@ static void XS_RegistryCloseAll(XS_ConnRegistry* pReg)
 {
 	XS_ConnRecord* pRecord;
 
+	if ( pReg == NULL || pReg->pLock == NULL ) return;
 	xrtMutexLock(pReg->pLock);
 	pReg->bClosing = true;
 	for ( pRecord = pReg->pHead; pRecord != NULL; pRecord = pRecord->pNext ) {
@@ -107,11 +112,14 @@ static uint32 XS_RegistrySweepIdle(XS_ConnRegistry* pReg, uint64 iIdleMs)
 	XS_ConnRecord* pRecord;
 	uint32 iStale = 0;
 	int64 tNow = xrtNow();
-	int64 iIdleUs = (int64)iIdleMs * 1000;
 
+	if ( pReg == NULL || pReg->pLock == NULL || iIdleMs == 0 ) return 0;
 	xrtMutexLock(pReg->pLock);
 	for ( pRecord = pReg->pHead; pRecord != NULL; pRecord = pRecord->pNext ) {
-		if ( tNow - (int64)xrtAtomic64Load(&pRecord->tLastActive, XMEMORY_RELAXED) > iIdleUs ) {
+		int64 tLast = (int64)xrtAtomic64Load(&pRecord->tLastActive, XMEMORY_RELAXED);
+		uint64 iElapsedMs = tNow > tLast ? (uint64)(tNow - tLast) / 1000u : 0;
+
+		if ( iElapsedMs > iIdleMs ) {
 			iStale++;
 			/* Close 只投递终态；记录仍由 Close 回调从表中摘除。锁内发起可
 			 * 避免先做裸指针快照再解锁造成 UAF。 */

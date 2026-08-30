@@ -26,23 +26,25 @@
 typedef struct XS_WsRuntime {
 	XS_ServerInfo*		pServer;
 	bool			bTls;
-	xnetlistener*		pListener;
-	xtlslistener*		pTlsListener;
 	XS_ListenerSlot*	pListenerSlot;
 	XS_TlsTable		tTls;
 	XS_VHostTable		tVHosts;
 	xhttp1limits		tLimits;
+	size_t			iReceiveLimit;	/* 握手期线路硬边界，防止 ReadLimit 满后永久 MORE */
 	str			sProtocol;	/* ws_protocol 旋钮（可空） */
 	uint64			iMessageLimit;	/* 0 = 内核默认 */
+	uint64			iIdleMs;	/* 0 = 关闭 idle 保护 */
+	XS_GenerationTimer	tSweepTimer;
 	struct XS_WsConn*	pConns;		/* 活动连接链（停机批量收口） */
 	uint32			iConnCount;
 	xmutex*			pConnLock;
 	XS_ServerGeneration*	pGeneration;
-	volatile bool		bStopping;
+	xatomic32		tStopping;
 } XS_WsRuntime;
 
 typedef struct XS_WsConn {
 	struct XS_WsConn*	pNext;
+	volatile int32		iReferences;	/* 连接所有权 1 + 正在执行的协议回调 */
 	XS_WsRuntime*		pRuntime;
 	XS_HostInfo*		pHost;
 	XS_ServerGeneration*	pGeneration;
@@ -58,16 +60,25 @@ typedef struct XS_WsConn {
 	size_t			iMsgSize;
 	size_t			iMsgCap;
 	uint8			iMsgOpcode;
+	xatomic64		tLastActive;	/* xrtNow() 微秒 */
 	bool			bUpgradeStarted;
 	bool			bHandshakeDone;
+	bool			bMessageFailed;
 } XS_WsConn;
+
+static void XS_WsTouch(XS_WsConn* pConn)
+{
+	if ( pConn != NULL ) {
+		xrtAtomic64Store(&pConn->tLastActive, (uint64)xrtNow(), XMEMORY_RELAXED);
+	}
+}
 
 static bool XS_WsListAdd(XS_WsRuntime* pRuntime, XS_WsConn* pConn)
 {
 	bool bAdded = false;
 
 	xrtMutexLock(pRuntime->pConnLock);
-	if ( !pRuntime->bStopping ) {
+	if ( xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) == 0 ) {
 		pConn->pNext = pRuntime->pConns;
 		pRuntime->pConns = pConn;
 		pRuntime->iConnCount++;
@@ -92,16 +103,65 @@ static void XS_WsListRemove(XS_WsRuntime* pRuntime, XS_WsConn* pConn)
 	xrtMutexUnlock(pRuntime->pConnLock);
 }
 
-static void XS_WsConnFree(XS_WsConn* pConn)
+static bool XS_WsConnRetain(XS_WsConn* pConn)
 {
-	XS_ScriptRuntime* pScript = pConn->pScript;
-	XS_ServerGeneration* pGeneration = pConn->pGeneration;
+	return pConn != NULL && xrtRefRetain(&pConn->iReferences) > 0;
+}
 
-	XS_WsListRemove(pConn->pRuntime, pConn);
+static void XS_WsConnRelease(XS_WsConn* pConn)
+{
+	XS_ScriptRuntime* pScript;
+	XS_ServerGeneration* pGeneration;
+
+	if ( pConn == NULL || xrtRefRelease(&pConn->iReferences) != 0 ) return;
+	pScript = pConn->pScript;
+	pGeneration = pConn->pGeneration;
 	xrtFree(pConn->pMsg);
 	xrtFree(pConn);
 	XS_ScriptRelease(pScript);
 	XS_GenerationConnectionRelease(pGeneration);
+}
+
+static bool XS_WsNetCallbackEnter(XS_WsConn* pConn, xnetstream* pStream)
+{
+	if ( !XS_WsConnRetain(pConn) ) return false;
+	if ( xrtNetStreamRef(pStream) != NULL ) return true;
+	XS_WsConnRelease(pConn);
+	return false;
+}
+
+static void XS_WsNetCallbackLeave(XS_WsConn* pConn, xnetstream* pStream)
+{
+	xrtNetStreamDestroy(pStream);
+	XS_WsConnRelease(pConn);
+}
+
+static bool XS_WsTlsCallbackEnter(XS_WsConn* pConn, xtlsstream* pStream)
+{
+	if ( !XS_WsConnRetain(pConn) ) return false;
+	if ( xrtTlsStreamRef(pStream) != NULL ) return true;
+	XS_WsConnRelease(pConn);
+	return false;
+}
+
+static void XS_WsTlsCallbackLeave(XS_WsConn* pConn, xtlsstream* pStream)
+{
+	xrtTlsStreamDestroy(pStream);
+	XS_WsConnRelease(pConn);
+}
+
+static bool XS_WsStreamCallbackEnter(XS_WsConn* pConn, xwsstream* pStream)
+{
+	if ( !XS_WsConnRetain(pConn) ) return false;
+	if ( xrtWsStreamRef(pStream) != NULL ) return true;
+	XS_WsConnRelease(pConn);
+	return false;
+}
+
+static void XS_WsStreamCallbackLeave(XS_WsConn* pConn, xwsstream* pStream)
+{
+	xrtWsStreamDestroy(pStream);
+	XS_WsConnRelease(pConn);
 }
 
 /* ============================================================
@@ -124,10 +184,12 @@ static void XS_WsReject(XS_WsConn* pConn, uint16 iStatus)
 	char arrHead[512];
 	xhttpfield arrFields[1];
 	size_t iSize = 0;
+	xhttpversion eVersion = pConn->tHead.Version == XHTTP_VERSION_1_0 ?
+		XHTTP_VERSION_1_0 : XHTTP_VERSION_1_1;
 
 	arrFields[0].Name = XRT_STR_LITERAL("Content-Length");
 	arrFields[0].Value = XRT_STR_LITERAL("0");
-	if ( xrtHttp1ResponseWrite(XHTTP_VERSION_1_1, iStatus, xrtHttpStatusText(iStatus),
+	if ( xrtHttp1ResponseWrite(eVersion, iStatus, xrtHttpStatusText(iStatus),
 		arrFields, 1, arrHead, sizeof(arrHead), &iSize) ) {
 		(void)XS_WsSendRaw(pConn, arrHead, iSize);
 	}
@@ -136,6 +198,23 @@ static void XS_WsReject(XS_WsConn* pConn, uint16 iStatus)
 	} else {
 		(void)xrtNetStreamClose(pConn->pTcp);
 	}
+}
+
+static size_t XS_WsHandshakeAvailable(XS_WsConn* pConn)
+{
+	const xnetbuf* pBuffer = pConn->pTls != NULL ?
+		xrtTlsStreamBuffer(pConn->pTls) : xrtNetStreamBuffer(pConn->pTcp);
+
+	return pBuffer != NULL ? xrtNetBufSize(pBuffer) : 0;
+}
+
+static bool XS_WsConsumeHandshake(XS_WsConn* pConn)
+{
+	if ( pConn->pTls != NULL ) {
+		return xrtTlsStreamConsume(pConn->pTls, pConn->tHead.Bytes);
+	}
+	return xrtNetStreamConsume(pConn->pTcp, pConn->tHead.Bytes) ==
+		pConn->tHead.Bytes;
 }
 
 static const xwsstreamevents g_XS_WsStreamEvents;	/* 前向声明（定义在事件段） */
@@ -183,8 +262,7 @@ static bool XS_WsUpgrade(XS_WsConn* pConn)
 		tUpgrade.Protocol, xrtStrViewN(tUpgrade.Extensions, tUpgrade.ExtensionSize),
 		arrFields, 4, &iCount) ||
 	     !xrtHttp1ResponseWrite(XHTTP_VERSION_1_1, 101, XRT_STR_LITERAL("Switching Protocols"),
-		arrFields, iCount, arrHead, sizeof(arrHead), &iSize) ||
-	     !XS_WsSendRaw(pConn, arrHead, iSize) ) {
+		arrFields, iCount, arrHead, sizeof(arrHead), &iSize) ) {
 		XS_WsReject(pConn, 500);
 		return false;
 	}
@@ -197,26 +275,47 @@ static bool XS_WsUpgrade(XS_WsConn* pConn)
 	if ( pRuntime->iMessageLimit > 0 ) {
 		tStreamCfg.MessageLimit = pRuntime->iMessageLimit;
 	}
+	/* 先消费 HTTP 前缀，再以 prefix=0 移交。这使 Attach 失败不会留下
+	 * 已换事件却无 Close 回调的半接管传输。 */
+	if ( !XS_WsConsumeHandshake(pConn) ) {
+		XS_WsReject(pConn, 500);
+		return false;
+	}
 	if ( pConn->pTls != NULL ) {
-		pWs = xrtWsStreamAttachTls(pConn->pTls, pConn->tHead.Bytes,
+		pWs = xrtWsStreamAttachTls(pConn->pTls, 0,
 			&tStreamCfg, &g_XS_WsStreamEvents, pConn);
 	} else {
-		pWs = xrtWsStreamAttach(pConn->pTcp, pConn->tHead.Bytes,
+		pWs = xrtWsStreamAttach(pConn->pTcp, 0,
 			&tStreamCfg, &g_XS_WsStreamEvents, pConn);
 	}
 	if ( pWs == NULL ) {
-		return false;	/* 库已关闭传输 */
+		XS_WsReject(pConn, 500);
+		return false;
 	}
+	xrtMutexLock(pRuntime->pConnLock);
 	pConn->pWs = pWs;
 	pConn->bHandshakeDone = true;
+	xrtMutexUnlock(pRuntime->pConnLock);
+	/* Attach 已成功后只能走 WS 终态；101 发送失败时不再发第二个 HTTP 响应。 */
+	if ( !XS_WsSendRaw(pConn, arrHead, iSize) ) {
+		(void)xrtWsStreamAbort(pWs);
+		return false;
+	}
 	{
 		XS_ScriptRuntime* pScript = pConn->pScript;
 
 		if ( pScript != NULL && pScript->procWsOpen != NULL ) {
-			XS_ScriptRuntime* pPrevious = XS_ScriptEnter(pScript);
+			xwsstream* pGuard = xrtWsStreamRef(pWs);
+			XS_ScriptRuntime* pPrevious;
 
+			if ( pGuard == NULL ) {
+				(void)xrtWsStreamAbort(pWs);
+				return false;
+			}
+			pPrevious = XS_ScriptEnter(pScript);
 			pScript->procWsOpen(pConn->pHost, pWs);
 			XS_ScriptLeave(pPrevious);
+			xrtWsStreamDestroy(pGuard);
 		}
 	}
 	return true;
@@ -231,22 +330,33 @@ static void XS_WsOnRead(xnetstream* pStream, xnetbuf* pBuffer, ptr pData)
 	XS_WsConn* pConn = (XS_WsConn*)pData;
 	xhttp1errorinfo tErr;
 
-	(void)pStream; (void)pBuffer;
+	(void)pBuffer;
+	if ( !XS_WsNetCallbackEnter(pConn, pStream) ) return;
+	XS_WsTouch(pConn);
 	if ( pConn->bHandshakeDone || pConn->bUpgradeStarted ) {
-		return;		/* 已移交 WS 层，不该再收到 */
+		goto Done;		/* 已移交 WS 层，不该再收到 */
 	}
 	switch ( xrtHttp1RequestParseBuffer((xnetbuf*)xrtNetStreamBuffer(pConn->pTcp),
 		&pConn->tHead, &pConn->pRuntime->tLimits, &tErr) ) {
 	case XHTTP1_MORE:
-		return;
+		if ( XS_WsHandshakeAvailable(pConn) >= pConn->pRuntime->iReceiveLimit ) {
+			XS_WsReject(pConn, 431);
+		}
+		goto Done;
 	case XHTTP1_ERROR:
-		XS_WsReject(pConn, 400);
-		return;
+		XS_WsReject(pConn,
+			(tErr.Code == XHTTP1_ERROR_HEAD_TOO_LARGE ||
+			 tErr.Code == XHTTP1_ERROR_START_LINE_TOO_LARGE ||
+			 tErr.Code == XHTTP1_ERROR_FIELD_LINE_TOO_LARGE ||
+			 tErr.Code == XHTTP1_ERROR_TOO_MANY_FIELDS) ? 431 : 400);
+		goto Done;
 	default:
 		break;
 	}
 	pConn->bUpgradeStarted = true;
 	(void)XS_WsUpgrade(pConn);
+Done:
+	XS_WsNetCallbackLeave(pConn, pStream);
 }
 
 static void XS_WsOnEnd(xnetstream* pStream, ptr pData)
@@ -261,8 +371,9 @@ static void XS_WsOnClose(xnetstream* pStream, xnetresult iResult, const xerror* 
 
 	(void)iResult; (void)pError;
 	if ( !pConn->bHandshakeDone ) {
+		XS_WsListRemove(pConn->pRuntime, pConn);
 		xrtNetStreamDestroy(pStream);
-		XS_WsConnFree(pConn);
+		XS_WsConnRelease(pConn);
 	}
 	/* 已握手：由 WS 层 Close 事件统一回收 */
 }
@@ -276,21 +387,32 @@ static void XS_WsTlsOnRead(xtlsstream* pStream, const xnetbuf* pBuffer, ptr pDat
 	XS_WsConn* pConn = (XS_WsConn*)pData;
 	xhttp1errorinfo tErr;
 
-	(void)pStream; (void)pBuffer;
+	(void)pBuffer;
+	if ( !XS_WsTlsCallbackEnter(pConn, pStream) ) return;
+	XS_WsTouch(pConn);
 	if ( pConn->bHandshakeDone || pConn->bUpgradeStarted ) {
-		return;
+		goto Done;
 	}
 	switch ( xrtHttp1RequestParseTls(pConn->pTls, &pConn->tHead, &pConn->pRuntime->tLimits, &tErr) ) {
 	case XHTTP1_MORE:
-		return;
+		if ( XS_WsHandshakeAvailable(pConn) >= pConn->pRuntime->iReceiveLimit ) {
+			XS_WsReject(pConn, 431);
+		}
+		goto Done;
 	case XHTTP1_ERROR:
-		XS_WsReject(pConn, 400);
-		return;
+		XS_WsReject(pConn,
+			(tErr.Code == XHTTP1_ERROR_HEAD_TOO_LARGE ||
+			 tErr.Code == XHTTP1_ERROR_START_LINE_TOO_LARGE ||
+			 tErr.Code == XHTTP1_ERROR_FIELD_LINE_TOO_LARGE ||
+			 tErr.Code == XHTTP1_ERROR_TOO_MANY_FIELDS) ? 431 : 400);
+		goto Done;
 	default:
 		break;
 	}
 	pConn->bUpgradeStarted = true;
 	(void)XS_WsUpgrade(pConn);
+Done:
+	XS_WsTlsCallbackLeave(pConn, pStream);
 }
 
 static void XS_WsTlsOnEnd(xtlsstream* pStream, ptr pData)
@@ -305,8 +427,9 @@ static void XS_WsTlsOnClose(xtlsstream* pStream, xnetresult iResult, const xerro
 
 	(void)iResult; (void)pError;
 	if ( !pConn->bHandshakeDone ) {
+		XS_WsListRemove(pConn->pRuntime, pConn);
 		xrtTlsStreamDestroy(pStream);
-		XS_WsConnFree(pConn);
+		XS_WsConnRelease(pConn);
 	}
 }
 
@@ -322,47 +445,73 @@ static void XS_WsOnMessageBegin(xwsstream* pStream, const xwsmessageinfo* pInfo,
 {
 	XS_WsConn* pConn = (XS_WsConn*)pData;
 
-	(void)pStream;
+	if ( !XS_WsStreamCallbackEnter(pConn, pStream) ) return;
+	XS_WsTouch(pConn);
 	pConn->iMsgSize = 0;
 	pConn->iMsgOpcode = pInfo->Opcode;
+	pConn->bMessageFailed = false;
+	XS_WsStreamCallbackLeave(pConn, pStream);
 }
 
 static void XS_WsOnMessageData(xwsstream* pStream, xbytesview Data, ptr pData)
 {
 	XS_WsConn* pConn = (XS_WsConn*)pData;
-	uint64 iLimit = pConn->pRuntime->iMessageLimit;
+	uint64 iLimit;
+	size_t iNeeded;
 
-	(void)pStream;
-	if ( iLimit > 0 && pConn->iMsgSize + Data.Size > iLimit ) {
+	if ( !XS_WsStreamCallbackEnter(pConn, pStream) ) return;
+	iLimit = pConn->pRuntime->iMessageLimit;
+	XS_WsTouch(pConn);
+	if ( pConn->bMessageFailed ) goto Done;
+	if ( Data.Size > SIZE_MAX - pConn->iMsgSize ) {
+		pConn->bMessageFailed = true;
 		(void)xrtWsStreamClose(pStream, 1009, XRT_STR_LITERAL("message too big"));
-		return;
+		goto Done;
 	}
-	if ( pConn->iMsgSize + Data.Size > pConn->iMsgCap ) {
-		size_t iNewCap = pConn->iMsgCap * 2;
+	iNeeded = pConn->iMsgSize + Data.Size;
+	if ( iLimit > 0 && ((uint64)pConn->iMsgSize > iLimit ||
+	     (uint64)Data.Size > iLimit - (uint64)pConn->iMsgSize) ) {
+		pConn->bMessageFailed = true;
+		(void)xrtWsStreamClose(pStream, 1009, XRT_STR_LITERAL("message too big"));
+		goto Done;
+	}
+	if ( iNeeded > pConn->iMsgCap ) {
+		size_t iNewCap = pConn->iMsgCap > SIZE_MAX / 2 ?
+			SIZE_MAX : pConn->iMsgCap * 2u;
 		unsigned char* pNew;
 
 		if ( iNewCap < 4096 ) iNewCap = 4096;
-		while ( iNewCap < pConn->iMsgSize + Data.Size ) {
-			iNewCap *= 2;
+		while ( iNewCap < iNeeded ) {
+			if ( iNewCap > SIZE_MAX / 2 ) {
+				iNewCap = iNeeded;
+				break;
+			}
+			iNewCap *= 2u;
 		}
 		pNew = (unsigned char*)xrtRealloc(pConn->pMsg, iNewCap);
 		if ( pNew == NULL ) {
+			pConn->bMessageFailed = true;
 			(void)xrtWsStreamClose(pStream, 1011, XRT_STR_LITERAL("oom"));
-			return;
+			goto Done;
 		}
 		pConn->pMsg = pNew;
 		pConn->iMsgCap = iNewCap;
 	}
-	memcpy(pConn->pMsg + pConn->iMsgSize, Data.Data, Data.Size);
+	if ( Data.Size != 0 ) memcpy(pConn->pMsg + pConn->iMsgSize, Data.Data, Data.Size);
 	pConn->iMsgSize += Data.Size;
+Done:
+	XS_WsStreamCallbackLeave(pConn, pStream);
 }
 
 static void XS_WsOnMessageEnd(xwsstream* pStream, ptr pData)
 {
 	XS_WsConn* pConn = (XS_WsConn*)pData;
-	XS_ScriptRuntime* pScript = pConn->pScript;
+	XS_ScriptRuntime* pScript;
 
-	if ( pScript != NULL ) {
+	if ( !XS_WsStreamCallbackEnter(pConn, pStream) ) return;
+	pScript = pConn->pScript;
+	XS_WsTouch(pConn);
+	if ( !pConn->bMessageFailed && pScript != NULL ) {
 		XS_ScriptRuntime* pPrevious = XS_ScriptEnter(pScript);
 
 		if ( pConn->iMsgOpcode == XWS_OPCODE_TEXT && pScript->procWsText != NULL ) {
@@ -378,32 +527,41 @@ static void XS_WsOnMessageEnd(xwsstream* pStream, ptr pData)
 		XS_ScriptLeave(pPrevious);
 	}
 	pConn->iMsgSize = 0;
+	XS_WsStreamCallbackLeave(pConn, pStream);
 }
 
 static void XS_WsOnPing(xwsstream* pStream, xbytesview Payload, ptr pData)
 {
 	XS_WsConn* pConn = (XS_WsConn*)pData;
-	XS_ScriptRuntime* pScript = pConn->pScript;
+	XS_ScriptRuntime* pScript;
 
+	if ( !XS_WsStreamCallbackEnter(pConn, pStream) ) return;
+	pScript = pConn->pScript;
+	XS_WsTouch(pConn);
 	if ( pScript != NULL && pScript->procWsPing != NULL ) {
 		XS_ScriptRuntime* pPrevious = XS_ScriptEnter(pScript);
 
 		pScript->procWsPing(pConn->pHost, pStream, Payload);
 		XS_ScriptLeave(pPrevious);
 	}
+	XS_WsStreamCallbackLeave(pConn, pStream);
 }
 
 static void XS_WsOnPong(xwsstream* pStream, xbytesview Payload, ptr pData)
 {
 	XS_WsConn* pConn = (XS_WsConn*)pData;
-	XS_ScriptRuntime* pScript = pConn->pScript;
+	XS_ScriptRuntime* pScript;
 
+	if ( !XS_WsStreamCallbackEnter(pConn, pStream) ) return;
+	pScript = pConn->pScript;
+	XS_WsTouch(pConn);
 	if ( pScript != NULL && pScript->procWsPong != NULL ) {
 		XS_ScriptRuntime* pPrevious = XS_ScriptEnter(pScript);
 
 		pScript->procWsPong(pConn->pHost, pStream, Payload);
 		XS_ScriptLeave(pPrevious);
 	}
+	XS_WsStreamCallbackLeave(pConn, pStream);
 }
 
 static void XS_WsOnWsClose(xwsstream* pStream, const xwsstreamclose* pClose, ptr pData)
@@ -424,8 +582,10 @@ static void XS_WsOnWsClose(xwsstream* pStream, const xwsstreamclose* pClose, ptr
 		pScript->procWsClose(pConn->pHost, pStream, iCode, tReason);
 		XS_ScriptLeave(pPrevious);
 	}
+	/* 先出活动表，避免 idle/停机线程对已经 Destroy 的 WS 句柄再次 Abort。 */
+	XS_WsListRemove(pConn->pRuntime, pConn);
 	xrtWsStreamDestroy(pStream);	/* 附带关闭并回收底层传输 */
-	XS_WsConnFree(pConn);
+	XS_WsConnRelease(pConn);
 }
 
 static const xwsstreamevents g_XS_WsStreamEvents = {
@@ -453,26 +613,30 @@ static bool XS_WsOnAccept(xnetlistener* pListener, xnetstream* pStream, ptr pDat
 	XS_WsConn* pConn = (XS_WsConn*)xrtCalloc(1, sizeof(XS_WsConn));
 
 	(void)pListener;
-	if ( pConn == NULL ||
-	     !XS_ListenerSlotAcquireConnection(pSlot, (void**)&pRuntime, &pGeneration) ) {
-		xrtFree(pConn);
+	if ( pConn == NULL ) return false;
+	pConn->iReferences = 1;
+	if ( !XS_ListenerSlotAcquireConnection(pSlot, 0, (void**)&pRuntime, &pGeneration) ) {
+		XS_WsConnRelease(pConn);
 		return false;
 	}
-	if ( pRuntime->bStopping ) {
-		XS_GenerationConnectionRelease(pGeneration);
-		xrtFree(pConn);
+	pConn->pGeneration = pGeneration;
+	if ( xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) != 0 ) {
+		XS_WsConnRelease(pConn);
 		return false;
 	}
 	pConn->pRuntime = pRuntime;
-	pConn->pGeneration = pGeneration;
 	pConn->pTcp = pStream;
+	xrtAtomic64Init(&pConn->tLastActive, (uint64)xrtNow());
 	xrtHttp1HeadInit(&pConn->tHead, pConn->arrFields, XS_WS_MAX_FIELDS);
 	if ( !XS_WsListAdd(pRuntime, pConn) ) {
-		XS_GenerationConnectionRelease(pGeneration);
-		xrtFree(pConn);
+		XS_WsConnRelease(pConn);
 		return false;
 	}
-	(void)xrtNetStreamSetData(pStream, pConn);
+	if ( !xrtNetStreamSetData(pStream, pConn) ) {
+		XS_WsListRemove(pRuntime, pConn);
+		XS_WsConnRelease(pConn);
+		return false;
+	}
 	return true;
 }
 
@@ -480,8 +644,8 @@ static void XS_WsOnListenerClose(xnetlistener* pListener, ptr pData)
 {
 	XS_ListenerSlot* pSlot = (XS_ListenerSlot*)pData;
 
+	XS_ListenerSlotResourceClose(pSlot, XS_LISTENER_RESOURCE_PLAIN);
 	xrtNetListenerDestroy(pListener);
-	XS_ListenerSlotResourceClose(pSlot);
 }
 
 static const xnetlistenerevents g_XS_WsListenerEvents = {
@@ -496,26 +660,30 @@ static bool XS_WsTlsOnAccept(xtlslistener* pListener, xtlsstream* pStream, ptr p
 	XS_WsConn* pConn = (XS_WsConn*)xrtCalloc(1, sizeof(XS_WsConn));
 
 	(void)pListener;
-	if ( pConn == NULL ||
-	     !XS_ListenerSlotAcquireConnection(pSlot, (void**)&pRuntime, &pGeneration) ) {
-		xrtFree(pConn);
+	if ( pConn == NULL ) return false;
+	pConn->iReferences = 1;
+	if ( !XS_TlsAcquireConnection(pSlot, pStream, (void**)&pRuntime, &pGeneration) ) {
+		XS_WsConnRelease(pConn);
 		return false;
 	}
-	if ( pRuntime->bStopping ) {
-		XS_GenerationConnectionRelease(pGeneration);
-		xrtFree(pConn);
+	pConn->pGeneration = pGeneration;
+	if ( xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) != 0 ) {
+		XS_WsConnRelease(pConn);
 		return false;
 	}
 	pConn->pRuntime = pRuntime;
-	pConn->pGeneration = pGeneration;
 	pConn->pTls = pStream;
+	xrtAtomic64Init(&pConn->tLastActive, (uint64)xrtNow());
 	xrtHttp1HeadInit(&pConn->tHead, pConn->arrFields, XS_WS_MAX_FIELDS);
 	if ( !XS_WsListAdd(pRuntime, pConn) ) {
-		XS_GenerationConnectionRelease(pGeneration);
-		xrtFree(pConn);
+		XS_WsConnRelease(pConn);
 		return false;
 	}
-	(void)xrtTlsStreamSetEvents(pStream, &g_XS_WsTlsTransportEvents, pConn);
+	if ( !xrtTlsStreamSetEvents(pStream, &g_XS_WsTlsTransportEvents, pConn) ) {
+		XS_WsListRemove(pRuntime, pConn);
+		XS_WsConnRelease(pConn);
+		return false;
+	}
 	return true;
 }
 
@@ -523,13 +691,79 @@ static void XS_WsTlsOnListenerClose(xtlslistener* pListener, ptr pData)
 {
 	XS_ListenerSlot* pSlot = (XS_ListenerSlot*)pData;
 
+	XS_ListenerSlotResourceClose(pSlot, XS_LISTENER_RESOURCE_TLS);
 	xrtTlsListenerDestroy(pListener);
-	XS_ListenerSlotResourceClose(pSlot);
 }
 
 static const xtlslistenerevents g_XS_WsTlsListenerEvents = {
-	XS_WsTlsOnAccept, NULL, NULL, XS_WsTlsOnListenerClose
+	XS_WsTlsOnAccept, XS_TlsHandshakeError, NULL, XS_WsTlsOnListenerClose
 };
+
+/* ============================================================
+ * idle 扫描
+ * ============================================================ */
+
+static uint32 XS_WsSweepIdle(XS_WsRuntime* pRuntime)
+{
+	XS_WsConn* pConn;
+	int64 tNow = xrtNow();
+	uint32 iStale = 0;
+
+	if ( pRuntime == NULL || pRuntime->iIdleMs == 0 ) return 0;
+	xrtMutexLock(pRuntime->pConnLock);
+	for ( pConn = pRuntime->pConns; pConn != NULL; pConn = pConn->pNext ) {
+		int64 tLast = (int64)xrtAtomic64Load(&pConn->tLastActive, XMEMORY_RELAXED);
+		uint64 iElapsedMs = tNow > tLast ? (uint64)(tNow - tLast) / 1000u : 0;
+
+		if ( iElapsedMs <= pRuntime->iIdleMs ) continue;
+		iStale++;
+		if ( pConn->pWs != NULL ) {
+			(void)xrtWsStreamAbort(pConn->pWs);
+		} else if ( pConn->pTls != NULL ) {
+			(void)xrtTlsStreamAbort(pConn->pTls);
+		} else if ( pConn->pTcp != NULL ) {
+			(void)xrtNetStreamAbort(pConn->pTcp);
+		}
+	}
+	xrtMutexUnlock(pRuntime->pConnLock);
+	return iStale;
+}
+
+static void XS_WsSweepProc(xnetworker* pWorker, uint64 iId, xnetresult iResult, ptr pData)
+{
+	XS_WsRuntime* pRuntime = (XS_WsRuntime*)pData;
+	XS_ServerGeneration* pGeneration = XS_GenerationTimerFinish(&pRuntime->tSweepTimer);
+
+	(void)pWorker; (void)iId;
+	if ( pGeneration == NULL ) return;
+	if ( iResult == XNET_RESULT_OK &&
+	     xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) == 0 ) {
+		uint64 iInterval = pRuntime->iIdleMs / 2u;
+
+		(void)XS_WsSweepIdle(pRuntime);
+		if ( iInterval > 1000 ) iInterval = 1000;
+		if ( iInterval < 10 ) iInterval = 10;
+		if ( XS_GenerationTimerSchedule(pRuntime->pGeneration,
+			iInterval * 1000, XS_WsSweepProc, pRuntime,
+			pRuntime, &pRuntime->tSweepTimer) != 0 &&
+		     xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) != 0 ) {
+			XS_GenerationTimerCancelOwner(pRuntime->pGeneration, pRuntime);
+		}
+	}
+	XS_GenerationActivityRelease(pGeneration);
+	XS_GenerationRelease(pGeneration);
+}
+
+static bool XS_WsScheduleSweep(XS_WsRuntime* pRuntime)
+{
+	uint64 iInterval = pRuntime->iIdleMs / 2u;
+
+	if ( iInterval > 1000 ) iInterval = 1000;
+	if ( iInterval < 10 ) iInterval = 10;
+	return XS_GenerationTimerSchedule(pRuntime->pGeneration,
+		iInterval * 1000, XS_WsSweepProc, pRuntime,
+		pRuntime, &pRuntime->tSweepTimer) != 0;
+}
 
 /* ============================================================
  * 启动 / 停止
@@ -544,8 +778,10 @@ static bool XS_WsStartEx(
 {
 	XS_WsRuntime* pRuntime = (XS_WsRuntime*)xrtCalloc(1, sizeof(XS_WsRuntime));
 	xhttp1limits tDef;
+	xnetlistenconfig tNetDef;
 	xnetaddr tAddr;
-	int64 iVal = 0;
+	xnetaddr tTlsAddr;
+	uint64 iVal = 0;
 
 	if ( pRuntime == NULL ) {
 		snprintf(sErr, iErrCap, "out of memory");
@@ -553,6 +789,7 @@ static bool XS_WsStartEx(
 	}
 	pRuntime->pServer = pServer;
 	pRuntime->pGeneration = (XS_ServerGeneration*)pServer->Generation;
+	xrtAtomic32Init(&pRuntime->tStopping, 0);
 	pRuntime->pConnLock = xrtMutexCreate();
 	if ( pRuntime->pConnLock == NULL ) {
 		xrtFree(pRuntime);
@@ -586,31 +823,60 @@ static bool XS_WsStartEx(
 		snprintf(sErr, iErrCap, "ws server '%s' addr parse failed", pServer->Name);
 		return false;
 	}
+	if ( pServer->TLS && !xrtNetAddrParse(&tTlsAddr,
+		pServer->IPTLS ? pServer->IPTLS : (pServer->IP ? pServer->IP : "0.0.0.0"),
+		pServer->PortTLS) ) {
+		snprintf(sErr, iErrCap, "wss server '%s' tls addr parse failed", pServer->Name);
+		return false;
+	}
 	xrtHttp1LimitsInit(&tDef);
 	pRuntime->tLimits = tDef;
-	(void)XS_CustomGetInt(pServer->Custom, "ws_message_limit", &iVal);
-	pRuntime->iMessageLimit = (iVal > 0) ? (uint64)iVal : 0;
+	xrtNetListenConfigInit(&tNetDef);
+	pRuntime->iReceiveLimit = pServer->RecvLimit > 0 ?
+		pServer->RecvLimit : tNetDef.Stream.ReadLimit;
+	if ( pRuntime->tLimits.MaxFields > XS_WS_MAX_FIELDS ) {
+		pRuntime->tLimits.MaxFields = XS_WS_MAX_FIELDS;
+	}
+	if ( !XS_CustomReadUInt(pServer->Custom, "ws_message_limit", &iVal,
+		sErr, iErrCap) ) return false;
+	pRuntime->iMessageLimit = iVal;
+	if ( !XS_CustomReadUInt(pServer->Custom, "idle_timeout", &iVal,
+		sErr, iErrCap) ) return false;
+	pRuntime->iIdleMs = iVal;
 	{
-		const char* sProto = NULL;
-
 		if ( pServer->Custom != NULL ) {
 			xvalue* pVal = xrtValueObjectGet(pServer->Custom,
 				xrtStrViewN("ws_protocol", strlen("ws_protocol")));
 			xstrview tView;
 
-			if ( pVal != NULL && xrtValueGetString(pVal, &tView) ) {
-				pRuntime->sProtocol = xrtStrDupN(tView.Data, tView.Size);
+			if ( pVal != NULL ) {
+				if ( !xrtValueGetString(pVal, &tView) ) {
+					snprintf(sErr, iErrCap, "custom field 'ws_protocol' expect string");
+					return false;
+				}
+				if ( tView.Size > 0 && !xrtWsProtocolsValid(tView) ) {
+					snprintf(sErr, iErrCap, "custom field 'ws_protocol' is invalid");
+					return false;
+				}
+				if ( tView.Size > 0 ) {
+					pRuntime->sProtocol = xrtStrDupN(tView.Data, tView.Size);
+					if ( pRuntime->sProtocol == NULL ) {
+						snprintf(sErr, iErrCap, "out of memory reading ws_protocol");
+						return false;
+					}
+				}
 			}
 		}
-		(void)sProto;
 	}
 
 	if ( pServer->TLS ) {
 		if ( XS_TlsSharedContext() == NULL ||
 		     !XS_TlsTableBuild(pServer, &pRuntime->tTls, sErr, iErrCap) ||
 		     pRuntime->tTls.iCount == 0 ) {
-			snprintf(sErr + strlen(sErr), iErrCap - strlen(sErr),
-				"wss server '%s' has no usable tls identity", pServer->Name);
+			if ( sErr[0] == '\0' ) {
+				snprintf(sErr, iErrCap,
+					"wss server '%s' has no usable tls identity", pServer->Name);
+			}
 			return false;
 		}
 		pRuntime->bTls = true;
@@ -624,8 +890,9 @@ static bool XS_WsStartEx(
 		}
 	}
 
-	if ( bStartEndpoint && !pServer->TLS ) {
+	if ( bStartEndpoint ) {
 		xnetlistenconfig tListen;
+		xnetlistener* pListener;
 
 		xrtNetListenConfigInit(&tListen);
 		tListen.Address = tAddr;
@@ -634,14 +901,14 @@ static bool XS_WsStartEx(
 		if ( pServer->Backlog > 0 ) {
 			tListen.Backlog = (int)pServer->Backlog;
 		}
-		if ( pServer->RecvLimit > 0 ) {
-			tListen.Stream.ReadLimit = pServer->RecvLimit;
-		}
-		if ( !XS_ListenerSlotResourceAdd(pRuntime->pListenerSlot) ) return false;
-		pRuntime->pListener = xrtNetListen(pServer->Engine, &tListen,
+		XS_StreamApplyReceiveLimit(&tListen.Stream, pServer->RecvLimit);
+		if ( !XS_ListenerSlotResourceAdd(pRuntime->pListenerSlot,
+		     XS_LISTENER_RESOURCE_PLAIN) ) return false;
+		pListener = xrtNetListen(pServer->Engine, &tListen,
 			&g_XS_WsListenerEvents, &g_XS_WsTransportEvents, pRuntime->pListenerSlot);
-		if ( pRuntime->pListener == NULL ) {
-			XS_ListenerSlotResourceCancel(pRuntime->pListenerSlot);
+		if ( pListener == NULL ) {
+			XS_ListenerSlotResourceCancel(pRuntime->pListenerSlot,
+				XS_LISTENER_RESOURCE_PLAIN);
 			XS_ListenerSlotDestroyEmpty(pRuntime->pListenerSlot);
 			pRuntime->pListenerSlot = NULL;
 			const xerror* pErr = xrtGetError();
@@ -649,41 +916,64 @@ static bool XS_WsStartEx(
 				pServer->Name, pServer->Port, pErr ? xrtErrorMessage(pErr) : "unknown");
 			return false;
 		}
-	} else if ( bStartEndpoint ) {
+		if ( !XS_ListenerSlotResourceAttach(pRuntime->pListenerSlot,
+		     XS_LISTENER_RESOURCE_PLAIN, pListener) ) {
+			XS_ListenerSlotDestroyEmpty(pRuntime->pListenerSlot);
+			pRuntime->pListenerSlot = NULL;
+			snprintf(sErr, iErrCap, "ws server '%s' listener closed during start",
+				pServer->Name);
+			return false;
+		}
+	}
+	if ( bStartEndpoint && pServer->TLS ) {
 		xtlslistenerconfig tTlsListen;
 		xtlscontext* pContext = XS_TlsSharedContext();
+		xtlslistener* pTlsListener;
 
-		xrtNetListenConfigInit(&tTlsListen.Listen);
-		tTlsListen.Listen.Address = tAddr;
+		xrtTlsListenerConfigInit(&tTlsListen);
+		tTlsListen.Listen.Address = tTlsAddr;
 		tTlsListen.Listen.ReuseAddress = true;
 		tTlsListen.Listen.ExclusiveAddress = false;
 		if ( pServer->Backlog > 0 ) {
 			tTlsListen.Listen.Backlog = (int)pServer->Backlog;
 		}
-		if ( pServer->RecvLimit > 0 ) {
-			tTlsListen.Listen.Stream.ReadLimit = pServer->RecvLimit;
-		}
-		xrtTlsServerConfigInit(&tTlsListen.Tls);
+		XS_StreamApplyReceiveLimit(&tTlsListen.Listen.Stream, pServer->RecvLimit);
 		tTlsListen.Tls.Context = pContext;
 		tTlsListen.Tls.Identity = pRuntime->tTls.pEntries[0].pIdentity;
 		tTlsListen.Tls.Select = XS_TlsSlotSelect;
 		tTlsListen.Tls.SelectContext = pRuntime->pListenerSlot;
-		if ( !XS_ListenerSlotResourceAdd(pRuntime->pListenerSlot) ) return false;
-		pRuntime->pTlsListener = xrtTlsListenerStart(pServer->Engine, &tTlsListen,
-			&g_XS_WsTlsListenerEvents, &g_XS_WsTlsTransportEvents, pRuntime->pListenerSlot);
-		if ( pRuntime->pTlsListener == NULL ) {
-			XS_ListenerSlotResourceCancel(pRuntime->pListenerSlot);
-			XS_ListenerSlotDestroyEmpty(pRuntime->pListenerSlot);
-			pRuntime->pListenerSlot = NULL;
-			snprintf(sErr, iErrCap, "wss server '%s' listen failed (port %u)", pServer->Name, pServer->Port);
+		if ( !XS_ListenerSlotResourceAdd(pRuntime->pListenerSlot,
+		     XS_LISTENER_RESOURCE_TLS) ) return false;
+		pTlsListener = xrtTlsListenerStart(pServer->Engine, &tTlsListen,
+			&g_XS_WsTlsListenerEvents, NULL, pRuntime->pListenerSlot);
+		if ( pTlsListener == NULL ) {
+			XS_ListenerSlotResourceCancel(pRuntime->pListenerSlot,
+				XS_LISTENER_RESOURCE_TLS);
+			snprintf(sErr, iErrCap, "wss server '%s' listen failed (port %u)", pServer->Name, pServer->PortTLS);
+			return false;
+		}
+		if ( !XS_ListenerSlotResourceAttach(pRuntime->pListenerSlot,
+		     XS_LISTENER_RESOURCE_TLS, pTlsListener) ) {
+			snprintf(sErr, iErrCap, "wss server '%s' listener closed during start",
+				pServer->Name);
 			return false;
 		}
 	}
-	printf("[xs] server '%s' %s %s on %s:%u%s\n", pServer->Name,
-		pRuntime->bTls ? "wss" : "ws",
+	if ( pRuntime->iIdleMs > 0 && !XS_WsScheduleSweep(pRuntime) ) {
+		snprintf(sErr, iErrCap, "ws server '%s' idle timer start failed", pServer->Name);
+		return false;
+	}
+	printf("[xs] server '%s' ws%s %s on %s:%u", pServer->Name,
+		pRuntime->bTls ? "+wss" : "",
 		bStartEndpoint ? (bAcceptEndpoint ? "ready" : "bound") : "prepared",
-		pServer->IP ? pServer->IP : "0.0.0.0", pServer->Port,
-		pRuntime->sProtocol != NULL ? " (subprotocol required)" : "");
+		pServer->IP ? pServer->IP : "0.0.0.0", pServer->Port);
+	if ( pRuntime->bTls ) {
+		printf(" and %s:%u", pServer->IPTLS ? pServer->IPTLS :
+			(pServer->IP ? pServer->IP : "0.0.0.0"), pServer->PortTLS);
+	}
+	printf("%s%s\n",
+		pRuntime->sProtocol != NULL ? " (subprotocol required)" : "",
+		pRuntime->iIdleMs > 0 ? " (idle protected)" : "");
 	return true;
 }
 
@@ -697,35 +987,32 @@ static bool XS_WsHandoff(XS_WsRuntime* pOld, XS_WsRuntime* pNew)
 	if ( !XS_ListenerSlotHandoff(pSlot, pOld, pNew, pNew->pGeneration,
 		pNew->bTls ? (void*)&pNew->tTls : NULL) ) return false;
 	pNew->pListenerSlot = pSlot;
-	pNew->pListener = pOld->pListener;
-	pNew->pTlsListener = pOld->pTlsListener;
 	pOld->pListenerSlot = NULL;
-	pOld->pListener = NULL;
-	pOld->pTlsListener = NULL;
 	return true;
 }
 
 static void XS_WsStop(XS_WsRuntime* pRuntime)
 {
 	XS_ListenerSlot* pSlot;
+	XS_ListenerResources tResources;
 
 	if ( pRuntime == NULL ) {
 		return;
 	}
-	xrtMutexLock(pRuntime->pConnLock);
-	pRuntime->bStopping = true;
-	xrtMutexUnlock(pRuntime->pConnLock);
+	if ( xrtAtomic32Exchange(&pRuntime->tStopping, 1, XMEMORY_ACQ_REL) != 0 ) return;
+	XS_GenerationTimerCancelOwner(pRuntime->pGeneration, pRuntime);
 	pSlot = pRuntime->pListenerSlot;
-	if ( pSlot != NULL ) XS_ListenerSlotBeginClose(pSlot, pRuntime);
-	if ( pRuntime->pListener != NULL ) {
-		xrtNetListenerClose(pRuntime->pListener);
-		pRuntime->pListener = NULL;
-	}
-	if ( pRuntime->pTlsListener != NULL ) {
-		xrtTlsListenerClose(pRuntime->pTlsListener);
-		pRuntime->pTlsListener = NULL;
-	}
 	pRuntime->pListenerSlot = NULL;
+	if ( pSlot != NULL && XS_ListenerSlotBeginClose(pSlot, pRuntime, &tResources) ) {
+		if ( tResources.pPlain != NULL ) {
+			xrtNetListenerClose(tResources.pPlain);
+			xrtNetListenerDestroy(tResources.pPlain);
+		}
+		if ( tResources.pTls != NULL ) {
+			xrtTlsListenerClose(tResources.pTls);
+			xrtTlsListenerDestroy(tResources.pTls);
+		}
+	}
 }
 
 static void XS_WsCloseConnections(XS_WsRuntime* pRuntime)
@@ -739,9 +1026,9 @@ static void XS_WsCloseConnections(XS_WsRuntime* pRuntime)
 			/* Close 要求所属 worker；Abort 是跨线程安全的终态收口 API。 */
 			(void)xrtWsStreamAbort(pConn->pWs);
 		} else if ( pConn->pTls != NULL ) {
-			(void)xrtTlsStreamClose(pConn->pTls);
+			(void)xrtTlsStreamAbort(pConn->pTls);
 		} else if ( pConn->pTcp != NULL ) {
-			(void)xrtNetStreamClose(pConn->pTcp);
+			(void)xrtNetStreamAbort(pConn->pTcp);
 		}
 	}
 	xrtMutexUnlock(pRuntime->pConnLock);
