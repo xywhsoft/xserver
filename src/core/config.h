@@ -38,6 +38,38 @@ typedef struct XS_ConfigRevision {
 	XS_App			App;
 } XS_ConfigRevision;
 
+/* engine.h 的 XS_App 在此定义；归一化基准目录借用其 XS_AppPath。
+ * 此处前置声明，engine.h 稍后提供定义（static 函数声明与定义可分离）。 */
+static const char* XS_AppPath(void);
+
+/* ============================================================
+ * 文件系统路径归一化：相对路径按配置文件所在目录解析为绝对路径
+ * ============================================================ */
+
+static void XS_ConfigResolveField(const char** psField, cstr sBaseDir)
+{
+	str sAbs;
+
+	if ( psField == NULL || *psField == NULL || (*psField)[0] == '\0' ) return;
+	if ( xrtPathIsAbs(*psField) ) return;
+	sAbs = xrtPathJoin(sBaseDir, *psField);
+	if ( sAbs == NULL ) return;
+	xrtFree((void*)*psField);
+	*psField = sAbs;
+}
+
+static void XS_ConfigResolveHostPaths(XS_HostInfo* pHost, cstr sBaseDir)
+{
+	if ( pHost == NULL ) return;
+	XS_ConfigResolveField(&pHost->Path, sBaseDir);
+	XS_ConfigResolveField(&pHost->DevFile, sBaseDir);
+	XS_ConfigResolveField(&pHost->DevInc, sBaseDir);
+	XS_ConfigResolveField(&pHost->DevLib, sBaseDir);
+	XS_ConfigResolveField(&pHost->TlsCA, sBaseDir);
+	XS_ConfigResolveField(&pHost->TlsCert, sBaseDir);
+	XS_ConfigResolveField(&pHost->TlsKey, sBaseDir);
+}
+
 /* ============================================================
  * 内部：预设标量字段提取（严格类型；标量键 Remove 即弃）
  * 注意：XRT_STR_LITERAL 仅可用于字符串字面量（sizeof 求长），
@@ -515,6 +547,33 @@ static bool XS_ConfigBuild(const char* sSource, xvalue* pRoot, XS_App* pApp)
 				snprintf(pApp->ParseError, sizeof(pApp->ParseError), "duplicate server name '%s'", pApp->Servers[i]->Name);
 				return false;
 			}
+		}
+	}
+	/* 文件系统路径按配置文件所在目录归一化为绝对路径：配置目录自包含
+	 * （demo 目录可整体搬移）。旧式"配置与可执行文件同目录"的写法两个
+	 * 基准重合，语义不变。归一化后消费侧不再回落可执行文件目录。 */
+	{
+		str sBase = sSource != NULL ? xrtPathParent(sSource) : NULL;
+
+		if ( sBase == NULL || sBase[0] == '\0' ) {
+			xrtFree(sBase);
+			sBase = xrtStrDup(XS_AppPath());
+		} else if ( !xrtPathIsAbs(sBase) ) {
+			str sAbs = xrtPathJoin(XS_AppPath(), sBase);
+
+			xrtFree(sBase);
+			sBase = sAbs;
+		}
+		if ( sBase != NULL ) {
+			for ( i = 0; i < pApp->ServerCount; i++ ) {
+				XS_ServerInfo* pServer = pApp->Servers[i];
+
+				XS_ConfigResolveHostPaths(pServer->DefaultHost, sBase);
+				for ( j = 0; j < pServer->HostCount; j++ ) {
+					XS_ConfigResolveHostPaths(pServer->Hosts[j], sBase);
+				}
+			}
+			xrtFree(sBase);
 		}
 	}
 	return true;
