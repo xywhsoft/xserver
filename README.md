@@ -2,9 +2,9 @@
 
 **xs 是 xrt 的落地化部署工具。** 它把 xrt 的网络、协议、TLS、并发、数据能力装配成一个由配置文件驱动的可执行程序，并在运行时把 C 脚本编译进进程。xrt 才是主要的那个；xs 只负责部署，不提供框架、不提供治理、不教应用怎么做事。
 
-当前状态：**生产就绪**——五大协议（http(+https)/ws(+wss)/tcp(+tcps)/udp/custom）、期望状态热重载（latest-wins/整代候选/原子发布/自动排空回收）、可选库门控（sqlite）、dev_inc/dev_lib 应用 SDK 目录、静态层四旋钮、四层测试体系（冒烟/功能/压力/攻防演练 6h 704 轮 0 失败）。遗留：xadmin 试点、Linux 实测。
+当前状态：**生产就绪**——五大协议（http(+https)/ws(+wss)/tcp(+tcps)/udp/custom）、期望状态热重载（latest-wins/整代候选/原子发布/自动排空回收）、可选库门控（sqlite）、dev_inc/dev_lib 应用 SDK 目录、静态层四旋钮、Windows/Linux 双平台回归与四层测试体系（冒烟/功能/压力/攻防演练 6h 704 轮 0 失败）。遗留：xadmin 试点。
 - 协议：HTTP 每请求虚拟主机路由（脚本+静态根）、WS 握手期路由并固定 host/脚本、TCP/TCP+TLS、UDP、custom 手动装配
-- 热重载：独立 controller、提交前 latest-wins ticket、reload-all 共享不可变配置 revision、候选 listener 先 bind 但不接入、host/server/all 均以完整 server generation 原子发布；旧代停止新接入后由终态引用自然排空，`ServiceUnit` 与最终析构交给专用 reaper，无泄漏、无宽限/超时强拆
+- 热重载：独立 controller、提交前 latest-wins ticket、reload-all 共享不可变配置 revision、候选 listener 先 bind 但不接入、host/server/all 均以完整 server generation 原子发布；旧代停止新接入后由终态引用自然排空，协议回调以连接记录和具体流的临时引用抵御同步 Close 重入，`ServiceUnit` 与最终析构交给专用 reaper，无泄漏、无宽限/超时强拆
 - 可选库：`build.bat sqlite` 变体（296 符号导入 + sqlite3.h 入 VFS）
 - 测试：`test.bat` / `bash test.sh`（正式构建、动态端口冒烟、功能边界、generation 生命周期、明文/TLS reload 矩阵与失败清理）、`tools/func_test.py`（配置失败清理、监听半启动回滚、虚拟主机/静态根、header/chunked 边界、静态发送中断、嵌套 TCC 并发、ticket 环碰撞）、`tools/lifecycle_reload_test.py`（旧 keep-alive、初始化发布屏障、拓扑 lease 与 Root 换代）、`tools/reload_matrix_test.py`（HTTP(S)/TCP(S)/UDP/WS(S) 同端点换代及跨服务 lease 回收）、`tools/pressure_test.py`、`tools/drill.py`；全部使用动态端口和临时配置，压力/演练进程会等待回收，重载破坏样本只操作临时脚本副本。
 

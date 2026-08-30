@@ -234,6 +234,7 @@ static bool XS_WsUpgrade(XS_WsConn* pConn)
 	size_t iSize = 0;
 	xwsstreamconfig tStreamCfg;
 	xwsstream* pWs;
+	xwsstream* pWsGuard;
 
 	memset(&tSrvCfg, 0, sizeof(tSrvCfg));
 	if ( pRuntime->sProtocol != NULL ) {
@@ -296,28 +297,28 @@ static bool XS_WsUpgrade(XS_WsConn* pConn)
 	pConn->pWs = pWs;
 	pConn->bHandshakeDone = true;
 	xrtMutexUnlock(pRuntime->pConnLock);
+	pWsGuard = xrtWsStreamRef(pWs);
+	if ( pWsGuard == NULL ) {
+		(void)xrtWsStreamAbort(pWs);
+		return false;
+	}
 	/* Attach 已成功后只能走 WS 终态；101 发送失败时不再发第二个 HTTP 响应。 */
 	if ( !XS_WsSendRaw(pConn, arrHead, iSize) ) {
-		(void)xrtWsStreamAbort(pWs);
+		(void)xrtWsStreamAbort(pWsGuard);
+		xrtWsStreamDestroy(pWsGuard);
 		return false;
 	}
 	{
 		XS_ScriptRuntime* pScript = pConn->pScript;
 
 		if ( pScript != NULL && pScript->procWsOpen != NULL ) {
-			xwsstream* pGuard = xrtWsStreamRef(pWs);
-			XS_ScriptRuntime* pPrevious;
+			XS_ScriptRuntime* pPrevious = XS_ScriptEnter(pScript);
 
-			if ( pGuard == NULL ) {
-				(void)xrtWsStreamAbort(pWs);
-				return false;
-			}
-			pPrevious = XS_ScriptEnter(pScript);
 			pScript->procWsOpen(pConn->pHost, pWs);
 			XS_ScriptLeave(pPrevious);
-			xrtWsStreamDestroy(pGuard);
 		}
 	}
+	xrtWsStreamDestroy(pWsGuard);
 	return true;
 }
 

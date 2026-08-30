@@ -4,6 +4,7 @@ release/xs_smoke.log
 release/xs_smoke_config.json
 tools/wingrp.exe
 tools/tcc_vfs_lzma_pack.exe
+tools/tcc_vfs_lzma_pack
 build_tmp_pack_in
 build_tmp_pack_out
 tools/wingrp.pid

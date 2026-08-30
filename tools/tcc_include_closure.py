@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-INC = ROOT / "release" / "tcc" / "include_win"
+INC = ROOT / "res" / "tcc" / "include_win"
 
 # 保证可用的 SDK 入口：核心系统 / 网络 / 进程 / COM(Excel 自动化) /
 # ADO(数据库) / Shell / XML / 签名校验 / 证书 / HTTP 客户端 / 加密
@@ -25,15 +25,16 @@ ENTRIES = [
     "msxml2.h",
     "shellapi.h", "shlobj.h", "shlwapi.h",
     "psapi.h", "tlhelp32.h", "wincon.h",
-    "oledb.h",		/* ADO 类型化头(adoint/msado15)为 IDL 重语法，TCC 不可解析；
-                 * 数据访问保证面 = ODBC(sql 家族) + OLE DB + IDispatch 后期绑定 */
+    # ADO 类型化头（adoint/msado15）为 TCC 不可解析的 IDL 重语法；
+    # 数据访问保证面 = ODBC（sql 家族）+ OLE DB + IDispatch 后期绑定。
+    "oledb.h",
     "wintrust.h", "mssip.h", "wincrypt.h",
     "wininet.h",     "sddl.h", "aclapi.h", "authz.h",
     "dbghelp.h", "winver.h", "lm.h", "nb30.h",
     # 本地化（mlang 代码页转换）与数据访问（ODBC / ADO 补充 / MSXML dispatch）
     "mlang.h",
     "sql.h", "sqlext.h", "sqlucode.h",
-        "msxml2did.h", "msxmldid.h", "olectl.h",
+    "msxml2did.h", "msxmldid.h", "olectl.h",
 ]
 
 INCLUDE_RE = re.compile(r"^\s*#\s*include\s*[<\"]([^>\"]+)[>\"]", re.M)
