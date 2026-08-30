@@ -5,7 +5,7 @@
  * xs3 TLS 身份装载与 SNI 选择器（设计 §4.1 host 级证书 / §10.3 证书热替换基础）
  * - PEM 证书/私钥经 xrt fs 读取（UTF-8 路径），xrtPemDecode 转 DER 后构造 identity
  * - 证书链：同文件内多个 CERTIFICATE 块按序作为链
- * - 密钥算法自动识别：RSA → P-256 → P-384 依次尝试
+ * - 先解析叶证书公钥算法，再调用唯一匹配的身份构造器；构造器继续核对证书/私钥
  * - SNI：xtlsserverselectproc 按 ClientHello ServerName 匹配 host->Host（分号分隔、忽略大小写）
  */
 
@@ -175,8 +175,116 @@ failed:
 	return false;
 }
 
-/* 依次尝试 RSA / P-256 / P-384 构造身份 */
-static xtlsidentity* XS_TlsBuildIdentity(XS_TlsDer* arrCerts, uint32 iCertCount, const char* sKeyText, size_t iKeySize)
+typedef struct XS_TlsPrivateKeyInfo {
+	xx509keytype		Type;
+	xx509curve		Curve;
+} XS_TlsPrivateKeyInfo;
+
+static const char* XS_TlsKeyName(xx509keytype Type, xx509curve Curve)
+{
+	switch ( Type ) {
+	case X509_KEY_RSA: return "RSA";
+	case X509_KEY_RSA_PSS: return "RSA-PSS";
+	case X509_KEY_EC:
+		switch ( Curve ) {
+		case X509_CURVE_P256: return "EC P-256";
+		case X509_CURVE_P384: return "EC P-384";
+		case X509_CURVE_P521: return "EC P-521";
+		default: return "EC (unknown curve)";
+		}
+	case X509_KEY_ED25519: return "Ed25519";
+	case X509_KEY_ED448: return "Ed448";
+	case X509_KEY_X25519: return "X25519";
+	case X509_KEY_X448: return "X448";
+	default: return "unknown";
+	}
+}
+
+/* 只解析未加密 PKCS#8 的算法标识，用于在调用构造器前给出类型冲突诊断。
+ * 完整密钥合法性与公钥匹配仍由 xrt TLS identity 构造器负责。 */
+static XS_TlsPrivateKeyInfo XS_TlsPkcs8KeyInfo(xbytesview Der)
+{
+	static const unsigned char arrRsaOid[] = {
+		0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01
+	};
+	static const unsigned char arrRsaPssOid[] = {
+		0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0a
+	};
+	static const unsigned char arrEcOid[] = {
+		0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01
+	};
+	static const unsigned char arrP256Oid[] = {
+		0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07
+	};
+	static const unsigned char arrP384Oid[] = {
+		0x2b, 0x81, 0x04, 0x00, 0x22
+	};
+	static const unsigned char arrP521Oid[] = {
+		0x2b, 0x81, 0x04, 0x00, 0x23
+	};
+	XS_TlsPrivateKeyInfo tInfo = { X509_KEY_UNKNOWN, X509_CURVE_UNKNOWN };
+	xdercursor tRoot;
+	xdercursor tFields;
+	xdercursor tAlgorithm;
+	xdervalue tSequence;
+	xdervalue tVersion;
+	xdervalue tAlgorithmValue;
+	xdervalue tOid;
+	xdervalue tParameters;
+
+	if ( !xrtDerInit(&tRoot, Der.Data, Der.Size) ||
+	     xrtDerRead(&tRoot, &tSequence) != XDER_VALUE ||
+	     !xrtDerDone(&tRoot) ||
+	     !xrtDerIs(&tSequence, XASN1_UNIVERSAL, XASN1_SEQUENCE, true) ||
+	     !xrtDerEnter(&tSequence, &tFields) ||
+	     xrtDerRead(&tFields, &tVersion) != XDER_VALUE ||
+	     !xrtDerIs(&tVersion, XASN1_UNIVERSAL, XASN1_INTEGER, false) ||
+	     xrtDerRead(&tFields, &tAlgorithmValue) != XDER_VALUE ||
+	     !xrtDerIs(&tAlgorithmValue, XASN1_UNIVERSAL, XASN1_SEQUENCE, true) ||
+	     !xrtDerEnter(&tAlgorithmValue, &tAlgorithm) ||
+	     xrtDerRead(&tAlgorithm, &tOid) != XDER_VALUE ) {
+		return tInfo;
+	}
+	if ( xrtDerOidEqual(&tOid, arrRsaOid, sizeof(arrRsaOid)) ) {
+		tInfo.Type = X509_KEY_RSA;
+	} else if ( xrtDerOidEqual(&tOid, arrRsaPssOid, sizeof(arrRsaPssOid)) ) {
+		tInfo.Type = X509_KEY_RSA_PSS;
+	} else if ( xrtDerOidEqual(&tOid, arrEcOid, sizeof(arrEcOid)) ) {
+		tInfo.Type = X509_KEY_EC;
+		if ( xrtDerRead(&tAlgorithm, &tParameters) == XDER_VALUE ) {
+			if ( xrtDerOidEqual(&tParameters, arrP256Oid, sizeof(arrP256Oid)) ) {
+				tInfo.Curve = X509_CURVE_P256;
+			} else if ( xrtDerOidEqual(&tParameters, arrP384Oid, sizeof(arrP384Oid)) ) {
+				tInfo.Curve = X509_CURVE_P384;
+			} else if ( xrtDerOidEqual(&tParameters, arrP521Oid, sizeof(arrP521Oid)) ) {
+				tInfo.Curve = X509_CURVE_P521;
+			}
+		}
+	}
+	return tInfo;
+}
+
+static bool XS_TlsKeyFamilyMismatch(
+	const xx509pubkey* pCertificate,
+	XS_TlsPrivateKeyInfo tPrivate)
+{
+	bool bCertRsa = pCertificate->Type == X509_KEY_RSA ||
+		pCertificate->Type == X509_KEY_RSA_PSS;
+	bool bPrivateRsa = tPrivate.Type == X509_KEY_RSA ||
+		tPrivate.Type == X509_KEY_RSA_PSS;
+
+	return (bCertRsa && tPrivate.Type == X509_KEY_EC) ||
+		(pCertificate->Type == X509_KEY_EC && bPrivateRsa);
+}
+
+/* 由叶证书唯一选择 RSA / P-256 / P-384 构造器，避免失败原因被后续尝试覆盖。 */
+static xtlsidentity* XS_TlsBuildIdentity(
+	XS_TlsDer* arrCerts,
+	uint32 iCertCount,
+	const char* sKeyText,
+	size_t iKeySize,
+	char* sErr,
+	size_t iErrCap)
 {
 	static const char* arrKeyLabels[] = { "RSA PRIVATE KEY", "PRIVATE KEY", "EC PRIVATE KEY" };
 	xpemblock tKeyBlock;
@@ -189,6 +297,32 @@ static xtlsidentity* XS_TlsBuildIdentity(XS_TlsDer* arrCerts, uint32 iCertCount,
 	uint32 j;
 	size_t iKeyBlocks = 0;
 	size_t iViewsBytes;
+	uint32 iKeyLabel = UINT32_MAX;
+	xx509cert tLeaf;
+	xx509pubkey tPublicKey;
+	XS_TlsPrivateKeyInfo tPrivate = { X509_KEY_UNKNOWN, X509_CURVE_UNKNOWN };
+	const xerror* pError;
+	const char* sCertificateType;
+
+	if ( iCertCount == 0 || arrCerts == NULL ) {
+		snprintf(sErr, iErrCap, "tls identity requires a leaf certificate");
+		return NULL;
+	}
+	if ( !xrtX509Parse(arrCerts[0].pData, arrCerts[0].iSize, &tLeaf) ||
+	     !xrtX509PublicKey(&tLeaf, &tPublicKey) ) {
+		pError = xrtGetError();
+		snprintf(sErr, iErrCap, "tls leaf certificate public key parse failed: %s",
+			pError != NULL ? xrtErrorMessage(pError) : "unknown error");
+		return NULL;
+	}
+	sCertificateType = XS_TlsKeyName(tPublicKey.Type, tPublicKey.Curve);
+	if ( !((tPublicKey.Type == X509_KEY_RSA || tPublicKey.Type == X509_KEY_RSA_PSS) ||
+	       (tPublicKey.Type == X509_KEY_EC &&
+	        (tPublicKey.Curve == X509_CURVE_P256 || tPublicKey.Curve == X509_CURVE_P384))) ) {
+		snprintf(sErr, iErrCap, "tls leaf certificate key is unsupported: %s",
+			sCertificateType);
+		return NULL;
+	}
 
 	/* 密钥文件同样只接受一个完整且可识别的私钥块，避免静默忽略坏尾部。 */
 	for ( j = 0; j < 3; j++ ) {
@@ -201,21 +335,57 @@ static xtlsidentity* XS_TlsBuildIdentity(XS_TlsDer* arrCerts, uint32 iCertCount,
 		(void)snprintf(sEnd, sizeof(sEnd), "-----END %s-----", arrKeyLabels[j]);
 		iBegin = XS_TlsTokenCount(sKeyText, iKeySize, sBegin);
 		iEnd = XS_TlsTokenCount(sKeyText, iKeySize, sEnd);
-		if ( iBegin != iEnd ) return NULL;
+		if ( iBegin != iEnd ) {
+			snprintf(sErr, iErrCap, "tls private key PEM block is incomplete: %s",
+				arrKeyLabels[j]);
+			return NULL;
+		}
 		iKeyBlocks += iBegin;
 		if ( iBegin == 1 && pKeyDer == NULL &&
 		     xrtPemFind(sKeyText, iKeySize, arrKeyLabels[j], &tKeyBlock) ) {
 			pKeyDer = xrtPemDecodeNew(&tKeyBlock, &iKeyDer);
+			iKeyLabel = j;
 		}
 	}
 	if ( iKeyBlocks != 1 || pKeyDer == NULL ) {
+		pError = xrtGetError();
+		if ( iKeyBlocks != 1 ) {
+			snprintf(sErr, iErrCap,
+				"tls private key expects exactly one supported PEM block; found %zu",
+				iKeyBlocks);
+		} else {
+			snprintf(sErr, iErrCap, "tls private key PEM decode failed: %s",
+				pError != NULL ? xrtErrorMessage(pError) : "unknown error");
+		}
 		xrtFree(pKeyDer);
 		return NULL;
 	}
 	tKey.Data = (const unsigned char*)pKeyDer;
 	tKey.Size = iKeyDer;
+	if ( iKeyLabel == 0 ) {
+		tPrivate.Type = X509_KEY_RSA;
+	} else if ( iKeyLabel == 2 ) {
+		tPrivate.Type = X509_KEY_EC;
+	} else {
+		tPrivate = XS_TlsPkcs8KeyInfo(tKey);
+	}
+	if ( XS_TlsKeyFamilyMismatch(&tPublicKey, tPrivate) ) {
+		snprintf(sErr, iErrCap, "tls certificate uses %s but private key uses %s",
+			sCertificateType, XS_TlsKeyName(tPrivate.Type, tPrivate.Curve));
+		xrtFree(pKeyDer);
+		return NULL;
+	}
+	if ( tPublicKey.Type == X509_KEY_EC && tPrivate.Type == X509_KEY_EC &&
+	     tPrivate.Curve != X509_CURVE_UNKNOWN &&
+	     tPrivate.Curve != tPublicKey.Curve ) {
+		snprintf(sErr, iErrCap, "tls certificate uses %s but private key uses %s",
+			sCertificateType, XS_TlsKeyName(tPrivate.Type, tPrivate.Curve));
+		xrtFree(pKeyDer);
+		return NULL;
+	}
 
 	if ( !XS_TlsSizeMul((size_t)iCertCount, sizeof(xbytesview), &iViewsBytes) ) {
+		snprintf(sErr, iErrCap, "tls certificate chain is too large");
 		xrtFree(pKeyDer);
 		return NULL;
 	}
@@ -225,14 +395,22 @@ static xtlsidentity* XS_TlsBuildIdentity(XS_TlsDer* arrCerts, uint32 iCertCount,
 			arrViews[i].Data = (const unsigned char*)arrCerts[i].pData;
 			arrViews[i].Size = arrCerts[i].iSize;
 		}
-		pIdentity = xrtTlsIdentityRsa(arrViews, iCertCount, tKey);
-		if ( pIdentity == NULL ) {
+		if ( tPublicKey.Type == X509_KEY_RSA || tPublicKey.Type == X509_KEY_RSA_PSS ) {
+			pIdentity = xrtTlsIdentityRsa(arrViews, iCertCount, tKey);
+		} else if ( tPublicKey.Curve == X509_CURVE_P256 ) {
 			pIdentity = xrtTlsIdentityP256(arrViews, iCertCount, tKey);
-		}
-		if ( pIdentity == NULL ) {
+		} else {
 			pIdentity = xrtTlsIdentityP384(arrViews, iCertCount, tKey);
 		}
+		if ( pIdentity == NULL ) {
+			pError = xrtGetError();
+			snprintf(sErr, iErrCap, "tls identity build failed for %s certificate: %s",
+				sCertificateType,
+				pError != NULL ? xrtErrorMessage(pError) : "unknown error");
+		}
 		xrtFree(arrViews);
+	} else {
+		snprintf(sErr, iErrCap, "out of memory building tls identity");
 	}
 	xrtFree(pKeyDer);
 	return pIdentity;
@@ -307,10 +485,8 @@ static xtlsidentity* XS_TlsLoadHost(XS_HostInfo* pHost, char* sErr, size_t iErrC
 		arrCa = NULL;
 		iCaCount = 0;
 	}
-	pIdentity = XS_TlsBuildIdentity(arrCerts, iCertCount, (const char*)pKeyText, iKeySize);
-	if ( pIdentity == NULL ) {
-		snprintf(sErr, iErrCap, "tls identity build failed: %s", pHost->TlsCert);
-	}
+	pIdentity = XS_TlsBuildIdentity(arrCerts, iCertCount,
+		(const char*)pKeyText, iKeySize, sErr, iErrCap);
 
 done:
 	XS_TlsDerFree(arrCerts, iCertCount);

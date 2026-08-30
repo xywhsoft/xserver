@@ -131,6 +131,55 @@ def listener_failure_matrix():
         os.unlink(path)
 
 
+def tls_identity_diagnostic_matrix():
+    """证书算法应在构造身份前决定，类型冲突不得被后续构造器错误覆盖。"""
+    cert_path = RELEASE / 'tls' / 'xtps_cert.pem'
+    source_key = RELEASE / 'tls' / 'xtps_key.pem'
+    if not cert_path.is_file() or not source_key.is_file():
+        fail('tls/type-mismatch-diagnostic', 'missing TLS fixture')
+        return
+    key_text = source_key.read_text(encoding='ascii')
+    if '-----BEGIN PRIVATE KEY-----' not in key_text:
+        fail('tls/type-mismatch-diagnostic', 'fixture is not PKCS#8')
+        return
+    # 保留 DER，仅把传统 PEM 类型声明改为 EC；xs 应在进入 RSA 构造器前明确拒绝。
+    key_text = key_text.replace('-----BEGIN PRIVATE KEY-----',
+                                '-----BEGIN EC PRIVATE KEY-----')
+    key_text = key_text.replace('-----END PRIVATE KEY-----',
+                                '-----END EC PRIVATE KEY-----')
+    used = set()
+    plain_port = free_port(socket.SOCK_STREAM, used)
+    tls_port = free_port(socket.SOCK_STREAM, used)
+    with tempfile.TemporaryDirectory(prefix='xs-tls-diag-') as temp_dir:
+        temp_path = Path(temp_dir)
+        key_path = temp_path / 'wrong-type-key.pem'
+        config_path = temp_path / 'xs.json'
+        key_path.write_text(key_text, encoding='ascii')
+        config_path.write_text(json.dumps({
+            'services': [{
+                'class': 'http', 'name': 'tls-diagnostic',
+                'ip': '127.0.0.1', 'port': plain_port,
+                'tls': True, 'ip_tls': '127.0.0.1', 'port_tls': tls_port,
+                'host_default': {
+                    'name': 'default',
+                    'tls_cert': str(cert_path),
+                    'tls_key': str(key_path),
+                },
+            }],
+        }), encoding='utf-8')
+        try:
+            proc = subprocess.run(
+                [str(EXE), str(config_path)], capture_output=True, text=True,
+                timeout=20, cwd=str(RELEASE))
+            output = proc.stdout + proc.stderr
+            expected = 'certificate uses RSA but private key uses EC'
+            if proc.returncode != 1 or expected not in output:
+                fail('tls/type-mismatch-diagnostic',
+                     f'exit={proc.returncode} output={output[-300:]}')
+        except subprocess.TimeoutExpired:
+            fail('tls/type-mismatch-diagnostic', 'process did not fail-fast')
+
+
 # ============================================================
 # B. 行为矩阵（独立实例，短 idle 配置）
 # ============================================================
@@ -641,6 +690,9 @@ XS_RequestResult RequestProc(XS_HttpReq* pReq)
             ('encoded-nul', '/bad%00name', {400}),
             ('encoded-backslash', '/%5CWindows%5Cwin.ini', {403}),
             ('parent', '/../outside-secret.txt', {403}),
+            ('parent-percent-upper', '/%2E%2E/outside-secret.txt', {403}),
+            ('parent-percent-lower', '/%2e%2e/outside-secret.txt', {403}),
+            ('parent-percent-mixed', '/%2E%2e/outside-secret.txt', {403}),
         )
         for case_name, target, expected in static_escape_cases:
             try:
@@ -705,6 +757,7 @@ def main():
     EXE = args.exe.resolve()
     config_matrix()
     listener_failure_matrix()
+    tls_identity_diagnostic_matrix()
     behavior_matrix()
     if failures:
         print('FUNC TEST FAILURES (%d):' % len(failures))

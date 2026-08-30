@@ -473,10 +473,10 @@ static void XS_HttpStatic(XS_HttpRecord* pRec)
 	const XS_HttpHostHdrs* pSite;
 	xhttptarget tParsedTarget;
 	xstrview tTarget;
-	char* sEncoded = NULL;
 	char* sDecoded = NULL;
 	char* sRel = NULL;
-	char* sSelected = NULL;
+	char* sIndexPath = NULL;
+	const char* sSelected = NULL;
 	xfile hFile = NULL;
 	xfileinfo tInfo;
 	size_t iEncoded;
@@ -506,15 +506,12 @@ static void XS_HttpStatic(XS_HttpRecord* pRec)
 		XS_HttpErrorPage(pRec, 400);
 		return;
 	}
-	sEncoded = (char*)xrtMalloc(iEncoded + 1u);
 	sDecoded = (char*)xrtMalloc(iEncoded + 1u);
-	if ( sEncoded == NULL || sDecoded == NULL ) {
+	if ( sDecoded == NULL ) {
 		XS_HttpErrorPage(pRec, 500);
 		goto cleanup;
 	}
-	memcpy(sEncoded, tTarget.Data, iEncoded);
-	sEncoded[iEncoded] = '\0';
-	if ( !xrtPercentDecode(xrtStrViewN(sEncoded, iEncoded),
+	if ( !xrtPercentDecode(xrtStrViewN(tTarget.Data, iEncoded),
 		sDecoded, iEncoded, &iDecoded) ) {
 		XS_HttpErrorPage(pRec, 400);
 		goto cleanup;
@@ -624,21 +621,23 @@ static void XS_HttpStatic(XS_HttpRecord* pRec)
 			if ( !bHas || !XS_HttpSafeRelative(tName) || tName.Data[0] == '.' ||
 			     iBase > SIZE_MAX - tName.Size - 2u ) continue;
 			iNeed = iBase + (iBase > 0 ? 1u : 0u) + tName.Size + 1u;
-			sSelected = (char*)xrtMalloc(iNeed);
-			if ( sSelected == NULL ) {
+			sIndexPath = (char*)xrtMalloc(iNeed);
+			if ( sIndexPath == NULL ) {
 				XS_HttpErrorPage(pRec, 500);
 				goto cleanup;
 			}
 			if ( iBase > 0 ) {
-				memcpy(sSelected, sRel, iBase);
-				sSelected[iBase++] = '/';
+				memcpy(sIndexPath, sRel, iBase);
+				sIndexPath[iBase++] = '/';
 			}
-			memcpy(sSelected + iBase, tName.Data, tName.Size);
-			sSelected[iBase + tName.Size] = '\0';
-			hFile = XS_HttpRootOpenFile(pSite->pRoot, sSelected, &tInfo);
+			memcpy(sIndexPath + iBase, tName.Data, tName.Size);
+			sIndexPath[iBase + tName.Size] = '\0';
+			hFile = XS_HttpRootOpenFile(pSite->pRoot, sIndexPath, &tInfo);
 			if ( hFile == NULL ) {
-				xrtFree(sSelected);
-				sSelected = NULL;
+				xrtFree(sIndexPath);
+				sIndexPath = NULL;
+			} else {
+				sSelected = sIndexPath;
 			}
 		}
 		if ( hFile == NULL ) {
@@ -646,11 +645,7 @@ static void XS_HttpStatic(XS_HttpRecord* pRec)
 			goto cleanup;
 		}
 	} else {
-		sSelected = xrtStrDup(sRel);
-		if ( sSelected == NULL ) {
-			XS_HttpErrorPage(pRec, 500);
-			goto cleanup;
-		}
+		sSelected = sRel;
 		hFile = XS_HttpRootOpenFile(pSite->pRoot, sSelected, &tInfo);
 		if ( hFile == NULL ) {
 			XS_HttpErrorPage(pRec, 404);
@@ -684,9 +679,8 @@ static void XS_HttpStatic(XS_HttpRecord* pRec)
 
 cleanup:
 	if ( hFile != NULL ) xrtClose(hFile);
-	xrtFree(sSelected);
+	xrtFree(sIndexPath);
 	xrtFree(sDecoded);
-	xrtFree(sEncoded);
 }
 
 /* ============================================================

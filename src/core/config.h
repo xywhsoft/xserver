@@ -419,6 +419,7 @@ static bool XS_ConfigBuild(const char* sSource, xvalue* pRoot, XS_App* pApp)
 	xvalue* pEngine;
 	xvalue* pServerObj;
 	int64 iWorkers = 0;
+	uint32 iServerCount;
 	uint32 i, j;
 
 	memset(pApp, 0, sizeof(XS_App));
@@ -470,13 +471,15 @@ static bool XS_ConfigBuild(const char* sSource, xvalue* pRoot, XS_App* pApp)
 		snprintf(pApp->ParseError, sizeof(pApp->ParseError), "field 'services' has too many entries");
 		return false;
 	}
-	pApp->ServerCount = (uint32)xrtValueCount(pServices);
-	if ( pApp->ServerCount > 0 ) {
-		pApp->Servers = (XS_ServerInfo**)xrtCalloc(pApp->ServerCount, sizeof(XS_ServerInfo*));
+	iServerCount = (uint32)xrtValueCount(pServices);
+	if ( iServerCount > 0 ) {
+		pApp->Servers = (XS_ServerInfo**)xrtCalloc(iServerCount, sizeof(XS_ServerInfo*));
 		if ( pApp->Servers == NULL ) {
 			snprintf(pApp->ParseError, sizeof(pApp->ParseError), "out of memory");
 			return false;
 		}
+		/* 仅在槽位数组可见后发布数量；失败快照可由 XS_ConfigFree 安全清理。 */
+		pApp->ServerCount = iServerCount;
 		for ( i = 0; i < pApp->ServerCount; i++ ) {
 			pServerObj = xrtValueArrayGet(pServices, i);
 			if ( pServerObj == NULL || xrtValueType(pServerObj) != XVALUE_OBJECT ) {
@@ -533,13 +536,15 @@ static void XS_ConfigFree(XS_App* pApp)
 	if ( pApp == NULL ) {
 		return;
 	}
-	for ( i = 0; i < pApp->ServerCount; i++ ) {
-		XS_ServerInfo* pServer = pApp->Servers[i];
+	if ( pApp->Servers != NULL ) {
+		for ( i = 0; i < pApp->ServerCount; i++ ) {
+			XS_ServerInfo* pServer = pApp->Servers[i];
 
-		/* 动态重载后的 server 由其配置快照拥有；根 XS_App 只借用槽位。 */
-		if ( pServer != NULL &&
-		     (pServer->ConfigOwner == NULL || pServer->ConfigOwner == (void*)pApp) ) {
-			XS_ConfigServerFree(pServer);
+			/* 动态重载后的 server 由其配置快照拥有；根 XS_App 只借用槽位。 */
+			if ( pServer != NULL &&
+			     (pServer->ConfigOwner == NULL || pServer->ConfigOwner == (void*)pApp) ) {
+				XS_ConfigServerFree(pServer);
+			}
 		}
 	}
 	xrtFree(pApp->Servers);
