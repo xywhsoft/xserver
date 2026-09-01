@@ -142,6 +142,14 @@ def udp_echo(port: int, payload: bytes) -> None:
         assert data == payload, data
 
 
+def udp_closed_peer_burst(port: int) -> None:
+    """让服务端向已经关闭的临时端口回显，覆盖 Windows ICMP reset。"""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        for index in range(64):
+            payload = struct.pack("!I", index) + bytes([index & 0xFF]) * 1020
+            sock.sendto(payload, ("127.0.0.1", port))
+
+
 def write_config(path: Path, ports: dict[str, int], marker: int) -> None:
     services = [
         {
@@ -292,6 +300,9 @@ def main() -> int:
                 old_ws_admin = ws_open(ports["ws"], "admin.ws.example.com")
                 ws_send_expect(old_ws_admin, b"before", b"ws-admin-script")
                 udp_echo(ports["udp"], b"udp-before")
+                udp_closed_peer_burst(ports["udp"])
+                time.sleep(0.25)
+                udp_echo(ports["udp"], b"udp-after-closed-peer")
 
                 admin_ws_script = app / "hosts" / "ws-admin" / "main.c"
                 admin_ws_script.write_text(

@@ -67,9 +67,11 @@ def config_matrix():
             'host_default': {'path': str(Path(tempfile.gettempdir()) /
                                          'xs-root-must-not-exist-7b911c')}
         }]}), 'cannot open static root'),
-        ('ws-protocol-type', '{"services":[{"class":"ws","name":"x","port":1,'
-                             '"devlang":"c","devfile":"script/ws_main.c",'
-                             '"ws_protocol":1}]}', "ws_protocol' expect string"),
+        ('ws-protocol-type', json.dumps({'services': [{
+            'class': 'ws', 'name': 'x', 'port': 1,
+            'devlang': 'c', 'devfile': str(RELEASE / 'script' / 'ws_main.c'),
+            'ws_protocol': 1,
+        }]}), "ws_protocol' expect string"),
         ('dup-host-name', '{"services":[{"class":"http","name":"x","port":1,"hosts":['
                           '{"name":"a","host":"a.example"},{"name":"a","host":"b.example"}]}]}',
          'duplicate host name'),
@@ -97,18 +99,22 @@ def config_matrix():
         finally:
             os.unlink(path)
 
-    # dev_inc 相对路径只能基于可执行文件 appPath 解析，不得意外命中
-    # 进程当前工作目录中的同名诱饵头文件。
+    # dev_inc 相对路径只能基于配置文件目录解析，不得意外命中进程当前
+    # 工作目录中的同名诱饵头文件。
     with tempfile.TemporaryDirectory(prefix='xs-dev-path-cwd-') as temp_dir:
         temp_root = Path(temp_dir)
-        decoy = temp_root / 'decoy'
+        config_root = temp_root / 'config'
+        cwd_root = temp_root / 'cwd'
+        config_root.mkdir()
+        cwd_root.mkdir()
+        decoy = cwd_root / 'decoy'
         decoy.mkdir()
         (decoy / 'cwd_only.h').write_text('#define CWD_ONLY 1\n', encoding='utf-8')
-        script = temp_root / 'main.c'
+        script = config_root / 'main.c'
         script.write_text(
             '#include <xsbase.h>\n#include <cwd_only.h>\n'
             'void ServiceInit(XS_HostInfo* p){(void)p;}\n', encoding='utf-8')
-        config = temp_root / 'xs.json'
+        config = config_root / 'xs.json'
         config.write_text(json.dumps({'services': [{
             'class': 'custom', 'name': 'cwd-probe', 'enabled': True,
             'devlang': 'c', 'devfile': str(script), 'dev_inc': 'decoy'
@@ -116,7 +122,7 @@ def config_matrix():
         try:
             proc = subprocess.run(
                 [str(EXE), str(config)], capture_output=True, text=True,
-                timeout=10, cwd=str(temp_root))
+                timeout=10, cwd=str(cwd_root))
             if proc.returncode != 1 or 'script compile failed' not in proc.stdout + proc.stderr:
                 fail('config/dev-path-no-cwd-fallback',
                      f'exit={proc.returncode} output={(proc.stdout + proc.stderr)[-200:]}')

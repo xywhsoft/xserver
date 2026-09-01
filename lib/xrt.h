@@ -230195,9 +230195,50 @@ XRT_API void xrtNetUdpConfigInit(xnetudpconfig* pConfig)
 static bool __xrtNetUdpSocketOptions(
 	xnetsocket Socket,
 	const xnetudpconfig* pConfig,
-	xnetfamily Family
+	xnetfamily Family,
+	bool bConnected
 )
 {
+	#if defined(_WIN32) || defined(_WIN64)
+		/*
+		 * Windows 默认把已发送数据报收到的 ICMP Port Unreachable 映射为
+		 * 后续 WSARecvFrom 的 WSAECONNRESET。共享的无连接 UDP 端点可能向
+		 * 已经关闭的临时端口发送数据；错误风暴还可能令下一次 Overlapped
+		 * 接收同步失败，进而被误判为整个 UDP 对象的不可恢复终态。
+		 *
+		 * 未连接 xnetudp 不把任一远端端口状态当作本地 socket 生命周期，
+		 * 因此在提交首个接收前关闭该 Winsock 行为。连接式 UDP 保留系统默认
+		 * 错误语义。
+		 */
+		if ( !bConnected ) {
+			BOOL bReportConnectionReset = FALSE;
+			DWORD iReturned = 0;
+
+			if ( WSAIoctl(
+				__xrtNetSocketHandle(Socket),
+				SIO_UDP_CONNRESET,
+				&bReportConnectionReset,
+				(DWORD)sizeof(bReportConnectionReset),
+				NULL,
+				0,
+				&iReturned,
+				NULL,
+				NULL
+			) != 0 ) {
+				int iCode = __xrtNetSocketLastError();
+
+				__xrtNetSocketSetSystemError(
+					XNET_ERROR_SOCKET_OPTION,
+					"set-udp-connreset",
+					"disabling UDP connection reset reporting failed",
+					iCode
+				);
+				return false;
+			}
+		}
+	#else
+		(void)bConnected;
+	#endif
 	if ( pConfig->ReuseAddress && !xrtNetSocketSet(
 		Socket,
 		XNET_OPTION_REUSE_ADDRESS,
@@ -230611,7 +230652,12 @@ XRT_API xnetudp* xrtNetUdpOpen(
 	if ( Socket == NULL ) {
 		return NULL;
 	}
-	if ( !__xrtNetUdpSocketOptions(Socket, &Config, Family) ||
+	if ( !__xrtNetUdpSocketOptions(
+		Socket,
+		&Config,
+		Family,
+		pPeer != NULL
+	) ||
 		 !xrtNetSocketBind(Socket, &Local) ) {
 		__xrtNetUdpClosePreserveError(Socket);
 		return NULL;

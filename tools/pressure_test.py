@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import shutil
 import socket
 import subprocess
 import tempfile
@@ -209,6 +210,8 @@ def main() -> int:
     ok = True
     with tempfile.TemporaryDirectory(prefix="xs-pressure-") as temp_name:
         temp_dir = Path(temp_name)
+        for directory in ("script", "wwwroot", "hosts", "tls", "devsdk"):
+            shutil.copytree(RELEASE / directory, temp_dir / directory)
         config_path = temp_dir / "xs.json"
         config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
         popen_options: dict[str, object] = {}

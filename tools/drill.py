@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import random
 import signal
+import shutil
 import socket
 import struct
 import subprocess
@@ -279,12 +280,6 @@ def canary() -> list[str]:
         except OSError as exc:
             if getattr(exc, "winerror", 0) == 10054 and attempt < 2:
                 continue
-            if getattr(exc, "winerror", 0) == 10054:
-                events = report["events"]
-                assert isinstance(events, list)
-                events.append(
-                    f"round{report['rounds']}: udp-icmp-artifact (non-fatal)")
-                break
             failures.append(f"udp:{exc}")
             break
 
@@ -364,6 +359,8 @@ def main() -> int:
     log(f"report: {REPORT_PATH}")
     with tempfile.TemporaryDirectory(prefix="xs-drill-") as temp_name:
         temp_dir = Path(temp_name)
+        for directory in ("script", "wwwroot", "hosts", "tls", "devsdk"):
+            shutil.copytree(RELEASE / directory, temp_dir / directory)
         SCRIPT_PATH = temp_dir / "http_main.c"
         SCRIPT_PATH.write_text(
             (RELEASE / "script" / "http_main.c").read_text(encoding="utf-8"),
