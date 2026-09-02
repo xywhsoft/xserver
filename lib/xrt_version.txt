@@ -1,2 +1,3 @@
-af1b6827325af3417fcc53ed31dc8dee54d559c5
-2026-08-29 完善编译器兼容与 CI 门禁
+fd5cc99b254b2a34269286272bd06876d27b0698
+2026-09-03 regex 库重新进入核心库
+本地上游补丁：TLS 服务端 Cookie 与 Windows UDP ICMP reset 隔离（尚未提交）
