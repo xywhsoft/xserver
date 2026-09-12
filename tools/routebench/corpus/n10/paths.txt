@@ -1,0 +1,10 @@
+/s/res000000/detail
+/s/res000001/detail
+/s/res000002/detail
+/s/res000003/detail
+/s/res000004/detail
+/d/res000000/1000000
+/d/res000001/1000001
+/d/res000002/1000002
+/d/res000003/1000003
+/d/res000004/1000004

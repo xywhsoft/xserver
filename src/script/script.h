@@ -201,6 +201,16 @@ static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 		xrtFree(sDevPath);
 		return NULL;
 	}
+	/* 脚本目录进包含路径：源码挂载在 VFS 虚路径下，引号包含无法
+	 * 按原始目录解析，需显式提供（脚本分 modules/ 子目录的常规姿势） */
+	{
+		str sIncDir = xrtPathParent(sDevPath);
+
+		if ( sIncDir != NULL && sIncDir[0] != '\0' ) {
+			tcc_add_include_path(pTcc, sIncDir);
+		}
+		xrtFree(sIncDir);
+	}
 	/* 唯一路径避免并行候选互相覆盖源码；add_file 返回后立即卸载。 */
 	snprintf(sVirtual, sizeof(sVirtual), "/xs/script/%p.c", (void*)pTcc);
 	if ( !tcc_vfs_mount_memory(sVirtual, pData, iSize) ) {

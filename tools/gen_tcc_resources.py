@@ -8,16 +8,20 @@ VFS 布局（与 XS_TccCreate 的 include/lib 路径一一对应）：
   /tcc/lib/**                                 ← libtcc1.a 与 .def 导入库
 
 压缩：LZMA（tools/tcc_vfs_lzma_pack.exe），压缩无收益或过小则 STORE。
-用法：python tools/gen_tcc_resources.py [--store]    # --store 全部不压缩
+用法：python tools/gen_tcc_resources.py [sqlite] [xtp] [--store]
 输出：src/script/tcc_builtin_resources.c
 """
 from __future__ import annotations
 
+import argparse
 import hashlib
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
+
+from xs_extensions import select_extensions
 
 ROOT = Path(__file__).resolve().parent.parent
 RES_TCC = ROOT / "res" / "tcc"
@@ -31,7 +35,6 @@ SDK_FILES = [
     ("/xs/xsbase.h", ROOT / "src" / "sdk" / "xsbase.h"),
     ("/xs/xrt_decl.h", ROOT / "lib" / "xrt_decl.h"),
     ("/xs/libtcc.h", ROOT / "lib" / "libtcc.h"),
-    ("/xs/sqlite3.h", ROOT / "lib" / "sqlite3.h"),
 ]
 
 # (虚拟目录前缀, 源目录) —— 整目录递归收录
@@ -43,7 +46,7 @@ RES_DIRS = [
 ]
 
 MIN_COMPRESS_SIZE = 64
-GENERATOR_FORMAT = b"xs-tcc-vfs-resource-format-v2\0"
+GENERATOR_FORMAT = b"xs-tcc-vfs-resource-format-v3\0"
 
 
 def input_digest(items: list[tuple[str, Path]], force_store: bool) -> str:
@@ -70,14 +73,14 @@ def normalize_virtual_name(text: str) -> str:
     return text.replace("\\", "/").strip("/").lower()
 
 
-def lzma_pack(data: bytes) -> bytes | None:
-    if not PACK_TOOL.is_file():
-        raise RuntimeError(f"missing pack tool: {PACK_TOOL}（先执行 build.bat/sh 的工具构建步骤）")
-    src = ROOT / "build_tmp_pack_in"
-    dst = ROOT / "build_tmp_pack_out"
+def lzma_pack(data: bytes, pack_tool: Path, scratch: Path) -> bytes | None:
+    if not pack_tool.is_file():
+        raise RuntimeError(f"missing pack tool: {pack_tool}（先执行 build.bat/sh 的工具构建步骤）")
+    src = scratch / "input"
+    dst = scratch / "output"
     src.write_bytes(data)
     try:
-        subprocess.run([str(PACK_TOOL), str(src), str(dst), "9"], check=True)
+        subprocess.run([str(pack_tool), str(src), str(dst), "9"], check=True)
         packed = dst.read_bytes()
     finally:
         src.unlink(missing_ok=True)
@@ -85,14 +88,16 @@ def lzma_pack(data: bytes) -> bytes | None:
     return packed if len(packed) < len(data) else None
 
 
-def collect() -> list[tuple[str, Path]]:
+def collect(selected: dict | None = None) -> list[tuple[str, Path]]:
     items: list[tuple[str, Path]] = []
     seen: set[str] = set()
 
     def add(virtual: str, source: Path) -> None:
         key = normalize_virtual_name(virtual)
-        if key in seen or not source.is_file():
-            return
+        if key in seen:
+            raise ValueError(f"duplicate VFS resource: {virtual}")
+        if not source.is_file():
+            raise ValueError(f"missing VFS source: {source}")
         seen.add(key)
         items.append((key, source))
 
@@ -100,6 +105,9 @@ def collect() -> list[tuple[str, Path]]:
         if not source.is_file():
             raise RuntimeError(f"missing SDK source: {source}")
         add(virtual, source)
+    for entry in (selected or {}).values():
+        for virtual, source in entry["headers"].items():
+            add(f"/xs/{virtual}", ROOT / source)
     for prefix, directory in RES_DIRS:
         if not directory.is_dir():
             raise RuntimeError(f"missing VFS source directory: {directory}")
@@ -116,49 +124,81 @@ def c_bytes(data: bytes) -> str:
     )
 
 
-def main() -> int:
-    force_store = "--store" in sys.argv
-    items = collect()
+def generate(selected: dict | None = None, *, output: Path = OUTPUT,
+             pack_tool: Path = PACK_TOOL, force_store: bool = False) -> int:
+    items = collect(selected)
     source_hash = input_digest(items, force_store)
     marker = f"input-sha256: {source_hash}"
-    if OUTPUT.is_file():
-        with OUTPUT.open("r", encoding="utf-8") as existing:
+    if output.is_file():
+        with output.open("r", encoding="utf-8") as existing:
             if marker in existing.readline():
-                print(f"cached {OUTPUT} ({source_hash[:12]})")
+                print(f"cached {output} ({source_hash[:12]})")
                 return 0
     parts = [
         f"/* 由 tools/gen_tcc_resources.py 生成，勿手改；{marker} */",
-        '#include "../../tcc/tcc_builtin_vfs.h"',
+        '#include "tcc_builtin_vfs.h"',
         "",
     ]
     total_raw = total_packed = 0
     rows: list[tuple[str, int, int, str]] = []
-    for index, (virtual, source) in enumerate(items):
-        data = source.read_bytes()
-        packed: bytes | None = None
-        method = "TCC_BUILTIN_RESOURCE_STORE"
-        if not force_store and len(data) > MIN_COMPRESS_SIZE:
-            packed = lzma_pack(data)
-            if packed is not None:
-                method = "TCC_BUILTIN_RESOURCE_LZMA"
-        payload = packed if packed is not None else data
-        parts.append(f"static const unsigned char xs_resource_{index}[] = {{\n\t{c_bytes(payload)}\n}};")
-        parts.append("")
-        rows.append((virtual, len(data), len(payload), method))
-        total_raw += len(data)
-        total_packed += len(payload)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    # Each invocation owns its scratch files, including concurrent variants.
+    with tempfile.TemporaryDirectory(prefix="xs-vfs-", dir=output.parent) as temp:
+        for index, (virtual, source) in enumerate(items):
+            data = source.read_bytes()
+            packed: bytes | None = None
+            method = "TCC_BUILTIN_RESOURCE_STORE"
+            if not force_store and len(data) > MIN_COMPRESS_SIZE:
+                packed = lzma_pack(data, pack_tool, Path(temp))
+                if packed is not None:
+                    method = "TCC_BUILTIN_RESOURCE_LZMA"
+            payload = packed if packed is not None else data
+            parts.append(f"static const unsigned char xs_resource_{index}[] = {{\n\t{c_bytes(payload)}\n}};")
+            parts.append("")
+            rows.append((virtual, len(data), len(payload), method))
+            total_raw += len(data)
+            total_packed += len(payload)
     parts.append("const TCCBuiltinResource tcc_builtin_resources[] = {")
     for index, (virtual, raw, packed_len, method) in enumerate(rows):
         parts.append(f"\t{{ \"{virtual}\", xs_resource_{index}, {packed_len}, {raw}, {method} }},")
     parts.append("};")
     parts.append(f"const unsigned int tcc_builtin_resources_count = {len(rows)};")
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT.open("w", encoding="utf-8", newline="\n").write("\n".join(parts) + "\n")
+    # Write beside the target, then replace; an interrupted generation cannot
+    # leave a partial C source looking like a valid cached resource file.
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", newline="\n",
+                                     dir=output.parent, delete=False) as fp:
+        temporary = Path(fp.name)
+        try:
+            fp.write("\n".join(parts) + "\n")
+        except BaseException:
+            fp.close()
+            temporary.unlink(missing_ok=True)
+            raise
+    try:
+        temporary.replace(output)
+    finally:
+        temporary.unlink(missing_ok=True)
     lzma_count = sum(1 for *_, m in rows if m == "TCC_BUILTIN_RESOURCE_LZMA")
-    print(f"generated {OUTPUT}")
+    print(f"generated {output}")
     print(f"resources: {len(rows)} (lzma {lzma_count}, store {len(rows) - lzma_count})")
     print(f"raw {total_raw/1024:.0f} KB -> packed {total_packed/1024:.0f} KB")
     return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("extensions", nargs="*", metavar="LIB")
+    parser.add_argument("--store", action="store_true", help="disable compression")
+    parser.add_argument("--output", type=Path, default=OUTPUT)
+    parser.add_argument("--pack-tool", type=Path, default=PACK_TOOL)
+    args = parser.parse_intermixed_args()
+    try:
+        selected = select_extensions(args.extensions)
+        return generate(selected, output=args.output.resolve(),
+                        pack_tool=args.pack_tool.resolve(), force_store=args.store)
+    except (ValueError, OSError, RuntimeError, subprocess.CalledProcessError) as error:
+        print(f"[vfs] failed: {error}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

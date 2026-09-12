@@ -1,0 +1,10 @@
+S /s/res000000/detail
+S /s/res000001/detail
+S /s/res000002/detail
+S /s/res000003/detail
+S /s/res000004/detail
+D /d/res000000/{id}
+D /d/res000001/{id}
+D /d/res000002/{id}
+D /d/res000003/{id}
+D /d/res000004/{id}

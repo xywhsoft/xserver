@@ -268,6 +268,8 @@ XS_SQLITE_SYMBOL(sqlite3_wal_autocheckpoint)
 XS_SQLITE_SYMBOL(sqlite3_wal_checkpoint)
 XS_SQLITE_SYMBOL(sqlite3_wal_checkpoint_v2)
 XS_SQLITE_SYMBOL(sqlite3_wal_hook)
+#if defined(_WIN32) || defined(_WIN64)
 XS_SQLITE_SYMBOL(sqlite3_win32_set_directory)
 XS_SQLITE_SYMBOL(sqlite3_win32_set_directory16)
 XS_SQLITE_SYMBOL(sqlite3_win32_set_directory8)
+#endif

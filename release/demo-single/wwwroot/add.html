@@ -74,6 +74,8 @@
 			form.on('submit(AddRow)', function(data){
 				// 获取表单字段值
 				var field = data.field;
+				// 表单值都是字符串；年龄需作为 JSON 数字提交，供接口按整数读取。
+				field.age = Number(field.age || 0);
 				// 支持 iframe（layer 弹层）与独立打开两种方式
 				var index = (parent !== window) ? parent.layer.getFrameIndex(window.name) : null;
 

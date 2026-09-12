@@ -1,0 +1,16 @@
+{
+  "sqlite": {
+    "macro": "XS_USE_SQLITE",
+    "headers": {"sqlite3.h": "lib/sqlite3.h"},
+    "sources": [{"path": "lib/sqlite3.c", "flags": ["-w"]}],
+    "symbols": "src/script/import_sqlite.inc",
+    "symbol_macro": "XS_SQLITE_SYMBOL"
+  },
+  "xtp": {
+    "macro": "XS_USE_XTP2",
+    "headers": {"xtp2.h": "lib/xtp2.h"},
+    "sources": [{"path": "lib/xtp2.h", "defines": ["XTP2_IMPLEMENTATION"]}],
+    "symbols": "src/script/import_xtp2.inc",
+    "symbol_macro": "XS_XTP2_SYMBOL"
+  }
+}

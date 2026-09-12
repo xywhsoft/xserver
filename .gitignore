@@ -12,3 +12,4 @@ tools/wingrp.pid
 *.obj
 *.pyc
 /build_out.txt
+/.build/

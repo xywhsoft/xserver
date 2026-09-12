@@ -90,16 +90,6 @@ static const XS_TccSymbol g_XS_TccSymbols[] = {
 	{ "tcc_vfs_unmount",		(const void*)tcc_vfs_unmount },
 };
 
-#ifdef XS_USE_SQLITE
-/* sqlite3 符号（构建生成清单；仅 XS_USE_SQLITE 构建存在） */
-#include "../../lib/sqlite3.h"
-#define XS_SQLITE_SYMBOL(name)	{ #name, (const void*)(name) },
-static const XS_TccSymbol g_XS_SqliteSymbols[] = {
-#include "import_sqlite.inc"
-};
-#undef XS_SQLITE_SYMBOL
-#endif
-
 static void XS_TccAddSymbols(TCCState* pTcc, const XS_TccSymbol* pSymbols, size_t iCount)
 {
 	size_t i;
@@ -108,6 +98,10 @@ static void XS_TccAddSymbols(TCCState* pTcc, const XS_TccSymbol* pSymbols, size_
 		(void)tcc_add_symbol(pTcc, pSymbols[i].sName, pSymbols[i].pValue);
 	}
 }
+
+/* tools/build.py 按扩展清单生成：头声明、符号表与脚本特性宏同步选择。
+ * 生成文件位于当前构建目录；增加可选库不再修改此处。 */
+#include <xs_build_extensions.h>
 
 /* 创建就绪的 TCC 环境：全部资源来自内置 VFS（/xs 与 /tcc），
  * 运行时不依赖任何磁盘上的 TCC 环境（res/tcc 已在构建期打包进二进制） */
@@ -155,9 +149,7 @@ static TCCState* XS_TccCreate(void)
 	XS_TccAddSymbols(pTcc, g_XS_XrtSymbols, sizeof(g_XS_XrtSymbols) / sizeof(g_XS_XrtSymbols[0]));
 	XS_TccAddSymbols(pTcc, g_XS_ApiSymbols, sizeof(g_XS_ApiSymbols) / sizeof(g_XS_ApiSymbols[0]));
 	XS_TccAddSymbols(pTcc, g_XS_TccSymbols, sizeof(g_XS_TccSymbols) / sizeof(g_XS_TccSymbols[0]));
-#ifdef XS_USE_SQLITE
-	XS_TccAddSymbols(pTcc, g_XS_SqliteSymbols, sizeof(g_XS_SqliteSymbols) / sizeof(g_XS_SqliteSymbols[0]));
-#endif
+	XS_TccAddExtensions(pTcc);
 	return pTcc;
 }
 

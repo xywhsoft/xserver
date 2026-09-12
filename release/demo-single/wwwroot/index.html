@@ -6,15 +6,20 @@
 	<ul>
 		<li><a href="/text">GET /text</a> — 文本响应</li>
 		<li><a href="/json">GET /json</a> — xvalue → JSON</li>
+		<li><a href="/page">GET /page</a> — 从受控 page 目录加载页面</li>
 		<li><a href="/template">GET /template</a> — 模板渲染</li>
 		<li><a href="/api/list">GET /api/list</a> — SQLite 列表（item 表）</li>
+		<li><a href="/api/v1/items">GET /api/v1/items</a> — RESTful item 集合</li>
 	</ul>
 	<h2>迁移自 dev/v1 脚本范例</h2>
 	<ul>
 		<li><a href="/test">GET /test</a> — 自检</li>
 		<li><a href="/chart.html">chart.html</a> — ECharts 图表页（GET /chart/get）</li>
+		<li><a href="/list.html">list.html</a> — SQLite 列表页（新增、编辑、批量删除）</li>
 		<li><a href="/add.html">add.html</a> — layui 表单页（POST /app/add）</li>
-		<li><a href="/app/list">GET /app/list</a> — test 表列表</li>
+		<li><a href="/app/list">GET /app/list</a> — test 表 JSON 接口</li>
+		<li><a href="/api/v1/item/1">GET /api/v1/item/{id}</a> — 动态路由参数捕获</li>
+		<li><a href="/api/v1/file/readme.txt">GET /api/v1/file/{name}.txt</a> — 段内动态参数捕获</li>
 	</ul>
 </body>
 </html>
