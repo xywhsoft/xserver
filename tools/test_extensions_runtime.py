@@ -231,6 +231,9 @@ static const char nested_source[] =
     "#ifdef XS_USE_XIMAP\nif(xrtImapSequenceSetValid(xrtStrView(\"1:5\"))) mask |= 128;\n\n#endif\n\n"
     "#ifdef XS_USE_MD4C\nif(md_html(\"x\", 1, md4c_silent, 0, 0, 0) == 0) mask |= 256;\n\n#endif\n\n"
     "#ifdef XS_USE_XACME\nif(xrtAcmeDnsProviderCount() >= 1) mask |= 512;\n\n#endif\n\n"
+    "{ unsigned i, c = xsExtensionCount(); unsigned seen = 0;\n"
+    "  for (i = 0; i < c; i++) { if (xsExtensionName(i) != 0) seen |= 1u; }\n"
+    "  if (c > 0 && seen && xsExtensionName(c) == 0) mask |= 1024; }\n\n"
     "return mask; }\n";
 
 void ServiceInit(XS_HostInfo *host)
@@ -292,6 +295,23 @@ void ServiceInit(XS_HostInfo *host)
 #ifdef XS_USE_XSMTP
     REQUIRE(xsExtensionEnabled("xmail")); /* requires 展开可见 */
 #endif
+    /* xsExtensionCount / xsExtensionName：注册表顺序枚举，越界 NULL */
+    {
+        uint32 iEach;
+        uint32 iCount = xsExtensionCount();
+
+        for ( iEach = 0; iEach < iCount; iEach++ ) {
+            const char* sEach = xsExtensionName(iEach);
+
+            REQUIRE(sEach != NULL && sEach[0] != 0);
+            REQUIRE(xsExtensionEnabled(sEach)); /* 枚举名必为 enabled */
+        }
+        REQUIRE(xsExtensionName(iCount) == NULL);      /* 首个越界 */
+        REQUIRE(xsExtensionName(0xFFFFFFFFu) == NULL); /* 深越界 */
+        if ( iCount > 0 ) {
+            mask |= 1024; /* 枚举链路打通（default 下 count==0 不置位） */
+        }
+    }
     REQUIRE(mask == EXPECTED_MASK);
     nested = xsCreateTCC();
     REQUIRE(nested != NULL && tcc_compile_string(nested, nested_source) == 0);
@@ -330,7 +350,8 @@ def check(exe: Path, names: list[str]) -> None:
             | (64 if "xpop3" in selected else 0)
             | (128 if "ximap" in selected else 0)
             | (256 if "md4c" in selected else 0)
-            | (512 if "xacme" in selected else 0))
+            | (512 if "xacme" in selected else 0)
+            | (1024 if selected else 0))
     with tempfile.TemporaryDirectory(prefix="xs-extension-probe-") as temp:
         directory = Path(temp)
         proc = invoke(exe, f"#define EXPECTED_MASK {mask}\n" + PROBE, directory, "enabled")

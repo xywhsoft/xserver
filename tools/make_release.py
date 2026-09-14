@@ -78,12 +78,19 @@ def build_variant(name: str, meta: dict, when: str, commit: str, out_dir: Path) 
         raise RuntimeError(f"missing binary for {name}: {binary}")
 
     registry = load_registry()
+    # 版本块直接取产物自身输出（与启动横幅/--version 同源，杜绝手拼漂移）
+    import subprocess as _sp
+    try:
+        banner = _sp.run([str(binary), "--version"], capture_output=True, text=True,
+                         encoding="utf-8", errors="replace", timeout=20).stdout.strip()
+    except (OSError, _sp.TimeoutExpired):
+        banner = "XServer (version unavailable)"
     version_text = (
-        f"XServer 全功能版（all：全部可选库）\n"
+        f"{banner}\n"
         f"platform : {name} ({meta['os']})\n"
         f"build    : {when}\n"
         f"commit   : {commit}\n"
-        f"license  : MIT\n"
+        f"license  : MIT (bundled third-party components keep their own)\n"
     )
 
     def arc(prefix: str, path: Path, inner: str | None = None) -> tuple[str, Path]:

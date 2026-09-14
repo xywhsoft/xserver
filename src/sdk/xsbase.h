@@ -237,6 +237,12 @@ XS_API const char* xsAppPath(void);
  * 未知名/空串/NULL 返回 false，不设置错误。等价的编译期写法是
  * #ifdef XS_USE_<名>。 */
 XS_API bool xsExtensionEnabled(const char* sName);
+/* 枚举本变体编入的扩展（注册表顺序，与启动横幅/--version 一致）：
+ * count 返回数量；name 按下标取名字（= build 参数名），返回静态常量的
+ * 借用指针、进程期内有效无需释放，越界返回 NULL 且不设置错误。
+ * 枚举出的名字喂给 xsExtensionEnabled 必为 true（同一张表）。 */
+XS_API uint32 xsExtensionCount(void);
+XS_API const char* xsExtensionName(uint32 iIndex);
 XS_API TCCState* xsCreateTCC(void);
 XS_API void xsDestroyTCC(TCCState* pTcc);
 

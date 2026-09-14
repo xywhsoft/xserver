@@ -22,6 +22,16 @@ xs.exe demo\xs.json
 浏览器打开 **<http://127.0.0.1:9081>** —— 页面上的三个按钮分别演示静态页、HTTP API 和 WebSocket 回显。
 停止服务：在终端按 `Ctrl+C`。
 
+想知道这个二进制的版本和编入了哪些可选库（本包为全功能版）：
+
+```bash
+./xs --version        # 或 xs.exe --version
+# [xs] XServer 1.0.0 (commit <hash>, <日期>, <平台>)
+# [xs] extensions (10): sqlite, xtp, xllm, ...
+```
+
+启动时也会打印同样的两行。同一份信息见包内 `VERSION` 文件。
+
 ## 2. 这个包里有什么
 
 ```

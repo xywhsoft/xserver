@@ -55,6 +55,8 @@ static const XS_TccSymbol g_XS_ApiSymbols[] = {
 	XS_API_SYMBOL(xsTimerCancel)
 	XS_API_SYMBOL(xsAppPath)
 	XS_API_SYMBOL(xsExtensionEnabled)
+	XS_API_SYMBOL(xsExtensionCount)
+	XS_API_SYMBOL(xsExtensionName)
 	XS_API_SYMBOL(xsCreateTCC)
 	XS_API_SYMBOL(xsDestroyTCC)
 	XS_API_SYMBOL(xsSwapTake)
@@ -137,6 +139,23 @@ bool xsExtensionEnabled(const char* sName)
 		}
 	}
 	return false;
+}
+
+/* 契约 API：xsExtensionCount / xsExtensionName
+ * 枚举本变体编入的扩展：注册表顺序（与启动横幅/--version 一致），
+ * 名字即 build 参数名。name 返回静态常量的借用指针，进程期内有效、
+ * 无需释放；越界返回 NULL，不设置错误。default 变体 count 为 0。 */
+uint32 xsExtensionCount(void)
+{
+	return XS_EXTENSION_COUNT;
+}
+
+const char* xsExtensionName(uint32 iIndex)
+{
+	if ( iIndex >= XS_EXTENSION_COUNT ) {
+		return NULL;
+	}
+	return g_XS_ExtensionNames[iIndex];
 }
 
 /* 创建就绪的 TCC 环境：全部资源来自内置 VFS（/xs 与 /tcc），
