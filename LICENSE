@@ -1,3 +1,22 @@
+xserver (xs) — 开源许可说明 / Licensing Overview
+=================================================
+
+本仓库的自有代码以下方 MIT License 授权。仓库同时捆绑了若干第三方组
+件,它们各自保留原许可,不因本文件而改变:
+
+- `tcc/` — Tiny C Compiler(mob 快照 + 本地 VFS/UTF-8 IO 修改):
+  LGPL-2.1-or-later,全文见 `tcc/COPYING`,修改清单见 `tcc/README.md`
+- `tcc/` 内 LZMA SDK 文件(LzmaDec/LzmaEnc/LzFind/CpuArch 等):公有领域
+- `lib/sqlite3.c`、`lib/sqlite3.h` — SQLite:公有领域
+- `lib/md4c/` — MD4C:MIT(文件头保留 Martin Mitáš 声明)
+- 其余 `lib/` 与 `src/` 内容为本项目自有代码,适用下方 MIT License
+
+按 LGPL-2.1 要求,静态链入 TCC 的二进制发行版须提供重新链接所需
+的源码与构建方式,本仓库的完整源码与 `build.bat` / `build.sh` 即满足
+该要求。
+
+-----------------------------------------------------------------------------
+
 MIT License
 
 Copyright (c) 2025 xLeaves [xywhsoft] <xywhsoft@qq.com>

@@ -8,6 +8,16 @@
  *
  * The embedded table uses virtual names such as "include/stdio.h" and
  * "lib/libtcc1.a". Runtime lookup only accepts those normalized virtual names.
+ *
+ * Copyright (c) 2025-2026 xLeaves [xywhsoft] <xywhsoft@qq.com>
+ *
+ * This file is part of the TCC integration of XServer and is licensed
+ * under the GNU Lesser General Public License version 2.1 or later
+ * (LGPL-2.1-or-later), the same license as TCC itself; see COPYING in
+ * this directory. It is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the LGPL-2.1
+ * for more details.
  */
 #include "tcc_builtin_vfs.h"
 

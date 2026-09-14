@@ -56,3 +56,16 @@ Linux 使用相同参数，例如 `bash build.sh sqlite xtp xllm xsmtp`；需要
 启用后，脚本直接 `#include <sqlite3.h>` / `#include <xtp2.h>` / `#include <xllm.h>`，无需再定义 `XTP2_IMPLEMENTATION`。脚本可用 `XS_USE_SQLITE`、`XS_USE_XTP2`、`XS_USE_XLLM` 判断当前宿主能力，嵌套 `xsCreateTCC()` 环境也一致。
 
 后续库在 [扩展清单](/D:/GIT/xserver/tools/extensions.json) 登记源码、头文件、宏和符号清单，不需要修改两个平台的构建脚本或 TCC 宿主分支。参见[可选扩展库说明](/D:/GIT/xserver/docs/可选扩展库.md)。
+
+## 开源许可
+
+本项目自有代码以 MIT 授权（见 [LICENSE](/D:/GIT/xserver/LICENSE)）。仓库捆绑的第三方组件各自保留原许可：
+
+| 组件 | 位置 | 许可 |
+| --- | --- | --- |
+| Tiny C Compiler（mob 快照 + 本地 VFS/UTF-8 IO 修改） | `tcc/` | LGPL-2.1-or-later，全文见 `tcc/COPYING`，修改清单见 `tcc/README.md` |
+| LZMA SDK（Igor Pavlov） | `tcc/LzmaDec.c` 等 | 公有领域 |
+| SQLite | `lib/sqlite3.c` | 公有领域 |
+| MD4C（Martin Mitáš） | `lib/md4c/` | MIT |
+
+TCC 以静态链接编入单一二进制。按 LGPL-2.1 要求，发布二进制时须让接收方能够用修改版 TCC 重新链接出完整程序——本仓库公开全部源码与构建脚本（`build.bat` / `build.sh`），即满足该要求；修改过的 TCC 部分保持 LGPL 并随源码提供。项目自有代码与用户脚本的许可均不受 TCC 许可影响。

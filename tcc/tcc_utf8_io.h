@@ -1,3 +1,7 @@
+/* UTF-8 path aware file IO for TCC on Windows (wide-char bridge).
+ * Part of the TCC integration of XServer, LGPL-2.1-or-later; see COPYING
+ * in this directory. Copyright (c) 2025-2026 xLeaves [xywhsoft].
+ */
 #ifndef TCC_UTF8_IO_H
 #define TCC_UTF8_IO_H
 

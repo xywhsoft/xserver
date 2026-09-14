@@ -54,6 +54,7 @@ static const XS_TccSymbol g_XS_ApiSymbols[] = {
 	XS_API_SYMBOL(xsTimerAfter)
 	XS_API_SYMBOL(xsTimerCancel)
 	XS_API_SYMBOL(xsAppPath)
+	XS_API_SYMBOL(xsExtensionEnabled)
 	XS_API_SYMBOL(xsCreateTCC)
 	XS_API_SYMBOL(xsDestroyTCC)
 	XS_API_SYMBOL(xsSwapTake)
@@ -102,6 +103,41 @@ static void XS_TccAddSymbols(TCCState* pTcc, const XS_TccSymbol* pSymbols, size_
 /* tools/build.py 按扩展清单生成：头声明、符号表与脚本特性宏同步选择。
  * 生成文件位于当前构建目录；增加可选库不再修改此处。 */
 #include <xs_build_extensions.h>
+
+/* 契约 API：xsExtensionEnabled
+ * 按注册表名（= build 参数名，与启动横幅一致）查询本变体是否编入某扩展。
+ * 大小写不敏感；requires 展开后的依赖项同样可见；未知名/空串/NULL 一律
+ * 返回 false，不设置线程错误。名表来自生成的 g_XS_ExtensionNames。 */
+bool xsExtensionEnabled(const char* sName)
+{
+	unsigned int iIndex;
+
+	if ( sName == NULL || sName[0] == 0 ) {
+		return false;
+	}
+	for ( iIndex = 0; iIndex < XS_EXTENSION_COUNT; iIndex++ ) {
+		const char* sEach = g_XS_ExtensionNames[iIndex];
+		size_t i = 0;
+
+		for ( ; ; i++ ) {
+			char a = sName[i], b = sEach[i];
+
+			if ( a >= 'A' && a <= 'Z' ) {
+				a += 'a' - 'A';
+			}
+			if ( b >= 'A' && b <= 'Z' ) {
+				b += 'a' - 'A';
+			}
+			if ( a != b ) {
+				break;
+			}
+			if ( a == 0 ) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
 
 /* 创建就绪的 TCC 环境：全部资源来自内置 VFS（/xs 与 /tcc），
  * 运行时不依赖任何磁盘上的 TCC 环境（res/tcc 已在构建期打包进二进制） */

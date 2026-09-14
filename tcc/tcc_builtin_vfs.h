@@ -3,6 +3,12 @@
  *
  * This file intentionally stays independent from tcc.h so it can be built as
  * a small side module and keep upstream TCC edits narrow.
+ *
+ * Copyright (c) 2025-2026 xLeaves [xywhsoft] <xywhsoft@qq.com>
+ *
+ * This file is part of the TCC integration of XServer and is licensed
+ * under the LGPL-2.1-or-later, the same license as TCC itself; see
+ * COPYING in this directory.
  */
 #ifndef TCC_BUILTIN_VFS_H
 #define TCC_BUILTIN_VFS_H

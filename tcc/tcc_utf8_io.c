@@ -1,3 +1,12 @@
+/* UTF-8 path aware file IO for TCC on Windows (wide-char bridge).
+ *
+ * Copyright (c) 2025-2026 xLeaves [xywhsoft] <xywhsoft@qq.com>
+ *
+ * This file is part of the TCC integration of XServer and is licensed
+ * under the LGPL-2.1-or-later, the same license as TCC itself; see
+ * COPYING in this directory. It is distributed in the hope that it will
+ * be useful, but WITHOUT ANY WARRANTY.
+ */
 #define TCC_UTF8_IO_NO_REMAP
 
 #include "tcc_utf8_io.h"

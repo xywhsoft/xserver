@@ -16,6 +16,17 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *
+ * ---------------------------------------------------------------------------
+ * Local modifications for XServer: Copyright (c) 2025-2026 xLeaves
+ * [xywhsoft] <xywhsoft@qq.com>.
+ *   - CONFIG_TCC_BUILTIN_VFS: remap open/close/read/lseek/fopen/fclose
+ *     to the builtin resource/memory VFS (tcc_builtin_vfs.c).
+ *   - Windows UTF-8 wide-char file IO remap when the VFS is disabled
+ *     (tcc_utf8_io.c).
+ * These modifications are part of this library and remain under the
+ * LGPL-2.1-or-later (see COPYING in this directory). Upstream base:
+ * tinycc mob branch snapshot 2025-03-20 @5527ca6d (0.9.28rc).
  */
 
 #ifndef _TCC_H

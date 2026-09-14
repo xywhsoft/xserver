@@ -232,6 +232,11 @@ XS_API bool xsTimerCancel(uint64 iTimerId);
 
 /* 部署信息与嵌套编译（xsCreateTCC 预置标准 include/lib 路径与符号导入） */
 XS_API const char* xsAppPath(void);
+/* 可选扩展探测：按注册表名（= build 参数名，与启动横幅/--version 一致）查询
+ * 本变体是否编入；大小写不敏感，requires 展开的依赖项同样可见；
+ * 未知名/空串/NULL 返回 false，不设置错误。等价的编译期写法是
+ * #ifdef XS_USE_<名>。 */
+XS_API bool xsExtensionEnabled(const char* sName);
 XS_API TCCState* xsCreateTCC(void);
 XS_API void xsDestroyTCC(TCCState* pTcc);
 

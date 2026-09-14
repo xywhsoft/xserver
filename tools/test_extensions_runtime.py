@@ -269,6 +269,29 @@ void ServiceInit(XS_HostInfo *host)
 #ifdef XS_USE_XACME
     mask |= 512; probe_xacme();
 #endif
+    /* xsExtensionEnabled：大小写不敏感、requires 可见、未知/空/NULL 恒 false */
+    REQUIRE(xsExtensionEnabled(NULL) == false);
+    REQUIRE(xsExtensionEnabled("") == false);
+    REQUIRE(xsExtensionEnabled("no-such-lib") == false);
+    REQUIRE(xsExtensionEnabled("sqlite") ==
+        (
+#ifdef XS_USE_SQLITE
+            true
+#else
+            false
+#endif
+        ));
+    REQUIRE(xsExtensionEnabled("XSMTP") ==
+        (
+#ifdef XS_USE_XSMTP
+            true
+#else
+            false
+#endif
+        ));
+#ifdef XS_USE_XSMTP
+    REQUIRE(xsExtensionEnabled("xmail")); /* requires 展开可见 */
+#endif
     REQUIRE(mask == EXPECTED_MASK);
     nested = xsCreateTCC();
     REQUIRE(nested != NULL && tcc_compile_string(nested, nested_source) == 0);
