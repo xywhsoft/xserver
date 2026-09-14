@@ -60,14 +60,28 @@ def build(args: argparse.Namespace, selected: dict) -> Path:
          "tcc/CpuArch.c", "-I", "tcc", "-DZ7_ST", "-O2", "-s", "-o", str(packer)],
         args.dry_run)
     if args.dry_run:
-        run([sys.executable, "tools/gen_tcc_resources.py", *selected,
-             "--output", str(resources), "--pack-tool", str(packer)], True)
+        gen_cmd = [sys.executable, "tools/gen_tcc_resources.py", *selected,
+             "--output", str(resources), "--pack-tool", str(packer)]
+        if args.sysroot is not None:
+            gen_cmd += ["--sysroot", str(args.sysroot)]
+        run(gen_cmd, True)
     else:
-        vfs.generate(selected, output=resources, pack_tool=packer)
+        vfs.generate(selected, output=resources, pack_tool=packer,
+                     sysroot=args.sysroot.resolve() if args.sysroot else None)
 
     flags = ["-I", str(ROOT / "lib"), "-I", str(ROOT / "tcc"),
              "-I", str(ROOT), "-I", str(directory), "-DCONFIG_TCC_BUILTIN_VFS"]
     flags += [f"-D{entry['macro']}=1" for entry in selected.values()]
+    # 特性宏：宿主编译也拉起扩展的完整声明闭包（unity TU 经 sources[].defines 同源）
+    for entry in selected.values():
+        features = entry.get("feature_macro", [])
+        features = [features] if isinstance(features, str) else features
+        flags += [f"-D{feature}=1" for feature in features]
+    # 扩展可声明宿主编译所需的额外 include 目录（清单驱动，无逐库分支）
+    flags += [f"-I{d}" for entry in selected.values()
+              for d in entry.get("host_includes", [])]
+    if args.sysroot is not None:
+        flags.append('-DCONFIG_SYSROOT="/xsroot"')
     if platform == "linux":
         triplet = "<compiler-triplet>" if args.dry_run else subprocess.check_output(
             [args.cc, "-dumpmachine"], text=True, cwd=ROOT).strip()
@@ -105,6 +119,8 @@ def build(args: argparse.Namespace, selected: dict) -> Path:
         libraries = ["-ldl", "-lpthread", "-lm"]
     for entry in selected.values():
         libraries += entry.get("link_flags", {}).get(platform, [])
+    if args.link_extra:
+        libraries += shlex.split(args.link_extra)
     if args.dry_run:
         staged = directory / "link-stage" / ("xs" + suffix)
         run([args.cc, *objects, "-O2", "-s", "-o", str(staged), *libraries], True)
@@ -130,6 +146,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="artifact root; platform/extension variants are isolated below it")
     parser.add_argument("--output", type=Path, help="output executable (default: release/xs[.exe])")
     parser.add_argument("--cc", default="gcc", help="C compiler executable (default: gcc)")
+    parser.add_argument("--sysroot", type=Path, default=None,
+                        help="embed libc headers (e.g. musl include) at virtual /xsroot/usr/include "
+                             "and compile libtcc with -DCONFIG_SYSROOT=/xsroot")
+    parser.add_argument("--link-extra", default="", help="extra flags appended to the final link")
     args = parser.parse_intermixed_args(argv)
     try:
         registry = load_registry()

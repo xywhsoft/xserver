@@ -1,5 +1,5 @@
 @echo off
 setlocal
-rem Usage: build.bat [sqlite] [xtp] [--help]
+rem Usage: build.bat [all] [sqlite] [xtp] [xllm] [xllm-session] [xmail] [xsmtp] [xpop3] [ximap] [md4c] [xacme] [--help]
 python "%~dp0tools\build.py" %*
 exit /b %errorlevel%

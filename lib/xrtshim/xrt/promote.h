@@ -1,0 +1,1135 @@
+/* xserver shim 共享块：按 lib/xrt.h 的语义把 XRT_MODULE_* 持久提升为
+ * XRT_FEATURE_*（xrt_decl.h 只在自身范围内临时启用后还原）。
+ * 生成自 lib/xrt_decl.h 的 XRT_DECLARATIONS_RESTORE_XRT_FEATURE_* 清单；
+ * 更新 lib/xrt*.h 后需重生成。幂等，可重复包含。 */
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_ARRAY)) && !defined(XRT_FEATURE_ARRAY)
+#define XRT_FEATURE_ARRAY
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_ASN1_DER)) && !defined(XRT_FEATURE_ASN1_DER)
+#define XRT_FEATURE_ASN1_DER
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_ATOMIC)) && !defined(XRT_FEATURE_ATOMIC)
+#define XRT_FEATURE_ATOMIC
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_AVL)) && !defined(XRT_FEATURE_AVL)
+#define XRT_FEATURE_AVL
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_AVL_TREE)) && !defined(XRT_FEATURE_AVL_TREE)
+#define XRT_FEATURE_AVL_TREE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_BLOCK_STACK)) && !defined(XRT_FEATURE_BLOCK_STACK)
+#define XRT_FEATURE_BLOCK_STACK
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_BUFFER)) && !defined(XRT_FEATURE_BUFFER)
+#define XRT_FEATURE_BUFFER
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_BUFFER_BASE64)) && !defined(XRT_FEATURE_BUFFER_BASE64)
+#define XRT_FEATURE_BUFFER_BASE64
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_BUFFER_HEX)) && !defined(XRT_FEATURE_BUFFER_HEX)
+#define XRT_FEATURE_BUFFER_HEX
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CANCEL)) && !defined(XRT_FEATURE_CANCEL)
+#define XRT_FEATURE_CANCEL
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CHANNEL)) && !defined(XRT_FEATURE_CHANNEL)
+#define XRT_FEATURE_CHANNEL
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CHANNEL_CANCEL)) && !defined(XRT_FEATURE_CHANNEL_CANCEL)
+#define XRT_FEATURE_CHANNEL_CANCEL
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CHANNEL_COROUTINE)) && !defined(XRT_FEATURE_CHANNEL_COROUTINE)
+#define XRT_FEATURE_CHANNEL_COROUTINE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CHANNEL_SELECT)) && !defined(XRT_FEATURE_CHANNEL_SELECT)
+#define XRT_FEATURE_CHANNEL_SELECT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CHANNEL_SELECT_CANCEL)) && !defined(XRT_FEATURE_CHANNEL_SELECT_CANCEL)
+#define XRT_FEATURE_CHANNEL_SELECT_CANCEL
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CHARSET)) && !defined(XRT_FEATURE_CHARSET)
+#define XRT_FEATURE_CHARSET
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CHARSET_DETECT)) && !defined(XRT_FEATURE_CHARSET_DETECT)
+#define XRT_FEATURE_CHARSET_DETECT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CODEC_BASE64)) && !defined(XRT_FEATURE_CODEC_BASE64)
+#define XRT_FEATURE_CODEC_BASE64
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CODEC_HEX)) && !defined(XRT_FEATURE_CODEC_HEX)
+#define XRT_FEATURE_CODEC_HEX
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CODEC_PERCENT)) && !defined(XRT_FEATURE_CODEC_PERCENT)
+#define XRT_FEATURE_CODEC_PERCENT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_COND)) && !defined(XRT_FEATURE_COND)
+#define XRT_FEATURE_COND
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CONSOLE)) && !defined(XRT_FEATURE_CONSOLE)
+#define XRT_FEATURE_CONSOLE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_COROUTINE)) && !defined(XRT_FEATURE_COROUTINE)
+#define XRT_FEATURE_COROUTINE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_COROUTINE_EVENT)) && !defined(XRT_FEATURE_COROUTINE_EVENT)
+#define XRT_FEATURE_COROUTINE_EVENT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_COROUTINE_SCHEDULER)) && !defined(XRT_FEATURE_COROUTINE_SCHEDULER)
+#define XRT_FEATURE_COROUTINE_SCHEDULER
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_AES)) && !defined(XRT_FEATURE_CRYPTO_AES)
+#define XRT_FEATURE_CRYPTO_AES
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_AES_GCM)) && !defined(XRT_FEATURE_CRYPTO_AES_GCM)
+#define XRT_FEATURE_CRYPTO_AES_GCM
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_CHACHA20)) && !defined(XRT_FEATURE_CRYPTO_CHACHA20)
+#define XRT_FEATURE_CRYPTO_CHACHA20
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_CHACHA20_POLY1305)) && !defined(XRT_FEATURE_CRYPTO_CHACHA20_POLY1305)
+#define XRT_FEATURE_CRYPTO_CHACHA20_POLY1305
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_CORE)) && !defined(XRT_FEATURE_CRYPTO_CORE)
+#define XRT_FEATURE_CRYPTO_CORE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_CURVE25519)) && !defined(XRT_FEATURE_CRYPTO_CURVE25519)
+#define XRT_FEATURE_CRYPTO_CURVE25519
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_CORE)) && !defined(XRT_FEATURE_CRYPTO_ECDSA_CORE)
+#define XRT_FEATURE_CRYPTO_ECDSA_CORE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_DER)) && !defined(XRT_FEATURE_CRYPTO_ECDSA_DER)
+#define XRT_FEATURE_CRYPTO_ECDSA_DER
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_MATH)) && !defined(XRT_FEATURE_CRYPTO_ECDSA_MATH)
+#define XRT_FEATURE_CRYPTO_ECDSA_MATH
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_P256)) && !defined(XRT_FEATURE_CRYPTO_ECDSA_P256)
+#define XRT_FEATURE_CRYPTO_ECDSA_P256
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_P256_DER)) && !defined(XRT_FEATURE_CRYPTO_ECDSA_P256_DER)
+#define XRT_FEATURE_CRYPTO_ECDSA_P256_DER
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_P256_SIGN)) && !defined(XRT_FEATURE_CRYPTO_ECDSA_P256_SIGN)
+#define XRT_FEATURE_CRYPTO_ECDSA_P256_SIGN
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_P256_SIGN_DER)) && !defined(XRT_FEATURE_CRYPTO_ECDSA_P256_SIGN_DER)
+#define XRT_FEATURE_CRYPTO_ECDSA_P256_SIGN_DER
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_P384)) && !defined(XRT_FEATURE_CRYPTO_ECDSA_P384)
+#define XRT_FEATURE_CRYPTO_ECDSA_P384
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_P384_DER)) && !defined(XRT_FEATURE_CRYPTO_ECDSA_P384_DER)
+#define XRT_FEATURE_CRYPTO_ECDSA_P384_DER
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_P384_SIGN)) && !defined(XRT_FEATURE_CRYPTO_ECDSA_P384_SIGN)
+#define XRT_FEATURE_CRYPTO_ECDSA_P384_SIGN
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_P384_SIGN_DER)) && !defined(XRT_FEATURE_CRYPTO_ECDSA_P384_SIGN_DER)
+#define XRT_FEATURE_CRYPTO_ECDSA_P384_SIGN_DER
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_SIGN)) && !defined(XRT_FEATURE_CRYPTO_ECDSA_SIGN)
+#define XRT_FEATURE_CRYPTO_ECDSA_SIGN
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_SIGN_DER)) && !defined(XRT_FEATURE_CRYPTO_ECDSA_SIGN_DER)
+#define XRT_FEATURE_CRYPTO_ECDSA_SIGN_DER
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_VERIFY)) && !defined(XRT_FEATURE_CRYPTO_ECDSA_VERIFY)
+#define XRT_FEATURE_CRYPTO_ECDSA_VERIFY
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_VERIFY_DER)) && !defined(XRT_FEATURE_CRYPTO_ECDSA_VERIFY_DER)
+#define XRT_FEATURE_CRYPTO_ECDSA_VERIFY_DER
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ED25519)) && !defined(XRT_FEATURE_CRYPTO_ED25519)
+#define XRT_FEATURE_CRYPTO_ED25519
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ED25519_KEYPAIR)) && !defined(XRT_FEATURE_CRYPTO_ED25519_KEYPAIR)
+#define XRT_FEATURE_CRYPTO_ED25519_KEYPAIR
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ED25519_SIGN)) && !defined(XRT_FEATURE_CRYPTO_ED25519_SIGN)
+#define XRT_FEATURE_CRYPTO_ED25519_SIGN
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ED25519_VERIFY)) && !defined(XRT_FEATURE_CRYPTO_ED25519_VERIFY)
+#define XRT_FEATURE_CRYPTO_ED25519_VERIFY
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_HKDF_SHA256)) && !defined(XRT_FEATURE_CRYPTO_HKDF_SHA256)
+#define XRT_FEATURE_CRYPTO_HKDF_SHA256
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_HKDF_SHA512)) && !defined(XRT_FEATURE_CRYPTO_HKDF_SHA512)
+#define XRT_FEATURE_CRYPTO_HKDF_SHA512
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_HMAC_SHA256)) && !defined(XRT_FEATURE_CRYPTO_HMAC_SHA256)
+#define XRT_FEATURE_CRYPTO_HMAC_SHA256
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_HMAC_SHA512)) && !defined(XRT_FEATURE_CRYPTO_HMAC_SHA512)
+#define XRT_FEATURE_CRYPTO_HMAC_SHA512
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_INT31)) && !defined(XRT_FEATURE_CRYPTO_INT31)
+#define XRT_FEATURE_CRYPTO_INT31
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_MD5)) && !defined(XRT_FEATURE_CRYPTO_MD5)
+#define XRT_FEATURE_CRYPTO_MD5
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_NIST)) && !defined(XRT_FEATURE_CRYPTO_NIST)
+#define XRT_FEATURE_CRYPTO_NIST
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_NIST_KEYPAIR)) && !defined(XRT_FEATURE_CRYPTO_NIST_KEYPAIR)
+#define XRT_FEATURE_CRYPTO_NIST_KEYPAIR
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_P256)) && !defined(XRT_FEATURE_CRYPTO_P256)
+#define XRT_FEATURE_CRYPTO_P256
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_P256_KEYPAIR)) && !defined(XRT_FEATURE_CRYPTO_P256_KEYPAIR)
+#define XRT_FEATURE_CRYPTO_P256_KEYPAIR
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_P384)) && !defined(XRT_FEATURE_CRYPTO_P384)
+#define XRT_FEATURE_CRYPTO_P384
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_P384_KEYPAIR)) && !defined(XRT_FEATURE_CRYPTO_P384_KEYPAIR)
+#define XRT_FEATURE_CRYPTO_P384_KEYPAIR
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_PBKDF2_SHA256)) && !defined(XRT_FEATURE_CRYPTO_PBKDF2_SHA256)
+#define XRT_FEATURE_CRYPTO_PBKDF2_SHA256
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_PBKDF2_SHA512)) && !defined(XRT_FEATURE_CRYPTO_PBKDF2_SHA512)
+#define XRT_FEATURE_CRYPTO_PBKDF2_SHA512
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_POLY1305)) && !defined(XRT_FEATURE_CRYPTO_POLY1305)
+#define XRT_FEATURE_CRYPTO_POLY1305
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_RSA)) && !defined(XRT_FEATURE_CRYPTO_RSA)
+#define XRT_FEATURE_CRYPTO_RSA
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_RSA_PKCS1)) && !defined(XRT_FEATURE_CRYPTO_RSA_PKCS1)
+#define XRT_FEATURE_CRYPTO_RSA_PKCS1
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_RSA_PKCS1_SIGN)) && !defined(XRT_FEATURE_CRYPTO_RSA_PKCS1_SIGN)
+#define XRT_FEATURE_CRYPTO_RSA_PKCS1_SIGN
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_RSA_PRIVATE)) && !defined(XRT_FEATURE_CRYPTO_RSA_PRIVATE)
+#define XRT_FEATURE_CRYPTO_RSA_PRIVATE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_RSA_PSS)) && !defined(XRT_FEATURE_CRYPTO_RSA_PSS)
+#define XRT_FEATURE_CRYPTO_RSA_PSS
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_RSA_PSS_SIGN)) && !defined(XRT_FEATURE_CRYPTO_RSA_PSS_SIGN)
+#define XRT_FEATURE_CRYPTO_RSA_PSS_SIGN
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_SHA1)) && !defined(XRT_FEATURE_CRYPTO_SHA1)
+#define XRT_FEATURE_CRYPTO_SHA1
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_SHA224)) && !defined(XRT_FEATURE_CRYPTO_SHA224)
+#define XRT_FEATURE_CRYPTO_SHA224
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_SHA256)) && !defined(XRT_FEATURE_CRYPTO_SHA256)
+#define XRT_FEATURE_CRYPTO_SHA256
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_SHA512)) && !defined(XRT_FEATURE_CRYPTO_SHA512)
+#define XRT_FEATURE_CRYPTO_SHA512
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_SHA512_256)) && !defined(XRT_FEATURE_CRYPTO_SHA512_256)
+#define XRT_FEATURE_CRYPTO_SHA512_256
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_X25519)) && !defined(XRT_FEATURE_CRYPTO_X25519)
+#define XRT_FEATURE_CRYPTO_X25519
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_X25519_KEYPAIR)) && !defined(XRT_FEATURE_CRYPTO_X25519_KEYPAIR)
+#define XRT_FEATURE_CRYPTO_X25519_KEYPAIR
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_X448)) && !defined(XRT_FEATURE_CRYPTO_X448)
+#define XRT_FEATURE_CRYPTO_X448
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_X448_KEYPAIR)) && !defined(XRT_FEATURE_CRYPTO_X448_KEYPAIR)
+#define XRT_FEATURE_CRYPTO_X448_KEYPAIR
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_DEFLATE)) && !defined(XRT_FEATURE_DEFLATE)
+#define XRT_FEATURE_DEFLATE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_DIR)) && !defined(XRT_FEATURE_DIR)
+#define XRT_FEATURE_DIR
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_DIR_ASYNC)) && !defined(XRT_FEATURE_DIR_ASYNC)
+#define XRT_FEATURE_DIR_ASYNC
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_DIR_TEMP)) && !defined(XRT_FEATURE_DIR_TEMP)
+#define XRT_FEATURE_DIR_TEMP
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_ENVIRONMENT)) && !defined(XRT_FEATURE_ENVIRONMENT)
+#define XRT_FEATURE_ENVIRONMENT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_ERROR_FORMAT)) && !defined(XRT_FEATURE_ERROR_FORMAT)
+#define XRT_FEATURE_ERROR_FORMAT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_EVENT)) && !defined(XRT_FEATURE_EVENT)
+#define XRT_FEATURE_EVENT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_EXECUTOR)) && !defined(XRT_FEATURE_EXECUTOR)
+#define XRT_FEATURE_EXECUTOR
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE)) && !defined(XRT_FEATURE_FILE)
+#define XRT_FEATURE_FILE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_ASYNC)) && !defined(XRT_FEATURE_FILE_ASYNC)
+#define XRT_FEATURE_FILE_ASYNC
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_ASYNC_COMMON)) && !defined(XRT_FEATURE_FILE_ASYNC_COMMON)
+#define XRT_FEATURE_FILE_ASYNC_COMMON
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_ASYNC_MANAGE)) && !defined(XRT_FEATURE_FILE_ASYNC_MANAGE)
+#define XRT_FEATURE_FILE_ASYNC_MANAGE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_ASYNC_WHOLE)) && !defined(XRT_FEATURE_FILE_ASYNC_WHOLE)
+#define XRT_FEATURE_FILE_ASYNC_WHOLE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_FIFO)) && !defined(XRT_FEATURE_FILE_FIFO)
+#define XRT_FEATURE_FILE_FIFO
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_LINK)) && !defined(XRT_FEATURE_FILE_LINK)
+#define XRT_FEATURE_FILE_LINK
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_LOCK)) && !defined(XRT_FEATURE_FILE_LOCK)
+#define XRT_FEATURE_FILE_LOCK
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_MAP)) && !defined(XRT_FEATURE_FILE_MAP)
+#define XRT_FEATURE_FILE_MAP
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_ROOT)) && !defined(XRT_FEATURE_FILE_ROOT)
+#define XRT_FEATURE_FILE_ROOT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_TEMP)) && !defined(XRT_FEATURE_FILE_TEMP)
+#define XRT_FEATURE_FILE_TEMP
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_TEXT)) && !defined(XRT_FEATURE_FILE_TEXT)
+#define XRT_FEATURE_FILE_TEXT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_TREE)) && !defined(XRT_FEATURE_FILE_TREE)
+#define XRT_FEATURE_FILE_TREE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_TREE_ASYNC)) && !defined(XRT_FEATURE_FILE_TREE_ASYNC)
+#define XRT_FEATURE_FILE_TREE_ASYNC
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_WALK)) && !defined(XRT_FEATURE_FILE_WALK)
+#define XRT_FEATURE_FILE_WALK
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_WHOLE)) && !defined(XRT_FEATURE_FILE_WHOLE)
+#define XRT_FEATURE_FILE_WHOLE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FIXED_STACK)) && !defined(XRT_FEATURE_FIXED_STACK)
+#define XRT_FEATURE_FIXED_STACK
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FUTURE)) && !defined(XRT_FEATURE_FUTURE)
+#define XRT_FEATURE_FUTURE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FUTURE_BRIDGE)) && !defined(XRT_FEATURE_FUTURE_BRIDGE)
+#define XRT_FEATURE_FUTURE_BRIDGE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FUTURE_COMBINE)) && !defined(XRT_FEATURE_FUTURE_COMBINE)
+#define XRT_FEATURE_FUTURE_COMBINE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FUTURE_CONTINUE)) && !defined(XRT_FEATURE_FUTURE_CONTINUE)
+#define XRT_FEATURE_FUTURE_CONTINUE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FUTURE_COROUTINE)) && !defined(XRT_FEATURE_FUTURE_COROUTINE)
+#define XRT_FEATURE_FUTURE_COROUTINE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HASH32)) && !defined(XRT_FEATURE_HASH32)
+#define XRT_FEATURE_HASH32
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HASH64)) && !defined(XRT_FEATURE_HASH64)
+#define XRT_FEATURE_HASH64
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HASH_KEYED)) && !defined(XRT_FEATURE_HASH_KEYED)
+#define XRT_FEATURE_HASH_KEYED
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTML_ESCAPE)) && !defined(XRT_FEATURE_HTML_ESCAPE)
+#define XRT_FEATURE_HTML_ESCAPE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP)) && !defined(XRT_FEATURE_HTTP)
+#define XRT_FEATURE_HTTP
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP1_BODY)) && !defined(XRT_FEATURE_HTTP1_BODY)
+#define XRT_FEATURE_HTTP1_BODY
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP1_HEAD)) && !defined(XRT_FEATURE_HTTP1_HEAD)
+#define XRT_FEATURE_HTTP1_HEAD
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP1_MESSAGE)) && !defined(XRT_FEATURE_HTTP1_MESSAGE)
+#define XRT_FEATURE_HTTP1_MESSAGE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP1_NET)) && !defined(XRT_FEATURE_HTTP1_NET)
+#define XRT_FEATURE_HTTP1_NET
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP1_TLS)) && !defined(XRT_FEATURE_HTTP1_TLS)
+#define XRT_FEATURE_HTTP1_TLS
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP_CONNECTION)) && !defined(XRT_FEATURE_HTTP_CONNECTION)
+#define XRT_FEATURE_HTTP_CONNECTION
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP_DECODE)) && !defined(XRT_FEATURE_HTTP_DECODE)
+#define XRT_FEATURE_HTTP_DECODE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP_ENCODING)) && !defined(XRT_FEATURE_HTTP_ENCODING)
+#define XRT_FEATURE_HTTP_ENCODING
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP_EXPECT)) && !defined(XRT_FEATURE_HTTP_EXPECT)
+#define XRT_FEATURE_HTTP_EXPECT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP_HOST)) && !defined(XRT_FEATURE_HTTP_HOST)
+#define XRT_FEATURE_HTTP_HOST
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP_PARAM)) && !defined(XRT_FEATURE_HTTP_PARAM)
+#define XRT_FEATURE_HTTP_PARAM
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP_PARAM_HOST)) && !defined(XRT_FEATURE_HTTP_PARAM_HOST)
+#define XRT_FEATURE_HTTP_PARAM_HOST
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP_TARGET)) && !defined(XRT_FEATURE_HTTP_TARGET)
+#define XRT_FEATURE_HTTP_TARGET
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP_TE)) && !defined(XRT_FEATURE_HTTP_TE)
+#define XRT_FEATURE_HTTP_TE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP_TRAILER)) && !defined(XRT_FEATURE_HTTP_TRAILER)
+#define XRT_FEATURE_HTTP_TRAILER
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP_UPGRADE)) && !defined(XRT_FEATURE_HTTP_UPGRADE)
+#define XRT_FEATURE_HTTP_UPGRADE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP_UPGRADE_WRITE)) && !defined(XRT_FEATURE_HTTP_UPGRADE_WRITE)
+#define XRT_FEATURE_HTTP_UPGRADE_WRITE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_INFLATE)) && !defined(XRT_FEATURE_INFLATE)
+#define XRT_FEATURE_INFLATE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_INT_MAP)) && !defined(XRT_FEATURE_INT_MAP)
+#define XRT_FEATURE_INT_MAP
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_IO)) && !defined(XRT_FEATURE_IO)
+#define XRT_FEATURE_IO
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_IO_BUFFER)) && !defined(XRT_FEATURE_IO_BUFFER)
+#define XRT_FEATURE_IO_BUFFER
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_IO_FILE)) && !defined(XRT_FEATURE_IO_FILE)
+#define XRT_FEATURE_IO_FILE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_IO_LINE)) && !defined(XRT_FEATURE_IO_LINE)
+#define XRT_FEATURE_IO_LINE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSON)) && !defined(XRT_FEATURE_JSON)
+#define XRT_FEATURE_JSON
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSONL)) && !defined(XRT_FEATURE_JSONL)
+#define XRT_FEATURE_JSONL
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSONL_CORE)) && !defined(XRT_FEATURE_JSONL_CORE)
+#define XRT_FEATURE_JSONL_CORE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSONL_FILE)) && !defined(XRT_FEATURE_JSONL_FILE)
+#define XRT_FEATURE_JSONL_FILE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSONL_READ)) && !defined(XRT_FEATURE_JSONL_READ)
+#define XRT_FEATURE_JSONL_READ
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSONL_WRITE)) && !defined(XRT_FEATURE_JSONL_WRITE)
+#define XRT_FEATURE_JSONL_WRITE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSON_CORE)) && !defined(XRT_FEATURE_JSON_CORE)
+#define XRT_FEATURE_JSON_CORE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSON_ESCAPE)) && !defined(XRT_FEATURE_JSON_ESCAPE)
+#define XRT_FEATURE_JSON_ESCAPE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSON_FILE)) && !defined(XRT_FEATURE_JSON_FILE)
+#define XRT_FEATURE_JSON_FILE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSON_READ)) && !defined(XRT_FEATURE_JSON_READ)
+#define XRT_FEATURE_JSON_READ
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSON_WRITE)) && !defined(XRT_FEATURE_JSON_WRITE)
+#define XRT_FEATURE_JSON_WRITE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LIST)) && !defined(XRT_FEATURE_LIST)
+#define XRT_FEATURE_LIST
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LOGGER_ASYNC)) && !defined(XRT_FEATURE_LOGGER_ASYNC)
+#define XRT_FEATURE_LOGGER_ASYNC
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LOGGER_CONSOLE)) && !defined(XRT_FEATURE_LOGGER_CONSOLE)
+#define XRT_FEATURE_LOGGER_CONSOLE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LOGGER_CORE)) && !defined(XRT_FEATURE_LOGGER_CORE)
+#define XRT_FEATURE_LOGGER_CORE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LOGGER_FILE)) && !defined(XRT_FEATURE_LOGGER_FILE)
+#define XRT_FEATURE_LOGGER_FILE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LOGGER_FILE_JSON)) && !defined(XRT_FEATURE_LOGGER_FILE_JSON)
+#define XRT_FEATURE_LOGGER_FILE_JSON
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LOGGER_FILE_TEXT)) && !defined(XRT_FEATURE_LOGGER_FILE_TEXT)
+#define XRT_FEATURE_LOGGER_FILE_TEXT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LOGGER_FORMAT_JSON)) && !defined(XRT_FEATURE_LOGGER_FORMAT_JSON)
+#define XRT_FEATURE_LOGGER_FORMAT_JSON
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LOGGER_FORMAT_JSON_BUFFER)) && !defined(XRT_FEATURE_LOGGER_FORMAT_JSON_BUFFER)
+#define XRT_FEATURE_LOGGER_FORMAT_JSON_BUFFER
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LOGGER_FORMAT_TEXT)) && !defined(XRT_FEATURE_LOGGER_FORMAT_TEXT)
+#define XRT_FEATURE_LOGGER_FORMAT_TEXT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LOGGER_FORMAT_TEXT_BUFFER)) && !defined(XRT_FEATURE_LOGGER_FORMAT_TEXT_BUFFER)
+#define XRT_FEATURE_LOGGER_FORMAT_TEXT_BUFFER
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LOGGER_PRINTF)) && !defined(XRT_FEATURE_LOGGER_PRINTF)
+#define XRT_FEATURE_LOGGER_PRINTF
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LOGGER_RING)) && !defined(XRT_FEATURE_LOGGER_RING)
+#define XRT_FEATURE_LOGGER_RING
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_MAP)) && !defined(XRT_FEATURE_MAP)
+#define XRT_FEATURE_MAP
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_MATH)) && !defined(XRT_FEATURE_MATH)
+#define XRT_FEATURE_MATH
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_MEMORY_DEBUG)) && !defined(XRT_FEATURE_MEMORY_DEBUG)
+#define XRT_FEATURE_MEMORY_DEBUG
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_MEMORY_DEBUG_REPORT)) && !defined(XRT_FEATURE_MEMORY_DEBUG_REPORT)
+#define XRT_FEATURE_MEMORY_DEBUG_REPORT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_MEMORY_POOL)) && !defined(XRT_FEATURE_MEMORY_POOL)
+#define XRT_FEATURE_MEMORY_POOL
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_MEMORY_STATS)) && !defined(XRT_FEATURE_MEMORY_STATS)
+#define XRT_FEATURE_MEMORY_STATS
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_MUTEX)) && !defined(XRT_FEATURE_MUTEX)
+#define XRT_FEATURE_MUTEX
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET)) && !defined(XRT_FEATURE_NET)
+#define XRT_FEATURE_NET
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_BUFFER)) && !defined(XRT_FEATURE_NET_BUFFER)
+#define XRT_FEATURE_NET_BUFFER
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_DNS)) && !defined(XRT_FEATURE_NET_DNS)
+#define XRT_FEATURE_NET_DNS
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_ENGINE)) && !defined(XRT_FEATURE_NET_ENGINE)
+#define XRT_FEATURE_NET_ENGINE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_FILE)) && !defined(XRT_FEATURE_NET_FILE)
+#define XRT_FEATURE_NET_FILE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_FRAME)) && !defined(XRT_FEATURE_NET_FRAME)
+#define XRT_FEATURE_NET_FRAME
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_FRAME_LENGTH)) && !defined(XRT_FEATURE_NET_FRAME_LENGTH)
+#define XRT_FEATURE_NET_FRAME_LENGTH
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_FRAME_LINE)) && !defined(XRT_FEATURE_NET_FRAME_LINE)
+#define XRT_FEATURE_NET_FRAME_LINE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_INTERFACE)) && !defined(XRT_FEATURE_NET_INTERFACE)
+#define XRT_FEATURE_NET_INTERFACE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_INTERFACE_TEXT)) && !defined(XRT_FEATURE_NET_INTERFACE_TEXT)
+#define XRT_FEATURE_NET_INTERFACE_TEXT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_PORT)) && !defined(XRT_FEATURE_NET_PORT)
+#define XRT_FEATURE_NET_PORT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_PORT_EPOLL)) && !defined(XRT_FEATURE_NET_PORT_EPOLL)
+#define XRT_FEATURE_NET_PORT_EPOLL
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_PORT_IOCP)) && !defined(XRT_FEATURE_NET_PORT_IOCP)
+#define XRT_FEATURE_NET_PORT_IOCP
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_PORT_KQUEUE)) && !defined(XRT_FEATURE_NET_PORT_KQUEUE)
+#define XRT_FEATURE_NET_PORT_KQUEUE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_PORT_SELECT)) && !defined(XRT_FEATURE_NET_PORT_SELECT)
+#define XRT_FEATURE_NET_PORT_SELECT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_PORT_URING)) && !defined(XRT_FEATURE_NET_PORT_URING)
+#define XRT_FEATURE_NET_PORT_URING
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_PROXY)) && !defined(XRT_FEATURE_NET_PROXY)
+#define XRT_FEATURE_NET_PROXY
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_PROXY_DIAL)) && !defined(XRT_FEATURE_NET_PROXY_DIAL)
+#define XRT_FEATURE_NET_PROXY_DIAL
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_PROXY_HANDSHAKE)) && !defined(XRT_FEATURE_NET_PROXY_HANDSHAKE)
+#define XRT_FEATURE_NET_PROXY_HANDSHAKE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_PROXY_HTTP_CONNECT)) && !defined(XRT_FEATURE_NET_PROXY_HTTP_CONNECT)
+#define XRT_FEATURE_NET_PROXY_HTTP_CONNECT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_PROXY_SOCKS5)) && !defined(XRT_FEATURE_NET_PROXY_SOCKS5)
+#define XRT_FEATURE_NET_PROXY_SOCKS5
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_RESOLVER)) && !defined(XRT_FEATURE_NET_RESOLVER)
+#define XRT_FEATURE_NET_RESOLVER
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_RESOLVER_FUTURE)) && !defined(XRT_FEATURE_NET_RESOLVER_FUTURE)
+#define XRT_FEATURE_NET_RESOLVER_FUTURE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_SOCKET)) && !defined(XRT_FEATURE_NET_SOCKET)
+#define XRT_FEATURE_NET_SOCKET
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_SYNC)) && !defined(XRT_FEATURE_NET_SYNC)
+#define XRT_FEATURE_NET_SYNC
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP)) && !defined(XRT_FEATURE_NET_TCP)
+#define XRT_FEATURE_NET_TCP
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP_DIAL)) && !defined(XRT_FEATURE_NET_TCP_DIAL)
+#define XRT_FEATURE_NET_TCP_DIAL
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP_DIAL_FUTURE)) && !defined(XRT_FEATURE_NET_TCP_DIAL_FUTURE)
+#define XRT_FEATURE_NET_TCP_DIAL_FUTURE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP_DIAL_SYNC)) && !defined(XRT_FEATURE_NET_TCP_DIAL_SYNC)
+#define XRT_FEATURE_NET_TCP_DIAL_SYNC
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP_FILE)) && !defined(XRT_FEATURE_NET_TCP_FILE)
+#define XRT_FEATURE_NET_TCP_FILE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP_FUTURE)) && !defined(XRT_FEATURE_NET_TCP_FUTURE)
+#define XRT_FEATURE_NET_TCP_FUTURE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP_SERVER)) && !defined(XRT_FEATURE_NET_TCP_SERVER)
+#define XRT_FEATURE_NET_TCP_SERVER
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP_SERVER_FUTURE)) && !defined(XRT_FEATURE_NET_TCP_SERVER_FUTURE)
+#define XRT_FEATURE_NET_TCP_SERVER_FUTURE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP_SERVER_SYNC)) && !defined(XRT_FEATURE_NET_TCP_SERVER_SYNC)
+#define XRT_FEATURE_NET_TCP_SERVER_SYNC
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP_SYNC)) && !defined(XRT_FEATURE_NET_TCP_SYNC)
+#define XRT_FEATURE_NET_TCP_SYNC
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_UDP)) && !defined(XRT_FEATURE_NET_UDP)
+#define XRT_FEATURE_NET_UDP
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_UDP_FUTURE)) && !defined(XRT_FEATURE_NET_UDP_FUTURE)
+#define XRT_FEATURE_NET_UDP_FUTURE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_UDP_SYNC)) && !defined(XRT_FEATURE_NET_UDP_SYNC)
+#define XRT_FEATURE_NET_UDP_SYNC
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NUMBER_FLOAT)) && !defined(XRT_FEATURE_NUMBER_FLOAT)
+#define XRT_FEATURE_NUMBER_FLOAT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NUMBER_FORMAT)) && !defined(XRT_FEATURE_NUMBER_FORMAT)
+#define XRT_FEATURE_NUMBER_FORMAT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NUMBER_INTEGER)) && !defined(XRT_FEATURE_NUMBER_INTEGER)
+#define XRT_FEATURE_NUMBER_INTEGER
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_ONCE)) && !defined(XRT_FEATURE_ONCE)
+#define XRT_FEATURE_ONCE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PATH)) && !defined(XRT_FEATURE_PATH)
+#define XRT_FEATURE_PATH
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PATH_SAFE)) && !defined(XRT_FEATURE_PATH_SAFE)
+#define XRT_FEATURE_PATH_SAFE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PATH_SYSTEM)) && !defined(XRT_FEATURE_PATH_SYSTEM)
+#define XRT_FEATURE_PATH_SYSTEM
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PATTERN)) && !defined(XRT_FEATURE_PATTERN)
+#define XRT_FEATURE_PATTERN
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PEM)) && !defined(XRT_FEATURE_PEM)
+#define XRT_FEATURE_PEM
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_POOL)) && !defined(XRT_FEATURE_POOL)
+#define XRT_FEATURE_POOL
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_POOL_PAGE)) && !defined(XRT_FEATURE_POOL_PAGE)
+#define XRT_FEATURE_POOL_PAGE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PROCESS)) && !defined(XRT_FEATURE_PROCESS)
+#define XRT_FEATURE_PROCESS
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PROCESS_FILE)) && !defined(XRT_FEATURE_PROCESS_FILE)
+#define XRT_FEATURE_PROCESS_FILE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PROCESS_FUTURE)) && !defined(XRT_FEATURE_PROCESS_FUTURE)
+#define XRT_FEATURE_PROCESS_FUTURE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PROCESS_OPEN)) && !defined(XRT_FEATURE_PROCESS_OPEN)
+#define XRT_FEATURE_PROCESS_OPEN
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PROCESS_PIPELINE)) && !defined(XRT_FEATURE_PROCESS_PIPELINE)
+#define XRT_FEATURE_PROCESS_PIPELINE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PROCESS_RUN)) && !defined(XRT_FEATURE_PROCESS_RUN)
+#define XRT_FEATURE_PROCESS_RUN
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PROCESS_TERMINAL)) && !defined(XRT_FEATURE_PROCESS_TERMINAL)
+#define XRT_FEATURE_PROCESS_TERMINAL
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PTR_ARRAY)) && !defined(XRT_FEATURE_PTR_ARRAY)
+#define XRT_FEATURE_PTR_ARRAY
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PTR_FIXED_STACK)) && !defined(XRT_FEATURE_PTR_FIXED_STACK)
+#define XRT_FEATURE_PTR_FIXED_STACK
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PTR_STACK)) && !defined(XRT_FEATURE_PTR_STACK)
+#define XRT_FEATURE_PTR_STACK
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_QUEUE)) && !defined(XRT_FEATURE_QUEUE)
+#define XRT_FEATURE_QUEUE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_QUEUE_MPMC)) && !defined(XRT_FEATURE_QUEUE_MPMC)
+#define XRT_FEATURE_QUEUE_MPMC
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_QUEUE_MPSC)) && !defined(XRT_FEATURE_QUEUE_MPSC)
+#define XRT_FEATURE_QUEUE_MPSC
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_QUEUE_SPSC)) && !defined(XRT_FEATURE_QUEUE_SPSC)
+#define XRT_FEATURE_QUEUE_SPSC
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_RANDOM)) && !defined(XRT_FEATURE_RANDOM)
+#define XRT_FEATURE_RANDOM
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_RANDOM_DEFAULT)) && !defined(XRT_FEATURE_RANDOM_DEFAULT)
+#define XRT_FEATURE_RANDOM_DEFAULT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_RANDOM_SECURE)) && !defined(XRT_FEATURE_RANDOM_SECURE)
+#define XRT_FEATURE_RANDOM_SECURE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_RANDOM_SECURE_TEXT)) && !defined(XRT_FEATURE_RANDOM_SECURE_TEXT)
+#define XRT_FEATURE_RANDOM_SECURE_TEXT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_RANDOM_TEXT)) && !defined(XRT_FEATURE_RANDOM_TEXT)
+#define XRT_FEATURE_RANDOM_TEXT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_RANDOM_TEXT_DEFAULT)) && !defined(XRT_FEATURE_RANDOM_TEXT_DEFAULT)
+#define XRT_FEATURE_RANDOM_TEXT_DEFAULT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_REGEX)) && !defined(XRT_FEATURE_REGEX)
+#define XRT_FEATURE_REGEX
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_REGEX_CORE)) && !defined(XRT_FEATURE_REGEX_CORE)
+#define XRT_FEATURE_REGEX_CORE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_REGEX_MATCH)) && !defined(XRT_FEATURE_REGEX_MATCH)
+#define XRT_FEATURE_REGEX_MATCH
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_REGEX_REPLACE)) && !defined(XRT_FEATURE_REGEX_REPLACE)
+#define XRT_FEATURE_REGEX_REPLACE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_REGEX_SET)) && !defined(XRT_FEATURE_REGEX_SET)
+#define XRT_FEATURE_REGEX_SET
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_REGEX_SPLIT)) && !defined(XRT_FEATURE_REGEX_SPLIT)
+#define XRT_FEATURE_REGEX_SPLIT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_RWLOCK)) && !defined(XRT_FEATURE_RWLOCK)
+#define XRT_FEATURE_RWLOCK
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_SEM)) && !defined(XRT_FEATURE_SEM)
+#define XRT_FEATURE_SEM
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_SET)) && !defined(XRT_FEATURE_SET)
+#define XRT_FEATURE_SET
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_SIGNAL)) && !defined(XRT_FEATURE_SIGNAL)
+#define XRT_FEATURE_SIGNAL
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_SLOT_MAP)) && !defined(XRT_FEATURE_SLOT_MAP)
+#define XRT_FEATURE_SLOT_MAP
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_SPIN)) && !defined(XRT_FEATURE_SPIN)
+#define XRT_FEATURE_SPIN
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_STACK)) && !defined(XRT_FEATURE_STACK)
+#define XRT_FEATURE_STACK
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_STRING)) && !defined(XRT_FEATURE_STRING)
+#define XRT_FEATURE_STRING
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_STRING_FORMAT)) && !defined(XRT_FEATURE_STRING_FORMAT)
+#define XRT_FEATURE_STRING_FORMAT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_STRING_GLOB)) && !defined(XRT_FEATURE_STRING_GLOB)
+#define XRT_FEATURE_STRING_GLOB
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_STRING_SPLIT)) && !defined(XRT_FEATURE_STRING_SPLIT)
+#define XRT_FEATURE_STRING_SPLIT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_SYNC)) && !defined(XRT_FEATURE_SYNC)
+#define XRT_FEATURE_SYNC
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TASK)) && !defined(XRT_FEATURE_TASK)
+#define XRT_FEATURE_TASK
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TASK_COROUTINE)) && !defined(XRT_FEATURE_TASK_COROUTINE)
+#define XRT_FEATURE_TASK_COROUTINE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TASK_GROUP)) && !defined(XRT_FEATURE_TASK_GROUP)
+#define XRT_FEATURE_TASK_GROUP
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TASK_GROUP_COROUTINE)) && !defined(XRT_FEATURE_TASK_GROUP_COROUTINE)
+#define XRT_FEATURE_TASK_GROUP_COROUTINE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TASK_GROUP_NET)) && !defined(XRT_FEATURE_TASK_GROUP_NET)
+#define XRT_FEATURE_TASK_GROUP_NET
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TASK_GROUP_POOL)) && !defined(XRT_FEATURE_TASK_GROUP_POOL)
+#define XRT_FEATURE_TASK_GROUP_POOL
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TASK_NET)) && !defined(XRT_FEATURE_TASK_NET)
+#define XRT_FEATURE_TASK_NET
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TASK_POOL)) && !defined(XRT_FEATURE_TASK_POOL)
+#define XRT_FEATURE_TASK_POOL
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TEMPLATE_COMPOSE)) && !defined(XRT_FEATURE_TEMPLATE_COMPOSE)
+#define XRT_FEATURE_TEMPLATE_COMPOSE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TEMPLATE_CONTROL)) && !defined(XRT_FEATURE_TEMPLATE_CONTROL)
+#define XRT_FEATURE_TEMPLATE_CONTROL
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TEMPLATE_CORE)) && !defined(XRT_FEATURE_TEMPLATE_CORE)
+#define XRT_FEATURE_TEMPLATE_CORE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TEMPLATE_EXTENSION)) && !defined(XRT_FEATURE_TEMPLATE_EXTENSION)
+#define XRT_FEATURE_TEMPLATE_EXTENSION
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TEMPLATE_FILE)) && !defined(XRT_FEATURE_TEMPLATE_FILE)
+#define XRT_FEATURE_TEMPLATE_FILE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TEMP_MEMORY)) && !defined(XRT_FEATURE_TEMP_MEMORY)
+#define XRT_FEATURE_TEMP_MEMORY
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_THREAD)) && !defined(XRT_FEATURE_THREAD)
+#define XRT_FEATURE_THREAD
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_THREAD_KEY)) && !defined(XRT_FEATURE_THREAD_KEY)
+#define XRT_FEATURE_THREAD_KEY
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TIME)) && !defined(XRT_FEATURE_TIME)
+#define XRT_FEATURE_TIME
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TIME_LOCAL)) && !defined(XRT_FEATURE_TIME_LOCAL)
+#define XRT_FEATURE_TIME_LOCAL
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TIME_TEXT)) && !defined(XRT_FEATURE_TIME_TEXT)
+#define XRT_FEATURE_TIME_TEXT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS)) && !defined(XRT_FEATURE_TLS)
+#define XRT_FEATURE_TLS
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_AUTH_MESSAGES)) && !defined(XRT_FEATURE_TLS_AUTH_MESSAGES)
+#define XRT_FEATURE_TLS_AUTH_MESSAGES
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_AUTH_MESSAGES_WRITE)) && !defined(XRT_FEATURE_TLS_AUTH_MESSAGES_WRITE)
+#define XRT_FEATURE_TLS_AUTH_MESSAGES_WRITE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_CLIENT)) && !defined(XRT_FEATURE_TLS_CLIENT)
+#define XRT_FEATURE_TLS_CLIENT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_CLIENT_RESUME)) && !defined(XRT_FEATURE_TLS_CLIENT_RESUME)
+#define XRT_FEATURE_TLS_CLIENT_RESUME
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_CLIENT_VERIFY)) && !defined(XRT_FEATURE_TLS_CLIENT_VERIFY)
+#define XRT_FEATURE_TLS_CLIENT_VERIFY
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_CONTEXT)) && !defined(XRT_FEATURE_TLS_CONTEXT)
+#define XRT_FEATURE_TLS_CONTEXT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_HANDSHAKE)) && !defined(XRT_FEATURE_TLS_HANDSHAKE)
+#define XRT_FEATURE_TLS_HANDSHAKE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_HANDSHAKE_READER)) && !defined(XRT_FEATURE_TLS_HANDSHAKE_READER)
+#define XRT_FEATURE_TLS_HANDSHAKE_READER
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_HELLO)) && !defined(XRT_FEATURE_TLS_HELLO)
+#define XRT_FEATURE_TLS_HELLO
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_HELLO_WRITE)) && !defined(XRT_FEATURE_TLS_HELLO_WRITE)
+#define XRT_FEATURE_TLS_HELLO_WRITE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_IDENTITY)) && !defined(XRT_FEATURE_TLS_IDENTITY)
+#define XRT_FEATURE_TLS_IDENTITY
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_IDENTITY_EC)) && !defined(XRT_FEATURE_TLS_IDENTITY_EC)
+#define XRT_FEATURE_TLS_IDENTITY_EC
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_IDENTITY_ED25519)) && !defined(XRT_FEATURE_TLS_IDENTITY_ED25519)
+#define XRT_FEATURE_TLS_IDENTITY_ED25519
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_IDENTITY_P256)) && !defined(XRT_FEATURE_TLS_IDENTITY_P256)
+#define XRT_FEATURE_TLS_IDENTITY_P256
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_IDENTITY_P384)) && !defined(XRT_FEATURE_TLS_IDENTITY_P384)
+#define XRT_FEATURE_TLS_IDENTITY_P384
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_IDENTITY_RSA)) && !defined(XRT_FEATURE_TLS_IDENTITY_RSA)
+#define XRT_FEATURE_TLS_IDENTITY_RSA
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_KEY_EXCHANGE)) && !defined(XRT_FEATURE_TLS_KEY_EXCHANGE)
+#define XRT_FEATURE_TLS_KEY_EXCHANGE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_KEY_EXCHANGE_P256)) && !defined(XRT_FEATURE_TLS_KEY_EXCHANGE_P256)
+#define XRT_FEATURE_TLS_KEY_EXCHANGE_P256
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_KEY_EXCHANGE_P384)) && !defined(XRT_FEATURE_TLS_KEY_EXCHANGE_P384)
+#define XRT_FEATURE_TLS_KEY_EXCHANGE_P384
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_KEY_EXCHANGE_X25519)) && !defined(XRT_FEATURE_TLS_KEY_EXCHANGE_X25519)
+#define XRT_FEATURE_TLS_KEY_EXCHANGE_X25519
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_KEY_EXCHANGE_X448)) && !defined(XRT_FEATURE_TLS_KEY_EXCHANGE_X448)
+#define XRT_FEATURE_TLS_KEY_EXCHANGE_X448
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_MESSAGES)) && !defined(XRT_FEATURE_TLS_MESSAGES)
+#define XRT_FEATURE_TLS_MESSAGES
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_MESSAGES_WRITE)) && !defined(XRT_FEATURE_TLS_MESSAGES_WRITE)
+#define XRT_FEATURE_TLS_MESSAGES_WRITE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_NEGOTIATE)) && !defined(XRT_FEATURE_TLS_NEGOTIATE)
+#define XRT_FEATURE_TLS_NEGOTIATE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_POLICY)) && !defined(XRT_FEATURE_TLS_POLICY)
+#define XRT_FEATURE_TLS_POLICY
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_PSK)) && !defined(XRT_FEATURE_TLS_PSK)
+#define XRT_FEATURE_TLS_PSK
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_PSK_WRITE)) && !defined(XRT_FEATURE_TLS_PSK_WRITE)
+#define XRT_FEATURE_TLS_PSK_WRITE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_RECORD)) && !defined(XRT_FEATURE_TLS_RECORD)
+#define XRT_FEATURE_TLS_RECORD
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_RECORD_AES)) && !defined(XRT_FEATURE_TLS_RECORD_AES)
+#define XRT_FEATURE_TLS_RECORD_AES
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_RECORD_CHACHA)) && !defined(XRT_FEATURE_TLS_RECORD_CHACHA)
+#define XRT_FEATURE_TLS_RECORD_CHACHA
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_RESUME)) && !defined(XRT_FEATURE_TLS_RESUME)
+#define XRT_FEATURE_TLS_RESUME
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_SCHEDULE)) && !defined(XRT_FEATURE_TLS_SCHEDULE)
+#define XRT_FEATURE_TLS_SCHEDULE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_SCHEDULE_SHA256)) && !defined(XRT_FEATURE_TLS_SCHEDULE_SHA256)
+#define XRT_FEATURE_TLS_SCHEDULE_SHA256
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_SCHEDULE_SHA384)) && !defined(XRT_FEATURE_TLS_SCHEDULE_SHA384)
+#define XRT_FEATURE_TLS_SCHEDULE_SHA384
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_SERVER)) && !defined(XRT_FEATURE_TLS_SERVER)
+#define XRT_FEATURE_TLS_SERVER
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_SERVER_RESUME)) && !defined(XRT_FEATURE_TLS_SERVER_RESUME)
+#define XRT_FEATURE_TLS_SERVER_RESUME
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_SESSION)) && !defined(XRT_FEATURE_TLS_SESSION)
+#define XRT_FEATURE_TLS_SESSION
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_STREAM)) && !defined(XRT_FEATURE_TLS_STREAM)
+#define XRT_FEATURE_TLS_STREAM
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_STREAM_DIAL)) && !defined(XRT_FEATURE_TLS_STREAM_DIAL)
+#define XRT_FEATURE_TLS_STREAM_DIAL
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_STREAM_DIAL_FUTURE)) && !defined(XRT_FEATURE_TLS_STREAM_DIAL_FUTURE)
+#define XRT_FEATURE_TLS_STREAM_DIAL_FUTURE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_STREAM_FUTURE)) && !defined(XRT_FEATURE_TLS_STREAM_FUTURE)
+#define XRT_FEATURE_TLS_STREAM_FUTURE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_STREAM_LISTENER)) && !defined(XRT_FEATURE_TLS_STREAM_LISTENER)
+#define XRT_FEATURE_TLS_STREAM_LISTENER
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_STREAM_LISTENER_FUTURE)) && !defined(XRT_FEATURE_TLS_STREAM_LISTENER_FUTURE)
+#define XRT_FEATURE_TLS_STREAM_LISTENER_FUTURE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_STREAM_LISTENER_SYNC)) && !defined(XRT_FEATURE_TLS_STREAM_LISTENER_SYNC)
+#define XRT_FEATURE_TLS_STREAM_LISTENER_SYNC
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_VERIFY)) && !defined(XRT_FEATURE_TLS_VERIFY)
+#define XRT_FEATURE_TLS_VERIFY
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_UNICODE)) && !defined(XRT_FEATURE_UNICODE)
+#define XRT_FEATURE_UNICODE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_UNICODE_DISTANCE)) && !defined(XRT_FEATURE_UNICODE_DISTANCE)
+#define XRT_FEATURE_UNICODE_DISTANCE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_UNICODE_TEXT)) && !defined(XRT_FEATURE_UNICODE_TEXT)
+#define XRT_FEATURE_UNICODE_TEXT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_VALUE)) && !defined(XRT_FEATURE_VALUE)
+#define XRT_FEATURE_VALUE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_VALUE_COLLECTION)) && !defined(XRT_FEATURE_VALUE_COLLECTION)
+#define XRT_FEATURE_VALUE_COLLECTION
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_VALUE_CONTAINER)) && !defined(XRT_FEATURE_VALUE_CONTAINER)
+#define XRT_FEATURE_VALUE_CONTAINER
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_VALUE_GRAPH)) && !defined(XRT_FEATURE_VALUE_GRAPH)
+#define XRT_FEATURE_VALUE_GRAPH
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WAIT)) && !defined(XRT_FEATURE_WAIT)
+#define XRT_FEATURE_WAIT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_CLOSE)) && !defined(XRT_FEATURE_WEBSOCKET_CLOSE)
+#define XRT_FEATURE_WEBSOCKET_CLOSE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_DEFLATE)) && !defined(XRT_FEATURE_WEBSOCKET_DEFLATE)
+#define XRT_FEATURE_WEBSOCKET_DEFLATE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_DEFLATER)) && !defined(XRT_FEATURE_WEBSOCKET_DEFLATER)
+#define XRT_FEATURE_WEBSOCKET_DEFLATER
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_EXTENSION)) && !defined(XRT_FEATURE_WEBSOCKET_EXTENSION)
+#define XRT_FEATURE_WEBSOCKET_EXTENSION
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_FRAME)) && !defined(XRT_FEATURE_WEBSOCKET_FRAME)
+#define XRT_FEATURE_WEBSOCKET_FRAME
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_HANDSHAKE)) && !defined(XRT_FEATURE_WEBSOCKET_HANDSHAKE)
+#define XRT_FEATURE_WEBSOCKET_HANDSHAKE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_INFLATER)) && !defined(XRT_FEATURE_WEBSOCKET_INFLATER)
+#define XRT_FEATURE_WEBSOCKET_INFLATER
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_KEYGEN)) && !defined(XRT_FEATURE_WEBSOCKET_KEYGEN)
+#define XRT_FEATURE_WEBSOCKET_KEYGEN
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_MESSAGE)) && !defined(XRT_FEATURE_WEBSOCKET_MESSAGE)
+#define XRT_FEATURE_WEBSOCKET_MESSAGE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_STREAM)) && !defined(XRT_FEATURE_WEBSOCKET_STREAM)
+#define XRT_FEATURE_WEBSOCKET_STREAM
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_STREAM_DEFLATE)) && !defined(XRT_FEATURE_WEBSOCKET_STREAM_DEFLATE)
+#define XRT_FEATURE_WEBSOCKET_STREAM_DEFLATE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_STREAM_REF)) && !defined(XRT_FEATURE_WEBSOCKET_STREAM_REF)
+#define XRT_FEATURE_WEBSOCKET_STREAM_REF
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_STREAM_TLS)) && !defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS)
+#define XRT_FEATURE_WEBSOCKET_STREAM_TLS
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_UPGRADE)) && !defined(XRT_FEATURE_WEBSOCKET_UPGRADE)
+#define XRT_FEATURE_WEBSOCKET_UPGRADE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_UPGRADE_DEFLATE)) && !defined(XRT_FEATURE_WEBSOCKET_UPGRADE_DEFLATE)
+#define XRT_FEATURE_WEBSOCKET_UPGRADE_DEFLATE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_UPGRADE_STREAM)) && !defined(XRT_FEATURE_WEBSOCKET_UPGRADE_STREAM)
+#define XRT_FEATURE_WEBSOCKET_UPGRADE_STREAM
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_CRL)) && !defined(XRT_FEATURE_X509_CRL)
+#define XRT_FEATURE_X509_CRL
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_CRL_POLICY)) && !defined(XRT_FEATURE_X509_CRL_POLICY)
+#define XRT_FEATURE_X509_CRL_POLICY
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_CRL_PROFILE)) && !defined(XRT_FEATURE_X509_CRL_PROFILE)
+#define XRT_FEATURE_X509_CRL_PROFILE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_CRL_VERIFY)) && !defined(XRT_FEATURE_X509_CRL_VERIFY)
+#define XRT_FEATURE_X509_CRL_VERIFY
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_DIGEST)) && !defined(XRT_FEATURE_X509_DIGEST)
+#define XRT_FEATURE_X509_DIGEST
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_DISTRIBUTION)) && !defined(XRT_FEATURE_X509_DISTRIBUTION)
+#define XRT_FEATURE_X509_DISTRIBUTION
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_IDENTITY)) && !defined(XRT_FEATURE_X509_IDENTITY)
+#define XRT_FEATURE_X509_IDENTITY
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_NAME)) && !defined(XRT_FEATURE_X509_NAME)
+#define XRT_FEATURE_X509_NAME
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_NAME_CONSTRAINTS)) && !defined(XRT_FEATURE_X509_NAME_CONSTRAINTS)
+#define XRT_FEATURE_X509_NAME_CONSTRAINTS
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_PARSE)) && !defined(XRT_FEATURE_X509_PARSE)
+#define XRT_FEATURE_X509_PARSE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_PATH)) && !defined(XRT_FEATURE_X509_PATH)
+#define XRT_FEATURE_X509_PATH
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_PATH_BUILD)) && !defined(XRT_FEATURE_X509_PATH_BUILD)
+#define XRT_FEATURE_X509_PATH_BUILD
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_PROFILE)) && !defined(XRT_FEATURE_X509_PROFILE)
+#define XRT_FEATURE_X509_PROFILE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_SIGNATURE)) && !defined(XRT_FEATURE_X509_SIGNATURE)
+#define XRT_FEATURE_X509_SIGNATURE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_STORE)) && !defined(XRT_FEATURE_X509_STORE)
+#define XRT_FEATURE_X509_STORE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_STORE_FILE)) && !defined(XRT_FEATURE_X509_STORE_FILE)
+#define XRT_FEATURE_X509_STORE_FILE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_STORE_SYSTEM)) && !defined(XRT_FEATURE_X509_STORE_SYSTEM)
+#define XRT_FEATURE_X509_STORE_SYSTEM
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_VERIFY)) && !defined(XRT_FEATURE_X509_VERIFY)
+#define XRT_FEATURE_X509_VERIFY
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_VERIFY_ECDSA)) && !defined(XRT_FEATURE_X509_VERIFY_ECDSA)
+#define XRT_FEATURE_X509_VERIFY_ECDSA
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_VERIFY_ED25519)) && !defined(XRT_FEATURE_X509_VERIFY_ED25519)
+#define XRT_FEATURE_X509_VERIFY_ED25519
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_VERIFY_RSA)) && !defined(XRT_FEATURE_X509_VERIFY_RSA)
+#define XRT_FEATURE_X509_VERIFY_RSA
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XID)) && !defined(XRT_FEATURE_XID)
+#define XRT_FEATURE_XID
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XSON)) && !defined(XRT_FEATURE_XSON)
+#define XRT_FEATURE_XSON
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XSONL)) && !defined(XRT_FEATURE_XSONL)
+#define XRT_FEATURE_XSONL
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XSONL_CORE)) && !defined(XRT_FEATURE_XSONL_CORE)
+#define XRT_FEATURE_XSONL_CORE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XSONL_FILE)) && !defined(XRT_FEATURE_XSONL_FILE)
+#define XRT_FEATURE_XSONL_FILE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XSONL_READ)) && !defined(XRT_FEATURE_XSONL_READ)
+#define XRT_FEATURE_XSONL_READ
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XSONL_WRITE)) && !defined(XRT_FEATURE_XSONL_WRITE)
+#define XRT_FEATURE_XSONL_WRITE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XSON_CORE)) && !defined(XRT_FEATURE_XSON_CORE)
+#define XRT_FEATURE_XSON_CORE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XSON_FILE)) && !defined(XRT_FEATURE_XSON_FILE)
+#define XRT_FEATURE_XSON_FILE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XSON_READ)) && !defined(XRT_FEATURE_XSON_READ)
+#define XRT_FEATURE_XSON_READ
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XSON_WRITE)) && !defined(XRT_FEATURE_XSON_WRITE)
+#define XRT_FEATURE_XSON_WRITE
+#endif

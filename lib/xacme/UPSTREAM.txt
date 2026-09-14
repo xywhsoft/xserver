@@ -1,0 +1,17 @@
+xacme（ACME / RFC 8555 客户端扩展库）
+来源: https://gitee.com/xywhsoft/xrt 仓库 extlibs/xacme
+基线: xrt@f41ee032 "添加 acme 插件" (2026-09-14)
+
+本目录为 xserver 的 vendored 副本，仅收录:
+  include/          公开头（xacme.h 伞头 + xrt/acme*.h 模块头）
+  src/              实现（acme/ 7 模块 + dns/ 2 模块 + src/xacme.c 组合根）
+  config/           modules.json（模块闭包定义，供同步参考）
+
+定位：证书签发客户端（账户/订单/dns-01 挑战/证书获取），自带同步 HTTPS
+传输与 UDP TXT 传播探测，仅依赖 xrt 核心——不依赖 xmail 等任何其它
+extlib，变体无需 requires。上游无 single/ 目录（构建用 --no-single），
+上游同步后重验 src/script/import_xacme.inc（覆盖率测试兜底）。
+
+VFS 除公开头外还收录 src/internal 的 flow/csr/http/jose 头（xacme/
+子路径）：伞头有意不暴露 flow API，而 xacmeClientInit/Issue/IssueStored
+是宿主的标准用法，同目录引号包含在 VFS 中天然成立。

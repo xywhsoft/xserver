@@ -29,12 +29,17 @@ def load_registry(path: Path = REGISTRY) -> dict:
     for name, entry in registry.items():
         if not LIBRARY_NAME.fullmatch(name) or not isinstance(entry, dict):
             raise ValueError(f"invalid extension entry: {name}")
-        for field in ("macro", "symbol_macro", "feature_macro"):
+        for field in ("macro", "symbol_macro"):
             if field not in entry:
                 continue
             value = entry.get(field)
             if not isinstance(value, str) or not IDENTIFIER.fullmatch(value):
                 raise ValueError(f"{name}: invalid {field}")
+        if "feature_macro" in entry:
+            value = entry["feature_macro"]
+            values = [value] if isinstance(value, str) else value
+            if not values or not all(isinstance(v, str) and IDENTIFIER.fullmatch(v) for v in values):
+                raise ValueError(f"{name}: invalid feature_macro")
         unknown = set(entry) - {"macro", "headers", "sources", "symbols",
                                "symbol_macro", "link_flags", "requires",
                                "host_includes", "feature_macro"}
@@ -163,8 +168,10 @@ def host_header(selected: dict) -> str:
     ]
     for entry in selected.values():
         lines.append(f'\ttcc_define_symbol(pTcc, "{entry["macro"]}", "1");')
-        if "feature_macro" in entry:
-            lines.append(f'\ttcc_define_symbol(pTcc, "{entry["feature_macro"]}", "1");')
+        features = entry.get("feature_macro", [])
+        features = [features] if isinstance(features, str) else features
+        for feature in features:
+            lines.append(f'\ttcc_define_symbol(pTcc, "{feature}", "1");')
     lines += [
         "\tXS_TccAddSymbols(pTcc, g_XS_ExtensionSymbols,",
         "\t\tsizeof(g_XS_ExtensionSymbols) / sizeof(g_XS_ExtensionSymbols[0]) - 1);",

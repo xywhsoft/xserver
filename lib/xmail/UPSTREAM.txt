@@ -1,0 +1,16 @@
+xmail（邮件 MIME 基础库）
+来源: https://gitee.com/xywhsoft/xrt 仓库 extlibs/xmail
+基线: xrt@6bbb256e "xmail(lib): 拆分为底层库+三协议扩展" (2026-09-14)
+
+本目录为 xserver 的 vendored 副本，仅收录:
+  include/          公开头（xmail.h 伞头 + xrt/mail*.h 模块头，进 VFS 保留 xrt/ 子路径）
+  src/              实现（mail/ 14 个 MIME 模块 + transport/ 5 个传输模块）
+  config/           modules.json（模块/特性闭包定义，供同步参考）
+  shim/xrt/*.h      xrt 核心模块头的垫片（-> <xrt_decl.h>，宿主与 VFS 通用）
+
+有意未收录: single/（单头把内嵌 xrt 实现圈进同一个实现宏，与宿主 main.c 的
+XRT_MODULE_ALL 实现冲突）、tests/、bench/、docs/、examples/。
+
+xsmtp/xpop3/ximap 三个协议库通过 ../../xmail/src/internal/* 相对桥共享本库的
+transport/SASL 内部实现，四个目录必须保持兄弟关系。上游同步后需重验
+src/script/import_xmail.inc（tools/test_extensions.py 覆盖率测试）。

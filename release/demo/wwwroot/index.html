@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>demo — XServer</title>
+<style>
+  :root {
+    --bg: #0b1220; --card: #111a2c; --border: #243349;
+    --text: #e8eef7; --muted: #94a3b8; --cyan: #22d3ee;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.7;
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    padding: 32px 18px;
+  }
+  main { width: 100%; max-width: 620px; }
+  h1 { font-size: 1.5rem; margin-bottom: 4px; }
+  h1 b { color: var(--cyan); }
+  p.sub { color: var(--muted); font-size: .9rem; margin-bottom: 24px; }
+  section {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px 20px; margin-bottom: 14px;
+  }
+  h2 { font-size: .95rem; margin-bottom: 10px; }
+  h2 code { color: var(--cyan); font-size: .85em; }
+  .row { display: flex; gap: 10px; }
+  input {
+    flex: 1; min-width: 0; background: #0b1220; color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px;
+    font-size: .9rem;
+  }
+  button {
+    background: rgba(34, 211, 238, .12); color: var(--cyan);
+    border: 1px solid rgba(34, 211, 238, .4); border-radius: 8px;
+    padding: 9px 16px; font-size: .85rem; cursor: pointer; white-space: nowrap;
+  }
+  button:hover { background: rgba(34, 211, 238, .2); }
+  output {
+    display: block; margin-top: 12px; padding: 10px 12px;
+    background: #0b1220; border: 1px solid var(--border); border-radius: 8px;
+    font-family: Consolas, monospace; font-size: .82rem; color: #a5d6a7;
+    min-height: 20px; word-break: break-all; white-space: pre-wrap;
+  }
+  footer { color: var(--muted); font-size: .78rem; text-align: center; margin-top: 8px; }
+  footer a { color: var(--cyan); text-decoration: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1><b>XServer</b> demo 跑起来了</h1>
+  <p class="sub">静态页来自 wwwroot；下面的按钮走脚本里的 main.c 处理函数。</p>
+
+  <section>
+    <h2>HTTP · JSON <code>GET /api/hello</code></h2>
+    <div class="row"><button id="btnHello">请求</button></div>
+    <output id="outHello">（等待请求）</output>
+  </section>
+
+  <section>
+    <h2>HTTP · 回显 <code>GET /api/echo?text=…</code></h2>
+    <div class="row">
+      <input id="inEcho" value="你好，XServer" maxlength="60">
+      <button id="btnEcho">回显</button>
+    </div>
+    <output id="outEcho">（等待请求）</output>
+  </section>
+
+  <section>
+    <h2>WebSocket · 回显 <code>ws://…:9082</code></h2>
+    <div class="row">
+      <input id="inWs" value="hello ws" maxlength="60">
+      <button id="btnWs">发送</button>
+    </div>
+    <output id="outWs">（未连接）</output>
+  </section>
+
+  <footer>完整工程范本见 <a href="https://xs.xywhsoft.com/guide.html" target="_blank" rel="noopener">XServer 官网 · 开发指南</a></footer>
+</main>
+<script>
+var ws = null, wsReady = false;
+
+function $(id) { return document.getElementById(id); }
+
+$('btnHello').onclick = function () {
+  fetch('/api/hello').then(function (r) { return r.text(); })
+    .then(function (t) { $('outHello').textContent = t; })
+    .catch(function (e) { $('outHello').textContent = '请求失败: ' + e; });
+};
+
+$('btnEcho').onclick = function () {
+  var text = encodeURIComponent($('inEcho').value || '');
+  fetch('/api/echo?text=' + text).then(function (r) { return r.text(); })
+    .then(function (t) { $('outEcho').textContent = t; })
+    .catch(function (e) { $('outEcho').textContent = '请求失败: ' + e; });
+};
+
+function wsLog(msg) {
+  var el = $('outWs');
+  el.textContent = (el.textContent === '（未连接）' ? '' : el.textContent) + msg + '\n';
+  el.scrollTop = el.scrollHeight;
+}
+
+try {
+  ws = new WebSocket('ws://' + location.hostname + ':9082');
+  ws.onopen = function () { wsReady = true; wsLog('[已连接 ws://…:9082]'); };
+  ws.onmessage = function (ev) { wsLog('← ' + ev.data); };
+  ws.onclose = function () { wsReady = false; wsLog('[连接已关闭]'); };
+  ws.onerror = function () { wsLog('[连接错误]'); };
+} catch (e) {
+  wsLog('[浏览器不支持 WebSocket]');
+}
+
+$('btnWs').onclick = function () {
+  var text = $('inWs').value;
+  if (!text) return;
+  if (wsReady) { ws.send(text); wsLog('→ ' + text); }
+  else { wsLog('[尚未连接，稍等片刻再试]'); }
+};
+</script>
+</body>
+</html>

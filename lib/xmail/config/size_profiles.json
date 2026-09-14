@@ -1,0 +1,84 @@
+{
+	"schema": 1,
+	"manifest": "extlibs/xmail/config/modules.json",
+	"profiles": [
+		{
+			"name": "mail_core",
+			"system": "mail_content",
+			"suite": "mail_core",
+			"description": "邮件换行和结构化错误核心"
+		},
+		{
+			"name": "mail_content",
+			"system": "mail_content",
+			"suite": "xmail",
+			"description": "邮件传输编码与字段解析闭包"
+		},
+		{
+			"name": "mail_address",
+			"system": "mail_content",
+			"suite": "mail_address",
+			"description": "编码词与零分配地址列表闭包"
+		},
+		{
+			"name": "mail_param",
+			"system": "mail_content",
+			"suite": "mail_param",
+			"description": "独立 MIME 参数解析与 RFC 2231 合并闭包"
+		},
+		{
+			"name": "mail_multipart",
+			"system": "mail_content",
+			"suite": "mail_multipart",
+			"description": "零分配 multipart 游标与字段校验闭包"
+		},
+		{
+			"name": "mail_message",
+			"system": "mail_content",
+			"suite": "mail_message",
+			"description": "消息字段视图与传输编码解码闭包"
+		},
+		{
+			"name": "mail_tree",
+			"system": "mail_content",
+			"suite": "mail_tree",
+			"description": "拥有型 MIME 树、预算和递归解析闭包"
+		},
+		{
+			"name": "mail_build",
+			"system": "mail_content",
+			"suite": "mail_build",
+			"description": "零复制正文、字段和 multipart 流式构建闭包"
+		},
+		{
+			"name": "mail_compose",
+			"system": "mail_content",
+			"suite": "mail_compose",
+			"description": "UTF-8 正文、附件和嵌套 MIME 高层构建闭包"
+		},
+		{
+			"name": "mail_wire",
+			"system": "mail_transport",
+			"suite": "mail_wire",
+			"description": "增量 CRLF 行与 dot transparency 闭包"
+		},
+		{
+			"name": "mail_net",
+			"system": "mail_transport",
+			"suite": "mail_net",
+			"description": "不带 TLS 的 TCP 拨号与动态线路缓冲闭包"
+		},
+		{
+			"name": "mail_net_tls",
+			"system": "mail_transport",
+			"suite": "mail_net_tls",
+			"description": "经过验证的 TLS 邮件传输闭包"
+		}
+	],
+	"default_growth": {
+		"text": 0.1,
+		"data": 0.2,
+		"bss": 0.2,
+		"file": 0.15
+	}
+}

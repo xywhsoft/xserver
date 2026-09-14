@@ -1,0 +1,7 @@
+xpop3（POP3 客户端扩展库）
+来源: https://gitee.com/xywhsoft/xrt 仓库 extlibs/xpop3
+基线: xrt@6bbb256e (2026-09-14)
+
+vendored 副本: include/ + src/ + config/。硬依赖 xmail（../../xmail 相对桥），
+构建注册表以 requires 声明，构建时自动携带。
+未收录: single/、tests/、docs/。上游同步后重验 src/script/import_xpop3.inc。

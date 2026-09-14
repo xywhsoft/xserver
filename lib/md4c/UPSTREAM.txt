@@ -1,0 +1,11 @@
+md4c（Markdown 解析器 + HTML 渲染器）
+来源: https://github.com/mity/md4c （master 分支 src/ 目录）
+许可: MIT（见同目录 LICENSE）
+
+本目录为 xserver 的 vendored 副本：
+  md4c.h / md4c.c        核心解析器（回调式 SAX 风格 API：md_parse）
+  md4c-html.h / .c       HTML 渲染器（md_html，基于 md_parse）
+  entity.h               内部 HTML 实体表（md4c.c 私有包含）
+
+头文件自包含（仅 stddef/stdint 等），无特性宏、无链接依赖。
+上游同步后重验 src/script/import_md4c.inc（覆盖率测试兜底）。

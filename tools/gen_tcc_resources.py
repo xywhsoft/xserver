@@ -35,6 +35,12 @@ SDK_FILES = [
     ("/xs/xsbase.h", ROOT / "src" / "sdk" / "xsbase.h"),
     ("/xs/xrt_decl.h", ROOT / "lib" / "xrt_decl.h"),
     ("/xs/libtcc.h", ROOT / "lib" / "libtcc.h"),
+] + [
+    ("/xs/xrt.h", ROOT / "lib" / "xrtshim" / "xrt" / "xrt.h"),
+] + [
+    (f"/xs/xrt/{path.name}", path)
+    for path in sorted((ROOT / "lib" / "xrtshim" / "xrt").glob("*.h"))
+    if path.name != "xrt.h"
 ]
 
 # (虚拟目录前缀, 源目录) —— 整目录递归收录
@@ -88,7 +94,8 @@ def lzma_pack(data: bytes, pack_tool: Path, scratch: Path) -> bytes | None:
     return packed if len(packed) < len(data) else None
 
 
-def collect(selected: dict | None = None) -> list[tuple[str, Path]]:
+def collect(selected: dict | None = None,
+            sysroot: Path | None = None) -> list[tuple[str, Path]]:
     items: list[tuple[str, Path]] = []
     seen: set[str] = set()
 
@@ -114,6 +121,30 @@ def collect(selected: dict | None = None) -> list[tuple[str, Path]]:
         for path in sorted(directory.rglob("*")):
             if path.is_file():
                 add(f"{prefix}/{path.relative_to(directory)}", path)
+    # 可选 libc sysroot（如 musl 工具链的目标目录，含 include/ 与 lib/）：
+    #   include/** → 虚拟 /xsroot/usr/include，配合宿主 -DCONFIG_SYSROOT="/xsroot"
+    #   lib/libc.a → 虚拟 /xsroot/usr/lib，脚本经 TCC 静态链入完整 libc
+    # VFS 为磁盘优先兜底，虚拟前缀不会命中真实磁盘，保证任何目标机一致。
+    # 注意：不能收 libc.so —— tcc 搜库时 .so 优先于 .a，而静态二进制无法 dlopen。
+    if sysroot is not None:
+        if not sysroot.is_dir():
+            raise RuntimeError(f"missing sysroot directory: {sysroot}")
+        incdir = sysroot / "include"
+        if not incdir.is_dir():
+            raise RuntimeError(f"missing sysroot include directory: {incdir}")
+        for path in sorted(incdir.rglob("*")):
+            if path.is_file():
+                virtual = f"/xsroot/usr/include/{path.relative_to(incdir)}"
+                key = normalize_virtual_name(virtual)
+                # 内核 UAPI 存在仅大小写不同的重复头（xt_CONNMARK.h / xt_connmark.h）；
+                # VFS 键本身不区分大小写，保留首个即可服务两种拼写。
+                if key in seen:
+                    print(f"[vfs] skip case-duplicate sysroot header: {virtual}")
+                    continue
+                add(virtual, path)
+        libc_a = sysroot / "lib" / "libc.a"
+        if libc_a.is_file():
+            add("/xsroot/usr/lib/libc.a", libc_a)
     return items
 
 
@@ -125,8 +156,9 @@ def c_bytes(data: bytes) -> str:
 
 
 def generate(selected: dict | None = None, *, output: Path = OUTPUT,
-             pack_tool: Path = PACK_TOOL, force_store: bool = False) -> int:
-    items = collect(selected)
+             pack_tool: Path = PACK_TOOL, force_store: bool = False,
+             sysroot: Path | None = None) -> int:
+    items = collect(selected, sysroot)
     source_hash = input_digest(items, force_store)
     marker = f"input-sha256: {source_hash}"
     if output.is_file():
@@ -191,11 +223,15 @@ def main() -> int:
     parser.add_argument("--store", action="store_true", help="disable compression")
     parser.add_argument("--output", type=Path, default=OUTPUT)
     parser.add_argument("--pack-tool", type=Path, default=PACK_TOOL)
+    parser.add_argument("--sysroot", type=Path, default=None,
+                        help="toolchain target dir with include/ + lib/libc.a "
+                             "(e.g. musl x86_64-linux-musl); embedded at virtual /xsroot")
     args = parser.parse_intermixed_args()
     try:
         selected = select_extensions(args.extensions)
         return generate(selected, output=args.output.resolve(),
-                        pack_tool=args.pack_tool.resolve(), force_store=args.store)
+                        pack_tool=args.pack_tool.resolve(), force_store=args.store,
+                        sysroot=args.sysroot.resolve() if args.sysroot else None)
     except (ValueError, OSError, RuntimeError, subprocess.CalledProcessError) as error:
         print(f"[vfs] failed: {error}", file=sys.stderr)
         return 1

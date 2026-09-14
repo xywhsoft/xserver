@@ -79,12 +79,158 @@ static void probe_xtp(void)
 }
 #endif
 
+#ifdef XS_USE_XLLM
+#include <xllm.h>
+static void probe_xllm(void)
+{
+    xllm_error error;
+    xllm_request request;
+    xllmErrorInit(&error);
+    REQUIRE(strcmp(xllmFinishReasonName(XLLM_FINISH_STOP), "stop") == 0);
+    REQUIRE(strcmp(xllmErrorCodeName(XLLM_ERROR_NONE), "none") == 0);
+    REQUIRE(xllmEstimateTextTokens("hello world") > 0);
+    xllmRequestInit(&request);
+    REQUIRE(xllmRequestAddTextMessage(&request, XLLM_ROLE_USER, "hi"));
+    xllmRequestUnit(&request);
+    xllmFree(NULL);
+}
+#endif
+
+#ifdef XS_USE_XLLM_SESSION
+#include <xllm-session.h>
+static void probe_xllm_session(void)
+{
+    xllm_session_config config;
+    xllmSessionConfigInit(&config);
+    REQUIRE(config.uContextWindowTokens == XLLM_SESSION_DEFAULT_CONTEXT_WINDOW_TOKENS);
+}
+#endif
+
+#ifdef XS_USE_XMAIL
+#include <xmail.h>
+static void probe_xmail(void)
+{
+    xtime time;
+    size_t size = 0;
+    bytes raw;
+    REQUIRE(xrtMailBoundaryValid(xrtStrView("boundary-123")));
+    REQUIRE(xrtMailDateParse(xrtStrView("Thu, 18 Sep 2025 10:00:00 +0800"), 0, &time, NULL));
+    raw = xrtMailBase64Decode(xrtStrView("aGVsbG8="), &size);
+    REQUIRE(raw != NULL && size == 5 && memcmp(raw, "hello", 5) == 0);
+    xrtFree(raw);
+}
+#endif
+
+#ifdef XS_USE_XSMTP
+#include <xsmtp.h>
+static void probe_xsmtp(void)
+{
+    xsmtpreplyline line;
+    xsmtpcapabilityview capability;
+    REQUIRE(xrtSmtpReplyLineParse(xrtStrView("250 2.0.0 OK"), &line) && line.Code == 250);
+    REQUIRE(xrtSmtpCapabilityParse(xrtStrView("SIZE 15728640"), &capability));
+}
+#endif
+
+#ifdef XS_USE_XPOP3
+#include <xpop3.h>
+static void probe_xpop3(void)
+{
+    xpop3stat stat;
+    xpop3uidlview uidl;
+    REQUIRE(xrtPop3StatParse(xrtStrView("+OK 2 320"), &stat) && stat.Messages == 2 && stat.Bytes == 320);
+    REQUIRE(xrtPop3UidlParse(xrtStrView("7 whqtswO00Q430"), &uidl));
+}
+#endif
+
+#ifdef XS_USE_XIMAP
+#include <ximap.h>
+static void probe_ximap(void)
+{
+    ximapresponseview response;
+    REQUIRE(xrtImapSequenceSetValid(xrtStrView("1:5,7,9:*")));
+    REQUIRE(xrtImapResponseParse(xrtStrView("* OK IMAP4rev1 ready"), &response));
+}
+#endif
+
+#ifdef XS_USE_XACME
+#include <xacme.h>
+#include <xacme/xacme_flow.h>
+static void probe_xacme(void)
+{
+    xacmeaccountconfig tAccount;
+    size_t iProviders;
+    /* 注册表：唯一内建 provider 是阿里云 */
+    iProviders = xrtAcmeDnsProviderCount();
+    REQUIRE(iProviders >= 1);
+    REQUIRE(strcmp(xrtAcmeDnsProviderId(0), "ali") == 0);
+    /* 账户配置 + LE staging 预设 */
+    xrtAcmeAccountConfigInit(&tAccount);
+    REQUIRE(tAccount.sDirectoryUrl == NULL);  /* 清零语义：预设用 XACME_DIRECTORY_* 常量 */
+    REQUIRE(strcmp(XACME_DIRECTORY_LE, "https://acme-v02.api.letsencrypt.org/directory") == 0);
+    /* provider 结构校验（构造后） */
+    {
+        xacmednaliconfig tAli;
+        xacmednsprovider tProvider;
+        xrtAcmeDnsAliConfigInit(&tAli);
+        tAli.sAccessKeyId = "key";
+        tAli.sAccessKeySecret = "secret";
+        REQUIRE(xrtAcmeDnsAli(&tAli, &tProvider));
+        REQUIRE(xrtAcmeDnsProviderValidate(&tProvider));
+        xrtAcmeDnsAliProviderUnit(&tProvider);
+    }
+}
+#endif
+
+#ifdef XS_USE_MD4C
+#include <md4c.h>
+#include <md4c-html.h>
+static char s_md4c_out[256];
+static MD_SIZE s_md4c_len;
+static void md4c_collect(const MD_CHAR* text, MD_SIZE size, void* userdata)
+{
+    (void)userdata;
+    if (s_md4c_len + size < sizeof(s_md4c_out)) {
+        memcpy(s_md4c_out + s_md4c_len, text, size);
+        s_md4c_len += size;
+    }
+}
+static void probe_md4c(void)
+{
+    s_md4c_len = 0;
+    REQUIRE(md_html("**hi** _md4c_", 13, md4c_collect, NULL, 0, 0) == 0);
+    s_md4c_out[s_md4c_len] = 0;
+    REQUIRE(strstr(s_md4c_out, "<strong>hi</strong>") != NULL);
+    REQUIRE(strstr(s_md4c_out, "<em>md4c</em>") != NULL);
+    /* md_parse 的回调指针无空保护，零值结构会空指针调用——
+       md_html 内部自带完整回调，等价于安全地驱动 md_parse。 */
+}
+#endif
+
 static const char nested_source[] =
     "#ifdef XS_USE_SQLITE\n#include <sqlite3.h>\n#endif\n"
     "#ifdef XS_USE_XTP2\n#include <xtp2.h>\n#endif\n"
-    "int nested(void) { int mask = 0;\n"
+    "#ifdef XS_USE_XLLM\n#include <xllm.h>\n#endif\n"
+    "#ifdef XS_USE_XLLM_SESSION\n#include <xllm-session.h>\n#endif\n"
+    "#ifdef XS_USE_XMAIL\n#include <xmail.h>\n#endif\n"
+    "#ifdef XS_USE_XSMTP\n#include <xsmtp.h>\n#endif\n"
+    "#ifdef XS_USE_XPOP3\n#include <xpop3.h>\n#endif\n"
+    "#ifdef XS_USE_XIMAP\n#include <ximap.h>\n#endif\n"
+    "#ifdef XS_USE_MD4C\n#include <md4c.h>\n#include <md4c-html.h>\n#endif\n"
+    "#ifdef XS_USE_MD4C\nstatic void md4c_silent(const MD_CHAR* t, MD_SIZE n, void* u){ (void)t;(void)n;(void)u; }\n#endif\n"
+    "#ifdef XS_USE_XACME\n#include <xacme.h>\n#endif\n"
+    "int nested(void) { int mask = 0; unsigned char buf[256];\n"
     "#ifdef XS_USE_SQLITE\nif(sqlite3_libversion_number()>0) mask |= 1;\n#endif\n"
-    "#ifdef XS_USE_XTP2\nif(xtp2_error_string(XTP2_OK)[0]=='o') mask |= 2;\n#endif\n"
+    "#ifdef XS_USE_XTP2\nif(xtp2_error_string(XTP2_OK)[0]=='o') mask |= 2;\n\n#endif\n\n"
+    "#ifdef XS_USE_XLLM\nif(xllmEstimateTextTokens(\"a\")>0) mask |= 4;\n\n#endif\n\n"
+    "#ifdef XS_USE_XLLM_SESSION\nxllmSessionConfigInit((xllm_session_config*)buf);\n"
+    "if(((xllm_session_config*)buf)->uContextWindowTokens>0) mask |= 8;\n\n#endif\n\n"
+    "#ifdef XS_USE_XMAIL\nif(xrtMailBoundaryValid(xrtStrView(\"b1\"))) mask |= 16;\n\n#endif\n\n"
+    "#ifdef XS_USE_XSMTP\nif(xrtSmtpReplyLineParse(xrtStrView(\"250 ok\"), (xsmtpreplyline*)buf)) mask |= 32;\n\n#endif\n\n"
+    "#ifdef XS_USE_XPOP3\nif(xrtPop3StatParse(xrtStrView(\"+OK 2 320\"), (xpop3stat*)buf)) mask |= 64;\n\n#endif\n\n"
+    "#ifdef XS_USE_XIMAP\nif(xrtImapSequenceSetValid(xrtStrView(\"1:5\"))) mask |= 128;\n\n#endif\n\n"
+    "#ifdef XS_USE_MD4C\nif(md_html(\"x\", 1, md4c_silent, 0, 0, 0) == 0) mask |= 256;\n\n#endif\n\n"
+    "#ifdef XS_USE_XACME\nif(xrtAcmeDnsProviderCount() >= 1) mask |= 512;\n\n#endif\n\n"
     "return mask; }\n";
 
 void ServiceInit(XS_HostInfo *host)
@@ -98,6 +244,30 @@ void ServiceInit(XS_HostInfo *host)
 #endif
 #ifdef XS_USE_XTP2
     mask |= 2; probe_xtp();
+#endif
+#ifdef XS_USE_XLLM
+    mask |= 4; probe_xllm();
+#endif
+#ifdef XS_USE_XLLM_SESSION
+    mask |= 8; probe_xllm_session();
+#endif
+#ifdef XS_USE_XMAIL
+    mask |= 16; probe_xmail();
+#endif
+#ifdef XS_USE_XSMTP
+    mask |= 32; probe_xsmtp();
+#endif
+#ifdef XS_USE_XPOP3
+    mask |= 64; probe_xpop3();
+#endif
+#ifdef XS_USE_XIMAP
+    mask |= 128; probe_ximap();
+#endif
+#ifdef XS_USE_MD4C
+    mask |= 256; probe_md4c();
+#endif
+#ifdef XS_USE_XACME
+    mask |= 512; probe_xacme();
 #endif
     REQUIRE(mask == EXPECTED_MASK);
     nested = xsCreateTCC();
@@ -128,7 +298,16 @@ def invoke(exe: Path, source: str, directory: Path, name: str) -> subprocess.Com
 
 def check(exe: Path, names: list[str]) -> None:
     selected = select_extensions(names)
-    mask = (1 if "sqlite" in selected else 0) | (2 if "xtp" in selected else 0)
+    mask = ((1 if "sqlite" in selected else 0)
+            | (2 if "xtp" in selected else 0)
+            | (4 if "xllm" in selected else 0)
+            | (8 if "xllm-session" in selected else 0)
+            | (16 if "xmail" in selected else 0)
+            | (32 if "xsmtp" in selected else 0)
+            | (64 if "xpop3" in selected else 0)
+            | (128 if "ximap" in selected else 0)
+            | (256 if "md4c" in selected else 0)
+            | (512 if "xacme" in selected else 0))
     with tempfile.TemporaryDirectory(prefix="xs-extension-probe-") as temp:
         directory = Path(temp)
         proc = invoke(exe, f"#define EXPECTED_MASK {mask}\n" + PROBE, directory, "enabled")
@@ -141,6 +320,22 @@ def check(exe: Path, names: list[str]) -> None:
                        "sqlite3_libversion_number()"),
             "xtp": ("xtp2.h", "extern const char *xtp2_error_string(int);",
                     "xtp2_error_string(0)"),
+            "xllm": ("xllm.h", "extern const char *xllmErrorCodeName(int);",
+                     "xllmErrorCodeName(0)"),
+            "xllm-session": ("xllm-session.h", "extern void xllmSessionConfigInit(void*);",
+                             "xllmSessionConfigInit(0)"),
+            "xmail": ("xmail.h", "extern int xrtMailBoundaryValid(void*);",
+                      "xrtMailBoundaryValid(0)"),
+            "xsmtp": ("xsmtp.h", "extern int xrtSmtpReplyLineParse(void*);",
+                      "xrtSmtpReplyLineParse(0)"),
+            "xpop3": ("xpop3.h", "extern int xrtPop3StatParse(void*);",
+                      "xrtPop3StatParse(0)"),
+            "ximap": ("ximap.h", "extern int xrtImapSequenceSetValid(void*);",
+                      "xrtImapSequenceSetValid(0)"),
+            "md4c": ("md4c.h", "extern int md_parse(const void*, unsigned, void*, void*);",
+                     "md_parse(0, 0, 0, 0)"),
+            "xacme": ("xacme.h", "extern size_t xrtAcmeDnsProviderCount(void);",
+                      "xrtAcmeDnsProviderCount()"),
         }
         for name, (header, declaration, call) in absent.items():
             if name in selected:

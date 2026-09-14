@@ -77,26 +77,14 @@
    "xrt/mail_param.h": "lib/xmail/include/xrt/mail_param.h",
    "xrt/mail_tree.h": "lib/xmail/include/xrt/mail_tree.h",
    "xrt/mail_wire.h": "lib/xmail/include/xrt/mail_wire.h",
-   "xrt/mail_word.h": "lib/xmail/include/xrt/mail_word.h",
-   "xrt.h": "lib/xmail/shim/xrt.h",
-   "xrt/buffer.h": "lib/xmail/shim/xrt/buffer.h",
-   "xrt/charset.h": "lib/xmail/shim/xrt/charset.h",
-   "xrt/codec.h": "lib/xmail/shim/xrt/codec.h",
-   "xrt/compress.h": "lib/xmail/shim/xrt/compress.h",
-   "xrt/error.h": "lib/xmail/shim/xrt/error.h",
-   "xrt/memory.h": "lib/xmail/shim/xrt/memory.h",
-   "xrt/random.h": "lib/xmail/shim/xrt/random.h",
-   "xrt/tcp.h": "lib/xmail/shim/xrt/tcp.h",
-   "xrt/time.h": "lib/xmail/shim/xrt/time.h",
-   "xrt/tls_stream.h": "lib/xmail/shim/xrt/tls_stream.h",
-   "xrt/promote.h": "lib/xmail/shim/xrt/promote.h"
+   "xrt/mail_word.h": "lib/xmail/include/xrt/mail_word.h"
   },
   "sources": [
    {
     "path": "lib/xmail/xmail.c",
     "flags": [
      "-Ilib/xmail/include",
-     "-Ilib/xmail/shim"
+     "-Ilib/xrtshim"
     ],
     "defines": [
      "XMAIL_MODULE_ALL"
@@ -107,7 +95,7 @@
   "symbol_macro": "XS_XMAIL_SYMBOL",
   "host_includes": [
    "lib/xmail/include",
-   "lib/xmail/shim"
+   "lib/xrtshim"
   ],
   "feature_macro": "XMAIL_MODULE_ALL"
  },
@@ -126,7 +114,7 @@
     "path": "lib/xsmtp/xsmtp.c",
     "flags": [
      "-Ilib/xmail/include",
-     "-Ilib/xmail/shim",
+     "-Ilib/xrtshim",
      "-Ilib/xsmtp/include"
     ],
     "defines": [
@@ -138,7 +126,7 @@
   "symbol_macro": "XS_XSMTP_SYMBOL",
   "host_includes": [
    "lib/xmail/include",
-   "lib/xmail/shim",
+   "lib/xrtshim",
    "lib/xsmtp/include"
   ],
   "requires": [
@@ -161,7 +149,7 @@
     "path": "lib/xpop3/xpop3.c",
     "flags": [
      "-Ilib/xmail/include",
-     "-Ilib/xmail/shim",
+     "-Ilib/xrtshim",
      "-Ilib/xpop3/include"
     ],
     "defines": [
@@ -173,7 +161,7 @@
   "symbol_macro": "XS_XPOP3_SYMBOL",
   "host_includes": [
    "lib/xmail/include",
-   "lib/xmail/shim",
+   "lib/xrtshim",
    "lib/xpop3/include"
   ],
   "requires": [
@@ -201,7 +189,7 @@
     "path": "lib/ximap/ximap.c",
     "flags": [
      "-Ilib/xmail/include",
-     "-Ilib/xmail/shim",
+     "-Ilib/xrtshim",
      "-Ilib/ximap/include"
     ],
     "defines": [
@@ -213,7 +201,7 @@
   "symbol_macro": "XS_XIMAP_SYMBOL",
   "host_includes": [
    "lib/xmail/include",
-   "lib/xmail/shim",
+   "lib/xrtshim",
    "lib/ximap/include"
   ],
   "requires": [
@@ -240,5 +228,226 @@
   ],
   "symbols": "src/script/import_md4c.inc",
   "symbol_macro": "XS_MD4C_SYMBOL"
+ },
+ "xacme": {
+  "macro": "XS_USE_XACME",
+  "headers": {
+   "xacme.h": "lib/xacme/include/xacme.h",
+   "xacme/features.h": "lib/xacme/include/xacme/features.h",
+   "xrt/acme.h": "lib/xacme/include/xrt/acme.h",
+   "xrt/acme_dns.h": "lib/xacme/include/xrt/acme_dns.h",
+   "xrt/acme_dns_ali.h": "lib/xacme/include/xrt/acme_dns_ali.h",
+   "xrt/acme_store.h": "lib/xacme/include/xrt/acme_store.h",
+   "xacme/xacme_flow.h": "lib/xacme/src/internal/xacme_flow.h",
+   "xacme/xacme_csr.h": "lib/xacme/src/internal/xacme_csr.h",
+   "xacme/xacme_http.h": "lib/xacme/src/internal/xacme_http.h",
+   "xacme/xacme_jose.h": "lib/xacme/src/internal/xacme_jose.h"
+  },
+  "sources": [
+   {
+    "path": "lib/xacme/src/xacme.c",
+    "defines": [
+     "XRT_MODULE_ALL",
+     "XACME_FEATURE_ACME_DNS",
+     "XACME_FEATURE_ACME_CORE",
+     "XACME_FEATURE_ACME_STORE",
+     "XACME_FEATURE_DNS_TXT",
+     "XACME_FEATURE_ACME_FLOW",
+     "XACME_FEATURE_ACME_HTTP",
+     "XACME_FEATURE_ACME_CSR",
+     "XACME_FEATURE_ACME_JOSE",
+     "XACME_FEATURE_DNS_ALI"
+    ],
+    "flags": [
+     "-Ilib/xacme/include",
+     "-Ilib/xrtshim"
+    ]
+   },
+   {
+    "path": "lib/xacme/src/acme/xacme_core.c",
+    "defines": [
+     "XRT_MODULE_ALL",
+     "XACME_FEATURE_ACME_DNS",
+     "XACME_FEATURE_ACME_CORE",
+     "XACME_FEATURE_ACME_STORE",
+     "XACME_FEATURE_DNS_TXT",
+     "XACME_FEATURE_ACME_FLOW",
+     "XACME_FEATURE_ACME_HTTP",
+     "XACME_FEATURE_ACME_CSR",
+     "XACME_FEATURE_ACME_JOSE",
+     "XACME_FEATURE_DNS_ALI"
+    ],
+    "flags": [
+     "-Ilib/xacme/include",
+     "-Ilib/xrtshim"
+    ]
+   },
+   {
+    "path": "lib/xacme/src/acme/xacme_csr.c",
+    "defines": [
+     "XRT_MODULE_ALL",
+     "XACME_FEATURE_ACME_DNS",
+     "XACME_FEATURE_ACME_CORE",
+     "XACME_FEATURE_ACME_STORE",
+     "XACME_FEATURE_DNS_TXT",
+     "XACME_FEATURE_ACME_FLOW",
+     "XACME_FEATURE_ACME_HTTP",
+     "XACME_FEATURE_ACME_CSR",
+     "XACME_FEATURE_ACME_JOSE",
+     "XACME_FEATURE_DNS_ALI"
+    ],
+    "flags": [
+     "-Ilib/xacme/include",
+     "-Ilib/xrtshim"
+    ]
+   },
+   {
+    "path": "lib/xacme/src/acme/xacme_dns.c",
+    "defines": [
+     "XRT_MODULE_ALL",
+     "XACME_FEATURE_ACME_DNS",
+     "XACME_FEATURE_ACME_CORE",
+     "XACME_FEATURE_ACME_STORE",
+     "XACME_FEATURE_DNS_TXT",
+     "XACME_FEATURE_ACME_FLOW",
+     "XACME_FEATURE_ACME_HTTP",
+     "XACME_FEATURE_ACME_CSR",
+     "XACME_FEATURE_ACME_JOSE",
+     "XACME_FEATURE_DNS_ALI"
+    ],
+    "flags": [
+     "-Ilib/xacme/include",
+     "-Ilib/xrtshim"
+    ]
+   },
+   {
+    "path": "lib/xacme/src/acme/xacme_flow.c",
+    "defines": [
+     "XRT_MODULE_ALL",
+     "XACME_FEATURE_ACME_DNS",
+     "XACME_FEATURE_ACME_CORE",
+     "XACME_FEATURE_ACME_STORE",
+     "XACME_FEATURE_DNS_TXT",
+     "XACME_FEATURE_ACME_FLOW",
+     "XACME_FEATURE_ACME_HTTP",
+     "XACME_FEATURE_ACME_CSR",
+     "XACME_FEATURE_ACME_JOSE",
+     "XACME_FEATURE_DNS_ALI"
+    ],
+    "flags": [
+     "-Ilib/xacme/include",
+     "-Ilib/xrtshim"
+    ]
+   },
+   {
+    "path": "lib/xacme/src/acme/xacme_http.c",
+    "defines": [
+     "XRT_MODULE_ALL",
+     "XACME_FEATURE_ACME_DNS",
+     "XACME_FEATURE_ACME_CORE",
+     "XACME_FEATURE_ACME_STORE",
+     "XACME_FEATURE_DNS_TXT",
+     "XACME_FEATURE_ACME_FLOW",
+     "XACME_FEATURE_ACME_HTTP",
+     "XACME_FEATURE_ACME_CSR",
+     "XACME_FEATURE_ACME_JOSE",
+     "XACME_FEATURE_DNS_ALI"
+    ],
+    "flags": [
+     "-Ilib/xacme/include",
+     "-Ilib/xrtshim"
+    ]
+   },
+   {
+    "path": "lib/xacme/src/acme/xacme_jose.c",
+    "defines": [
+     "XRT_MODULE_ALL",
+     "XACME_FEATURE_ACME_DNS",
+     "XACME_FEATURE_ACME_CORE",
+     "XACME_FEATURE_ACME_STORE",
+     "XACME_FEATURE_DNS_TXT",
+     "XACME_FEATURE_ACME_FLOW",
+     "XACME_FEATURE_ACME_HTTP",
+     "XACME_FEATURE_ACME_CSR",
+     "XACME_FEATURE_ACME_JOSE",
+     "XACME_FEATURE_DNS_ALI"
+    ],
+    "flags": [
+     "-Ilib/xacme/include",
+     "-Ilib/xrtshim"
+    ]
+   },
+   {
+    "path": "lib/xacme/src/acme/xacme_store.c",
+    "defines": [
+     "XRT_MODULE_ALL",
+     "XACME_FEATURE_ACME_DNS",
+     "XACME_FEATURE_ACME_CORE",
+     "XACME_FEATURE_ACME_STORE",
+     "XACME_FEATURE_DNS_TXT",
+     "XACME_FEATURE_ACME_FLOW",
+     "XACME_FEATURE_ACME_HTTP",
+     "XACME_FEATURE_ACME_CSR",
+     "XACME_FEATURE_ACME_JOSE",
+     "XACME_FEATURE_DNS_ALI"
+    ],
+    "flags": [
+     "-Ilib/xacme/include",
+     "-Ilib/xrtshim"
+    ]
+   },
+   {
+    "path": "lib/xacme/src/dns/xacme_dns_ali.c",
+    "defines": [
+     "XRT_MODULE_ALL",
+     "XACME_FEATURE_ACME_DNS",
+     "XACME_FEATURE_ACME_CORE",
+     "XACME_FEATURE_ACME_STORE",
+     "XACME_FEATURE_DNS_TXT",
+     "XACME_FEATURE_ACME_FLOW",
+     "XACME_FEATURE_ACME_HTTP",
+     "XACME_FEATURE_ACME_CSR",
+     "XACME_FEATURE_ACME_JOSE",
+     "XACME_FEATURE_DNS_ALI"
+    ],
+    "flags": [
+     "-Ilib/xacme/include",
+     "-Ilib/xrtshim"
+    ]
+   },
+   {
+    "path": "lib/xacme/src/dns/xacme_dnstxt.c",
+    "defines": [
+     "XRT_MODULE_ALL",
+     "XACME_FEATURE_ACME_DNS",
+     "XACME_FEATURE_ACME_CORE",
+     "XACME_FEATURE_ACME_STORE",
+     "XACME_FEATURE_DNS_TXT",
+     "XACME_FEATURE_ACME_FLOW",
+     "XACME_FEATURE_ACME_HTTP",
+     "XACME_FEATURE_ACME_CSR",
+     "XACME_FEATURE_ACME_JOSE",
+     "XACME_FEATURE_DNS_ALI"
+    ],
+    "flags": [
+     "-Ilib/xacme/include",
+     "-Ilib/xrtshim"
+    ]
+   }
+  ],
+  "symbols": "src/script/import_xacme.inc",
+  "symbol_macro": "XS_XACME_SYMBOL",
+  "host_includes": [
+   "lib/xacme/include",
+   "lib/xrtshim"
+  ],
+  "feature_macro": [
+   "XRT_MODULE_ALL",
+   "XACME_MODULE_ALL",
+   "XACME_MODULE_ACME_CORE",
+   "XACME_MODULE_ACME_FLOW",
+   "XACME_MODULE_ACME_STORE",
+   "XACME_MODULE_DNS_TXT"
+  ]
  }
 }

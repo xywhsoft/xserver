@@ -2,10 +2,10 @@
 
 **xs 是 xrt 的落地化部署工具。** 它把 xrt 的网络、协议、TLS、并发、数据能力装配成一个由配置文件驱动的可执行程序，并在运行时把 C 脚本编译进进程。xrt 才是主要的那个；xs 只负责部署，不提供框架、不提供治理、不教应用怎么做事。
 
-当前状态：**生产就绪**——五大协议（http(+https)/ws(+wss)/tcp(+tcps)/udp/custom）、期望状态热重载（latest-wins/整代候选/原子发布/自动排空回收）、可选库门控（sqlite、xtp，可组合）、dev_inc/dev_lib 应用 SDK 目录、静态层四旋钮、Windows/Linux 双平台回归与四层测试体系（冒烟/功能/压力/攻防演练 6h 704 轮 0 失败）。遗留：xadmin 试点。
+当前状态：**生产就绪**——五大协议（http(+https)/ws(+wss)/tcp(+tcps)/udp/custom）、期望状态热重载（latest-wins/整代候选/原子发布/自动排空回收）、可选库门控（sqlite、xtp、xllm、xmail 系列、md4c、xacme，可组合、支持依赖自动展开与 all 全选）、dev_inc/dev_lib 应用 SDK 目录、静态层四旋钮、Windows/Linux 双平台回归与四层测试体系（冒烟/功能/压力/攻防演练 6h 704 轮 0 失败）。遗留：xadmin 试点。
 - 协议：HTTP 每请求虚拟主机路由（脚本+静态根）、WS 握手期路由并固定 host/脚本、TCP/TCP+TLS、UDP、custom 手动装配
 - 热重载：独立 controller、提交前 latest-wins ticket、reload-all 共享不可变配置 revision、候选 listener 先 bind 但不接入、host/server/all 均以完整 server generation 原子发布；旧代停止新接入后由终态引用自然排空，协议回调以连接记录和具体流的临时引用抵御同步 Close 重入，`ServiceUnit` 与最终析构交给专用 reaper，无泄漏、无宽限/超时强拆
-- 可选库：`build.bat sqlite xtp` / `bash build.sh sqlite xtp`，参数可组合、可去重；同一扩展清单控制原生编译、VFS 头文件和 TCC 符号导入
+- 可选库：`build.bat all`（全部可选库）/ `bash build.sh sqlite xtp xllm xsmtp ...`，参数可组合、可去重，邮件协议库自动携带 xmail 基础库；同一扩展清单控制原生编译、VFS 头文件和 TCC 符号导入
 - 测试：`test.bat` / `bash test.sh`（正式构建、动态端口冒烟、功能边界、generation 生命周期、明文/TLS reload 矩阵与失败清理）、`tools/func_test.py`（配置失败清理、监听半启动回滚、虚拟主机/静态根、header/chunked 边界、静态发送中断、嵌套 TCC 并发、ticket 环碰撞）、`tools/lifecycle_reload_test.py`（旧 keep-alive、初始化发布屏障、拓扑 lease 与 Root 换代）、`tools/reload_matrix_test.py`（HTTP(S)/TCP(S)/UDP/WS(S) 同端点换代及跨服务 lease 回收）、`tools/pressure_test.py`、`tools/drill.py`；全部使用动态端口和临时配置，压力/演练进程会等待回收，重载破坏样本只操作临时脚本副本。
 
 热换安全边界：绑定端点改变时候选可先 bind，但在拓扑事务提交前拒绝接入；同一端点由稳定 listener 槽位转交给新 generation。所有 Accept 与拓扑写锁线性化，TLS 还把 ClientHello 选中的 generation cookie 带到 Accept，reload-all 不会暴露半新半旧状态。旧连接继续持有旧代，最后一个终态引用归零后自动释放。协议类型、TLS 形态、backlog、recv_limit 等 listener 固化字段若在同端点改变会明确拒绝并要求重启。`xsReloadHost*` 是指定 host 的管理面入口，内部也重建并发布它所属的完整 server generation，不原地改指针；custom 因裸资源无统一终态 lease，不支持在线卸载。公开 server 查找返回显式 lease，必须 `xsServerRelease`。
@@ -45,12 +45,14 @@ build.bat
 build.bat sqlite
 build.bat xtp
 build.bat sqlite xtp
+build.bat sqlite xtp xllm
+build.bat all
 ```
 
-Linux 使用相同参数，例如 `bash build.sh sqlite xtp`；需要 GCC 与 Python 3.10+。不传参数只包含固定的 xrt/libtcc 等基础能力。参数顺序无关、重复自动去重、名称不区分大小写，未知库名报错退出，不会悄悄生成错误变体。
+Linux 使用相同参数，例如 `bash build.sh sqlite xtp xllm xsmtp`；需要 GCC 与 Python 3.10+。不传参数只包含固定的 xrt/libtcc 等基础能力。参数顺序无关、重复自动去重、名称不区分大小写，未知库名报错退出，不会悄悄生成错误变体。
 
 `build.bat --list-extensions` 查看可选库；`build.bat sqlite xtp --dry-run` 查看实际构建命令。产物默认仍为 `release/xs.exe` 或 `release/xs`，可用 `--output` 指定其他位置。构建中间文件按平台和库组合隔离到 `.build/`，不会重写 `src/script/tcc_builtin_resources.c` 旧快照。
 
-启用后，脚本直接 `#include <sqlite3.h>` / `#include <xtp2.h>`，无需再定义 `XTP2_IMPLEMENTATION`。脚本可用 `XS_USE_SQLITE`、`XS_USE_XTP2` 判断当前宿主能力，嵌套 `xsCreateTCC()` 环境也一致。
+启用后，脚本直接 `#include <sqlite3.h>` / `#include <xtp2.h>` / `#include <xllm.h>`，无需再定义 `XTP2_IMPLEMENTATION`。脚本可用 `XS_USE_SQLITE`、`XS_USE_XTP2`、`XS_USE_XLLM` 判断当前宿主能力，嵌套 `xsCreateTCC()` 环境也一致。
 
 后续库在 [扩展清单](/D:/GIT/xserver/tools/extensions.json) 登记源码、头文件、宏和符号清单，不需要修改两个平台的构建脚本或 TCC 宿主分支。参见[可选扩展库说明](/D:/GIT/xserver/docs/可选扩展库.md)。

@@ -1,0 +1,330 @@
+/* 此文件由 tools/generate_extension_features.py 生成，请勿直接修改。 */
+#ifndef XMAIL_FEATURES_H
+#define XMAIL_FEATURES_H
+
+/* xmail 及其直接依赖。 */
+#if defined(XMAIL_MODULE_ALL) || defined(XMAIL_MODULE_XMAIL)
+#ifndef XMAIL_FEATURE_MAIL
+#define XMAIL_FEATURE_MAIL
+#endif
+#ifndef XMAIL_MODULE_MAIL_CHARSET
+#define XMAIL_MODULE_MAIL_CHARSET
+#endif
+#ifndef XMAIL_MODULE_MAIL_CODEC
+#define XMAIL_MODULE_MAIL_CODEC
+#endif
+#ifndef XMAIL_MODULE_MAIL_WORD
+#define XMAIL_MODULE_MAIL_WORD
+#endif
+#ifndef XMAIL_MODULE_MAIL_ADDRESS
+#define XMAIL_MODULE_MAIL_ADDRESS
+#endif
+#ifndef XMAIL_MODULE_MAIL_DATE
+#define XMAIL_MODULE_MAIL_DATE
+#endif
+#ifndef XMAIL_MODULE_MAIL_ID
+#define XMAIL_MODULE_MAIL_ID
+#endif
+#ifndef XMAIL_MODULE_MAIL_PARAM
+#define XMAIL_MODULE_MAIL_PARAM
+#endif
+#ifndef XMAIL_MODULE_MAIL_MULTIPART
+#define XMAIL_MODULE_MAIL_MULTIPART
+#endif
+#ifndef XMAIL_MODULE_MAIL_MESSAGE
+#define XMAIL_MODULE_MAIL_MESSAGE
+#endif
+#ifndef XMAIL_MODULE_MAIL_TREE
+#define XMAIL_MODULE_MAIL_TREE
+#endif
+#ifndef XMAIL_MODULE_MAIL_BUILD
+#define XMAIL_MODULE_MAIL_BUILD
+#endif
+#ifndef XMAIL_MODULE_MAIL_COMPOSE
+#define XMAIL_MODULE_MAIL_COMPOSE
+#endif
+#ifndef XMAIL_MODULE_MAIL_WIRE
+#define XMAIL_MODULE_MAIL_WIRE
+#endif
+#ifndef XMAIL_MODULE_MAIL_NET
+#define XMAIL_MODULE_MAIL_NET
+#endif
+#ifndef XMAIL_MODULE_MAIL_NET_TLS
+#define XMAIL_MODULE_MAIL_NET_TLS
+#endif
+#ifndef XMAIL_MODULE_MAIL_NET_DEFLATE
+#define XMAIL_MODULE_MAIL_NET_DEFLATE
+#endif
+#endif
+
+/* mail_net_deflate 及其直接依赖。 */
+#if defined(XMAIL_MODULE_ALL) || defined(XMAIL_MODULE_MAIL_NET_DEFLATE)
+#ifndef XMAIL_FEATURE_MAIL_NET_DEFLATE
+#define XMAIL_FEATURE_MAIL_NET_DEFLATE
+#endif
+#ifndef XMAIL_MODULE_MAIL_NET
+#define XMAIL_MODULE_MAIL_NET
+#endif
+#ifndef XRT_MODULE_DEFLATE
+#define XRT_MODULE_DEFLATE
+#endif
+#ifndef XRT_MODULE_INFLATE
+#define XRT_MODULE_INFLATE
+#endif
+#endif
+
+/* mail_net_tls 及其直接依赖。 */
+#if defined(XMAIL_MODULE_ALL) || defined(XMAIL_MODULE_MAIL_NET_TLS)
+#ifndef XMAIL_FEATURE_MAIL_NET_TLS
+#define XMAIL_FEATURE_MAIL_NET_TLS
+#endif
+#ifndef XMAIL_MODULE_MAIL_NET
+#define XMAIL_MODULE_MAIL_NET
+#endif
+#ifndef XRT_MODULE_TLS_STREAM_DIAL_FUTURE
+#define XRT_MODULE_TLS_STREAM_DIAL_FUTURE
+#endif
+#ifndef XRT_MODULE_TLS_STREAM_FUTURE
+#define XRT_MODULE_TLS_STREAM_FUTURE
+#endif
+#ifndef XRT_MODULE_TLS_CLIENT_VERIFY
+#define XRT_MODULE_TLS_CLIENT_VERIFY
+#endif
+#ifndef XRT_MODULE_TLS_SCHEDULE_SHA256
+#define XRT_MODULE_TLS_SCHEDULE_SHA256
+#endif
+#ifndef XRT_MODULE_TLS_SCHEDULE_SHA384
+#define XRT_MODULE_TLS_SCHEDULE_SHA384
+#endif
+#ifndef XRT_MODULE_TLS_KEY_EXCHANGE_X25519
+#define XRT_MODULE_TLS_KEY_EXCHANGE_X25519
+#endif
+#ifndef XRT_MODULE_TLS_KEY_EXCHANGE_P256
+#define XRT_MODULE_TLS_KEY_EXCHANGE_P256
+#endif
+#ifndef XRT_MODULE_TLS_RECORD_AES
+#define XRT_MODULE_TLS_RECORD_AES
+#endif
+#ifndef XRT_MODULE_TLS_RECORD_CHACHA
+#define XRT_MODULE_TLS_RECORD_CHACHA
+#endif
+#endif
+
+/* mail_net 及其直接依赖。 */
+#if defined(XMAIL_MODULE_ALL) || defined(XMAIL_MODULE_MAIL_NET)
+#ifndef XMAIL_FEATURE_MAIL_NET
+#define XMAIL_FEATURE_MAIL_NET
+#endif
+#ifndef XMAIL_MODULE_MAIL_WIRE
+#define XMAIL_MODULE_MAIL_WIRE
+#endif
+#ifndef XRT_MODULE_NET_TCP_DIAL_SYNC
+#define XRT_MODULE_NET_TCP_DIAL_SYNC
+#endif
+#ifndef XRT_MODULE_CODEC_BASE64
+#define XRT_MODULE_CODEC_BASE64
+#endif
+#endif
+
+/* mail_compose 及其直接依赖。 */
+#if defined(XMAIL_MODULE_ALL) || defined(XMAIL_MODULE_MAIL_COMPOSE)
+#ifndef XMAIL_FEATURE_MAIL_COMPOSE
+#define XMAIL_FEATURE_MAIL_COMPOSE
+#endif
+#ifndef XMAIL_MODULE_MAIL_BUILD
+#define XMAIL_MODULE_MAIL_BUILD
+#endif
+#ifndef XMAIL_MODULE_MAIL_CODEC
+#define XMAIL_MODULE_MAIL_CODEC
+#endif
+#ifndef XMAIL_MODULE_MAIL_DATE
+#define XMAIL_MODULE_MAIL_DATE
+#endif
+#ifndef XMAIL_MODULE_MAIL_ID
+#define XMAIL_MODULE_MAIL_ID
+#endif
+#ifndef XMAIL_MODULE_MAIL_PARAM
+#define XMAIL_MODULE_MAIL_PARAM
+#endif
+#endif
+
+/* mail_build 及其直接依赖。 */
+#if defined(XMAIL_MODULE_ALL) || defined(XMAIL_MODULE_MAIL_BUILD)
+#ifndef XMAIL_FEATURE_MAIL_BUILD
+#define XMAIL_FEATURE_MAIL_BUILD
+#endif
+#ifndef XMAIL_MODULE_MAIL_ADDRESS
+#define XMAIL_MODULE_MAIL_ADDRESS
+#endif
+#ifndef XMAIL_MODULE_MAIL_HEADER
+#define XMAIL_MODULE_MAIL_HEADER
+#endif
+#ifndef XMAIL_MODULE_MAIL_MULTIPART
+#define XMAIL_MODULE_MAIL_MULTIPART
+#endif
+#endif
+
+/* mail_tree 及其直接依赖。 */
+#if defined(XMAIL_MODULE_ALL) || defined(XMAIL_MODULE_MAIL_TREE)
+#ifndef XMAIL_FEATURE_MAIL_TREE
+#define XMAIL_FEATURE_MAIL_TREE
+#endif
+#ifndef XMAIL_MODULE_MAIL_MESSAGE
+#define XMAIL_MODULE_MAIL_MESSAGE
+#endif
+#ifndef XMAIL_MODULE_MAIL_MULTIPART
+#define XMAIL_MODULE_MAIL_MULTIPART
+#endif
+#ifndef XMAIL_MODULE_MAIL_PARAM
+#define XMAIL_MODULE_MAIL_PARAM
+#endif
+#ifndef XMAIL_MODULE_MAIL_CHARSET
+#define XMAIL_MODULE_MAIL_CHARSET
+#endif
+#endif
+
+/* mail_message 及其直接依赖。 */
+#if defined(XMAIL_MODULE_ALL) || defined(XMAIL_MODULE_MAIL_MESSAGE)
+#ifndef XMAIL_FEATURE_MAIL_MESSAGE
+#define XMAIL_FEATURE_MAIL_MESSAGE
+#endif
+#ifndef XMAIL_MODULE_MAIL_CODEC
+#define XMAIL_MODULE_MAIL_CODEC
+#endif
+#ifndef XMAIL_MODULE_MAIL_HEADER
+#define XMAIL_MODULE_MAIL_HEADER
+#endif
+#endif
+
+/* mail_wire 及其直接依赖。 */
+#if defined(XMAIL_MODULE_ALL) || defined(XMAIL_MODULE_MAIL_WIRE)
+#ifndef XMAIL_FEATURE_MAIL_WIRE
+#define XMAIL_FEATURE_MAIL_WIRE
+#endif
+#ifndef XMAIL_MODULE_MAIL_CORE
+#define XMAIL_MODULE_MAIL_CORE
+#endif
+#endif
+
+/* mail_multipart 及其直接依赖。 */
+#if defined(XMAIL_MODULE_ALL) || defined(XMAIL_MODULE_MAIL_MULTIPART)
+#ifndef XMAIL_FEATURE_MAIL_MULTIPART
+#define XMAIL_FEATURE_MAIL_MULTIPART
+#endif
+#ifndef XMAIL_MODULE_MAIL_CORE
+#define XMAIL_MODULE_MAIL_CORE
+#endif
+#ifndef XMAIL_MODULE_MAIL_HEADER
+#define XMAIL_MODULE_MAIL_HEADER
+#endif
+#endif
+
+/* mail_param 及其直接依赖。 */
+#if defined(XMAIL_MODULE_ALL) || defined(XMAIL_MODULE_MAIL_PARAM)
+#ifndef XMAIL_FEATURE_MAIL_PARAM
+#define XMAIL_FEATURE_MAIL_PARAM
+#endif
+#ifndef XMAIL_MODULE_MAIL_CORE
+#define XMAIL_MODULE_MAIL_CORE
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
+#endif
+#endif
+
+/* mail_id 及其直接依赖。 */
+#if defined(XMAIL_MODULE_ALL) || defined(XMAIL_MODULE_MAIL_ID)
+#ifndef XMAIL_FEATURE_MAIL_ID
+#define XMAIL_FEATURE_MAIL_ID
+#endif
+#ifndef XMAIL_MODULE_MAIL_CORE
+#define XMAIL_MODULE_MAIL_CORE
+#endif
+#ifndef XRT_MODULE_RANDOM_SECURE
+#define XRT_MODULE_RANDOM_SECURE
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
+#endif
+#endif
+
+/* mail_date 及其直接依赖。 */
+#if defined(XMAIL_MODULE_ALL) || defined(XMAIL_MODULE_MAIL_DATE)
+#ifndef XMAIL_FEATURE_MAIL_DATE
+#define XMAIL_FEATURE_MAIL_DATE
+#endif
+#ifndef XMAIL_MODULE_MAIL_CORE
+#define XMAIL_MODULE_MAIL_CORE
+#endif
+#ifndef XRT_MODULE_TIME_TEXT
+#define XRT_MODULE_TIME_TEXT
+#endif
+#endif
+
+/* mail_address 及其直接依赖。 */
+#if defined(XMAIL_MODULE_ALL) || defined(XMAIL_MODULE_MAIL_ADDRESS)
+#ifndef XMAIL_FEATURE_MAIL_ADDRESS
+#define XMAIL_FEATURE_MAIL_ADDRESS
+#endif
+#ifndef XMAIL_MODULE_MAIL_WORD
+#define XMAIL_MODULE_MAIL_WORD
+#endif
+#endif
+
+/* mail_word 及其直接依赖。 */
+#if defined(XMAIL_MODULE_ALL) || defined(XMAIL_MODULE_MAIL_WORD)
+#ifndef XMAIL_FEATURE_MAIL_WORD
+#define XMAIL_FEATURE_MAIL_WORD
+#endif
+#ifndef XMAIL_MODULE_MAIL_CODEC
+#define XMAIL_MODULE_MAIL_CODEC
+#endif
+#ifndef XMAIL_MODULE_MAIL_CHARSET
+#define XMAIL_MODULE_MAIL_CHARSET
+#endif
+#endif
+
+/* mail_header 及其直接依赖。 */
+#if defined(XMAIL_MODULE_ALL) || defined(XMAIL_MODULE_MAIL_HEADER)
+#ifndef XMAIL_FEATURE_MAIL_HEADER
+#define XMAIL_FEATURE_MAIL_HEADER
+#endif
+#ifndef XMAIL_MODULE_MAIL_CORE
+#define XMAIL_MODULE_MAIL_CORE
+#endif
+#endif
+
+/* mail_codec 及其直接依赖。 */
+#if defined(XMAIL_MODULE_ALL) || defined(XMAIL_MODULE_MAIL_CODEC)
+#ifndef XMAIL_FEATURE_MAIL_CODEC
+#define XMAIL_FEATURE_MAIL_CODEC
+#endif
+#ifndef XMAIL_MODULE_MAIL_CORE
+#define XMAIL_MODULE_MAIL_CORE
+#endif
+#ifndef XRT_MODULE_CODEC_BASE64
+#define XRT_MODULE_CODEC_BASE64
+#endif
+#endif
+
+/* mail_charset 及其直接依赖。 */
+#if defined(XMAIL_MODULE_ALL) || defined(XMAIL_MODULE_MAIL_CHARSET)
+#ifndef XMAIL_FEATURE_MAIL_CHARSET
+#define XMAIL_FEATURE_MAIL_CHARSET
+#endif
+#ifndef XMAIL_MODULE_MAIL_CORE
+#define XMAIL_MODULE_MAIL_CORE
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
+#endif
+#endif
+
+/* mail_core 及其直接依赖。 */
+#if defined(XMAIL_MODULE_ALL) || defined(XMAIL_MODULE_MAIL_CORE)
+#ifndef XMAIL_FEATURE_MAIL_CORE
+#define XMAIL_FEATURE_MAIL_CORE
+#endif
+#endif
+
+#endif /* XMAIL_FEATURES_H */

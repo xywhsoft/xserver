@@ -1,0 +1,52 @@
+/* xsmtp public API: umbrella xsmtp.h + xrt/smtp*.h, all XRT_API externals (xmail symbols come via the xmail entry) */
+
+/* smtp */
+XS_XSMTP_SYMBOL(xrtSmtpCapability)
+XS_XSMTP_SYMBOL(xrtSmtpCapabilityAdd)
+XS_XSMTP_SYMBOL(xrtSmtpCapabilityParse)
+XS_XSMTP_SYMBOL(xrtSmtpCommand)
+XS_XSMTP_SYMBOL(xrtSmtpCommandWrite)
+XS_XSMTP_SYMBOL(xrtSmtpPathValid)
+XS_XSMTP_SYMBOL(xrtSmtpReplyLineParse)
+XS_XSMTP_SYMBOL(xrtSmtpReplyParserInit)
+XS_XSMTP_SYMBOL(xrtSmtpReplyRead)
+
+/* smtp_auth */
+XS_XSMTP_SYMBOL(xrtSmtpAuthConfigInit)
+XS_XSMTP_SYMBOL(xrtSmtpAuthConfigValid)
+XS_XSMTP_SYMBOL(xrtSmtpClientAuth)
+
+/* smtp_client */
+XS_XSMTP_SYMBOL(xrtSmtpClientAbort)
+XS_XSMTP_SYMBOL(xrtSmtpClientAuthLine)
+XS_XSMTP_SYMBOL(xrtSmtpClientAuthenticated)
+XS_XSMTP_SYMBOL(xrtSmtpClientBdat)
+XS_XSMTP_SYMBOL(xrtSmtpClientBdatBegin)
+XS_XSMTP_SYMBOL(xrtSmtpClientBdatEnd)
+XS_XSMTP_SYMBOL(xrtSmtpClientBdatWrite)
+XS_XSMTP_SYMBOL(xrtSmtpClientCapabilities)
+XS_XSMTP_SYMBOL(xrtSmtpClientClose)
+XS_XSMTP_SYMBOL(xrtSmtpClientCommand)
+XS_XSMTP_SYMBOL(xrtSmtpClientConfigInit)
+XS_XSMTP_SYMBOL(xrtSmtpClientConfigValid)
+XS_XSMTP_SYMBOL(xrtSmtpClientData)
+XS_XSMTP_SYMBOL(xrtSmtpClientDataBegin)
+XS_XSMTP_SYMBOL(xrtSmtpClientDataEnd)
+XS_XSMTP_SYMBOL(xrtSmtpClientDataWrite)
+XS_XSMTP_SYMBOL(xrtSmtpClientDestroy)
+XS_XSMTP_SYMBOL(xrtSmtpClientLastReply)
+XS_XSMTP_SYMBOL(xrtSmtpClientMail)
+XS_XSMTP_SYMBOL(xrtSmtpClientNoop)
+XS_XSMTP_SYMBOL(xrtSmtpClientOpen)
+XS_XSMTP_SYMBOL(xrtSmtpClientQuit)
+XS_XSMTP_SYMBOL(xrtSmtpClientRcpt)
+XS_XSMTP_SYMBOL(xrtSmtpClientReceive)
+XS_XSMTP_SYMBOL(xrtSmtpClientReset)
+XS_XSMTP_SYMBOL(xrtSmtpClientSecurity)
+XS_XSMTP_SYMBOL(xrtSmtpClientSend)
+XS_XSMTP_SYMBOL(xrtSmtpClientSizeLimit)
+XS_XSMTP_SYMBOL(xrtSmtpClientState)
+
+/* smtp_submit */
+XS_XSMTP_SYMBOL(xrtSmtpSubmit)
+XS_XSMTP_SYMBOL(xrtSmtpSubmitEnvelope)
