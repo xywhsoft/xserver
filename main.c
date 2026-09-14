@@ -28,6 +28,7 @@
 #include "src/core/engine.h"
 #include "src/core/api.h"
 #include "src/core/assemble.h"
+#include "src/core/xs_version.h"
 
 #if defined(_WIN32) || defined(_WIN64)
 	#include <windows.h>
@@ -114,8 +115,28 @@ static void XS_SignalProc(int iSignal)
 static void XS_Usage(void)
 {
 	printf("xs - xrt deployment host\n");
-	printf("usage: xs [config]\n");
-	printf("  config   path to xs.json (default: <appdir>/xs.json)\n");
+	printf("usage: xs [config] [--version]\n");
+	printf("  config     path to xs.json (default: <appdir>/xs.json)\n");
+	printf("  --version  print version and built-in extension list, then exit\n");
+}
+
+/* 版本横幅：启动时与 --version 输出同一内容。
+ * 扩展清单来自生成的 xs_build_extensions.h（tcc_host.h 引入），registry 顺序。 */
+static void XS_PrintVersion(void)
+{
+	printf("[xs] XServer %s (commit %s, %s, %s)\n",
+		XS_VERSION_STRING, XS_BUILD_COMMIT, XS_BUILD_DATE, XS_BUILD_PLATFORM);
+	if ( XS_EXTENSION_COUNT > 0 ) {
+		unsigned int iIndex;
+
+		printf("[xs] extensions (%u):", XS_EXTENSION_COUNT);
+		for ( iIndex = 0; iIndex < XS_EXTENSION_COUNT; iIndex++ ) {
+			printf("%s %s", iIndex > 0 ? "," : "", g_XS_ExtensionNames[iIndex]);
+		}
+		printf("\n");
+	} else {
+		printf("[xs] extensions: none\n");
+	}
 }
 
 int main(int argc, char** argv)
@@ -152,6 +173,9 @@ int main(int argc, char** argv)
 		if ( strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0 ) {
 			XS_Usage();
 			return XS_MainExit(0, pOwnedArgv, iOwnedArgc);
+		} else if ( strcmp(argv[i], "--version") == 0 ) {
+			XS_PrintVersion();
+			return XS_MainExit(0, pOwnedArgv, iOwnedArgc);
 		} else if ( sArgConfig == NULL ) {
 			sArgConfig = argv[i];
 		} else {
@@ -173,6 +197,9 @@ int main(int argc, char** argv)
 		printf("[xs] config path is too long\n");
 		return XS_MainExit(1, pOwnedArgv, iOwnedArgc);
 	}
+
+	/* 启动横幅：版本 + 本变体携带的扩展清单（与 --version 同一输出） */
+	XS_PrintVersion();
 
 	/* 配置装载（fail-fast，见设计 §5.4） */
 	if ( !XS_ConfigLoad(sConfigPath, &tApp) ) {

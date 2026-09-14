@@ -163,6 +163,17 @@ def host_header(selected: dict) -> str:
         "\t{ NULL, NULL }",
         "};",
         "",
+        "/* 运行期扩展清单：启动横幅与 --version 直接枚举（registry 顺序）。 */",
+        "static const char* const g_XS_ExtensionNames[] = {",
+    ]
+    for name in selected:
+        lines.append(f'\t"{name}",')
+    lines += [
+        "\tNULL",
+        "};",
+        "#define XS_EXTENSION_COUNT "
+        + str(len(selected)),
+        "",
         "static void XS_TccAddExtensions(TCCState* pTcc)",
         "{",
     ]

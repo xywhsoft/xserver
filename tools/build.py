@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import gen_tcc_resources as vfs
@@ -82,6 +83,17 @@ def build(args: argparse.Namespace, selected: dict) -> Path:
               for d in entry.get("host_includes", [])]
     if args.sysroot is not None:
         flags.append('-DCONFIG_SYSROOT="/xsroot"')
+    # 版本标识：commit / 构建日期 / 平台，注入启动横幅与 --version（见 xs_version.h）
+    if not args.dry_run:
+        try:
+            commit = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"],
+                                             text=True, cwd=ROOT,
+                                             stderr=subprocess.DEVNULL).strip()
+        except (OSError, subprocess.CalledProcessError):
+            commit = "unknown"
+        flags.append(f'-DXS_BUILD_COMMIT="{commit}"')
+        flags.append(f'-DXS_BUILD_DATE="{time.strftime("%Y-%m-%d")}"')
+        flags.append(f'-DXS_BUILD_PLATFORM="{platform}"')
     if platform == "linux":
         triplet = "<compiler-triplet>" if args.dry_run else subprocess.check_output(
             [args.cc, "-dumpmachine"], text=True, cwd=ROOT).strip()

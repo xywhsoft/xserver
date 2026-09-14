@@ -315,6 +315,19 @@ def check(exe: Path, names: list[str]) -> None:
         if proc.returncode != 0 or f"[extensions] ok mask={mask}" not in output:
             raise RuntimeError(f"enabled/nested probe failed ({proc.returncode}):\n{output}")
         print(f"PASS enabled + nested TCC: {', '.join(selected) or '(none)'}", flush=True)
+
+        # 启动横幅与 --version 一致地报告本变体扩展清单
+        expected_list = (f"[xs] extensions ({len(selected)}): "
+                         + ", ".join(selected)) if selected else "[xs] extensions: none"
+        if expected_list not in output:
+            raise RuntimeError(f"startup banner missing extension list:\n{output}")
+        version = subprocess.run([str(exe), "--version"], cwd=directory, capture_output=True,
+                                 text=True, encoding="utf-8", errors="replace", timeout=25)
+        if (version.returncode != 0 or "[xs] XServer " not in version.stdout
+                or expected_list not in version.stdout):
+            raise RuntimeError(f"--version output unexpected ({version.returncode}):\n"
+                               f"{version.stdout}{version.stderr}")
+        print(f"PASS version banner + --version: {expected_list}", flush=True)
         absent = {
             "sqlite": ("sqlite3.h", "extern int sqlite3_libversion_number(void);",
                        "sqlite3_libversion_number()"),

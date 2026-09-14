@@ -168,6 +168,16 @@ class ExtensionTests(unittest.TestCase):
                              (ROOT / "src/script/import_md4c.inc").read_text(encoding="utf-8"))
         self.assertEqual(symbols, ["md_parse", "md_html"])
 
+    def test_host_header_exposes_runtime_extension_list(self):
+        header = host_header(select_extensions(["sqlite", "xacme"]))
+        self.assertIn("g_XS_ExtensionNames[] = {", header)
+        self.assertIn('"sqlite",', header)
+        self.assertIn('"xacme",', header)
+        self.assertIn("#define XS_EXTENSION_COUNT 2", header)
+        self.assertNotIn('"xtp",', header)
+        empty = host_header(select_extensions([]))
+        self.assertIn("#define XS_EXTENSION_COUNT 0", empty)
+
     def test_requires_rejects_bad_references(self):
         base = load_registry()
         for mutate, message in (
