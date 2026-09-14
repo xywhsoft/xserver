@@ -1,16 +1,244 @@
 {
-  "sqlite": {
-    "macro": "XS_USE_SQLITE",
-    "headers": {"sqlite3.h": "lib/sqlite3.h"},
-    "sources": [{"path": "lib/sqlite3.c", "flags": ["-w"]}],
-    "symbols": "src/script/import_sqlite.inc",
-    "symbol_macro": "XS_SQLITE_SYMBOL"
+ "sqlite": {
+  "macro": "XS_USE_SQLITE",
+  "headers": {
+   "sqlite3.h": "lib/sqlite3.h"
   },
-  "xtp": {
-    "macro": "XS_USE_XTP2",
-    "headers": {"xtp2.h": "lib/xtp2.h"},
-    "sources": [{"path": "lib/xtp2.h", "defines": ["XTP2_IMPLEMENTATION"]}],
-    "symbols": "src/script/import_xtp2.inc",
-    "symbol_macro": "XS_XTP2_SYMBOL"
-  }
+  "sources": [
+   {
+    "path": "lib/sqlite3.c",
+    "flags": [
+     "-w"
+    ]
+   }
+  ],
+  "symbols": "src/script/import_sqlite.inc",
+  "symbol_macro": "XS_SQLITE_SYMBOL"
+ },
+ "xtp": {
+  "macro": "XS_USE_XTP2",
+  "headers": {
+   "xtp2.h": "lib/xtp2.h"
+  },
+  "sources": [
+   {
+    "path": "lib/xtp2.h",
+    "defines": [
+     "XTP2_IMPLEMENTATION"
+    ]
+   }
+  ],
+  "symbols": "src/script/import_xtp2.inc",
+  "symbol_macro": "XS_XTP2_SYMBOL"
+ },
+ "xllm": {
+  "macro": "XS_USE_XLLM",
+  "headers": {
+   "xllm.h": "lib/xllm/xllm.h"
+  },
+  "sources": [
+   {
+    "path": "lib/xllm/xllm.c"
+   }
+  ],
+  "symbols": "src/script/import_xllm.inc",
+  "symbol_macro": "XS_XLLM_SYMBOL"
+ },
+ "xllm-session": {
+  "macro": "XS_USE_XLLM_SESSION",
+  "headers": {
+   "xllm-session.h": "lib/xllm-session/xllm-session.h"
+  },
+  "sources": [
+   {
+    "path": "lib/xllm-session/xllm-session.c"
+   }
+  ],
+  "symbols": "src/script/import_xllm_session.inc",
+  "symbol_macro": "XS_XLLM_SESSION_SYMBOL"
+ },
+ "xmail": {
+  "macro": "XS_USE_XMAIL",
+  "headers": {
+   "xmail/features.h": "lib/xmail/include/xmail/features.h",
+   "xmail.h": "lib/xmail/include/xmail.h",
+   "xrt/mail.h": "lib/xmail/include/xrt/mail.h",
+   "xrt/mail_address.h": "lib/xmail/include/xrt/mail_address.h",
+   "xrt/mail_build.h": "lib/xmail/include/xrt/mail_build.h",
+   "xrt/mail_charset.h": "lib/xmail/include/xrt/mail_charset.h",
+   "xrt/mail_codec.h": "lib/xmail/include/xrt/mail_codec.h",
+   "xrt/mail_compose.h": "lib/xmail/include/xrt/mail_compose.h",
+   "xrt/mail_date.h": "lib/xmail/include/xrt/mail_date.h",
+   "xrt/mail_header.h": "lib/xmail/include/xrt/mail_header.h",
+   "xrt/mail_id.h": "lib/xmail/include/xrt/mail_id.h",
+   "xrt/mail_message.h": "lib/xmail/include/xrt/mail_message.h",
+   "xrt/mail_multipart.h": "lib/xmail/include/xrt/mail_multipart.h",
+   "xrt/mail_net.h": "lib/xmail/include/xrt/mail_net.h",
+   "xrt/mail_param.h": "lib/xmail/include/xrt/mail_param.h",
+   "xrt/mail_tree.h": "lib/xmail/include/xrt/mail_tree.h",
+   "xrt/mail_wire.h": "lib/xmail/include/xrt/mail_wire.h",
+   "xrt/mail_word.h": "lib/xmail/include/xrt/mail_word.h",
+   "xrt.h": "lib/xmail/shim/xrt.h",
+   "xrt/buffer.h": "lib/xmail/shim/xrt/buffer.h",
+   "xrt/charset.h": "lib/xmail/shim/xrt/charset.h",
+   "xrt/codec.h": "lib/xmail/shim/xrt/codec.h",
+   "xrt/compress.h": "lib/xmail/shim/xrt/compress.h",
+   "xrt/error.h": "lib/xmail/shim/xrt/error.h",
+   "xrt/memory.h": "lib/xmail/shim/xrt/memory.h",
+   "xrt/random.h": "lib/xmail/shim/xrt/random.h",
+   "xrt/tcp.h": "lib/xmail/shim/xrt/tcp.h",
+   "xrt/time.h": "lib/xmail/shim/xrt/time.h",
+   "xrt/tls_stream.h": "lib/xmail/shim/xrt/tls_stream.h",
+   "xrt/promote.h": "lib/xmail/shim/xrt/promote.h"
+  },
+  "sources": [
+   {
+    "path": "lib/xmail/xmail.c",
+    "flags": [
+     "-Ilib/xmail/include",
+     "-Ilib/xmail/shim"
+    ],
+    "defines": [
+     "XMAIL_MODULE_ALL"
+    ]
+   }
+  ],
+  "symbols": "src/script/import_xmail.inc",
+  "symbol_macro": "XS_XMAIL_SYMBOL",
+  "host_includes": [
+   "lib/xmail/include",
+   "lib/xmail/shim"
+  ],
+  "feature_macro": "XMAIL_MODULE_ALL"
+ },
+ "xsmtp": {
+  "macro": "XS_USE_XSMTP",
+  "headers": {
+   "xsmtp/features.h": "lib/xsmtp/include/xsmtp/features.h",
+   "xsmtp.h": "lib/xsmtp/include/xsmtp.h",
+   "xrt/smtp.h": "lib/xsmtp/include/xrt/smtp.h",
+   "xrt/smtp_auth.h": "lib/xsmtp/include/xrt/smtp_auth.h",
+   "xrt/smtp_client.h": "lib/xsmtp/include/xrt/smtp_client.h",
+   "xrt/smtp_submit.h": "lib/xsmtp/include/xrt/smtp_submit.h"
+  },
+  "sources": [
+   {
+    "path": "lib/xsmtp/xsmtp.c",
+    "flags": [
+     "-Ilib/xmail/include",
+     "-Ilib/xmail/shim",
+     "-Ilib/xsmtp/include"
+    ],
+    "defines": [
+     "XSMTP_MODULE_ALL"
+    ]
+   }
+  ],
+  "symbols": "src/script/import_xsmtp.inc",
+  "symbol_macro": "XS_XSMTP_SYMBOL",
+  "host_includes": [
+   "lib/xmail/include",
+   "lib/xmail/shim",
+   "lib/xsmtp/include"
+  ],
+  "requires": [
+   "xmail"
+  ],
+  "feature_macro": "XSMTP_MODULE_ALL"
+ },
+ "xpop3": {
+  "macro": "XS_USE_XPOP3",
+  "headers": {
+   "xpop3/features.h": "lib/xpop3/include/xpop3/features.h",
+   "xpop3.h": "lib/xpop3/include/xpop3.h",
+   "xrt/pop3.h": "lib/xpop3/include/xrt/pop3.h",
+   "xrt/pop3_auth.h": "lib/xpop3/include/xrt/pop3_auth.h",
+   "xrt/pop3_client.h": "lib/xpop3/include/xrt/pop3_client.h",
+   "xrt/pop3_message.h": "lib/xpop3/include/xrt/pop3_message.h"
+  },
+  "sources": [
+   {
+    "path": "lib/xpop3/xpop3.c",
+    "flags": [
+     "-Ilib/xmail/include",
+     "-Ilib/xmail/shim",
+     "-Ilib/xpop3/include"
+    ],
+    "defines": [
+     "XPOP3_MODULE_ALL"
+    ]
+   }
+  ],
+  "symbols": "src/script/import_xpop3.inc",
+  "symbol_macro": "XS_XPOP3_SYMBOL",
+  "host_includes": [
+   "lib/xmail/include",
+   "lib/xmail/shim",
+   "lib/xpop3/include"
+  ],
+  "requires": [
+   "xmail"
+  ],
+  "feature_macro": "XPOP3_MODULE_ALL"
+ },
+ "ximap": {
+  "macro": "XS_USE_XIMAP",
+  "headers": {
+   "ximap/features.h": "lib/ximap/include/ximap/features.h",
+   "ximap.h": "lib/ximap/include/ximap.h",
+   "xrt/imap.h": "lib/ximap/include/xrt/imap.h",
+   "xrt/imap_append.h": "lib/ximap/include/xrt/imap_append.h",
+   "xrt/imap_auth.h": "lib/ximap/include/xrt/imap_auth.h",
+   "xrt/imap_body.h": "lib/ximap/include/xrt/imap_body.h",
+   "xrt/imap_client.h": "lib/ximap/include/xrt/imap_client.h",
+   "xrt/imap_command.h": "lib/ximap/include/xrt/imap_command.h",
+   "xrt/imap_compress.h": "lib/ximap/include/xrt/imap_compress.h",
+   "xrt/imap_data.h": "lib/ximap/include/xrt/imap_data.h",
+   "xrt/imap_message.h": "lib/ximap/include/xrt/imap_message.h"
+  },
+  "sources": [
+   {
+    "path": "lib/ximap/ximap.c",
+    "flags": [
+     "-Ilib/xmail/include",
+     "-Ilib/xmail/shim",
+     "-Ilib/ximap/include"
+    ],
+    "defines": [
+     "XIMAP_MODULE_ALL"
+    ]
+   }
+  ],
+  "symbols": "src/script/import_ximap.inc",
+  "symbol_macro": "XS_XIMAP_SYMBOL",
+  "host_includes": [
+   "lib/xmail/include",
+   "lib/xmail/shim",
+   "lib/ximap/include"
+  ],
+  "requires": [
+   "xmail"
+  ],
+  "feature_macro": "XIMAP_MODULE_ALL"
+ },
+ "md4c": {
+  "macro": "XS_USE_MD4C",
+  "headers": {
+   "md4c.h": "lib/md4c/md4c.h",
+   "md4c-html.h": "lib/md4c/md4c-html.h"
+  },
+  "sources": [
+   {
+    "path": "lib/md4c/md4c.c"
+   },
+   {
+    "path": "lib/md4c/md4c-html.c"
+   },
+   {
+    "path": "lib/md4c/entity.c"
+   }
+  ],
+  "symbols": "src/script/import_md4c.inc",
+  "symbol_macro": "XS_MD4C_SYMBOL"
+ }
 }

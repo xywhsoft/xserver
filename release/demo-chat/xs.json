@@ -1,0 +1,39 @@
+{
+  "app": {
+    "name": "demo-chat"
+  },
+  "services": [
+    {
+      "enabled": true,
+      "class": "http",
+      "name": "chat-web",
+      "ip": "127.0.0.1",
+      "port": 9090,
+      "host_default": {
+        "enabled": true,
+        "name": "app",
+        "path": "wwwroot",
+        "devlang": "static"
+      }
+    },
+    {
+      "enabled": true,
+      "class": "ws",
+      "name": "chat-ws",
+      "ip": "127.0.0.1",
+      "port": 9091,
+      "devlang": "c",
+      "devfile": "main.c",
+      "host_default": {
+        "enabled": true,
+        "name": "app"
+      }
+    }
+  ],
+  "llm": {
+    "base_url": "https://open.bigmodel.cn/api/paas/v4",
+    "model": "glm-5.3-flash",
+    "provider": "openai",
+    "context_window": 131072
+  }
+}

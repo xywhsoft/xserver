@@ -1,0 +1,16 @@
+xllm v3.0.0（仅核心层）
+来源: https://gitee.com/xywhsoft/xrt 仓库 extlibs/xllm
+基线: xrt@83e31f58 + 2026-09-14 头文件同步（XLLM_ERROR_LIMIT/HOOK 枚举增量）
+
+本目录为 xserver 的 vendored 副本，仅收录核心调用库：
+  xllm.h            公开 API 头（自包含，进 VFS: /xs/xllm.h）
+  xllm.c            unity TU（include src/ 下 11 个实现分片）
+  xllm-xrt.h        xrt 模块子集声明绑定（仅供本库 TU 使用，不进 VFS）
+  src/              实现分片与内部头
+
+有意未收录: xllm-xrt.c（自带 XRT_IMPLEMENTATION，与宿主 main.c 的
+XRT_MODULE_ALL 全量实现冲突，xserver 中严禁编译）、tests/、build.*、
+.github/、xllm-session/ 与 xllm-memory/ 分层。
+
+上游符号接口如有更新，同步本目录后需重新生成
+src/script/import_xllm.inc 并跑 tools/test_extensions.py 覆盖率测试。

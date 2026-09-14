@@ -1,0 +1,61 @@
+/* xllm-session v3 public API from lib/xllm-session/xllm-session.h.
+ * xllmEstimateTextTokens/xllmEstimateMessageTokens are declared here but
+ * owned by the xllm core symbol table (import_xllm.inc); do not duplicate. */
+
+/* lifecycle & config */
+XS_XLLM_SESSION_SYMBOL(xllmSessionConfigInit)
+XS_XLLM_SESSION_SYMBOL(xllmSessionComputeSafetyReserve)
+XS_XLLM_SESSION_SYMBOL(xllmSessionComputeOutputReserve)
+XS_XLLM_SESSION_SYMBOL(xllmSessionCreate)
+XS_XLLM_SESSION_SYMBOL(xllmSessionFork)
+XS_XLLM_SESSION_SYMBOL(xllmSessionDestroy)
+XS_XLLM_SESSION_SYMBOL(xllmSessionGetConfig)
+
+/* ledger */
+XS_XLLM_SESSION_SYMBOL(xllmSessionBeginTurn)
+XS_XLLM_SESSION_SYMBOL(xllmSessionCurrentTurn)
+XS_XLLM_SESSION_SYMBOL(xllmSessionAddMessage)
+XS_XLLM_SESSION_SYMBOL(xllmSessionAddText)
+XS_XLLM_SESSION_SYMBOL(xllmSessionAddAssistantResponse)
+XS_XLLM_SESSION_SYMBOL(xllmSessionAddToolResult)
+XS_XLLM_SESSION_SYMBOL(xllmSessionRecordUsage)
+XS_XLLM_SESSION_SYMBOL(xllmSessionGetTail)
+XS_XLLM_SESSION_SYMBOL(xllmSessionPendingToolCallCount)
+XS_XLLM_SESSION_SYMBOL(xllmSessionPendingToolCallAt)
+
+/* governance, render, summary view */
+XS_XLLM_SESSION_SYMBOL(xllmSessionGetStats)
+XS_XLLM_SESSION_SYMBOL(xllmSessionBuildRequest)
+XS_XLLM_SESSION_SYMBOL(xllmSessionGetSummary)
+
+/* compaction strategy & transaction */
+XS_XLLM_SESSION_SYMBOL(xllmSessionDefaultCompactionOps)
+XS_XLLM_SESSION_SYMBOL(xllmSessionSetCompactionOps)
+XS_XLLM_SESSION_SYMBOL(xllmSessionPrepareCompaction)
+XS_XLLM_SESSION_SYMBOL(xllmCompactionPrompt)
+XS_XLLM_SESSION_SYMBOL(xllmCompactionThroughSequence)
+XS_XLLM_SESSION_SYMBOL(xllmCompactionEstimatedTokens)
+XS_XLLM_SESSION_SYMBOL(xllmCompactionSetUsage)
+XS_XLLM_SESSION_SYMBOL(xllmCompactionEvaluateSummary)
+XS_XLLM_SESSION_SYMBOL(xllmSessionCommitCompaction)
+XS_XLLM_SESSION_SYMBOL(xllmCompactionDestroy)
+XS_XLLM_SESSION_SYMBOL(xllmSessionMaybeCompact)
+XS_XLLM_SESSION_SYMBOL(xllmSessionOverflowLadder)
+
+/* hooks */
+XS_XLLM_SESSION_SYMBOL(xllmSessionSetHooks)
+
+/* persistence */
+XS_XLLM_SESSION_SYMBOL(xllmSessionSave)
+XS_XLLM_SESSION_SYMBOL(xllmSessionLoad)
+XS_XLLM_SESSION_SYMBOL(xllmSessionEnableJournal)
+XS_XLLM_SESSION_SYMBOL(xllmSessionDisableJournal)
+XS_XLLM_SESSION_SYMBOL(xllmSessionJournalPath)
+XS_XLLM_SESSION_SYMBOL(xllmSessionCheckpoint)
+XS_XLLM_SESSION_SYMBOL(xllmSessionRecover)
+
+/* easy layer */
+XS_XLLM_SESSION_SYMBOL(xllmSessionCreateBound)
+XS_XLLM_SESSION_SYMBOL(xllmSessionSend)
+XS_XLLM_SESSION_SYMBOL(xllmSessionComplete)
+XS_XLLM_SESSION_SYMBOL(xllmSessionCreateForTest)

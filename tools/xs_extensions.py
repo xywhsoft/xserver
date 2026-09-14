@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 REGISTRY = Path(__file__).with_name("extensions.json")
 IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
-LIBRARY_NAME = re.compile(r"[a-z][a-z0-9_]*\Z")
+LIBRARY_NAME = re.compile(r"[a-z][a-z0-9_-]*\Z")
 
 
 def source_path(relative: str, root: Path = ROOT) -> Path:
@@ -29,17 +29,31 @@ def load_registry(path: Path = REGISTRY) -> dict:
     for name, entry in registry.items():
         if not LIBRARY_NAME.fullmatch(name) or not isinstance(entry, dict):
             raise ValueError(f"invalid extension entry: {name}")
-        for field in ("macro", "symbol_macro"):
+        for field in ("macro", "symbol_macro", "feature_macro"):
+            if field not in entry:
+                continue
             value = entry.get(field)
             if not isinstance(value, str) or not IDENTIFIER.fullmatch(value):
                 raise ValueError(f"{name}: invalid {field}")
         unknown = set(entry) - {"macro", "headers", "sources", "symbols",
-                               "symbol_macro", "link_flags"}
+                               "symbol_macro", "link_flags", "requires",
+                               "host_includes", "feature_macro"}
         if unknown:
             raise ValueError(f"{name}: unknown field(s): {', '.join(sorted(unknown))}")
         if entry["macro"] in macros:
             raise ValueError(f"{name}: duplicate feature macro {entry['macro']}")
         macros.add(entry["macro"])
+        requires = entry.get("requires", [])
+        if not isinstance(requires, list) or not all(isinstance(v, str) for v in requires):
+            raise ValueError(f"{name}: requires must be a string list")
+        for dependency in requires:
+            if dependency == name:
+                raise ValueError(f"{name}: requires cannot reference itself")
+            if dependency not in registry:
+                raise ValueError(f"{name}: requires unknown extension {dependency}")
+        host_includes = entry.get("host_includes", [])
+        if not isinstance(host_includes, list) or not all(isinstance(v, str) and v for v in host_includes):
+            raise ValueError(f"{name}: host_includes must be nonempty strings")
         if not isinstance(entry.get("headers"), dict) or not entry["headers"]:
             raise ValueError(f"{name}: headers must be a nonempty object")
         for virtual in entry["headers"]:
@@ -72,12 +86,42 @@ def select_extensions(names: list[str], registry: dict | None = None,
                       root: Path = ROOT) -> dict:
     registry = load_registry() if registry is None else registry
     requested = {name.lower() for name in names}
+    # "all" 是保留名：展开为清单中的全部可选库（可与其它名字混用，结果一致）。
+    if "all" in requested:
+        requested |= set(registry.keys())
+        requested.discard("all")
     unknown = requested - registry.keys()
     if unknown:
         raise ValueError(f"unknown extension(s): {', '.join(sorted(unknown))}; "
-                         f"available: {', '.join(registry)}")
+                         f"available: all, {', '.join(registry)}")
+    # 依赖闭包：显式选择或被已选条目 requires 的条目都入选（DFS，含环检测）。
+    expanded: set[str] = set()
+
+    def requires_of(name: str) -> list[str]:
+        requires = registry[name].get("requires", [])
+        if not isinstance(requires, list) or not all(isinstance(v, str) for v in requires):
+            raise ValueError(f"{name}: requires must be a string list")
+        for dependency in requires:
+            if dependency == name:
+                raise ValueError(f"{name}: requires cannot reference itself")
+            if dependency not in registry:
+                raise ValueError(f"{name}: requires unknown extension {dependency}")
+        return requires
+
+    def visit(name: str, path: list[str]) -> None:
+        if name in expanded:
+            return
+        if name in path:
+            raise ValueError("extension requires cycle detected: "
+                             + " -> ".join(path + [name]))
+        for dependency in requires_of(name):
+            visit(dependency, path + [name])
+        expanded.add(name)
+
+    for name in requested:
+        visit(name, [])
     # Canonical registry order makes "xtp sqlite" and "sqlite xtp" identical.
-    selected = {name: entry for name, entry in registry.items() if name in requested}
+    selected = {name: entry for name, entry in registry.items() if name in expanded}
     seen: dict[str, str] = {}
     for name, entry in selected.items():
         for virtual, source in entry["headers"].items():
@@ -119,6 +163,8 @@ def host_header(selected: dict) -> str:
     ]
     for entry in selected.values():
         lines.append(f'\ttcc_define_symbol(pTcc, "{entry["macro"]}", "1");')
+        if "feature_macro" in entry:
+            lines.append(f'\ttcc_define_symbol(pTcc, "{entry["feature_macro"]}", "1");')
     lines += [
         "\tXS_TccAddSymbols(pTcc, g_XS_ExtensionSymbols,",
         "\t\tsizeof(g_XS_ExtensionSymbols) / sizeof(g_XS_ExtensionSymbols[0]) - 1);",

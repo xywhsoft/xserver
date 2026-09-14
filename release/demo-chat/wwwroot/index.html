@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>demo-chat — xs + xllm</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; height: 100vh; display: flex; flex-direction: column;
+    background: #1a1a22; color: #e6e6ea;
+    font: 15px/1.5 system-ui, "Segoe UI", sans-serif;
+  }
+  header {
+    padding: 10px 16px; background: #22222c; border-bottom: 1px solid #333;
+    display: flex; align-items: center; gap: 10px;
+  }
+  header b { font-size: 16px; }
+  #status { font-size: 12px; color: #888; margin-left: auto; }
+  #status.on { color: #5dd66a; }
+  #messages { flex: 1; overflow-y: auto; padding: 16px; display: flex;
+    flex-direction: column; gap: 12px; }
+  .msg { max-width: 82%; padding: 10px 14px; border-radius: 12px;
+    white-space: pre-wrap; word-break: break-word; }
+  .user { align-self: flex-end; background: #2f4a7d; }
+  .assistant { align-self: flex-start; background: #2b2b35; }
+  .error { align-self: center; background: #5d2b2b; font-size: 13px; }
+  .thinking { align-self: flex-start; background: transparent; color: #8a8a96;
+    font-size: 13px; border-left: 3px solid #444; padding-left: 10px; }
+  .tool { align-self: flex-start; background: #23303a; font-size: 13px;
+    font-family: ui-monospace, monospace; }
+  .tool .name { color: #6cb2ff; }
+  footer { padding: 12px 16px; background: #22222c; border-top: 1px solid #333;
+    display: flex; gap: 8px; }
+  #input { flex: 1; background: #2b2b35; border: 1px solid #444; color: #e6e6ea;
+    border-radius: 8px; padding: 10px 12px; font: inherit; resize: none; }
+  #input:focus { outline: none; border-color: #2f4a7d; }
+  button { background: #2f4a7d; color: #fff; border: none; border-radius: 8px;
+    padding: 10px 18px; font: inherit; cursor: pointer; }
+  button:disabled { opacity: .45; cursor: default; }
+  #stop { background: #7d2f2f; display: none; }
+  #gauge { display: flex; flex-direction: column; align-items: center;
+    gap: 2px; min-width: 60px; align-self: stretch; justify-content: center; }
+  #gauge .wrap { position: relative; width: 44px; height: 44px; }
+  #gauge svg { width: 44px; height: 44px; transform: rotate(-90deg); }
+  #gauge circle { fill: none; stroke-width: 5; }
+  #gauge .bg { stroke: #3a3a44; }
+  #gauge .fg { stroke: #5dd66a; stroke-linecap: round;
+    stroke-dasharray: 113.1; stroke-dashoffset: 113.1;
+    transition: stroke-dashoffset .3s, stroke .3s; }
+  #gaugePct { position: absolute; inset: 0; display: flex;
+    align-items: center; justify-content: center; font-size: 10px;
+    color: #aaa; }
+  #gaugeLabel { font-size: 10px; color: #777;
+    font-family: ui-monospace, monospace; white-space: nowrap; }
+  .meta { font-size: 11px; color: #777; margin-top: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <b>demo-chat</b><span style="color:#666;font-size:12px">xs + xllm · GLM 流式</span>
+  <span id="status">connecting…</span>
+</header>
+<div id="messages"></div>
+<footer>
+  <textarea id="input" rows="1" placeholder="输入消息，Enter 发送"></textarea>
+  <button id="send">发送</button>
+  <button id="stop">停止</button>
+  <button id="clear" style="background:#3a3a44">清空</button>
+  <div id="gauge" title="上下文窗口占用">
+    <div class="wrap">
+      <svg viewBox="0 0 44 44">
+        <circle class="bg" cx="22" cy="22" r="18"/>
+        <circle class="fg" id="gaugeArc" cx="22" cy="22" r="18"/>
+      </svg>
+      <div id="gaugePct">–</div>
+    </div>
+    <div id="gaugeLabel">ctx</div>
+  </div>
+</footer>
+<script>
+function fmtK(n) {
+  return n >= 1000 ? (n / 1000).toFixed(1) + 'K' : String(n);
+}
+const msgs = document.getElementById('messages');
+const input = document.getElementById('input');
+const status = document.getElementById('status');
+const sendBtn = document.getElementById('send');
+const stopBtn = document.getElementById('stop');
+let ws = null;
+let curText = null;   /* 当前流式气泡 */
+let curThink = null;  /* 当前思考块 */
+let busy = false;
+
+function add(cls, text) {
+  const d = document.createElement('div');
+  d.className = cls;
+  d.textContent = text;
+  msgs.appendChild(d);
+  msgs.scrollTop = msgs.scrollHeight;
+  return d;
+}
+function setBusy(b) {
+  busy = b;
+  sendBtn.disabled = b;
+  stopBtn.style.display = b ? '' : 'none';
+}
+function connect() {
+  const port = location.port === '9090' ? '9091' : location.port;
+  ws = new WebSocket('ws://' + location.hostname + ':' + port);
+  ws.onopen = () => { status.textContent = 'connected'; status.className = 'on'; };
+  ws.onclose = () => {
+    status.textContent = 'disconnected'; status.className = '';
+    setBusy(false); setTimeout(connect, 1500);
+  };
+  ws.onmessage = (ev) => {
+    let f; try { f = JSON.parse(ev.data); } catch { return; }
+    if (f.type === 'hello') { add('assistant', '已连接，开始对话吧。'); return; }
+    if (f.type === 'start') {
+      curText = null; curThink = null;
+      setBusy(true);
+      return;
+    }
+    if (f.type === 'thinking') {
+      if (!curThink) curThink = add('thinking', '');
+      curThink.textContent += f.text;
+      msgs.scrollTop = msgs.scrollHeight;
+      return;
+    }
+    if (f.type === 'delta') {
+      if (!curText) { curText = add('assistant', ''); curThink = null; }
+      curText.textContent += f.text;
+      msgs.scrollTop = msgs.scrollHeight;
+      return;
+    }
+    if (f.type === 'tool_start') {
+      add('tool', '⚙ ' + f.name + '(' + f.args + ')');
+      return;
+    }
+    if (f.type === 'tool_result') {
+      add('tool', '↳ ' + f.result);
+      return;
+    }
+    if (f.type === 'usage') {
+      if (curText) {
+        const m = document.createElement('div');
+        m.className = 'meta';
+        const secs = (f.ms / 1000).toFixed(1);
+        m.textContent = f.output + ' tokens · ' + secs + 's · ' +
+          f.tps.toFixed(2) + ' t/s';
+        curText.appendChild(m);
+      }
+      const arc = document.getElementById('gaugeArc');
+      const pctEl = document.getElementById('gaugePct');
+      const lbl = document.getElementById('gaugeLabel');
+      if (arc && f.ctx_max) {
+        const ratio = Math.min(1, f.ctx_used / f.ctx_max);
+        const C = 2 * Math.PI * 18;
+        arc.style.strokeDashoffset = (C * (1 - ratio)).toFixed(1);
+        const pct = 100 * ratio;
+        pctEl.textContent = (pct < 10 ? pct.toFixed(1)
+          : Math.round(pct)) + '%';
+        lbl.textContent = fmtK(f.ctx_used) + '/' + fmtK(f.ctx_max);
+        const col = pct > 85 ? '#e06c5a' :
+          (pct > 70 ? '#d8b45a' : '#5dd66a');
+        arc.style.stroke = col;
+        pctEl.style.color = col;
+      }
+      return;
+    }
+    if (f.type === 'done') {
+      if (!curText) add('assistant', '(空响应，finish=' + f.finish + ')');
+      setBusy(false);
+      return;
+    }
+    if (f.type === 'error') { add('error', f.message); setBusy(false); return; }
+    if (f.type === 'cleared') { msgs.innerHTML = ''; return; }
+    if (f.type === 'ladder') {
+      add('assistant', 'Overflow recovery applied (generation ' + f.generation + ').');
+      return;
+    }
+    if (f.type === 'compacted') {
+      add('assistant', 'Context compacted to a rolling summary ' +
+        '(generation ' + f.generation + ', summary ' + f.summary_tokens + ' tokens).');
+      return;
+    }
+  };
+}
+function send() {
+  const t = input.value.trim();
+  if (!t || !ws || ws.readyState !== 1 || busy) return;
+  add('user', t);
+  ws.send('chat:' + t);
+  input.value = '';
+  input.style.height = 'auto';
+  setBusy(true);
+}
+sendBtn.onclick = send;
+stopBtn.onclick = () => { if (ws && ws.readyState === 1) ws.send('stop'); };
+document.getElementById('clear').onclick = () => {
+  if (ws && ws.readyState === 1 && !busy) ws.send('clear');
+};
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+input.addEventListener('input', () => {
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 160) + 'px';
+});
+connect();
+</script>
+</body>
+</html>

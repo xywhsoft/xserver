@@ -22,8 +22,11 @@ class ExtensionTests(unittest.TestCase):
     def test_selection(self):
         for names, expected in (
             ([], []), (["sqlite"], ["sqlite"]), (["xtp"], ["xtp"]),
+            (["xllm"], ["xllm"]),
             (["sqlite", "xtp"], ["sqlite", "xtp"]),
             (["xtp", "SQLITE", "xtp", "sqlite"], ["sqlite", "xtp"]),
+            (["xllm", "sqlite", "XTP"], ["sqlite", "xtp", "xllm"]),
+            (["xllm-session"], ["xllm-session"]),
         ):
             with self.subTest(names=names):
                 self.assertEqual(list(select_extensions(names)), expected)
@@ -31,7 +34,8 @@ class ExtensionTests(unittest.TestCase):
             select_extensions(["sqilte"])
 
     def test_headers_and_symbols_follow_selection(self):
-        for names in ([], ["sqlite"], ["xtp"], ["sqlite", "xtp"]):
+        for names in ([], ["sqlite"], ["xtp"], ["sqlite", "xtp"],
+                      ["xllm"], ["sqlite", "xtp", "xllm"]):
             with self.subTest(names=names):
                 selected = select_extensions(names)
                 resources = dict(vfs.collect(selected))
@@ -120,6 +124,84 @@ class ExtensionTests(unittest.TestCase):
         self.assertEqual(len(symbols), 13)
         self.assertEqual(len(symbols), len(set(symbols)))
         self.assertEqual(set(symbols), apis)
+
+    def test_xllm_session_import_covers_every_external_api(self):
+        header = (ROOT / "lib/xllm-session/xllm-session.h").read_text(encoding="utf-8")
+        imports = (ROOT / "src/script/import_xllm_session.inc").read_text(encoding="utf-8")
+        # 与 xllm 同款单行声明形式；xllmEstimate* 由核心符号表提供，排除。
+        apis = set(re.findall(r"^[A-Za-z_][A-Za-z0-9_ *]*?\**\s*(xllm[A-Z]\w*)\s*\(",
+                              header, re.MULTILINE))
+        apis -= {"xllmEstimateTextTokens", "xllmEstimateMessageTokens"}
+        symbols = re.findall(r"XS_XLLM_SESSION_SYMBOL\((\w+)\)", imports)
+        self.assertEqual(len(symbols), len(set(symbols)))
+        self.assertEqual(set(symbols), apis)
+
+    def test_xllm_import_covers_every_external_api(self):
+        header = (ROOT / "lib/xllm/xllm.h").read_text(encoding="utf-8")
+        imports = (ROOT / "src/script/import_xllm.inc").read_text(encoding="utf-8")
+        # 公开头为纯声明：外部函数均为「返回类型 + xllmCamel 名(」的单行形式，
+        # 类型名/枚举/不透明前置声明（typedef struct xllm_client xllm_client;）不带 "("。
+        apis = set(re.findall(r"^[A-Za-z_][A-Za-z0-9_ *]*?\**\s*(xllm[A-Z]\w*)\s*\(",
+                              header, re.MULTILINE))
+        symbols = re.findall(r"XS_XLLM_SYMBOL\((\w+)\)", imports)
+        self.assertEqual(len(symbols), 53)
+        self.assertEqual(len(symbols), len(set(symbols)))
+        self.assertEqual(set(symbols), apis)
+
+    def test_requires_expands_dependencies(self):
+        self.assertEqual(list(select_extensions(["xsmtp"])), ["xmail", "xsmtp"])
+        self.assertEqual(list(select_extensions(["xsmtp", "xpop3", "ximap"])),
+                         ["xmail", "xsmtp", "xpop3", "ximap"])
+        # 显式选依赖 + 自动展开不重复、顺序仍按清单
+        self.assertEqual(list(select_extensions(["xmail", "ximap"])),
+                         list(select_extensions(["ximap"])))
+
+    def test_all_selects_entire_registry(self):
+        registry = load_registry()
+        self.assertEqual(list(select_extensions(["all"])), list(registry))
+        # 大小写不敏感、可与显式名混用、重复无副作用
+        self.assertEqual(list(select_extensions(["ALL", "sqlite", "xtp"])), list(registry))
+        self.assertEqual(list(select_extensions(["all", "all"])), list(registry))
+
+    def test_md4c_import_covers_every_external_api(self):
+        symbols = re.findall(r"XS_MD4C_SYMBOL\((\w+)\)",
+                             (ROOT / "src/script/import_md4c.inc").read_text(encoding="utf-8"))
+        self.assertEqual(symbols, ["md_parse", "md_html"])
+
+    def test_requires_rejects_bad_references(self):
+        base = load_registry()
+        for mutate, message in (
+            (lambda r: r["xsmtp"].__setitem__("requires", ["no-such-lib"]), "unknown extension"),
+            (lambda r: r["xsmtp"].__setitem__("requires", ["xsmtp"]), "cannot reference itself"),
+            (lambda r: r["xsmtp"].__setitem__("requires", "xmail"), "string list"),
+        ):
+            with self.subTest(message=message):
+                registry = copy.deepcopy(base)
+                mutate(registry)
+                with self.assertRaisesRegex(ValueError, message):
+                    select_extensions(["xsmtp"], registry)
+
+    def test_requires_cycle_is_detected(self):
+        registry = load_registry()
+        registry["xmail"]["requires"] = ["ximap"]
+        with self.assertRaisesRegex(ValueError, "cycle"):
+            select_extensions(["xsmtp"], registry)
+
+    def test_mail_import_coverage(self):
+        decl = re.compile(r"XRT_API[^;{}]*?\b(xrt[A-Z][A-Za-z0-9]*)\s*\(", re.S)
+        for lib, macro, count in (("xmail", "XS_XMAIL_SYMBOL", 89),
+                                  ("xsmtp", "XS_XSMTP_SYMBOL", 43),
+                                  ("xpop3", "XS_XPOP3_SYMBOL", 47),
+                                  ("ximap", "XS_XIMAP_SYMBOL", 101)):
+            with self.subTest(lib=lib):
+                apis = set()
+                for header in (ROOT / "lib" / lib / "include" / "xrt").glob("*.h"):
+                    apis |= set(decl.findall(header.read_text(encoding="utf-8")))
+                symbols = re.findall(rf"{macro}\((\w+)\)",
+                                     (ROOT / f"src/script/import_{lib}.inc").read_text(encoding="utf-8"))
+                self.assertEqual(len(symbols), count)
+                self.assertEqual(len(symbols), len(set(symbols)))
+                self.assertEqual(set(symbols), apis)
 
     def test_publish_failure_preserves_existing_binary(self):
         with tempfile.TemporaryDirectory() as temp:
