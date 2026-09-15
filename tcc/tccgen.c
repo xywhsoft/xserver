@@ -433,6 +433,11 @@ ST_FUNC void tccgen_finish(TCCState *s1)
     local_label_stack = NULL;
     cur_text_section = NULL;
     sym_free_first = NULL;
+    /* 编译失败经 error_jmp longjmp 跳出时，parse_init_elem 里对 global_expr
+     * 的保存/恢复被绕过，残值 1 会让同进程下一次编译把所有复合字面量按
+     * 静态存储处理（initializer element is not constant 连环误报，宿主
+     * 热重载整体报废）。finish 在成功/错误两条路径都会执行，在此复位。 */
+    global_expr = 0;
 }
 
 /* ------------------------------------------------------------------------- */

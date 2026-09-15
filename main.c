@@ -104,6 +104,148 @@ static BOOL WINAPI XS_ConsoleProc(DWORD dwCtrlType)
 	g_XS_Stop = 1;
 	return TRUE;
 }
+
+/* 进程级崩溃 dump：gcc CRT 会把 SEH 翻译成 C 信号直接终止（UEF 轮不到，
+ * WER 也被绕过），因此用 vectored handler 在 SEH 链之前抓致命异常落盘。
+ * 目录优先级：XS_CRASH_DUMP_DIR 环境变量 > 可执行文件目录。
+ * DumpType=2（全量内存）：JIT 代码在堆上，缺内存段的 dump 无诊断价值。 */
+/* dump 落盘线程体：全量 dump 在崩溃线程栈上会 ERROR_NOACCESS，
+ * 由干净栈的辅助线程执行最稳；逐级降级保底 */
+typedef BOOL (WINAPI *XS_MiniDumpProc)(HANDLE, DWORD, HANDLE, int, void*, void*, void*);
+typedef struct tagXS_DUMPTCTX {
+	HANDLE hFile;
+	void* pExceptionInfo;
+	XS_MiniDumpProc pfn;
+	unsigned long dwLastError;
+	int iFailedType;
+} XS_DUMPTCTX;
+
+static DWORD WINAPI XS_DumpThreadProc(void* pParam)
+{
+	XS_DUMPTCTX* pCtx = (XS_DUMPTCTX*)pParam;
+	/* 部分系统 dbghelp 拒绝 VEH 场景的异常信息参数（ERROR_NOACCESS），
+	 * 降级为不带异常信息的 dump（线程上下文仍完整，异常元数据走 sidecar） */
+	struct { int iType; void* pExc; } aTry[3] = {
+		{ 2, pCtx->pExceptionInfo },                     /* 全量内存 + 异常信息 */
+		{ 2, NULL },                                      /* 全量内存 */
+		{ 0, NULL },                                      /* 最小 dump 保底 */
+	};
+	int i;
+	for ( i = 0; i < 3; i++ ) {
+		SetFilePointer(pCtx->hFile, 0, NULL, FILE_BEGIN);
+		SetEndOfFile(pCtx->hFile);
+		SetLastError(0);
+		if ( pCtx->pfn(GetCurrentProcess(), GetCurrentProcessId(), pCtx->hFile, aTry[i].iType,
+			aTry[i].pExc, NULL, NULL) )
+			return 1;
+		pCtx->dwLastError = GetLastError();
+		pCtx->iFailedType = aTry[i].iType;
+	}
+	return 0;
+}
+
+static void XS_WriteCrashDump(EXCEPTION_POINTERS* pException)
+{
+	HMODULE hDbgHelp;
+	XS_MiniDumpProc pfnDump;
+	const char* sDir;
+	char sPath[480], sExe[480], sName[64];
+	SYSTEMTIME stTime;
+	HANDLE hFile;
+
+	hDbgHelp = LoadLibraryA("dbghelp.dll");
+	if ( hDbgHelp == NULL ) return;
+	pfnDump = (XS_MiniDumpProc)(void*)GetProcAddress(hDbgHelp, "MiniDumpWriteDump");
+	if ( pfnDump == NULL ) return;
+
+	GetSystemTime(&stTime);
+	_snprintf(sName, sizeof(sName) - 1, "crash_%lu_%04u%02u%02u_%02u%02u%02u.dmp",
+		GetCurrentProcessId(), stTime.wYear, stTime.wMonth, stTime.wDay,
+		stTime.wHour, stTime.wMinute, stTime.wSecond);
+	sName[sizeof(sName) - 1] = '\0';
+
+	sDir = getenv("XS_CRASH_DUMP_DIR");
+	if ( sDir != NULL && sDir[0] != '\0' ) {
+		_snprintf(sPath, sizeof(sPath) - 1, "%s\\%s", sDir, sName);
+	} else if ( GetModuleFileNameA(NULL, sExe, sizeof(sExe)) != 0 && strrchr(sExe, '\\') != NULL ) {
+		*strrchr(sExe, '\\') = '\0';
+		_snprintf(sPath, sizeof(sPath) - 1, "%s\\%s", sExe, sName);
+	} else {
+		_snprintf(sPath, sizeof(sPath) - 1, "%s", sName);
+	}
+	sPath[sizeof(sPath) - 1] = '\0';
+
+	hFile = CreateFileA(sPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	if ( hFile == INVALID_HANDLE_VALUE ) return;
+	{
+		/* dbghelp 的 MINIDUMP_EXCEPTION_INFORMATION（本地声明避免引 dbghelp.h）；
+		 * 直传 EXCEPTION_POINTERS* 会因 ThreadId 无效被静默拒绝（0 字节 dump） */
+		struct { unsigned long ThreadId; void* ExceptionPointers; int ClientPointers; } tInfo;
+		XS_DUMPTCTX tCtx;
+		HANDLE hWorker;
+		tInfo.ThreadId = GetCurrentThreadId();
+		tInfo.ExceptionPointers = (void*)pException;
+		tInfo.ClientPointers = FALSE;
+		tCtx.hFile = hFile;
+		tCtx.pExceptionInfo = &tInfo;
+		tCtx.pfn = pfnDump;
+		tCtx.dwLastError = 0;
+		tCtx.iFailedType = -1;
+		hWorker = CreateThread(NULL, 0, XS_DumpThreadProc, &tCtx, 0, NULL);
+		if ( hWorker != NULL ) {
+			WaitForSingleObject(hWorker, 30000);
+			CloseHandle(hWorker);
+		}
+	}
+	CloseHandle(hFile);
+	/* sidecar：异常元数据（dump 不带异常信息时的崩溃现场索引） */
+	{
+		char sTxt[480];
+		size_t n = strlen(sPath);
+		if ( n > 5 && strcmp(sPath + n - 4, ".dmp") == 0 )
+			strcpy(sPath + n - 4, ".txt");
+		{
+			HANDLE hTxt = CreateFileA(sPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+			if ( hTxt != INVALID_HANDLE_VALUE ) {
+				CONTEXT* pCtxRec = pException->ContextRecord;
+				_snprintf(sTxt, sizeof(sTxt) - 1,
+					"code=%08lx thread=%lu flags=%08lx addr=%p\r\n"
+					"rip/pc=%p rsp/sp=%p\r\n",
+					(unsigned long)pException->ExceptionRecord->ExceptionCode,
+					GetCurrentThreadId(),
+					(unsigned long)pException->ExceptionRecord->ExceptionFlags,
+					pException->ExceptionRecord->ExceptionAddress,
+					(void*)(size_t)pCtxRec->Rip, (void*)(size_t)pCtxRec->Rsp);
+				sTxt[sizeof(sTxt) - 1] = '\0';
+				{
+					DWORD dwWritten = 0;
+					WriteFile(hTxt, sTxt, (DWORD)strlen(sTxt), &dwWritten, NULL);
+				}
+				CloseHandle(hTxt);
+			}
+		}
+	}
+}
+
+static LONG WINAPI XS_CrashVectored(EXCEPTION_POINTERS* pException)
+{
+	/* dbghelp 落盘过程会以 first-chance 异常探测内存，必须防止重入级联 */
+	static volatile LONG iInDump = 0;
+	switch ( pException->ExceptionRecord->ExceptionCode ) {
+	case EXCEPTION_ACCESS_VIOLATION:
+	case EXCEPTION_STACK_OVERFLOW:
+	case EXCEPTION_INT_DIVIDE_BY_ZERO:
+	case EXCEPTION_ILLEGAL_INSTRUCTION:
+	case EXCEPTION_PRIV_INSTRUCTION:
+	case EXCEPTION_IN_PAGE_ERROR:
+		if ( InterlockedExchange(&iInDump, 1) == 0 )
+			XS_WriteCrashDump(pException);
+		break;
+	default:
+		break; /* 断点/单步/C++ 异常等放行 */
+	}
+	return EXCEPTION_CONTINUE_SEARCH; /* 不改变原有终止路径 */
+}
 #endif
 
 static void XS_SignalProc(int iSignal)
@@ -149,6 +291,10 @@ int main(int argc, char** argv)
 	int i;
 
 	setvbuf(stdout, NULL, _IONBF, 0);
+#if defined(_WIN32) || defined(_WIN64)
+	/* vectored(1=最先)：抢在 CRT 的 SEH→信号翻译之前抓致命异常写 dump（启动期即生效） */
+	AddVectoredExceptionHandler(1, XS_CrashVectored);
+#endif
 #if !defined(_WIN32) && !defined(_WIN64)
 	/* Linux sendfile 没有 MSG_NOSIGNAL；对端 RST 必须作为连接发送失败返回，
 	 * 不能让默认 SIGPIPE 终止整个服务器进程。 */
