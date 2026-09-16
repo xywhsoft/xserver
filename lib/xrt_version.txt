@@ -1,4 +1,4 @@
-2639487c
+3c7077f3
 策略：本目录是 xrt 主线（gitee.com/xywhsoft/xrt）单头的纯快照，零分叉、零本地补丁；
 需要 xrt 改动时，先在 xrt 主线提交，再同步本目录，禁止直接修改这里的文件。
 同步步骤：git -C xrt show <commit>:single/xrt.h > lib/xrt.h（xrt_decl.h 同理），

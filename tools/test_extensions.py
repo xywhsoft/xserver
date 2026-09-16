@@ -216,16 +216,28 @@ class ExtensionTests(unittest.TestCase):
     def test_xacme_import_covers_its_api(self):
         symbols = re.findall(r"XS_XACME_SYMBOL\((\w+)\)",
                              (ROOT / "src/script/import_xacme.inc").read_text(encoding="utf-8"))
-        self.assertEqual(len(symbols), 18)
-        # 13 个公开 xrtAcme* + 5 个 flow 入口
+        self.assertEqual(len(symbols), len(set(symbols)))
+        # 全部公开 xrtAcme*（include/xrt/ 13 头）+ flow 入口（VFS xacme/）
         headers = "".join(
-            (ROOT / "lib" / "xacme" / "include" / "xrt" / f).read_text(encoding="utf-8")
-            for f in ("acme.h", "acme_dns.h", "acme_dns_ali.h", "acme_store.h"))
+            h.read_text(encoding="utf-8")
+            for h in sorted((ROOT / "lib" / "xacme" / "include" / "xrt").glob("*.h")))
         apis = set(re.findall(r"XRT_API[^;{}]*?\b(xrtAcme\w+)\s*\(", headers, re.S))
         self.assertEqual({x for x in symbols if x.startswith("xrtAcme")}, apis)
         self.assertEqual({x for x in symbols if x.startswith("xacmeClient")},
                          {"xacmeClientInit", "xacmeClientUnit", "xacmeClientAccountPem",
-                          "xacmeClientIssue", "xacmeClientIssueStored"})
+                          "xacmeClientIssue", "xacmeClientIssueStored",
+                          "xacmeClientRevoke", "xacmeClientRollover",
+                          "xacmeClientDeactivate"})
+
+    def test_qrcodegen_import_covers_every_external_api(self):
+        symbols = re.findall(r"XS_QRCODEGEN_SYMBOL\((\w+)\)",
+                             (ROOT / "src/script/import_qrcodegen.inc").read_text(encoding="utf-8"))
+        self.assertEqual(len(symbols), 10)
+        # 上游 9 个：声明为 bool/size_t/int + enum 返回的函数
+        header = (ROOT / "lib" / "qrcodegen" / "qrcodegen.h").read_text(encoding="utf-8")
+        apis = set(re.findall(r"^(?:bool|void|int|size_t) (qrcodegen_\w+)\(", header, re.M))
+        self.assertEqual({x for x in symbols if x != "qrcodegen_png"}, apis)
+        self.assertIn("qrcodegen_png", symbols)
 
     def test_publish_failure_preserves_existing_binary(self):
         with tempfile.TemporaryDirectory() as temp:

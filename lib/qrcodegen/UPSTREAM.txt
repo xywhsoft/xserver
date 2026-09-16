@@ -1,0 +1,17 @@
+qrcodegen（QR Code 生成器）+ qrpng（PNG 输出辅助层）
+来源: https://github.com/nayuki/QR-Code-generator （master 分支 c/ 目录）
+许可: MIT（Project Nayuki，见同目录 LICENSE）
+
+本目录为 xserver 的 vendored 副本：
+  qrcodegen.h / qrcodegen.c   上游核心（1,027 + 385 行，9 个公开函数）：
+                              编码三入口（Text/Binary/Segments）、模式探测、
+                              缓冲计算、getSize/getModule 逐模块取值；零动态分配
+  qrpng.h / qrpng.c           xserver 侧 PNG 输出辅助（非上游内容）：
+                              1-bit 灰度 PNG（IHDR/IDAT/IEND），IDAT 经
+                              <xrt_decl.h> 的 XDEFLATE_ZLIB 流式压缩
+                              （zlib 头与 adler32 尾由 xrt 产出），
+                              每块 CRC32 本地实现
+
+头自包含（仅 stdint/stddef 等）、无特性宏、无链接依赖（deflate 走宿主
+xrt 实现）。qrpng 返回 xrtMalloc 缓冲，调用方以 xrtFree 释放。
+上游同步后重验 src/script/import_qrcodegen.inc（覆盖率测试兜底）。

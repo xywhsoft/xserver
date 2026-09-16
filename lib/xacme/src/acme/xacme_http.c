@@ -7,6 +7,7 @@
 #include <xrt/net.h>
 #include <xrt/tcp.h>
 #include <xrt/thread.h>
+#include <xrt/time.h>
 #include <xrt/tls_client.h>
 #include <xrt/tls_stream.h>
 #include <xrt/tls_verify.h>
@@ -18,6 +19,57 @@
 
 #define XACME_HTTP_FIELD_MAX 32u
 #define XACME_HTTP_IO_CHUNK 16384u
+
+/*
+	传输级重试：IO/超时类失败最多 3 次尝试（500ms/1s 退避）。
+	只重试"未收到响应"的失败（连接/发送/接收/超时）；
+	HTTP 层语义（状态码、badNonce）由上层处理，不受影响。
+	POST 重放对 ACME 各端点幂等或无害（重复订单/已存在账户/幂等删除）；
+	provider 的加记录重放至多留下可被 Remove 清理的同值 TXT。
+	全部尝试失败时保留首个根因。
+*/
+#define XACME_HTTP_RETRY_MAX 3u
+
+static bool xacmeHttpErrorRetryable(void)
+{
+	xerrkind Kind = xrtErrorKind(xrtGetError());
+	return (Kind == XERR_IO) || (Kind == XERR_TIMEOUT);
+}
+
+static bool xacmeHttpExchangeOnce(
+	xacmehttp* pHttp, cstr sMethod, cstr sUrl, cstr sContentType,
+	xstrview sBody, const xacmehttpheader* pExtraHeaders,
+	size_t iExtraCount, xacmehttpresponse* pResponse);
+
+static bool xacmeHttpExchangeRetry(
+	xacmehttp* pHttp, cstr sMethod, cstr sUrl, cstr sContentType,
+	xstrview sBody, const xacmehttpheader* pExtraHeaders,
+	size_t iExtraCount, xacmehttpresponse* pResponse)
+{
+	uint32 uAttempt;
+	for(uAttempt = 1u; uAttempt <= XACME_HTTP_RETRY_MAX; uAttempt++)
+	{
+		xerror* pFirst = NULL;
+		bool bOk = xacmeHttpExchangeOnce(
+			pHttp, sMethod, sUrl, sContentType, sBody, pExtraHeaders,
+			iExtraCount, pResponse);
+		if(bOk || (uAttempt == XACME_HTTP_RETRY_MAX) ||
+			!xacmeHttpErrorRetryable())
+		{
+			return bOk;
+		}
+		/* 保留首个根因：后续尝试失败会覆盖线程错误。 */
+		pFirst = xrtErrorRef(xrtGetError());
+		if(getenv("XACME_DEBUG"))
+		{
+			printf("[http-retry] attempt=%u url=%.80s\n",
+				(unsigned)uAttempt, sUrl);
+		}
+		xrtSleep((uAttempt == 1u) ? 500u : 1000u);
+		xrtSetErrorTake(pFirst);
+	}
+	return false;
+}
 
 static void xacmeHttpError(
 	xerrkind Kind, xacmehttperror Code, cstr sMessage)
@@ -56,9 +108,14 @@ bool xacmeHttpInit(
 		xnetengineconfig Engine;
 		xrtNetEngineConfigInit(&Engine);
 		pHttp->pEngine = xrtNetEngineCreate(&Engine);
-		if((pHttp->pEngine == NULL) ||
-			!xrtNetEngineStart(pHttp->pEngine))
+		if(pHttp->pEngine == NULL)
 		{
+			goto Failure;
+		}
+		if(!xrtNetEngineStart(pHttp->pEngine))
+		{
+			/* start 失败：destroy 后再置空，避免泄漏未启动的 engine */
+			xrtNetEngineDestroy(pHttp->pEngine);
 			pHttp->pEngine = NULL;
 			goto Failure;
 		}
@@ -294,33 +351,34 @@ static int xacmeStreamRecv(
 	xacmestream* pStream, uint8* pBuffer, size_t iCapacity,
 	size_t* pRead, uint64 uUs)
 {
-	xfuture* pFuture;
-	xnetbytes* pBytes;
+	for(;;)
+	{
+		xfuture* pFuture;
+		xnetbytes* pBytes;
 
-	if(pStream->pTls != NULL)
-	{
-		pFuture = xrtTlsStreamRecvAsync(pStream->pTls, iCapacity);
-	}
-	else
-	{
-		pFuture = xrtNetStreamRecvAsync(pStream->pTcp, iCapacity);
-	}
-	if(pFuture == NULL)
-	{
-		return -1;
-	}
-	if(xrtFutureWaitFor(pFuture, uUs) != XWAIT_OK)
-	{
-		xrtFutureDestroy(pFuture);
-		return -1;
-	}
-	pBytes = (xnetbytes*)xrtFutureValue(pFuture);
-	if((pBytes == NULL) || (xrtNetBytesView(pBytes).Size == 0u))
-	{
-		xrtFutureDestroy(pFuture);
-		/* 0 字节不等于 EOF：仅在流确已离开 OPEN 态时判定结束。 */
+		if(pStream->pTls != NULL)
+		{
+			pFuture = xrtTlsStreamRecvAsync(pStream->pTls, iCapacity);
+		}
+		else
+		{
+			pFuture = xrtNetStreamRecvAsync(pStream->pTcp, iCapacity);
+		}
+		if(pFuture == NULL)
+		{
+			return -1;
+		}
+		if(xrtFutureWaitFor(pFuture, uUs) != XWAIT_OK)
+		{
+			xrtFutureDestroy(pFuture);
+			return -1;
+		}
+		pBytes = (xnetbytes*)xrtFutureValue(pFuture);
+		if((pBytes == NULL) || (xrtNetBytesView(pBytes).Size == 0u))
 		{
 			bool bEnd;
+			xrtFutureDestroy(pFuture);
+			/* 0 字节不等于 EOF：仅在流确已离开 OPEN 态时判定结束。 */
 			if(pStream->pTls != NULL)
 			{
 				xtlsstreamstate eState = xrtTlsStreamState(pStream->pTls);
@@ -330,8 +388,9 @@ static int xacmeStreamRecv(
 			}
 			else
 			{
+				xfuture* pClose;
 				bEnd = false; /* 明文流状态另查，暂按等待 CLOSE 判定。 */
-				xfuture* pClose = xrtNetStreamWaitAsync(
+				pClose = xrtNetStreamWaitAsync(
 					pStream->pTcp, XNET_STREAM_WAIT_READ);
 				if((pClose != NULL) && xacmeFutureWait(pClose, uUs))
 				{
@@ -345,19 +404,19 @@ static int xacmeStreamRecv(
 			}
 			/* 短暂让步后再试一轮（数据尚在路上）。 */
 			xrtSleep(5u);
-			return xacmeStreamRecv(
-				pStream, pBuffer, iCapacity, pRead, uUs);
+			continue;
 		}
-	}
-	if(xrtNetBytesView(pBytes).Size > iCapacity)
-	{
+		if(xrtNetBytesView(pBytes).Size > iCapacity)
+		{
+			xrtFutureDestroy(pFuture);
+			return -1;
+		}
+		memcpy(pBuffer, xrtNetBytesView(pBytes).Data,
+			xrtNetBytesView(pBytes).Size);
+		*pRead = xrtNetBytesView(pBytes).Size;
 		xrtFutureDestroy(pFuture);
-		return -1;
+		return 1;
 	}
-	memcpy(pBuffer, xrtNetBytesView(pBytes).Data, xrtNetBytesView(pBytes).Size);
-	*pRead = xrtNetBytesView(pBytes).Size;
-	xrtFutureDestroy(pFuture);
-	return 1;
 }
 
 static void xacmeStreamClose(xacmestream* pStream)
@@ -411,6 +470,16 @@ bool xacmeHttpExchange(
 }
 
 bool xacmeHttpExchangeV(
+	xacmehttp* pHttp, cstr sMethod, cstr sUrl, cstr sContentType,
+	xstrview sBody, const xacmehttpheader* pExtraHeaders,
+	size_t iExtraCount, xacmehttpresponse* pResponse)
+{
+	return xacmeHttpExchangeRetry(
+		pHttp, sMethod, sUrl, sContentType, sBody, pExtraHeaders,
+		iExtraCount, pResponse);
+}
+
+static bool xacmeHttpExchangeOnce(
 	xacmehttp* pHttp, cstr sMethod, cstr sUrl, cstr sContentType,
 	xstrview sBody, const xacmehttpheader* pExtraHeaders,
 	size_t iExtraCount, xacmehttpresponse* pResponse)
@@ -648,9 +717,14 @@ bool xacmeHttpExchangeV(
 			}
 			if(iGot == 0)
 			{
+				/* 连接在收到任何响应字节前关闭 = 传输层故障
+				   （可重试）；已收到部分头才算协议截断。 */
 				xacmeHttpError(
-					XERR_PROTOCOL, XACME_HTTP_ERROR_PROTOCOL,
-					"acme http response head truncated");
+					(Received.Size == 0u) ? XERR_IO : XERR_PROTOCOL,
+					XACME_HTTP_ERROR_PROTOCOL,
+					(Received.Size == 0u) ?
+						"acme http connection closed before response" :
+						"acme http response head truncated");
 				goto Done;
 			}
 			if(!xrtBufferAppend(&Received, (xbytesview){ Chunk, iUsed }))

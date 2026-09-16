@@ -22,6 +22,22 @@
  },
  "features_guard": "XACME_FEATURES_H",
  "features_header": "extlibs/xacme/include/xacme/features.h",
+ "performance_config": "extlibs/xacme/config/performance_profiles.json",
+ "size_config": "extlibs/xacme/config/size_profiles.json",
+ "scope": {
+  "product": "xacme",
+  "external_integrations": [],
+  "systems": [
+   {
+    "name": "acme_extension",
+    "state": "retained",
+    "source_roots": [
+     "acme",
+     "dns"
+    ]
+   }
+  ]
+ },
  "include_dirs": [
   "extlibs/xacme/include"
  ],
@@ -47,12 +63,16 @@
    "internal_headers": [
     "extlibs/xacme/src/internal/xacme_flow.h"
    ],
+   "public_headers": [
+    "extlibs/xacme/include/xrt/acme_client.h"
+   ],
    "sources": [
     "extlibs/xacme/src/acme/xacme_flow.c"
    ],
    "tests": [
     "extlibs/xacme/tests/acme/test_flow.c",
-    "extlibs/xacme/tests/acme/test_flow_live.c"
+    "extlibs/xacme/tests/acme/test_flow_live.c",
+    "extlibs/xacme/tests/acme/test_client.c"
    ],
    "single_tests": [],
    "examples": [],
@@ -101,6 +121,9 @@
     "tls_key_exchange_p256",
     "tls_key_exchange_p384"
    ],
+   "public_headers": [
+    "extlibs/xacme/include/xrt/acme_http.h"
+   ],
    "internal_headers": [
     "extlibs/xacme/src/internal/xacme_http.h"
    ],
@@ -121,16 +144,31 @@
    "state": "implemented",
    "feature": "XACME_FEATURE_ACME_DNS",
    "depends": [
-    "core"
+    "core",
+    "net_engine",
+    "net_udp",
+    "net_udp_sync",
+    "random",
+    "random_default",
+    "time",
+    "buffer",
+    "array"
+   ],
+   "internal_headers": [
+    "extlibs/xacme/src/internal/xacme_dnstxt.h"
    ],
    "public_headers": [
     "extlibs/xacme/include/xrt/acme_dns.h"
    ],
    "sources": [
-    "extlibs/xacme/src/acme/xacme_dns.c"
+    "extlibs/xacme/src/acme/xacme_dns.c",
+    "extlibs/xacme/src/acme/xacme_registry.c",
+    "extlibs/xacme/src/dns/xacme_dnstxt.c"
    ],
    "tests": [
-    "extlibs/xacme/tests/acme/test_dns_provider.c"
+    "extlibs/xacme/tests/acme/test_dns_provider.c",
+    "extlibs/xacme/tests/acme/test_registry.c",
+    "extlibs/xacme/tests/acme/test_dnstxt.c"
    ],
    "single_tests": [],
    "examples": [],
@@ -145,6 +183,7 @@
     "core",
     "acme_dns"
    ],
+   "internal_headers": [],
    "public_headers": [
     "extlibs/xacme/include/xrt/acme.h"
    ],
@@ -167,7 +206,6 @@
     "core",
     "acme_dns",
     "acme_http",
-    "dns_txt",
     "json",
     "codec_base64",
     "crypto_sha256",
@@ -175,6 +213,7 @@
     "time",
     "buffer"
    ],
+   "internal_headers": [],
    "public_headers": [
     "extlibs/xacme/include/xrt/acme_dns_ali.h"
    ],
@@ -198,11 +237,16 @@
     "buffer",
     "codec_base64",
     "crypto_sha256",
+    "crypto_hmac_sha256",
     "crypto_p256_keypair",
     "crypto_ecdsa_p256_sign"
    ],
-   "internal_headers": [
+   "public_headers": [],
+      "internal_headers": [
     "extlibs/xacme/src/internal/xacme_jose.h"
+   ],
+   "public_headers": [
+    "extlibs/xacme/include/xrt/acme_jose.h"
    ],
    "sources": [
     "extlibs/xacme/src/acme/xacme_jose.c"
@@ -227,10 +271,15 @@
     "codec_base64",
     "crypto_p256",
     "crypto_ecdsa_p256_sign_der",
+    "crypto_rsa_pkcs1_sign",
     "acme_jose"
    ],
-   "internal_headers": [
+   "public_headers": [],
+      "internal_headers": [
     "extlibs/xacme/src/internal/xacme_csr.h"
+   ],
+   "public_headers": [
+    "extlibs/xacme/include/xrt/acme_csr.h"
    ],
    "sources": [
     "extlibs/xacme/src/acme/xacme_csr.c"
@@ -252,20 +301,51 @@
     "acme_jose",
     "acme_csr",
     "dns_ali",
+    "dns_cf",
+    "dns_tencent",
+    "dns_aws",
+    "dns_huawei",
     "acme_http",
     "acme_flow",
-    "dns_txt",
+    "acme_obtain",
     "acme_store"
    ],
+   "internal_headers": [],
    "public_headers": [
     "extlibs/xacme/include/xacme.h",
     "extlibs/xacme/include/xacme/features.h"
    ],
-   "sources": [
-    "extlibs/xacme/src/xacme.c"
+   "sources": [],
+   "tests": [],
+   "single_tests": [
+    "extlibs/xacme/tests/single/test_single_xacme.c"
+   ],
+   "examples": [],
+   "benchmarks": [
+    "dev/bench/bench_common.h",
+    "extlibs/xacme/bench/bench_acme_jose.c",
+    "extlibs/xacme/config/performance_profiles.json"
+   ],
+   "docs": [
+    "extlibs/xacme/README.md"
+   ],
+   "legacy": []
+  },
+  {
+   "name": "acme_dns_response_fuzz_tests",
+   "state": "implemented",
+   "feature": null,
+   "depends": [
+    "acme_dns"
+   ],
+   "public_headers": [],
+   "internal_headers": [],
+   "sources": [],
+   "fuzz_sources": [
+    "extlibs/xacme/fuzz/acme_dns_response.c"
    ],
    "tests": [
-    "extlibs/xacme/tests/acme/test_registry.c"
+    "extlibs/xacme/tests/acme/test_dnstxt_fuzz.c"
    ],
    "single_tests": [],
    "examples": [],
@@ -273,28 +353,202 @@
    "legacy": []
   },
   {
-   "name": "dns_txt",
+   "name": "xacme_tests",
    "state": "implemented",
-   "feature": "XACME_FEATURE_DNS_TXT",
+   "feature": null,
+   "depends": [
+    "xacme",
+    "memory_debug"
+   ],
+   "public_headers": [],
+   "internal_headers": [],
+   "sources": [],
+   "tests": [
+    "extlibs/xacme/tests/acme/test_core_config.c",
+    "extlibs/xacme/tests/acme/test_client.c",
+    "extlibs/xacme/tests/acme/test_csr.c",
+    "extlibs/xacme/tests/acme/test_csr_oom.c",
+    "extlibs/xacme/tests/acme/test_dns_provider.c",
+    "extlibs/xacme/tests/acme/test_dnsali.c",
+    "extlibs/xacme/tests/acme/test_dnsaws.c",
+    "extlibs/xacme/tests/acme/test_dnscf.c",
+    "extlibs/xacme/tests/acme/test_dnshuawei.c",
+    "extlibs/xacme/tests/acme/test_dnstencent.c",
+    "extlibs/xacme/tests/acme/test_dnstxt.c",
+    "extlibs/xacme/tests/acme/test_dnstxt_fuzz.c",
+    "extlibs/xacme/tests/acme/test_flow.c",
+    "extlibs/xacme/tests/acme/test_flow_live.c",
+    "extlibs/xacme/tests/acme/test_http.c",
+    "extlibs/xacme/tests/acme/test_jose.c",
+    "extlibs/xacme/tests/acme/test_jose_oom.c",
+    "extlibs/xacme/tests/acme/test_obtain.c",
+    "extlibs/xacme/tests/acme/test_registry.c",
+    "extlibs/xacme/tests/acme/test_store.c",
+    "extlibs/xacme/tests/acme/test_store_oom.c",
+    "extlibs/xacme/tests/acme/test_tlsdbg.c",
+    "extlibs/xacme/tests/package/test_consumer.c"
+   ],
+   "single_tests": [],
+   "examples": [],
+   "docs": [],
+   "legacy": []
+  },
+  {
+   "name": "dns_cf",
+   "state": "implemented",
+   "feature": "XACME_FEATURE_DNS_CF",
    "depends": [
     "core",
-    "net_engine",
-    "net_udp",
-    "net_udp_sync",
-    "random",
-    "random_default",
-    "time",
-    "buffer",
-    "array"
+    "acme_dns",
+    "acme_http",
+    "json",
+    "buffer"
    ],
    "internal_headers": [
-    "extlibs/xacme/src/internal/xacme_dnstxt.h"
+    "extlibs/xacme/src/internal/xacme_dnscommon.h"
+   ],
+   "public_headers": [
+    "extlibs/xacme/include/xrt/acme_dns_cf.h"
    ],
    "sources": [
-    "extlibs/xacme/src/dns/xacme_dnstxt.c"
+    "extlibs/xacme/src/dns/xacme_dns_cf.c"
    ],
    "tests": [
-    "extlibs/xacme/tests/acme/test_dnstxt.c"
+    "extlibs/xacme/tests/acme/test_dnscf.c"
+   ],
+   "single_tests": [],
+   "examples": [],
+   "docs": [],
+   "legacy": []
+  },
+  {
+   "name": "dns_tencent",
+   "state": "implemented",
+   "feature": "XACME_FEATURE_DNS_TENCENT",
+   "depends": [
+    "core",
+    "acme_dns",
+    "acme_http",
+    "json",
+    "crypto_sha256",
+    "crypto_hmac_sha256",
+    "time",
+    "buffer"
+   ],
+   "internal_headers": [
+    "extlibs/xacme/src/internal/xacme_dnscommon.h",
+    "extlibs/xacme/src/internal/xacme_sigv4.h"
+   ],
+   "public_headers": [
+    "extlibs/xacme/include/xrt/acme_dns_tencent.h"
+   ],
+   "sources": [
+    "extlibs/xacme/src/dns/xacme_dns_tencent.c"
+   ],
+   "tests": [
+    "extlibs/xacme/tests/acme/test_dnstencent.c"
+   ],
+   "single_tests": [],
+   "examples": [],
+   "docs": [],
+   "legacy": []
+  },
+  {
+   "name": "dns_aws",
+   "state": "implemented",
+   "feature": "XACME_FEATURE_DNS_AWS",
+   "depends": [
+    "core",
+    "acme_dns",
+    "acme_http",
+    "crypto_sha256",
+    "crypto_hmac_sha256",
+    "time",
+    "buffer"
+   ],
+   "internal_headers": [
+    "extlibs/xacme/src/internal/xacme_dnscommon.h",
+    "extlibs/xacme/src/internal/xacme_sigv4.h"
+   ],
+   "public_headers": [
+    "extlibs/xacme/include/xrt/acme_dns_aws.h"
+   ],
+   "sources": [
+    "extlibs/xacme/src/dns/xacme_dns_aws.c"
+   ],
+   "tests": [
+    "extlibs/xacme/tests/acme/test_dnsaws.c"
+   ],
+   "single_tests": [],
+   "examples": [],
+   "docs": [],
+   "legacy": []
+  },
+  {
+   "name": "dns_huawei",
+   "state": "implemented",
+   "feature": "XACME_FEATURE_DNS_HUAWEI",
+   "depends": [
+    "core",
+    "acme_dns",
+    "acme_http",
+    "json",
+    "crypto_sha256",
+    "crypto_hmac_sha256",
+    "time",
+    "buffer"
+   ],
+   "internal_headers": [
+    "extlibs/xacme/src/internal/xacme_dnscommon.h",
+    "extlibs/xacme/src/internal/xacme_sigv4.h"
+   ],
+   "public_headers": [
+    "extlibs/xacme/include/xrt/acme_dns_huawei.h"
+   ],
+   "sources": [
+    "extlibs/xacme/src/dns/xacme_dns_huawei.c"
+   ],
+   "tests": [
+    "extlibs/xacme/tests/acme/test_dnshuawei.c"
+   ],
+   "single_tests": [],
+   "examples": [],
+   "docs": [],
+   "legacy": []
+  },
+  {
+   "name": "acme_obtain",
+   "state": "implemented",
+   "feature": "XACME_FEATURE_ACME_OBTAIN",
+   "depends": [
+    "core",
+    "acme_core",
+    "acme_flow",
+    "acme_store",
+    "acme_http",
+    "acme_jose",
+    "acme_csr",
+    "acme_dns",
+    "dns_ali",
+    "json",
+    "file_whole",
+    "x509_parse",
+    "crypto_sha256",
+    "pem",
+    "codec_base64",
+    "time",
+    "buffer",
+    "dir"
+   ],
+   "internal_headers": [],
+   "public_headers": [
+    "extlibs/xacme/include/xrt/acme_obtain.h"
+   ],
+   "sources": [
+    "extlibs/xacme/src/acme/xacme_obtain.c"
+   ],
+   "tests": [
+    "extlibs/xacme/tests/acme/test_obtain.c"
    ],
    "single_tests": [],
    "examples": [],
@@ -307,6 +561,7 @@
    "feature": "XACME_FEATURE_ACME_STORE",
    "depends": [
     "core",
+    "acme_core",
     "file",
     "file_whole",
     "x509_parse",
@@ -317,6 +572,7 @@
     "buffer",
     "dir"
    ],
+   "internal_headers": [],
    "public_headers": [
     "extlibs/xacme/include/xrt/acme_store.h"
    ],

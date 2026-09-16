@@ -6,7 +6,7 @@
 
 struct xnetengine;
 
-#if defined(XACME_FEATURE_DNS_TXT)
+#if defined(XACME_FEATURE_ACME_DNS)
 
 /* dns_txt 模块稳定错误码（错误域 "xrt.acme.dns.txt"）。 */
 typedef enum xacmednstxterror {
@@ -29,7 +29,7 @@ typedef struct xacmedns {
 
 XRT_EXTERN_C_BEGIN
 
-#if defined(XACME_FEATURE_DNS_TXT)
+#if defined(XACME_FEATURE_ACME_DNS)
 
 /* pBorrowedEngine 为空时自建引擎。 */
 bool xacmeDnsInit(xacmedns* pDns, struct xnetengine* pBorrowedEngine);
@@ -45,6 +45,20 @@ bool xacmeDnsTxtQuery(
 	cstr sResolver,
 	uint16 iPort,
 	cstr sFqdn,
+	char (*sOutRecords)[XACME_TXT_RECORD_MAX],
+	size_t iCapacity,
+	size_t* pOutCount
+);
+
+/*
+	解析完整 DNS 响应报文为 TXT 记录集合（不可信网络输入的唯一
+	消化口，fuzz 目标）。QR 位缺失/结构损坏 → false；RCODE 非零
+	→ true 且零记录。每条记录严格小于 XACME_TXT_RECORD_MAX。
+*/
+bool xacmeTxtParseResponse(
+	const uint8* pData,
+	size_t iSize,
+	uint16 uExpectId,
 	char (*sOutRecords)[XACME_TXT_RECORD_MAX],
 	size_t iCapacity,
 	size_t* pOutCount

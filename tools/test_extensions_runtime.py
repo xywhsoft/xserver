@@ -153,21 +153,57 @@ static void probe_ximap(void)
 }
 #endif
 
+#ifdef XS_USE_QRCODEGEN
+#include <qrcodegen.h>
+#include <qrpng.h>
+static uint8_t s_QrBuf[qrcodegen_BUFFER_LEN_MAX];
+static uint8_t s_QrTemp[qrcodegen_BUFFER_LEN_MAX];
+static void probe_qrcodegen(void)
+{
+    size_t iSize = 0;
+    unsigned char* pPng;
+    int iSide;
+
+    REQUIRE(qrcodegen_isNumeric("12345"));
+    REQUIRE(!qrcodegen_isAlphanumeric("https://x"));
+    if ( !qrcodegen_encodeText("https://xs.xywhsoft.com", s_QrTemp, s_QrBuf,
+         qrcodegen_Ecc_MEDIUM, qrcodegen_Mode_BYTE, qrcodegen_Mode_BYTE, 0, 0) ) {
+        REQUIRE(false);
+        return;
+    }
+    iSide = (qrcodegen_getSize(s_QrBuf) + 8) * 4;
+    pPng = qrcodegen_png(s_QrBuf, 4, 4, &iSize);
+    REQUIRE(pPng != NULL && iSize > 50);
+    REQUIRE(pPng[0] == 0x89 && pPng[1] == 0x50 && pPng[2] == 0x4E && pPng[3] == 0x47);
+    REQUIRE((pPng[16] << 24 | pPng[17] << 16 | pPng[18] << 8 | pPng[19]) == (unsigned)iSide);
+    REQUIRE(memcmp(pPng + iSize - 8, "IEND", 4) == 0);
+    REQUIRE(qrcodegen_png(s_QrBuf, 0, 4, &iSize) == NULL);  /* scale 越界 */
+    xrtFree(pPng);
+}
+#endif
+
 #ifdef XS_USE_XACME
 #include <xacme.h>
 #include <xacme/xacme_flow.h>
+#include <xrt/acme_client.h>
 static void probe_xacme(void)
 {
     xacmeaccountconfig tAccount;
     size_t iProviders;
-    /* 注册表：唯一内建 provider 是阿里云 */
+    /* 注册表：五家内建 provider（ali/cf/tencent/aws/huawei），首名 ali */
     iProviders = xrtAcmeDnsProviderCount();
-    REQUIRE(iProviders >= 1);
+    REQUIRE(iProviders == 5);
     REQUIRE(strcmp(xrtAcmeDnsProviderId(0), "ali") == 0);
     /* 账户配置 + LE staging 预设 */
     xrtAcmeAccountConfigInit(&tAccount);
     REQUIRE(tAccount.sDirectoryUrl == NULL);  /* 清零语义：预设用 XACME_DIRECTORY_* 常量 */
     REQUIRE(strcmp(XACME_DIRECTORY_LE, "https://acme-v02.api.letsencrypt.org/directory") == 0);
+    /* 不透明客户端 API 在场（Create/Destroy/Issue 一站式） */
+    {
+        xacmeclientconfig tClient;
+        xrtAcmeClientConfigInit(&tClient);
+        REQUIRE(tClient.pAccount == NULL);
+    }
     /* provider 结构校验（构造后） */
     {
         xacmednaliconfig tAli;
@@ -175,10 +211,230 @@ static void probe_xacme(void)
         xrtAcmeDnsAliConfigInit(&tAli);
         tAli.sAccessKeyId = "key";
         tAli.sAccessKeySecret = "secret";
-        REQUIRE(xrtAcmeDnsAli(&tAli, &tProvider));
+        REQUIRE(xrtAcmeDnsAli(&tAli, NULL, &tProvider));   /* engine 可借可 NULL */
         REQUIRE(xrtAcmeDnsProviderValidate(&tProvider));
         xrtAcmeDnsAliProviderUnit(&tProvider);
     }
+}
+#endif
+
+#ifdef XS_USE_XJWT
+#include <xjwt.h>
+/* 探针专用 EC P-256 测试密钥（无任何生产价值） */
+static const char s_JwtEcPriv[] =
+    "-----BEGIN EC PRIVATE KEY-----\n"
+    "MHcCAQEEIBdtzIuxndpRk0Qy8ivZHqrCPYEYltpRbcmHgwlUzK60oAoGCCqGSM49\n"
+    "AwEHoUQDQgAEbjyT7yV9lHyiQMI1E9jCRKdEPWa0YYO53nFlN9aPGO4m4A1ak2Qf\n"
+    "z5yNGcI0IqSiV74wKHHTtv605kbiwP7JJA==\n"
+    "-----END EC PRIVATE KEY-----\n";
+static const char s_JwtEcPub[] =
+    "-----BEGIN PUBLIC KEY-----\n"
+    "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEbjyT7yV9lHyiQMI1E9jCRKdEPWa0\n"
+    "YYO53nFlN9aPGO4m4A1ak2Qfz5yNGcI0IqSiV74wKHHTtv605kbiwP7JJA==\n"
+    "-----END PUBLIC KEY-----\n";
+static void probe_xjwt(void)
+{
+    xjwtconfig tCfg;
+    xjwtcheck tCheck;
+    xvalue *pClaims, *pOut;
+    xjwtkey* pKey;
+    xjwtjwks* pJwks;
+    char* pToken;
+    char aUser[32];
+    size_t n;
+
+    /* HS256 签发（iss/aud 注入）→ 带校验验证 → claims 提取 */
+    pClaims = xrtValueObject();
+    xrtValueObjectSetNew(pClaims, xrtStrView("sub"),
+        xrtValueString(xrtStrView("probe-user")));
+    xjwtConfigInit(&tCfg);
+    tCfg.Alg = XJWT_ALG_HS256;
+    tCfg.KeyPem = "probe-secret";
+    tCfg.Issuer = "https://xs.example";
+    tCfg.Audience = "xs-probe";
+    tCfg.ExpireSeconds = 3600;
+    pToken = xjwtSign(&tCfg, pClaims);
+    REQUIRE(pToken != NULL);
+    xrtValueRelease(pClaims);
+    xjwtCheckInit(&tCheck);
+    tCheck.Issuer = "https://xs.example";
+    tCheck.Audience = "xs-probe";
+    pOut = xjwtVerify(pToken, "probe-secret", &tCheck);
+    REQUIRE(pOut != NULL);
+    REQUIRE(xjwtClaimString(pOut, "sub", aUser, sizeof(aUser))
+        && strcmp(aUser, "probe-user") == 0);
+    xrtValueRelease(pOut);
+    /* 错误码语义：篡改 → SIGNATURE */
+    xrtClearError();
+    n = strlen(pToken);
+    pToken[n - 2] = (pToken[n - 2] == 'A') ? 'B' : 'A';
+    REQUIRE(xjwtVerify(pToken, "probe-secret", &tCheck) == NULL);
+    REQUIRE(xjwtLastError() == XJWT_ERROR_SIGNATURE);
+    pToken[n - 2] = (pToken[n - 2] == 'A') ? 'B' : 'A';  /* 还原 */
+    xrtFree(pToken);
+    /* 错误码语义：过期 → EXPIRED */
+    xrtClearError();
+    pClaims = xrtValueObject();
+    tCfg.ExpireSeconds = -60;
+    pToken = xjwtSign(&tCfg, pClaims);
+    xrtValueRelease(pClaims);
+    REQUIRE(pToken != NULL);
+    REQUIRE(xjwtVerify(pToken, "probe-secret", NULL) == NULL);
+    REQUIRE(xjwtLastError() == XJWT_ERROR_EXPIRED);
+    xrtFree(pToken);
+
+    /* ES256 非对称链路（SEC1 私钥签发 + 公钥缓存验证） */
+    pClaims = xrtValueObject();
+    xrtValueObjectSetNew(pClaims, xrtStrView("sub"),
+        xrtValueString(xrtStrView("ec-user")));
+    xjwtConfigInit(&tCfg);
+    tCfg.Alg = XJWT_ALG_ES256;
+    tCfg.KeyPem = s_JwtEcPriv;
+    tCfg.KeyId = "probe-ec";
+    tCfg.ExpireSeconds = 600;
+    pToken = xjwtSign(&tCfg, pClaims);
+    xrtValueRelease(pClaims);
+    REQUIRE(pToken != NULL);
+    pKey = xjwtKeyParse(s_JwtEcPub);
+    REQUIRE(pKey != NULL);
+    pOut = xjwtVerifyKey(pToken, pKey, NULL);
+    REQUIRE(pOut != NULL);
+    xrtValueRelease(pOut);
+    xjwtKeyFree(pKey);
+    REQUIRE(xjwtKeyParse("not a pem") == NULL);
+    xrtFree(pToken);
+
+    /* JWKS：合法解析 + HS256 令牌走 JWKS → alg 族拒绝 */
+    REQUIRE(xjwtJwksParse("not json") == NULL);
+    pJwks = xjwtJwksParse(
+        "{\"keys\":[{\"kty\":\"RSA\",\"kid\":\"k1\","
+        "\"n\":\"AQAB\",\"e\":\"AQAB\"}]}");
+    REQUIRE(pJwks != NULL);
+    pClaims = xrtValueObject();
+    xjwtConfigInit(&tCfg);
+    tCfg.Alg = XJWT_ALG_HS256;
+    tCfg.KeyPem = "probe-secret";
+    tCfg.KeyId = "k1";   /* kid 能命中，靠 alg 族防线拒绝 */
+    tCfg.ExpireSeconds = 600;
+    pToken = xjwtSign(&tCfg, pClaims);
+    xrtValueRelease(pClaims);
+    REQUIRE(pToken != NULL);
+    xrtClearError();
+    REQUIRE(xjwtVerifyJwks(pToken, pJwks, NULL) == NULL);
+    REQUIRE(xjwtLastError() == XJWT_ERROR_ALG_MISMATCH);
+    xrtFree(pToken);
+    xjwtJwksFree(pJwks);
+}
+#endif
+
+#ifdef XS_USE_XOAUTH2
+#include <xoauth2.h>
+/* mock 传输：离线驱动 token 端点（网络层另有回环端到端，见 extlibs 测试） */
+static const char* s_OaReply = "{}";
+static int s_OaStatus = 200;
+static char s_OaSawMethod[8];
+static bool probe_oa_http(const char* sMethod, const char* sUrl,
+                          const char* sBody, const char* sAuth,
+                          char** psBody, int* piStatus, void* pCtx)
+{
+    (void)sUrl; (void)sBody; (void)sAuth; (void)pCtx;
+    snprintf(s_OaSawMethod, sizeof(s_OaSawMethod), "%s", sMethod);
+    *piStatus = s_OaStatus;
+    *psBody = (char*)xrtMalloc(strlen(s_OaReply) + 1);
+    strcpy(*psBody, s_OaReply);
+    return true;
+}
+static void probe_xoauth2(void)
+{
+    xoauth2client c;
+    char* url;
+    xoauth2token* t;
+    char v[128], ch[128], st[64];
+
+    /* PKCE：挑战可复算 */
+    REQUIRE(xoauth2PkceGenerate(v, sizeof(v), ch, sizeof(ch)));
+    REQUIRE(strlen(v) == 43 && strlen(ch) == 43);
+    {
+        unsigned char dig[32];
+        char* expect;
+        xrtSha256(v, strlen(v), dig);
+        expect = xoauth2UrlEncode("");   /* 借用分配器验证可用，立刻释放 */
+        xrtFree(expect);
+    }
+
+    /* GitHub 预设：授权 URL 含 PKCE + state */
+    xoauth2UseGithub(&c, "cid-1", "sec", "https://app/cb");
+    c.Config.Http = probe_oa_http;
+    url = xoauth2BeginLogin(&c);
+    REQUIRE(url != NULL);
+    REQUIRE(strstr(url, "code_challenge_method=S256") != NULL);
+    REQUIRE(strstr(url, "state=") != NULL);
+    xrtFree(url);
+    REQUIRE(c.Config.UserInfoUrl != NULL);   /* 评审②：预设带 userinfo */
+
+    /* 错误 state：不焚毁 + 错误码 */
+    xrtClearError();
+    REQUIRE(xoauth2CompleteLogin(&c, "code", "wrong") == NULL);
+    REQUIRE(xoauth2LastError() == XOAUTH2_ERROR_STATE_MISMATCH);
+    REQUIRE(c.sState[0] != 0);
+
+    /* mock 全流程：换 token 成功 + nonce 焚毁 + 刷新 + DENIED 分级 */
+    s_OaStatus = 200;
+    s_OaReply = "{\"access_token\":\"oa_tok\",\"refresh_token\":\"oa_rt\","
+        "\"token_type\":\"Bearer\",\"expires_in\":7200}";
+    t = xoauth2CompleteLogin(&c, "code", c.sState);
+    REQUIRE(t != NULL && strcmp(t->AccessToken, "oa_tok") == 0);
+    REQUIRE(strcmp(s_OaSawMethod, "POST") == 0);
+    REQUIRE(strcmp(t->TokenType, "bearer") == 0);       /* 归一 */
+    REQUIRE(t->ExpiresAt == t->ObtainedAt + 7200);      /* 时间戳 */
+    REQUIRE(!xoauth2TokenExpiring(t, 60));
+    xoauth2TokenFree(t);
+    REQUIRE(c.sState[0] == 0 && c.sVerifier[0] == 0);   /* 一次性焚毁 */
+
+    t = xoauth2Refresh(&c, "oa_rt");
+    REQUIRE(t != NULL && strcmp(t->AccessToken, "oa_tok") == 0);
+    xoauth2TokenFree(t);
+    s_OaStatus = 400;
+    s_OaReply = "{\"error\":\"invalid_grant\"}";
+    xrtClearError();
+    REQUIRE(xoauth2Refresh(&c, "oa_rt") == NULL);
+    REQUIRE(xoauth2LastError() == XOAUTH2_ERROR_TOKEN_DENIED);
+
+    /* OIDC 辅助：HttpGet/NonceConsume/未知有效期语义 */
+    xoauth2UseGoogle(&c, "g", "s", "https://app/cb");
+    c.Config.Http = probe_oa_http;
+    s_OaStatus = 200;
+    s_OaReply = "{\"keys\":[]}";
+    {
+        int st2 = 0;
+        char* jwks = xoauth2HttpGet(&c, c.Config.JwksUrl, NULL, &st2);
+        REQUIRE(jwks != NULL && strcmp(s_OaSawMethod, "GET") == 0);
+        xrtFree(jwks);
+    }
+    REQUIRE(c.Config.UseNonce);
+    url = xoauth2BeginLogin(&c);
+    REQUIRE(url != NULL && strstr(url, "&nonce=") != NULL);
+    xrtFree(url);
+    REQUIRE(xoauth2NonceConsume(&c, c.sNonce));
+    xrtClearError();
+    REQUIRE(!xoauth2NonceConsume(&c, "replay"));
+    REQUIRE(xoauth2LastError() == XOAUTH2_ERROR_NONCE_MISMATCH);
+    {
+        xoauth2token unk;   /* 评审③：未知有效期 ≠ 即将过期 */
+        memset(&unk, 0, sizeof(unk));
+        unk.AccessToken = "x";
+        REQUIRE(!xoauth2TokenExpiring(&unk, 0));
+    }
+
+    /* 工具 + ClientUnit 语义 */
+    REQUIRE(xoauth2StateGenerate(st, sizeof(st)) && strlen(st) >= 30);
+    {
+        char* e = xoauth2UrlEncode("a b");
+        REQUIRE(e != NULL && strcmp(e, "a%20b") == 0);
+        xrtFree(e);
+    }
+    xoauth2ClientUnit(&c);
+    REQUIRE(c.Config.ClientId == NULL);
 }
 #endif
 
@@ -219,6 +475,9 @@ static const char nested_source[] =
     "#ifdef XS_USE_MD4C\n#include <md4c.h>\n#include <md4c-html.h>\n#endif\n"
     "#ifdef XS_USE_MD4C\nstatic void md4c_silent(const MD_CHAR* t, MD_SIZE n, void* u){ (void)t;(void)n;(void)u; }\n#endif\n"
     "#ifdef XS_USE_XACME\n#include <xacme.h>\n#endif\n"
+    "#ifdef XS_USE_QRCODEGEN\n#include <qrcodegen.h>\n#include <qrpng.h>\n#endif\n"
+    "#ifdef XS_USE_XJWT\n#include <xjwt.h>\n#endif\n"
+    "#ifdef XS_USE_XOAUTH2\n#include <xoauth2.h>\n#endif\n"
     "int nested(void) { int mask = 0; unsigned char buf[256];\n"
     "#ifdef XS_USE_SQLITE\nif(sqlite3_libversion_number()>0) mask |= 1;\n#endif\n"
     "#ifdef XS_USE_XTP2\nif(xtp2_error_string(XTP2_OK)[0]=='o') mask |= 2;\n\n#endif\n\n"
@@ -231,6 +490,9 @@ static const char nested_source[] =
     "#ifdef XS_USE_XIMAP\nif(xrtImapSequenceSetValid(xrtStrView(\"1:5\"))) mask |= 128;\n\n#endif\n\n"
     "#ifdef XS_USE_MD4C\nif(md_html(\"x\", 1, md4c_silent, 0, 0, 0) == 0) mask |= 256;\n\n#endif\n\n"
     "#ifdef XS_USE_XACME\nif(xrtAcmeDnsProviderCount() >= 1) mask |= 512;\n\n#endif\n\n"
+    "#ifdef XS_USE_QRCODEGEN\nif(qrcodegen_isNumeric(\"123\")) mask |= 2048;\n\n#endif\n\n"
+    "#ifdef XS_USE_XJWT\nif(xjwtAlgParse(\"HS256\")==XJWT_ALG_HS256) mask |= 4096;\n\n#endif\n\n"
+    "#ifdef XS_USE_XOAUTH2\n{ char* q = xoauth2UrlEncode(\"a b\"); if(q && strcmp(q,\"a%20b\")==0) mask |= 8192; if(q) xrtFree(q); }\n\n#endif\n\n"
     "{ unsigned i, c = xsExtensionCount(); unsigned seen = 0;\n"
     "  for (i = 0; i < c; i++) { if (xsExtensionName(i) != 0) seen |= 1u; }\n"
     "  if (c > 0 && seen && xsExtensionName(c) == 0) mask |= 1024; }\n\n"
@@ -271,6 +533,15 @@ void ServiceInit(XS_HostInfo *host)
 #endif
 #ifdef XS_USE_XACME
     mask |= 512; probe_xacme();
+#endif
+#ifdef XS_USE_QRCODEGEN
+    mask |= 2048; probe_qrcodegen();
+#endif
+#ifdef XS_USE_XJWT
+    mask |= 4096; probe_xjwt();
+#endif
+#ifdef XS_USE_XOAUTH2
+    mask |= 8192; probe_xoauth2();
 #endif
     /* xsExtensionEnabled：大小写不敏感、requires 可见、未知/空/NULL 恒 false */
     REQUIRE(xsExtensionEnabled(NULL) == false);
@@ -351,6 +622,9 @@ def check(exe: Path, names: list[str]) -> None:
             | (128 if "ximap" in selected else 0)
             | (256 if "md4c" in selected else 0)
             | (512 if "xacme" in selected else 0)
+            | (2048 if "qrcodegen" in selected else 0)
+            | (4096 if "xjwt" in selected else 0)
+            | (8192 if "xoauth2" in selected else 0)
             | (1024 if selected else 0))
     with tempfile.TemporaryDirectory(prefix="xs-extension-probe-") as temp:
         directory = Path(temp)
@@ -393,6 +667,8 @@ def check(exe: Path, names: list[str]) -> None:
                      "md_parse(0, 0, 0, 0)"),
             "xacme": ("xacme.h", "extern size_t xrtAcmeDnsProviderCount(void);",
                       "xrtAcmeDnsProviderCount()"),
+            "qrcodegen": ("qrcodegen.h", "extern int qrcodegen_isNumeric(const char*);",
+                          "qrcodegen_isNumeric(0)"),
         }
         for name, (header, declaration, call) in absent.items():
             if name in selected:
