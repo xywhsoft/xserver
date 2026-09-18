@@ -28,14 +28,33 @@
 #include "src/core/engine.h"
 #include "src/core/api.h"
 #include "src/core/assemble.h"
+#include "src/core/appnode.h"
 #include "src/core/xs_version.h"
+
+/* 站点 VFS：实现宏须在首次包含前定义（xs_pack.h 借用其格式常量） */
+#define XS_VFS_IMPLEMENTATION
+#include "src/core/xs_vfs.h"
+
+#define XS_PACK_IMPLEMENTATION
+#include "src/core/xs_pack.h"
+
+#define XS_APPFILE_IMPLEMENTATION
+#include "src/core/xs_appfile.h"
 
 #if defined(_WIN32) || defined(_WIN64)
 	#include <windows.h>
 	#include <shellapi.h>
 #endif
 
-static volatile sig_atomic_t g_XS_Stop = 0;
+volatile sig_atomic_t g_XS_Stop = 0;
+
+/* 进程停机唯一写入口：Ctrl-C/信号与 app 窗口关闭共用（设计 §5）。 */
+void XS_RequestStop(void)
+{
+	g_XS_Stop = 1;
+}
+static bool g_XS_VfsActive = false;   /* 站点 VFS 单文件模式（main 装载后置位） */
+bool g_XS_VfsDisabled = false;          /* --no-vfs：跳过应用包装载 */
 
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -101,7 +120,7 @@ static int XS_MainExit(int iCode, char** pOwnedArgv, int iOwnedArgc)
 static BOOL WINAPI XS_ConsoleProc(DWORD dwCtrlType)
 {
 	(void)dwCtrlType;
-	g_XS_Stop = 1;
+	XS_RequestStop();
 	return TRUE;
 }
 
@@ -251,15 +270,19 @@ static LONG WINAPI XS_CrashVectored(EXCEPTION_POINTERS* pException)
 static void XS_SignalProc(int iSignal)
 {
 	(void)iSignal;
-	g_XS_Stop = 1;
+	XS_RequestStop();
 }
 
 static void XS_Usage(void)
 {
 	printf("xs - xrt deployment host\n");
-	printf("usage: xs [config] [--version]\n");
-	printf("  config     path to xs.json (default: <appdir>/xs.json)\n");
+	printf("usage: xs [config] [--no-vfs] [--version]\n");
+	printf("  config     path to xs.json (default: <appdir>/xs.json or app pack)\n");
+	printf("  --no-vfs   ignore the appended app pack, use on-disk files only\n");
 	printf("  --version  print version and built-in extension list, then exit\n");
+	printf("subcommand:\n");
+	printf("  xs pack <site-dir> -o <out.exe>       pack site onto xs (single-file deploy)\n");
+	printf("  xs pack --list/--extract/--strip <exe> inspect / unpack / restore\n");
 }
 
 /* 版本横幅：启动时与 --version 输出同一内容。
@@ -314,6 +337,32 @@ int main(int argc, char** argv)
 		SetConsoleOutputCP(CP_UTF8);
 	}
 #endif
+#if defined(_WIN32) || defined(_WIN64)
+	{
+		/* GUI 子系统变体（xsw.exe，-mwindows）无控制台：stdout/stderr 落到
+		 * exe 同目录 xsw.log，保证 --version 与运行日志仍可取证。
+		 * 判定读自身 PE 头的 Subsystem 字段——GetConsoleWindow() 在
+		 * ConPTY/MSYS 终端下会误判为无控制台。 */
+		IMAGE_DOS_HEADER* pDos = (IMAGE_DOS_HEADER*)GetModuleHandleW(NULL);
+		IMAGE_NT_HEADERS* pNt = pDos != NULL && pDos->e_magic == IMAGE_DOS_SIGNATURE
+			? (IMAGE_NT_HEADERS*)((unsigned char*)pDos + pDos->e_lfanew) : NULL;
+
+		if ( pNt != NULL && pNt->Signature == IMAGE_NT_SIGNATURE
+			&& pNt->OptionalHeader.Subsystem == IMAGE_SUBSYSTEM_WINDOWS_GUI ) {
+			const char* sLogDir = XS_AppPath();
+			char sLogPath[4200];
+
+			i = sLogDir != NULL ? snprintf(sLogPath, sizeof(sLogPath),
+				"%s/xsw.log", sLogDir) : -1;
+			if ( i > 0 && (size_t)i < sizeof(sLogPath) ) {
+				freopen(sLogPath, "a", stdout);
+				freopen(sLogPath, "a", stderr);
+				setvbuf(stdout, NULL, _IONBF, 0);
+				setvbuf(stderr, NULL, _IONBF, 0);
+			}
+		}
+	}
+#endif
 
 	for ( i = 1; i < argc; i++ ) {
 		if ( strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0 ) {
@@ -322,6 +371,12 @@ int main(int argc, char** argv)
 		} else if ( strcmp(argv[i], "--version") == 0 ) {
 			XS_PrintVersion();
 			return XS_MainExit(0, pOwnedArgv, iOwnedArgc);
+		} else if ( strcmp(argv[i], "--no-vfs") == 0 ) {
+			g_XS_VfsDisabled = true;
+		} else if ( i == 1 && strcmp(argv[i], "pack") == 0 ) {
+			/* 工具模式：站点 VFS 打包子命令（保留字），先于一切初始化 */
+			int iPackExit = XS_PackMain(argc - 1, argv + 1);
+			return XS_MainExit(iPackExit, pOwnedArgv, iOwnedArgc);
 		} else if ( sArgConfig == NULL ) {
 			sArgConfig = argv[i];
 		} else {
@@ -331,6 +386,32 @@ int main(int argc, char** argv)
 		}
 	}
 
+	/* 站点 VFS：无显式 config 时探测自身应用包（单文件发布模式） */
+	if ( sArgConfig == NULL && XS_VfsBootstrap() ) {
+		size_t iVfsSize = 0;
+		const char* sVfsJson = (const char*)XS_VfsReadAll("xs.json", &iVfsSize);
+
+		if ( sVfsJson != NULL ) {
+			XS_PrintVersion();
+			printf("[xs] app pack: %d entries\n", XS_VfsEntryCount());
+			if ( !XS_ConfigLoadMemory("app-pack:xs.json",
+			                          sVfsJson, iVfsSize, &tApp) ) {
+				printf("[xs] config load failed (from app pack): %s\n",
+					tApp.ParseError);
+				XS_ConfigFree(&tApp);
+				return XS_MainExit(1, pOwnedArgv, iOwnedArgc);
+			}
+			printf("[xs] config loaded: app-pack:xs.json (%u servers)\n",
+				tApp.ServerCount);
+			g_XS_VfsActive = true;
+		}
+		else {
+			XS_PrintVersion();
+			printf("[xs] app pack present but xs.json missing\n");
+			return XS_MainExit(1, pOwnedArgv, iOwnedArgc);
+		}
+	}
+	else {
 	if ( sArgConfig != NULL ) {
 		i = snprintf(sConfigPath, sizeof(sConfigPath), "%s", sArgConfig);
 	} else {
@@ -354,24 +435,37 @@ int main(int argc, char** argv)
 		return XS_MainExit(1, pOwnedArgv, iOwnedArgc);
 	}
 	printf("[xs] config loaded: %s (%u servers)\n", sConfigPath, tApp.ServerCount);
+	}
 	if ( tApp.ServerCount == 0 ) {
 		printf("[xs] warning: no services configured\n");
 	}
 	XS_ConfigDump(&tApp);
 
+	/* app 前端：loading 窗先于引擎启动（设计 §4 缝合点①）；
+	 * 二次实例在此退出（唤醒信号已发给首实例）。 */
+	XS_AppFrontendInit(&tApp);
+	if ( g_XS_Stop ) {
+		printf("[xs] bye (secondary instance)\n");
+		XS_ConfigFree(&tApp);
+		return XS_MainExit(0, pOwnedArgv, iOwnedArgc);
+	}
+
 	/* 引擎启动（进程级，常驻；见设计 §3.2） */
 	if ( !XS_EngineStartup(&tApp) ) {
+	XS_AppFrontendFail("引擎启动失败");
 		XS_ConfigFree(&tApp);
 		return XS_MainExit(1, pOwnedArgv, iOwnedArgc);
 	}
 	if ( !XS_GenerationReaperInit() ) {
 		printf("[xs] generation reaper init failed\n");
+		XS_AppFrontendFail("generation reaper 初始化失败");
 		XS_EngineShutdown(&tApp);
 		XS_ConfigFree(&tApp);
 		return XS_MainExit(1, pOwnedArgv, iOwnedArgc);
 	}
 	if ( !XS_TlsRuntimeInit() ) {
 		printf("[xs] tls runtime init failed\n");
+		XS_AppFrontendFail("TLS 运行时初始化失败");
 		XS_GenerationReaperUnit();
 		XS_EngineShutdown(&tApp);
 		XS_ConfigFree(&tApp);
@@ -380,6 +474,7 @@ int main(int argc, char** argv)
 	g_XS_App = &tApp;
 	if ( !XS_TopologyRuntimeInit(&tApp) ) {
 		printf("[xs] topology runtime init failed\n");
+		XS_AppFrontendFail("拓扑运行时初始化失败");
 		XS_EngineShutdown(&tApp);
 		XS_GenerationReaperUnit();
 		XS_TlsRuntimeUnit();
@@ -388,6 +483,7 @@ int main(int argc, char** argv)
 	}
 	if ( !XS_ReloadRuntimeInit(&tApp, sConfigPath) ) {
 		printf("[xs] reload runtime init failed\n");
+		XS_AppFrontendFail("reload 运行时初始化失败");
 		XS_EngineShutdown(&tApp);
 		XS_TopologyRuntimeUnit();
 		XS_GenerationReaperUnit();
@@ -400,6 +496,7 @@ int main(int argc, char** argv)
 	/* 所有初始服务就绪后才开放 reload admission。 */
 	if ( !XS_AssembleServers(&tApp) ) {
 		printf("[xs] assemble failed, exit\n");
+		XS_AppFrontendFail("服务装配失败，详见控制台日志");
 		XS_ServersDrain(&tApp);
 		XS_ShutdownServers(&tApp);
 		XS_EngineShutdown(&tApp);
@@ -413,6 +510,7 @@ int main(int argc, char** argv)
 		return XS_MainExit(1, pOwnedArgv, iOwnedArgc);
 	}
 	XS_ReloadRuntimeStart();
+	XS_AppFrontendReady(&tApp);
 
 	/* 信号与待机 */
 #if defined(_WIN32) || defined(_WIN64)
@@ -429,6 +527,7 @@ int main(int argc, char** argv)
 	/* 优雅停机：停止接入并退役 builtin → 等待网络终态并停止引擎 →
 	 * 退役 custom → 排空 reaper 上的 ServiceUnit/终析构 → 配置释放。 */
 	printf("[xs] stopping\n");
+	XS_AppFrontendUnit();
 	XS_ServersDrain(&tApp);
 	XS_ShutdownServers(&tApp);
 	XS_EngineShutdown(&tApp);

@@ -35,7 +35,7 @@ static bool XS_ServerDriverStartEx(
 		printf("[xs] server '%s' custom ready (manual assembly)\n", pServer->Name);
 		return true;
 	}
-	if ( strcmp(pServer->Class, "http") == 0 ) {
+	if ( XS_ClassIsHttp(pServer->Class) ) {
 		if ( XS_HttpStartEx(pServer, bStartEndpoint, bAcceptEndpoint, sErr, iErrCap) ) return true;
 		XS_HttpStop((XS_HttpRuntime*)pServer->Runtime);
 		XS_ServerDriverUnit(pServer);
@@ -69,7 +69,7 @@ static XS_ListenerSlot* XS_ServerDriverListenerSlot(
 {
 	if ( ppExpectedRuntime != NULL ) *ppExpectedRuntime = NULL;
 	if ( pServer == NULL || pServer->Runtime == NULL || ppExpectedRuntime == NULL ) return NULL;
-	if ( strcmp(pServer->Class, "http") == 0 ) {
+	if ( XS_ClassIsHttp(pServer->Class) ) {
 		XS_HttpRuntime* pRuntime = (XS_HttpRuntime*)pServer->Runtime;
 		*ppExpectedRuntime = pRuntime;
 		return pRuntime->pListenerSlot;
@@ -95,7 +95,7 @@ static XS_ListenerSlot* XS_ServerDriverListenerSlot(
 static bool XS_ServerDriverHandoff(XS_ServerInfo* pOld, XS_ServerInfo* pNew)
 {
 	if ( pOld == NULL || pNew == NULL || strcmp(pOld->Class, pNew->Class) != 0 ) return false;
-	if ( strcmp(pOld->Class, "http") == 0 ) {
+	if ( XS_ClassIsHttp(pOld->Class) ) {
 		return XS_HttpHandoff((XS_HttpRuntime*)pOld->Runtime, (XS_HttpRuntime*)pNew->Runtime);
 	}
 	if ( strcmp(pOld->Class, "tcp") == 0 ) {
@@ -159,7 +159,7 @@ static void XS_ServerDriverStop(XS_ServerInfo* pServer)
 	if ( pServer == NULL ) return;
 	if ( strcmp(pServer->Class, "tcp") == 0 ) {
 		XS_TcpStop((XS_TcpRuntime*)pServer->Runtime);
-	} else if ( strcmp(pServer->Class, "http") == 0 ) {
+	} else if ( XS_ClassIsHttp(pServer->Class) ) {
 		XS_HttpStop((XS_HttpRuntime*)pServer->Runtime);
 	} else if ( strcmp(pServer->Class, "ws") == 0 ) {
 		XS_WsStop((XS_WsRuntime*)pServer->Runtime);
@@ -174,7 +174,7 @@ static void XS_ServerDriverCloseConnections(XS_ServerInfo* pServer)
 	if ( pServer == NULL || pServer->Runtime == NULL ) return;
 	if ( strcmp(pServer->Class, "tcp") == 0 ) {
 		XS_TcpCloseConnections((XS_TcpRuntime*)pServer->Runtime);
-	} else if ( strcmp(pServer->Class, "http") == 0 ) {
+	} else if ( XS_ClassIsHttp(pServer->Class) ) {
 		XS_HttpCloseConnections((XS_HttpRuntime*)pServer->Runtime);
 	} else if ( strcmp(pServer->Class, "ws") == 0 ) {
 		XS_WsCloseConnections((XS_WsRuntime*)pServer->Runtime);
@@ -185,7 +185,7 @@ static void XS_ServerDriverUnit(XS_ServerInfo* pServer)
 {
 	if ( strcmp(pServer->Class, "tcp") == 0 ) {
 		XS_TcpUnit((XS_TcpRuntime*)pServer->Runtime);
-	} else if ( strcmp(pServer->Class, "http") == 0 ) {
+	} else if ( XS_ClassIsHttp(pServer->Class) ) {
 		XS_HttpUnit((XS_HttpRuntime*)pServer->Runtime);
 	} else if ( strcmp(pServer->Class, "ws") == 0 ) {
 		XS_WsUnit((XS_WsRuntime*)pServer->Runtime);
@@ -203,7 +203,7 @@ static bool XS_HostHasScript(XS_HostInfo* pHost)
 
 static bool XS_ServerScriptsLoad(XS_ServerInfo* pServer)
 {
-	bool bVirtualHosts = strcmp(pServer->Class, "http") == 0 ||
+	bool bVirtualHosts = XS_ClassIsHttp(pServer->Class) ||
 		strcmp(pServer->Class, "ws") == 0;
 	uint32 iCount = bVirtualHosts ? pServer->HostCount + 1 : 1;
 	uint32 i;
@@ -226,7 +226,7 @@ static bool XS_ServerScriptsLoad(XS_ServerInfo* pServer)
 		if ( pHost == NULL || !pHost->Enabled ) continue;
 		if ( XS_HostHasScript(pHost) ) {
 			if ( XS_ScriptLoad(pHost) ) continue;
-		} else if ( strcmp(pServer->Class, "http") == 0 ) {
+		} else if ( XS_ClassIsHttp(pServer->Class) ) {
 			continue;	/* HTTP host 可以是纯静态站点 */
 		} else {
 			printf("[xs] server '%s' host '%s' class %s requires devfile\n",

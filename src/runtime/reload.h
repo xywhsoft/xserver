@@ -18,6 +18,7 @@
 #include "../protocol/ws.h"
 #include "../protocol/udp.h"
 #include "../core/driver.h"
+#include "../core/appnode.h"
 #include "gc.h"
 #include "topology.h"
 
@@ -617,6 +618,15 @@ static const char* XS_ServerTlsBindIp(const XS_ServerInfo* pServer)
 	return (pServer->IP == NULL || pServer->IP[0] == '\0') ? "0.0.0.0" : pServer->IP;
 }
 
+/* 端点比较用的监听端口：port 0 自动分配的 server，老代 Port 在绑定时已回写
+ * 实际端口而重解析的候选仍是 0，须经粘滞表解析到同一端口才算同端点
+ * （表键 = server 名；固定端口原样返回，未登记的 0 只与 0 相等）。 */
+static uint16 XS_ServerEndpointPort(const XS_ServerInfo* pServer)
+{
+	if ( pServer->Port != 0 ) return pServer->Port;
+	return XS_PortStickyGet(pServer->Name);
+}
+
 static bool XS_ServerEndpointEquals(
 	const XS_ServerInfo* pA,
 	bool bTlsA,
@@ -625,18 +635,20 @@ static bool XS_ServerEndpointEquals(
 {
 	const char* sIpA = bTlsA ? XS_ServerTlsBindIp(pA) : pA->IP;
 	const char* sIpB = bTlsB ? XS_ServerTlsBindIp(pB) : pB->IP;
-	uint16 iPortA = bTlsA ? pA->PortTLS : pA->Port;
-	uint16 iPortB = bTlsB ? pB->PortTLS : pB->Port;
+	uint16 iPortA = bTlsA ? pA->PortTLS : XS_ServerEndpointPort(pA);
+	uint16 iPortB = bTlsB ? pB->PortTLS : XS_ServerEndpointPort(pB);
 
 	return iPortA == iPortB && XS_BindIpEquals(sIpA, sIpB);
 }
 
-/* listener 创建后固化的部分必须一致，其他配置可经稳定槽位换整个 generation。 */
+/* listener 创建后固化的部分必须一致，其他配置可经稳定槽位换整个 generation。
+ * 端口经 XS_ServerEndpointPort 解析：port0 粘滞候选与老代回写端口可比。 */
 static bool XS_ServerCanHandoffEndpoint(XS_ServerInfo* pOld, XS_ServerInfo* pNew)
 {
 	return pOld->Enabled && pNew->Enabled &&
 	       strcmp(pOld->Class, pNew->Class) == 0 && strcmp(pOld->Class, "custom") != 0 &&
-	       XS_BindIpEquals(pOld->IP, pNew->IP) && pOld->Port == pNew->Port &&
+	       XS_BindIpEquals(pOld->IP, pNew->IP) &&
+	       XS_ServerEndpointPort(pOld) == XS_ServerEndpointPort(pNew) &&
 	       pOld->TLS == pNew->TLS && pOld->Backlog == pNew->Backlog &&
 	       pOld->RecvLimit == pNew->RecvLimit &&
 	       (!pOld->TLS || (pOld->PortTLS == pNew->PortTLS &&
@@ -754,14 +766,14 @@ static bool XS_ReloadPrepareServer(
 		}
 		return true;
 	}
-	if ( strcmp(pServer->Class, "http") == 0 || strcmp(pServer->Class, "ws") == 0 ) {
+	if ( XS_ClassIsHttp(pServer->Class) || strcmp(pServer->Class, "ws") == 0 ) {
 		XS_VHostTable tCheck;
 
 		if ( !XS_VHostTableBuild(pServer, &tCheck, sErr, iErrCap) ) return false;
 		XS_VHostTableUnit(&tCheck);
 	}
 	/* HTTP/WS 的路由单元是 host；其他协议仍只编译 DefaultHost。 */
-	iHostCount = (strcmp(pServer->Class, "http") == 0 ||
+	iHostCount = (XS_ClassIsHttp(pServer->Class) ||
 		strcmp(pServer->Class, "ws") == 0) ? 1 + pServer->HostCount : 1;
 	pScripts = (XS_ScriptRuntime**)xrtCalloc(iHostCount, sizeof(XS_ScriptRuntime*));
 	if ( pScripts == NULL ) {
@@ -786,7 +798,7 @@ static bool XS_ReloadPrepareServer(
 					pHost->Name != NULL ? pHost->Name : "?");
 				goto Done;
 			}
-		} else if ( strcmp(pServer->Class, "http") != 0 ) {
+		} else if ( !XS_ClassIsHttp(pServer->Class) ) {
 			snprintf(sErr, iErrCap, "class '%s' host '%s' requires devfile",
 				pServer->Class, pHost->Name != NULL ? pHost->Name : "?");
 			goto Done;
@@ -943,6 +955,8 @@ static bool XS_ReloadServerNow(XS_App* pApp, const char* sName)
 		goto Done;
 	}
 	bHandoff = XS_ServerCanHandoffEndpoint(pOld, pNew);
+	if ( XS_ServerIsApp(pOld) && XS_ServerIsApp(pNew) )
+		XS_AppWindowDiffNote(pOld, pNew);
 	if ( XS_ServerBindConflicts(pOld, pNew) && !bHandoff ) {
 		printf("[xs] server reload '%s' rejected: same endpoint changed an immutable listener "
 			"field (class/tls/ip_tls/port_tls/backlog/recv_limit); restart or change endpoint\n", sName);
@@ -1148,6 +1162,8 @@ static bool XS_ReloadAllAtomicNow(XS_App* pApp)
 		}
 		if ( pOld != NULL ) {
 			bHandoff = XS_ServerCanHandoffEndpoint(pOld, pWanted);
+			if ( XS_ServerIsApp(pOld) && XS_ServerIsApp(pWanted) )
+				XS_AppWindowDiffNote(pOld, pWanted);
 			if ( XS_ServerBindConflicts(pOld, pWanted) && !bHandoff ) {
 				printf("[xs] reload all rejected: server '%s' changed immutable same-endpoint field\n",
 					pWanted->Name);

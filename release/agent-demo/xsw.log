@@ -1,0 +1,58 @@
+[pack] base 6500864 bytes + 15 files, compressing...
+[pack] 15/15 compressed
+[pack] agent-app.exe: 15 entries (lzma 15, store 0), archive 86465 bytes
+method      crc32         orig         comp path
+lzma   6cc230b3        23742         7131 main.c
+lzma   7bc81e2f        51555         9252 wwwroot/css/app.css
+lzma   2cb4c0f3        14665         2457 wwwroot/css/tokens.css
+lzma   cbca3adf         1762          826 wwwroot/index.html
+lzma   cf6f8f2b         8119         2789 wwwroot/src/assembler.js
+lzma   80a93f3d        30530         8915 wwwroot/src/chrome.js
+lzma   8b6c9f90         9911         3848 wwwroot/src/core.js
+lzma   28b97e84          917          575 wwwroot/src/dom.js
+lzma   d86d8110        33562        10177 wwwroot/src/fixture.js
+lzma   2c94c2eb        65878        20785 wwwroot/src/icons.js
+lzma   b3fb0d17         4081         1792 wwwroot/src/main.js
+lzma   170b7c9f         5297         2273 wwwroot/src/markdown.js
+lzma   da20cc9b        38858        11209 wwwroot/src/ui.js
+lzma   5299c6de         9894         3386 wwwroot/src/wire.js
+lzma   01e7cd92          581          268 xs.json
+-- 15 entries (lzma 15, store 0), 299352 -> 85683 bytes
+[xs] XServer 1.0.0 (commit 4f9af32, 2026-09-18, windows)
+[xs] extensions (14): sqlite, xtp, xllm, xllm-session, xmail, xsmtp, xpop3, ximap, md4c, xacme, qrcodegen, xjwt, xoauth2, webview
+[xs] app pack: 15 entries
+[xs] config loaded: app-pack:xs.json (1 servers)
+[xs] server 'agent' class=app 127.0.0.1:0 tls=off enabled
+[xs] custom:{"window":{"title":"Agent Demo · XServer","width":1440,"height":900,"min_width":480,"min_height":320,"url":"/","devtools":false,"close":"stop","install_fallback":"ask"}}
+[xs]   default-host 'agent' path=D:\GIT\xserver\release\agent-demo\wwwroot devfile=D:\GIT\xserver\release\agent-demo\main.c
+[xs] app 'agent': frontend window loading (close=stop)
+[xs] engine started, workers=12
+[xs] script loaded: D:\GIT\xserver\release\agent-demo\main.c (23.2 KB gen 1)
+[agent-demo] C backend ready (turn engine + 3 scripts)
+[xs] http host 'agent' static root 'D:\GIT\xserver\release\agent-demo\wwwroot' on disk missing, serving from app pack
+[xs] server 'agent' http bound on 127.0.0.1:60026
+[xs] app 'agent': frontend ready -> http://127.0.0.1:60026/
+[xs] running, press Ctrl+C to stop
+[xs] stopping
+[xs] generation finalized: server 'agent' (connections=0)
+[xs] engine stopped
+[xs] bye
+[xs] XServer 1.0.0 (commit 4f9af32, 2026-09-18, windows)
+[xs] extensions (14): sqlite, xtp, xllm, xllm-session, xmail, xsmtp, xpop3, ximap, md4c, xacme, qrcodegen, xjwt, xoauth2, webview
+[xs] app pack: 15 entries
+[xs] config loaded: app-pack:xs.json (1 servers)
+[xs] server 'agent' class=app 127.0.0.1:0 tls=off enabled
+[xs] custom:{"window":{"title":"Agent Demo · XServer","width":1440,"height":900,"min_width":480,"min_height":320,"url":"/","devtools":false,"close":"stop","install_fallback":"ask"}}
+[xs]   default-host 'agent' path=D:\GIT\xserver\release\agent-demo\wwwroot devfile=D:\GIT\xserver\release\agent-demo\main.c
+[xs] app 'agent': frontend window loading (close=stop)
+[xs] engine started, workers=12
+[xs] script loaded: D:\GIT\xserver\release\agent-demo\main.c (23.2 KB gen 1)
+[agent-demo] C backend ready (turn engine + 3 scripts)
+[xs] http host 'agent' static root 'D:\GIT\xserver\release\agent-demo\wwwroot' on disk missing, serving from app pack
+[xs] server 'agent' http bound on 127.0.0.1:60189
+[xs] app 'agent': frontend ready -> http://127.0.0.1:60189/
+[xs] running, press Ctrl+C to stop
+[xs] stopping
+[xs] generation finalized: server 'agent' (connections=0)
+[xs] engine stopped
+[xs] bye

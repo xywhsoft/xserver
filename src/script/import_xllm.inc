@@ -1,4 +1,4 @@
-/* xllm v3 core public API; all 53 externals from lib/xllm/xllm.h.
+/* xllm v3 core public API; all 65 externals from lib/xllm/xllm.h.
  * xrt handles stay opaque in the header; the host supplies xrt symbols. */
 
 /* parts & messages */
@@ -65,3 +65,16 @@ XS_XLLM_SYMBOL(xllmClientBuildRequestJson)
 
 /* allocator */
 XS_XLLM_SYMBOL(xllmFree)
+
+/* lifecycle hooks & history container */
+XS_XLLM_SYMBOL(xllmClientSetHooks)
+XS_XLLM_SYMBOL(xllmHistoryCreate)
+XS_XLLM_SYMBOL(xllmHistoryDestroy)
+XS_XLLM_SYMBOL(xllmHistoryCount)
+XS_XLLM_SYMBOL(xllmHistoryAt)
+XS_XLLM_SYMBOL(xllmHistoryAdd)
+XS_XLLM_SYMBOL(xllmHistoryAddText)
+XS_XLLM_SYMBOL(xllmHistoryAddFromResponse)
+XS_XLLM_SYMBOL(xllmHistoryAddToolResult)
+XS_XLLM_SYMBOL(xllmHistoryRemove)
+XS_XLLM_SYMBOL(xllmHistoryAppendInto)

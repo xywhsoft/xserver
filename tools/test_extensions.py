@@ -18,6 +18,45 @@ import gen_tcc_resources as vfs
 from xs_extensions import ROOT, host_header, load_registry, select_extensions, source_path
 
 
+class SiteVfsFormatTests(unittest.TestCase):
+    """站点 VFS：xs_vfs.h 与 xs_pack.h 的格式常量/魔数逐字段一致。"""
+
+    def test_format_constants_consistent(self):
+        vfs = (ROOT / "src/core/xs_vfs.h").read_text(encoding="utf-8")
+        pack = (ROOT / "src/core/xs_pack.h").read_text(encoding="utf-8")
+        for name in ("XS_VFS_TRAILER_SIZE", "XS_VFS_HEADER_SIZE",
+                     "XS_VFS_MAX_ENTRIES"):
+            self.assertIn(f"#define {name}", vfs)
+        # 打包器复用运行时常量（include xs_vfs.h 且不自定义同名单 define）
+        self.assertNotIn(f"#define {name}", pack)
+        # 双方魔数一致（各自字面量定义）
+        self.assertIn("XS_VFS_TRAILER_MAGIC", vfs)
+        self.assertIn("XS_PACK_TRAILER_MAGIC", pack)
+        # 24B 尾标 / 64B 头
+        self.assertIn("XS_VFS_TRAILER_SIZE 24u", vfs)
+        self.assertIn("XS_VFS_HEADER_SIZE  64u", vfs)
+
+    def test_main_wires_vfs_and_pack(self):
+        main = (ROOT / "main.c").read_text(encoding="utf-8")
+        self.assertIn("XS_VFS_IMPLEMENTATION", main)
+        self.assertIn("XS_PACK_IMPLEMENTATION", main)
+        self.assertIn('strcmp(argv[i], "pack")', main)
+        self.assertIn("XS_VfsBootstrap", main)
+        self.assertIn("XS_ConfigLoadMemory", main)
+
+    def test_http_layer_has_vfs_fallback(self):
+        http = (ROOT / "src/protocol/http.h").read_text(encoding="utf-8")
+        self.assertIn("XS_HttpVfsServe", http)
+        self.assertIn("XS_HttpSendMemoryData", http)
+        self.assertIn("pSendMem", http)
+
+    def test_tls_reads_via_appfile(self):
+        tls = (ROOT / "src/core/tls.h").read_text(encoding="utf-8")
+        self.assertIn("XS_AppReadAll", tls)
+        self.assertIn("XS_AppFree", tls)
+        self.assertNotIn("= xrtFileReadAll(sCertPath", tls)
+
+
 class ExtensionTests(unittest.TestCase):
     def test_selection(self):
         for names, expected in (
@@ -144,7 +183,7 @@ class ExtensionTests(unittest.TestCase):
         apis = set(re.findall(r"^[A-Za-z_][A-Za-z0-9_ *]*?\**\s*(xllm[A-Z]\w*)\s*\(",
                               header, re.MULTILINE))
         symbols = re.findall(r"XS_XLLM_SYMBOL\((\w+)\)", imports)
-        self.assertEqual(len(symbols), 53)
+        self.assertEqual(len(symbols), 64)
         self.assertEqual(len(symbols), len(set(symbols)))
         self.assertEqual(set(symbols), apis)
 

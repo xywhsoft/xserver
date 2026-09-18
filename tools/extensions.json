@@ -766,5 +766,48 @@
   "host_includes": [
    "lib/xoauth2"
   ]
+ },
+ "webview": {
+  "macro": "XS_USE_WEBVIEW",
+  "headers": {
+   "xs_webview.h": "src/webview/xs_webview.h"
+  },
+  "sources": [
+   {
+    "path": "src/webview/xs_app_window.c",
+    "platforms": [
+     "windows"
+    ]
+   },
+   {
+    "path": "src/webview/webview_impl.cpp",
+    "lang": "c++",
+    "platforms": [
+     "windows"
+    ],
+    "flags": [
+     "-std=c++17"
+    ]
+   }
+  ],
+  "symbols": "src/script/import_webview.inc",
+  "symbol_macro": "XS_WEBVIEW_SYMBOL",
+  "host_includes": [
+   "lib/webview"
+  ],
+  "link_flags": {
+   "windows": [
+    "-lstdc++",
+    "-lgdi32",
+    "-lurlmon",
+    "-lcomctl32",
+    "-lole32",
+    "-lshlwapi",
+    "-luser32",
+    "-lversion",
+    "-ladvapi32"
+   ],
+   "linux": []
+  }
  }
 }

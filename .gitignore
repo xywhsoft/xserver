@@ -1,5 +1,7 @@
 release/xs
 release/xs.exe
+release/xsw.exe
+release/xsw.log
 release/xs_smoke.log
 release/xs_smoke_config.json
 tools/wingrp.exe

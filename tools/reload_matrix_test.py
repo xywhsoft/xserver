@@ -228,6 +228,103 @@ def write_config(path: Path, ports: dict[str, int], marker: int) -> None:
     path.write_text(json.dumps(config, indent=2), encoding="utf-8")
 
 
+def write_app_config(path: Path, marker: int, title: str) -> None:
+    path.write_text(json.dumps({
+        "services": [{
+            "enabled": True,
+            "class": "app",
+            "name": "main",
+            "port": 0,
+            "app_marker": marker,
+            "host_default": {
+                "name": "app",
+                "path": "wwwroot",
+                "devlang": "c",
+                "devfile": "script/http_main.c",
+            },
+            "window": {"title": title, "install_fallback": "headless"},
+        }],
+    }, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def port0_case(source_exe: Path) -> None:
+    """app 节点 port 0 自动分配 + 热重载端口粘滞 + window 固化字段提示。
+
+    XS_WV2_FORCE_MISSING 使 Windows 变体同样走 headless，CI 无窗口依赖。
+    """
+    with tempfile.TemporaryDirectory(prefix="xs-port0-") as temp_name:
+        app = Path(temp_name)
+        exe = app / source_exe.name
+        log_path = app / "run.log"
+        shutil.copy2(source_exe, exe)
+        shutil.copytree(ROOT / "release" / "script", app / "script")
+        shutil.copytree(ROOT / "release" / "wwwroot", app / "wwwroot")
+        write_app_config(app / "xs.json", 0, "port0-sticky")
+
+        env = dict(os.environ)
+        env["XS_WV2_FORCE_MISSING"] = "1"
+        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+        with log_path.open("w", encoding="utf-8") as log:
+            process = subprocess.Popen(
+                [str(exe), "xs.json"], cwd=app, stdout=log,
+                stderr=subprocess.STDOUT, env=env, creationflags=creationflags,
+            )
+            try:
+                # 从日志取实际端口（port 0 由 OS 分配）
+                port = None
+                deadline = time.time() + 12
+                while time.time() < deadline:
+                    text = log_path.read_text(encoding="utf-8", errors="replace")
+                    for line in text.splitlines():
+                        if "http bound on 127.0.0.1:" in line:
+                            port = int(line.rsplit(":", 1)[1].split()[0])
+                            break
+                    if port is not None:
+                        break
+                    time.sleep(0.05)
+                assert port is not None, text[-3000:]
+                # 脚本视图看到的必须是回写后的实际端口
+                status, body = http_get(port, "/json")
+                assert status == 200 and json.loads(body)["port"] == port, body
+                status, body = http_get(port, "/text")
+                assert status == 200 and body == "xs3 http ok", body
+
+                # 改 marker（触发真实换代）+ 改 window.title（固化字段变更提示）
+                write_app_config(app / "xs.json", 1, "port0-sticky-v2")
+                reload_id = submit_reload(port, "/reload-all")
+                result = wait_reload(port, reload_id)
+                assert result["status"] == "succeeded", result
+
+                # 粘滞：reload 后同端口继续服务，脚本端口视图不变
+                status, body = http_get(port, "/json")
+                assert status == 200 and json.loads(body)["port"] == port, body
+                status, body = http_get(port, "/text")
+                assert status == 200 and body == "xs3 http ok", body
+
+                text = log_path.read_text(encoding="utf-8", errors="replace")
+                assert "window fields changed; restart required to apply" in text, text[-3000:]
+                # 候选按“先 bind 再转交”设计会再次打印 bound（同端口、REUSEADDR），
+                # 粘滞的正确断言是所有 bound 行都为同一端口（端点未漂移）
+                bound_lines = [l for l in text.splitlines() if "http bound on 127.0.0.1:" in l]
+                assert bound_lines and all(l.rstrip().endswith(f":{port}") for l in bound_lines), bound_lines
+            finally:
+                if process.poll() is None:
+                    if os.name == "nt":
+                        process.send_signal(signal.CTRL_BREAK_EVENT)
+                    else:
+                        process.send_signal(signal.SIGTERM)
+                try:
+                    process.wait(timeout=25)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=5)
+                    raise AssertionError("port0 case server did not drain")
+        output = log_path.read_text(encoding="utf-8", errors="replace")
+        assert process.returncode == 0, output[-4000:]
+        assert "[xs] bye" in output, output[-4000:]
+        print(f"PORT0 STICKY PASS (port {port}, reload kept endpoint)")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--exe", type=Path, default=ROOT / "release" / "xs.exe")
@@ -429,6 +526,8 @@ def main() -> int:
             assert output.count(f"generation finalized: server '{name}'") >= 2, output[-5000:]
         assert "[xs] bye" in output and "force-free" not in output
         print("RELOAD MATRIX PASS")
+
+    port0_case(source_exe)
     return 0
 
 

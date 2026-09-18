@@ -210,7 +210,8 @@ static bool XS_ConfigParseHost(xvalue* pObj, XS_HostInfo* pHost, XS_ServerInfo* 
 static bool XS_ConfigClassValid(const char* sClass)
 {
 	return sClass != NULL && (
-		strcmp(sClass, "http") == 0 || strcmp(sClass, "ws") == 0 ||
+		strcmp(sClass, "http") == 0 || strcmp(sClass, "app") == 0 ||
+		strcmp(sClass, "ws") == 0 ||
 		strcmp(sClass, "tcp") == 0 || strcmp(sClass, "udp") == 0 ||
 		strcmp(sClass, "custom") == 0 );
 }
@@ -264,7 +265,7 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 	if ( !XS_ConfigTakeBool(pObj, "enabled", &pServer->Enabled, sErr, iErrCap) ) return false;
 	if ( !XS_ConfigTakeString(pObj, "class", &pServer->Class, sErr, iErrCap) ) return false;
 	if ( !XS_ConfigClassValid(pServer->Class) ) {
-		snprintf(sErr, iErrCap, "field 'class' must be http/ws/tcp/udp/custom");
+		snprintf(sErr, iErrCap, "field 'class' must be http/app/ws/tcp/udp/custom");
 		return false;
 	}
 	if ( !XS_ConfigTakeString(pObj, "name", &pServer->Name, sErr, iErrCap) ) return false;
@@ -273,6 +274,10 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 		return false;
 	}
 	if ( !XS_ConfigTakeString(pObj, "ip", &pServer->IP, sErr, iErrCap) ) return false;
+	/* app 为本地前端语义：未指定 ip 时缺省回环，而非 http 的 0.0.0.0 */
+	if ( pServer->IP == NULL && strcmp(pServer->Class, "app") == 0 ) {
+		pServer->IP = xrtStrDup("127.0.0.1");
+	}
 	if ( !XS_ConfigTakeBool(pObj, "tls", &pServer->TLS, sErr, iErrCap) ) return false;
 	if ( !XS_ConfigTakeInt(pObj, "backlog", &iVal, sErr, iErrCap) ) return false;
 	if ( iVal < 0 || iVal > 0x7FFFFFFF ) {
@@ -293,8 +298,12 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 
 	if ( strcmp(pServer->Class, "custom") != 0 ) {
 		if ( !XS_ConfigTakeInt(pObj, "port", &iVal, sErr, iErrCap) ) return false;
-		if ( iVal <= 0 || iVal > 65535 ) {
-			snprintf(sErr, iErrCap, "field 'port' required (1-65535) for class '%s'", pServer->Class);
+		/* port 0 = OS 自动分配（app 专属，设计 §8）；其余类 1-65535 */
+		if ( iVal < 0 || iVal > 65535
+			|| (iVal == 0 && strcmp(pServer->Class, "app") != 0) ) {
+			snprintf(sErr, iErrCap, "field 'port' required (1-65535%s) for class '%s'",
+				strcmp(pServer->Class, "app") == 0 ? " or 0 (auto)" : "",
+				pServer->Class);
 			return false;
 		}
 		pServer->Port = (uint16)iVal;
@@ -442,7 +451,7 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 			}
 		}
 		if ( pHost->Enabled &&
-		     (strcmp(pServer->Class, "http") == 0 || strcmp(pServer->Class, "ws") == 0) &&
+		     (XS_ClassIsHttp(pServer->Class) || strcmp(pServer->Class, "ws") == 0) &&
 		     (pHost->Host == NULL || pHost->Host[0] == '\0') ) {
 			snprintf(sErr, iErrCap,
 				"virtual host '%s' requires non-empty field 'host'", pHost->Name);

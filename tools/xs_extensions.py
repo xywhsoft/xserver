@@ -70,12 +70,18 @@ def load_registry(path: Path = REGISTRY) -> dict:
         for source in entry["sources"]:
             if not isinstance(source, dict) or not isinstance(source.get("path"), str):
                 raise ValueError(f"{name}: each source needs a path")
-            if set(source) - {"path", "flags", "defines"}:
-                raise ValueError(f"{name}: source supports path, flags and defines only")
+            if set(source) - {"path", "flags", "defines", "lang", "platforms"}:
+                raise ValueError(f"{name}: source supports path, flags, defines, lang and platforms only")
             for field in ("flags", "defines"):
                 values = source.get(field, [])
                 if not isinstance(values, list) or not all(isinstance(v, str) for v in values):
                     raise ValueError(f"{name}: source {field} must be a string list")
+            if source.get("lang", "c") not in ("c", "c++"):
+                raise ValueError(f"{name}: source lang must be c or c++")
+            platforms = source.get("platforms")
+            if platforms is not None and (not isinstance(platforms, list) or not platforms
+                    or not all(v in ("windows", "linux") for v in platforms)):
+                raise ValueError(f"{name}: source platforms must be a nonempty windows/linux list")
         if not isinstance(entry.get("symbols"), str):
             raise ValueError(f"{name}: symbols needs an import file path")
         links = entry.get("link_flags", {})

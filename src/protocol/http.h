@@ -83,6 +83,7 @@ typedef struct XS_HttpRecord {
 	/* 静态文件发送状态。TCP 持有文件和偏移；TLS 额外持有一个小的
 	 * 可重用明文块。状态随连接记录存活，Close 终态可统一回收。 */
 	xfile			hSendFile;
+	const unsigned char*	pSendMem;	/* VFS 内存发送源（借用，不释放）；hSendFile 为空时生效 */
 	uint64			iSendOffset;
 	uint64			iSendRemaining;
 	unsigned char*		pSendData;
@@ -100,6 +101,7 @@ static void XS_HttpFileSourceRelease(XS_HttpRecord* pRec)
 	if ( pRec == NULL ) return;
 	if ( pRec->hSendFile != NULL ) xrtClose(pRec->hSendFile);
 	pRec->hSendFile = NULL;
+	pRec->pSendMem = NULL;
 	xrtFree(pRec->pSendData);
 	pRec->pSendData = NULL;
 	pRec->iSendDataSize = 0;
@@ -386,8 +388,15 @@ static int XS_HttpPumpFileData(XS_HttpRecord* pRec)
 				if ( iChunk > XS_HTTP_SENDFILE_CHUNK ) iChunk = XS_HTTP_SENDFILE_CHUNK;
 				if ( iChunk > (uint64)iWritable ) iChunk = (uint64)iWritable;
 				if ( iChunk == 0 ) break;
-				eSend = xrtNetStreamSendFile(pRec->tReg.pTcp, pRec->hSendFile,
-					pRec->iSendOffset, (size_t)iChunk);
+				if ( pRec->pSendMem != NULL ) {
+					/* VFS 内存源：直接按可写空间分片发送（零拷贝） */
+					eSend = xrtNetStreamSend(pRec->tReg.pTcp,
+						pRec->pSendMem + pRec->iSendOffset, (size_t)iChunk);
+				}
+				else {
+					eSend = xrtNetStreamSendFile(pRec->tReg.pTcp, pRec->hSendFile,
+						pRec->iSendOffset, (size_t)iChunk);
+				}
 				if ( eSend == XNET_RESULT_AGAIN ) break;
 				if ( eSend != XNET_RESULT_OK ) {
 					iResult = -1;
@@ -414,8 +423,14 @@ static int XS_HttpPumpFileData(XS_HttpRecord* pRec)
 							break;
 						}
 					}
-					if ( !xrtRead(pRec->hSendFile, pRec->pSendData, iChunk, &iRead) ||
-					     iRead == 0 ) {
+					if ( pRec->pSendMem != NULL ) {
+						/* VFS 内存源：直接切片借用，避免整段复制到 TLS 缓冲 */
+						memcpy(pRec->pSendData,
+							pRec->pSendMem + pRec->iSendOffset, iChunk);
+						iRead = iChunk;
+					}
+					else if ( !xrtRead(pRec->hSendFile, pRec->pSendData, iChunk, &iRead) ||
+					          iRead == 0 ) {
 						iResult = -1;
 						break;
 					}
@@ -458,6 +473,38 @@ static int XS_HttpPumpFileData(XS_HttpRecord* pRec)
 
 /* 静态文件统一走有界、可恢复的分块发送。调用成功后始终接管
  * hFile：同步完成时已关闭，异步完成时由 Record 持有到终态。 */
+/* VFS 内存体发送（借用视图，不接管释放）；与文件流同一 phase-3 泵 */
+static bool XS_HttpSendMemoryData(XS_HttpRecord* pRec,
+	const unsigned char* pMem, uint64 iSize)
+{
+	int iPreviousPhase;
+	int iPump;
+
+	if ( pRec == NULL || pMem == NULL || iSize == 0 || pRec->iPhase == 3 )
+		return false;
+	iPreviousPhase = pRec->iPhase;
+	pRec->hSendFile = NULL;
+	pRec->pSendMem = pMem;
+	pRec->iSendOffset = 0;
+	pRec->iSendRemaining = iSize;
+	pRec->bSendQueuedAll = false;
+	pRec->bSendFinishPending = false;
+	pRec->bSendClose = false;
+	pRec->iPhase = 3;
+	iPump = XS_HttpPumpFileData(pRec);
+	if ( iPump > 0 ) {
+		XS_HttpFileStateReset(pRec);
+		pRec->iPhase = iPreviousPhase;
+		return true;
+	}
+	if ( iPump < 0 ) {
+		XS_HttpFileStateReset(pRec);
+		pRec->iPhase = iPreviousPhase;
+		return false;
+	}
+	return true;
+}
+
 static bool XS_HttpSendFileData(XS_HttpRecord* pRec, xfile hFile, uint64 iSize)
 {
 	int iPreviousPhase;
@@ -569,6 +616,84 @@ static void XS_HttpErrorPage(XS_HttpRecord* pRec, uint16 iStatus)
 	      XS_HttpSend(&pRec->tReg, arrBody, (size_t)iLen) != XNET_RESULT_OK) ) {
 		pRec->bWriteFailed = true;
 	}
+}
+
+/* 站点 VFS 静态兜底：磁盘未命中时查包内条目，命中走内存响应。
+ * 返回非 NULL = 已接管响应（调用方直接 return）。 */
+extern bool XS_VfsActive(void);
+extern int XS_VfsLookup(const char* sRelPath);
+extern const unsigned char* XS_VfsEntryData(int iEntry, size_t* pSize);
+extern uint64_t XS_VfsEntrySize(int iEntry);
+
+static const unsigned char* XS_HttpVfsServe(XS_HttpRecord* pRec,
+	const char* sRel)
+{
+	size_t iSize = 0;
+	int iEntry;
+	const unsigned char* pMem;
+	const XS_HttpHostHdrs* pSite;
+	XS_HttpResp tResp;
+	char aPack[1024];
+
+	if ( !XS_VfsActive() || sRel == NULL || sRel[0] == '/' )
+		return NULL;
+	/* host 的 Path 是站点根（相对 appPath，如 wwwroot）；
+	 * VFS 条目以包根为基准 —— 先带前缀查，裸路径再查一次（path 为空时） */
+	iEntry = -1;
+		if ( pRec->pHost != NULL && pRec->pHost->Path != NULL && pRec->pHost->Path[0] != 0 ) {
+			/* Path 已被配置层解析为 appPath 绝对路径：剥前缀 + 反斜杠归一，
+			 * 映射到包内条目 <相对根>/<请求路径> */
+			const char* sApp2 = xsAppPath();
+			size_t nApp2 = sApp2 != NULL ? strlen(sApp2) : 0;
+			const char* pPath = pRec->pHost->Path;
+			size_t nPath = strlen(pPath);
+			size_t nRel2 = strlen(sRel);
+
+			if ( nApp2 > 0 && nPath > nApp2 + 1 &&
+				strncmp(pPath, sApp2, nApp2) == 0 &&
+				(pPath[nApp2] == '/' || pPath[nApp2] == '\\') ) {
+				pPath += nApp2 + 1;
+				nPath -= nApp2 + 1;
+			}
+			if ( nPath > 0 && nPath + nRel2 + 2 < sizeof(aPack) ) {
+				size_t j = 0, k;
+				for ( k = 0; k < nPath; k++ )
+					aPack[j++] = pPath[k] == '\\' ? '/' : pPath[k];
+				aPack[j++] = '/';
+				memcpy(aPack + j, sRel, nRel2);
+				aPack[j + nRel2] = 0;
+				iEntry = XS_VfsLookup(aPack);
+			}
+		}
+		if ( iEntry < 0 ) {
+		if ( getenv("XS_VFS_DEBUG") )
+			printf("[vfs] miss rel=%s hp=%s\n", sRel,
+			pRec->pHost != NULL && pRec->pHost->Path != NULL ? pRec->pHost->Path : "-");
+		return NULL;
+	}
+	pMem = XS_VfsEntryData(iEntry, &iSize);
+	if ( pMem == NULL ) return NULL;
+
+	pSite = XS_HttpHdrCacheFind(pRec->pRuntime, pRec->pHost);
+	memset(&tResp, 0, sizeof(tResp));
+	tResp.iStatus = 200;
+	tResp.sContentType = XS_HttpMime(sRel);
+	tResp.iContentLength = (uint64)iSize;
+	tResp.bHeadOnly = pRec->tHead.MethodCode == XHTTP_METHOD_HEAD;
+	if ( pSite != NULL && pSite->iCount > 0 ) {
+		memcpy(tResp.arrExtra, pSite->arrFields,
+			sizeof(xhttpfield) * pSite->iCount);
+		tResp.iExtraCount = pSite->iCount;
+	}
+	if ( !XS_HttpRespond(pRec, &tResp) ) {
+		pRec->bWriteFailed = true;
+		return pMem;   /* 已接管（失败也算处理完） */
+	}
+	if ( !tResp.bHeadOnly && iSize > 0 ) {
+		if ( !XS_HttpSendMemoryData(pRec, pMem, (uint64)iSize) )
+			pRec->bWriteFailed = true;
+	}
+	return pMem;
 }
 
 /* ============================================================
@@ -746,12 +871,34 @@ static void XS_HttpStatic(XS_HttpRecord* pRec)
 		goto cleanup;
 	}
 	if ( pSite->pRoot == NULL ) {
+		/* 站点 VFS 单文件模式（磁盘根缺失）：全部走包内兜底；
+		 * 目录请求（含根 /）补查 index.html */
+		{
+			const unsigned char* pMem = XS_HttpVfsServe(pRec, sRel);
+
+			if ( pMem == NULL && ( sRel[0] == 0 ||
+				sRel[strlen(sRel) - 1] == '/') ) {
+				char aIdx[1024];
+
+				if ( strlen(sRel) + 12 < sizeof(aIdx) ) {
+					snprintf(aIdx, sizeof(aIdx), "%sindex.html", sRel);
+					pMem = XS_HttpVfsServe(pRec, aIdx);
+				}
+			}
+			if ( pMem != NULL ) { xrtFree(sDecoded); return; }
+		}
 		XS_HttpErrorPage(pRec, 404);
 		goto cleanup;
 	}
 	if ( sRel[0] == '\0' ) {
 		bDirectory = true;
 	} else if ( !xrtRootStat(pSite->pRoot, sRel, true, &tInfo) ) {
+		/* 磁盘 miss（目录存在但文件不在）→ VFS 兜底 */
+		{
+			const unsigned char* pMem = XS_HttpVfsServe(pRec, sRel);
+
+			if ( pMem != NULL ) { xrtFree(sDecoded); return; }
+		}
 		XS_HttpErrorPage(pRec, 404);
 		goto cleanup;
 	} else if ( tInfo.Type == XFILE_TYPE_DIRECTORY ) {
@@ -805,6 +952,11 @@ static void XS_HttpStatic(XS_HttpRecord* pRec)
 			}
 		}
 		if ( hFile == NULL ) {
+			/* 磁盘未命中索引页 → VFS 兜底 */
+			const unsigned char* pMem = XS_HttpVfsServe(pRec, sIndexPath);
+			xrtFree(sIndexPath);
+			sIndexPath = NULL;
+			if ( pMem != NULL ) { xrtFree(sDecoded); return; }
 			XS_HttpErrorPage(pRec, 404);
 			goto cleanup;
 		}
@@ -812,6 +964,8 @@ static void XS_HttpStatic(XS_HttpRecord* pRec)
 		sSelected = sRel;
 		hFile = XS_HttpRootOpenFile(pSite->pRoot, sSelected, &tInfo);
 		if ( hFile == NULL ) {
+			const unsigned char* pMem = XS_HttpVfsServe(pRec, sSelected);
+			if ( pMem != NULL ) { xrtFree(sDecoded); return; }
 			XS_HttpErrorPage(pRec, 404);
 			goto cleanup;
 		}
@@ -1585,14 +1739,22 @@ static XS_HttpHostHdrs* XS_HttpHdrCacheBuild(
 	}
 	pHdrs->pRoot = xrtRootOpen(sRoot);
 	if ( pHdrs->pRoot == NULL ) {
-		const xerror* pError = xrtGetError();
-		const char* sMessage = pError != NULL ? xrtErrorMessage(pError) : NULL;
+		/* 站点 VFS 单文件模式：磁盘根缺失不阻断装配——
+		 * 请求期 XS_HttpVfsServe 以包内条目兜底（pRoot 留空） */
+		extern bool XS_VfsActive(void);
 
-		snprintf(sErr, iErrCap, "http host '%s' cannot open static root '%s'%s%s",
-			pHost->Name != NULL ? pHost->Name : "?", sRoot,
-			sMessage != NULL ? ": " : "", sMessage != NULL ? sMessage : "");
-		xrtFree(sRoot);
-		goto failed;
+		if ( !XS_VfsActive() ) {
+			const xerror* pError = xrtGetError();
+			const char* sMessage = pError != NULL ? xrtErrorMessage(pError) : NULL;
+
+			snprintf(sErr, iErrCap, "http host '%s' cannot open static root '%s'%s%s",
+				pHost->Name != NULL ? pHost->Name : "?", sRoot,
+				sMessage != NULL ? ": " : "", sMessage != NULL ? sMessage : "");
+			xrtFree(sRoot);
+			goto failed;
+		}
+		printf("[xs] http host '%s' static root '%s' on disk missing, serving from app pack\n",
+			pHost->Name != NULL ? pHost->Name : "?", sRoot);
 	}
 	xrtFree(sRoot);
 	if ( pStatic == NULL ) return pHdrs;
@@ -1800,6 +1962,43 @@ static void XS_HttpHdrCacheUnit(XS_HttpRuntime* pRuntime)
 	pRuntime->iHdrCacheCount = 0;
 }
 
+/* ---- 端口 0 粘滞表（设计 §8）：按服务名记录 OS 分配端口，跨 generation
+ * 存活（reload-all 换代不重建），进程生命周期内有效、不落盘。写入只发生在
+ * 装配/候选构建路径（主线程或 reload 控制线程，串行），无需加锁。 ---- */
+#define XS_PORT_STICKY_MAX 32
+typedef struct XS_PortStickyEntry {
+	char			sName[64];
+	uint16			iPort;
+} XS_PortStickyEntry;
+static XS_PortStickyEntry g_tPortSticky[XS_PORT_STICKY_MAX];
+static uint32 g_iPortStickyCount;
+
+static uint16 XS_PortStickyGet(const char* sName)
+{
+	uint32 i;
+
+	for ( i = 0; i < g_iPortStickyCount; i++ ) {
+		if ( strcmp(g_tPortSticky[i].sName, sName) == 0 )
+			return g_tPortSticky[i].iPort;
+	}
+	return 0;
+}
+
+static void XS_PortStickySet(const char* sName, uint16 iPort)
+{
+	uint32 i;
+
+	for ( i = 0; i < g_iPortStickyCount; i++ ) {
+		if ( strcmp(g_tPortSticky[i].sName, sName) != 0 ) continue;
+		g_tPortSticky[i].iPort = iPort;
+		return;
+	}
+	if ( i >= XS_PORT_STICKY_MAX ) return;	/* 超额：不再粘滞（无碍正确性） */
+	snprintf(g_tPortSticky[i].sName, sizeof g_tPortSticky[0].sName, "%s", sName);
+	g_tPortSticky[i].iPort = iPort;
+	g_iPortStickyCount++;
+}
+
 static bool XS_HttpStartEx(
 	XS_ServerInfo* pServer,
 	bool bStartEndpoint,
@@ -1820,6 +2019,8 @@ static bool XS_HttpStartEx(
 		snprintf(sErr, iErrCap, "out of memory");
 		return false;
 	}
+	bool bAutoPort;
+
 	pRuntime->pServer = pServer;
 	pRuntime->pDefaultHost = pServer->DefaultHost;
 	pRuntime->pGeneration = (XS_ServerGeneration*)pServer->Generation;
@@ -1839,6 +2040,15 @@ static bool XS_HttpStartEx(
 	if ( !bHasRequestProc ) {
 		/* 无 RequestProc：纯静态服务（设计 §5.3：static 也走 fallback） */
 		printf("[xs] http server '%s' static-only mode\n", pServer->Name);
+	}
+	/* 端口 0 自动分配（仅 app 类经配置校验放行）：粘滞优先——
+	 * reload 候选绑定本服务上一次解析出的端口，端点标识不变，
+	 * 走既有稳定槽位转交而非换端点排空（已开窗口不断线）。 */
+	bAutoPort = (pServer->Port == 0);
+	if ( bAutoPort ) {
+		uint16 iSticky = XS_PortStickyGet(pServer->Name);
+
+		if ( iSticky != 0 ) pServer->Port = iSticky;
 	}
 	if ( !xrtNetAddrParse(&tAddr, pServer->IP ? pServer->IP : "0.0.0.0", pServer->Port) ) {
 		snprintf(sErr, iErrCap, "http server '%s' addr parse failed", pServer->Name);
@@ -1954,6 +2164,19 @@ static bool XS_HttpStartEx(
 			snprintf(sErr, iErrCap, "http server '%s' listener closed during start",
 				pServer->Name);
 			return false;
+		}
+		/* 回读实际端口：自动分配时回写 Port 并登记粘滞（端点标识、
+		 * 脚本视图、前端 URL 与日志全部自然一致）。 */
+		{
+			xnetaddr tLocal;
+
+			if ( xrtNetListenerLocal(pListener, &tLocal) && tLocal.Port != 0 ) {
+				pServer->PortBound = tLocal.Port;
+				if ( bAutoPort ) {
+					pServer->Port = tLocal.Port;
+					XS_PortStickySet(pServer->Name, tLocal.Port);
+				}
+			}
 		}
 	}
 	if ( bStartEndpoint && pServer->TLS ) {

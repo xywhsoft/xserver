@@ -93,9 +93,17 @@ typedef struct XS_HostInfo {
 	void*				RuntimeLock;	/* 宿主侧脚本代切换锁（不透明） */
 } XS_HostInfo;
 
+/* class 分发辅助：app 节点与 http 走同一套装配/驱动/reload 语义
+ * （docs/Webview扩展与app节点设计.md §3）。仅判断行为归属，不改 Class 值。 */
+static bool XS_ClassIsHttp(const char* sClass)
+{
+	return sClass != NULL &&
+		(strcmp(sClass, "http") == 0 || strcmp(sClass, "app") == 0);
+}
+
 typedef struct XS_ServerInfo {
 	bool			Enabled;
-	const char*			Class;		/* "http"|"ws"|"tcp"|"udp"|"custom" */
+	const char*			Class;		/* "http"|"app"|"ws"|"tcp"|"udp"|"custom"；app 复用 http 全套装配 */
 	const char*			Name;		/* 唯一名，xsServerFind 的键 */
 	const char*			IP;
 	uint16			Port;
@@ -114,6 +122,9 @@ typedef struct XS_ServerInfo {
 	/* 以下为尾部追加字段（ABI 纪律：只增不改） */
 	void*				Generation;	/* 服务代生命周期拥有者（不透明） */
 	void*				ConfigOwner;	/* 动态配置快照所有者（不透明） */
+	uint16			PortBound;	/* 实际监听端口：绑定成功后回填（固定端口=Port；
+						 * port:0 自动分配=OS 分配值，同时回写 Port，
+						 * 端点标识与脚本视图天然一致；0=尚未绑定） */
 } XS_ServerInfo;
 
 /* ============================================================

@@ -189,6 +189,33 @@ static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 	pData = g_XS_ScriptReadHook != NULL ?
 		g_XS_ScriptReadHook(sDevPath, &iSize, g_XS_ScriptReadContext) :
 		xrtFileReadAll(sDevPath, &iSize);
+	if ( pData == NULL && g_XS_ScriptReadHook == NULL ) {
+		/* 站点 VFS 兜底：单文件模式下 C 源码可进应用包（appPath 相对路径） */
+		extern bool XS_VfsActive(void);
+		extern const unsigned char* XS_VfsReadAll(const char*, size_t*);
+		const char* sSlash = strrchr(sDevPath, '/');
+		const char* sBack = strrchr(sDevPath, '\\');
+		const char* sLast = sSlash > sBack ? sSlash : sBack;
+
+		if ( XS_VfsActive() && sLast != NULL ) {
+			const char* sApp = xsAppPath();
+			size_t nApp = sApp != NULL ? strlen(sApp) : 0;
+
+			if ( nApp > 0 && strncmp(sDevPath, sApp, nApp) == 0 &&
+			     (sDevPath[nApp] == '/' || sDevPath[nApp] == '\\') ) {
+				char aRel[1024];
+				size_t nRel = strlen(sDevPath) - nApp - 1;
+
+				if ( nRel > 0 && nRel < sizeof(aRel) ) {
+					size_t j = 0;
+					for ( size_t k = nApp + 1; sDevPath[k]; k++ )
+						aRel[j++] = sDevPath[k] == '\\' ? '/' : sDevPath[k];
+					aRel[j] = 0;
+					pData = (void*)XS_VfsReadAll(aRel, &iSize);
+				}
+			}
+		}
+	}
 	if ( pData == NULL ) {
 		printf("[xs] script read failed: %s\n", sDevPath);
 		xrtFree(sDevPath);
@@ -200,6 +227,80 @@ static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 		xrtFree(pData);
 		xrtFree(sDevPath);
 		return NULL;
+	}
+	/* 站点 VFS：包内源码头挂载到虚拟根 /xs/site/<相对路径>，
+	 * 引号/尖号包含经该根解析（appPath 与 dev_inc 的磁盘路径不存在时兜底） */
+	{
+		extern bool XS_VfsActive(void);
+		extern int XS_VfsEntryCount(void);
+		extern const char* XS_VfsEntryPath(int);
+		extern const unsigned char* XS_VfsEntryData(int, size_t*);
+
+		if ( XS_VfsActive() ) {
+			static const char* s_XS_SiteRoot = "/xs/site";
+			char aVirtual[1024];
+			int nEntries = XS_VfsEntryCount();
+			static int s_iMounted = 0;
+
+			if ( getenv("XS_VFS_DEBUG") )
+				printf("[vfs] script mount block: %d entries, devinc=%s\n",
+					nEntries, pHost != NULL && pHost->DevInc != NULL
+					? pHost->DevInc : "(null)");
+			for ( int i = 0; i < nEntries; i++ ) {
+				const char* sRel = XS_VfsEntryPath(i);
+				size_t n = sRel != NULL ? strlen(sRel) : 0;
+				bool bSource = n > 2 && (
+					strcmp(sRel + n - 2, ".h") == 0 ||
+					strcmp(sRel + n - 2, ".c") == 0 ) ||
+					( n > 4 && strcmp(sRel + n - 4, ".inc") == 0 );
+
+				if ( !bSource || n + 16 >= sizeof(aVirtual) ) continue;
+				{
+					size_t iSize = 0;
+					const unsigned char* pSrc = XS_VfsEntryData(i, &iSize);
+
+					if ( pSrc == NULL ) continue;
+					snprintf(aVirtual, sizeof(aVirtual), "%s/%s",
+						s_XS_SiteRoot, sRel);
+					if ( tcc_vfs_mount_memory(aVirtual, pSrc, iSize) > 0 )
+						s_iMounted++;
+				}
+			}
+			tcc_add_include_path(pTcc, s_XS_SiteRoot);
+			if ( getenv("XS_VFS_DEBUG") )
+				printf("[vfs] mounted %d source entries under /xs/site\n", s_iMounted);
+			/* dev_inc 目录的虚拟等价：DevInc 已被配置层解析为 appPath
+			 * 绝对路径（分号分隔）——剥前缀取相对部分映射 /xs/site/<相对> */
+			if ( pHost != NULL && pHost->DevInc != NULL ) {
+				const char* sApp = xsAppPath();
+				size_t nApp = sApp != NULL ? strlen(sApp) : 0;
+				const char* p = pHost->DevInc;
+				while ( *p != '\0' ) {
+					const char* q = strchr(p, ';');
+					size_t n = q != NULL ? (size_t)(q - p) : strlen(p);
+					const char* pUse = p;
+					size_t nUse = n;
+
+					if ( nApp > 0 && n > nApp + 1 &&
+					     strncmp(p, sApp, nApp) == 0 &&
+					     (p[nApp] == '/' || p[nApp] == '\\') ) {
+						pUse = p + nApp + 1;
+						nUse = n - nApp - 1;
+					}
+					if ( nUse > 0 && nUse + 16 < sizeof(aVirtual) ) {
+						char aRel[512];
+						size_t j = 0;
+						for ( size_t k = 0; k < nUse; k++ )
+							aRel[j++] = pUse[k] == '\\' ? '/' : pUse[k];
+						aRel[j] = 0;
+						snprintf(aVirtual, sizeof(aVirtual), "%s/%s",
+							s_XS_SiteRoot, aRel);
+						tcc_add_include_path(pTcc, aVirtual);
+					}
+					p = q != NULL ? q + 1 : p + n;
+				}
+			}
+		}
 	}
 	/* 脚本目录进包含路径：源码挂载在 VFS 虚路径下，引号包含无法
 	 * 按原始目录解析，需显式提供（脚本分 modules/ 子目录的常规姿势） */

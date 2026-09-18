@@ -57,8 +57,11 @@ def build(args: argparse.Namespace, selected: dict) -> Path:
         if not header.is_file() or header.read_text(encoding="utf-8") != content:
             header.write_text(content, encoding="utf-8", newline="\n")
 
+    # vfs_pack 在构建机上即刻执行：musl 交叉场景下动态链会因宿主无 musl
+    # loader 而 ENOENT（伪装成"文件不存在"），Linux 一律静态链
     run([args.cc, "tools/tcc_vfs_lzma_pack.c", "tcc/LzmaEnc.c", "tcc/LzFind.c",
-         "tcc/CpuArch.c", "-I", "tcc", "-DZ7_ST", "-O2", "-s", "-o", str(packer)],
+         "tcc/CpuArch.c", "-I", "tcc", "-DZ7_ST", "-O2", "-s",
+         *(["-static"] if platform == "linux" else []), "-o", str(packer)],
         args.dry_run)
     if args.dry_run:
         gen_cmd = [sys.executable, "tools/gen_tcc_resources.py", *selected,
@@ -100,28 +103,38 @@ def build(args: argparse.Namespace, selected: dict) -> Path:
         flags.append(f'-DCONFIG_TRIPLET="{triplet}"')
     objects: list[str] = []
 
-    def compile_source(source: str, name: str, extra: list[str]) -> None:
+    def compile_source(source: str, name: str, extra: list[str],
+                       lang: str = "c") -> None:
         obj = str(directory / (name + ".o"))
-        run([args.cc, "-x", "c", "-c", source, *flags, "-O2", *extra, "-o", obj],
+        run([args.cc, "-x", lang, "-c", source, *flags, "-O2", *extra, "-o", obj],
             args.dry_run)
         objects.append(obj)
 
     for name, entry in selected.items():
         for index, source in enumerate(entry["sources"]):
+            # platforms 过滤：源可以声明只参与指定平台（如 webview 的 C++ 实现单元）
+            if "platforms" in source and platform not in source["platforms"]:
+                continue
             extra = ["-D" + value for value in source.get("defines", [])]
             compile_source(source["path"], f"extension-{name}-{index}",
-                           extra + source.get("flags", []))
+                           extra + source.get("flags", []), source.get("lang", "c"))
     compile_source("main.c", "main", ["-Wall"])
     core = {
         "tcc-libtcc": "tcc/libtcc.c",
         "tcc-vfs": "tcc/tcc_builtin_vfs.c",
         "lzma-dec": "tcc/LzmaDec.c",
+        "lzma-enc": ("tcc/LzmaEnc.c", "-DZ7_ST"),
+        "lzma-find": ("tcc/LzFind.c", "-DZ7_ST"),
+        "cpu-arch": ("tcc/CpuArch.c", "-DZ7_ST"),
         "resources": str(resources),
     }
     if platform == "windows":
         core["tcc-utf8"] = "tcc/tcc_utf8_io.c"
     for name, source in core.items():
-        compile_source(source, name, [])
+        if isinstance(source, tuple):
+            compile_source(source[0], name, [source[1]])
+        else:
+            compile_source(source, name, [])
     if platform == "windows":
         icon = str(directory / "icon.o")
         run(["windres", "res/xs.rc", "-O", "coff", "-o", icon], args.dry_run)
@@ -136,6 +149,11 @@ def build(args: argparse.Namespace, selected: dict) -> Path:
     if args.dry_run:
         staged = directory / "link-stage" / ("xs" + suffix)
         run([args.cc, *objects, "-O2", "-s", "-o", str(staged), *libraries], True)
+        if platform == "windows":
+            # GUI 子系统变体：同一批 objects 重链为无控制台的 xsw.exe
+            staged_gui = directory / "link-stage" / "xsw.exe"
+            run([args.cc, *objects, "-O2", "-s", "-mwindows",
+                 "-o", str(staged_gui), *libraries], True)
     else:
         # Even --output=<variant>/xs is protected from a failed linker.
         with tempfile.TemporaryDirectory(prefix="xs-link-", dir=directory) as temp:
@@ -143,6 +161,12 @@ def build(args: argparse.Namespace, selected: dict) -> Path:
             run([args.cc, *objects, "-O2", "-s", "-o", str(staged), *libraries])
             publish(staged, linked)
             publish(linked, output)
+            if platform == "windows":
+                staged_gui = Path(temp) / "xsw.exe"
+                run([args.cc, *objects, "-O2", "-s", "-mwindows",
+                     "-o", str(staged_gui), *libraries])
+                publish(staged_gui, output.with_name("xsw.exe"))
+                print(f"[build] built {output.with_name('xsw.exe')}", flush=True)
     print(f"[build] {'would publish' if args.dry_run else 'built'} {output}", flush=True)
     return output
 

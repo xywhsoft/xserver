@@ -99,6 +99,10 @@ static void XS_TlsRuntimeUnit(void)
 }
 
 /* 相对路径按 appPath 解析（结果 xrtFree 释放） */
+/* 应用文件统一出口（磁盘优先 → VFS 兜底），实现见 xs_appfile.h */
+extern void* XS_AppReadAll(const char* sRelPath, size_t* pSize, bool* pFromVfs);
+extern void XS_AppFree(void* pData, bool bFromVfs);
+
 static str XS_TlsResolvePath(const char* sPath)
 {
 	if ( sPath == NULL ) {
@@ -465,6 +469,7 @@ static xtlsidentity* XS_TlsLoadHost(XS_HostInfo* pHost, char* sErr, size_t iErrC
 {
 	str sCertPath = NULL, sKeyPath = NULL, sCaPath = NULL;
 	bytes pCertText = NULL, pKeyText = NULL, pCaText = NULL;
+	bool bCertFromVfs = false, bKeyFromVfs = false, bCaFromVfs = false;
 	size_t iCertSize = 0, iKeySize = 0, iCaSize = 0;
 	XS_TlsDer* arrCerts = NULL;
 	XS_TlsDer* arrCa = NULL;
@@ -484,8 +489,8 @@ static xtlsidentity* XS_TlsLoadHost(XS_HostInfo* pHost, char* sErr, size_t iErrC
 		snprintf(sErr, iErrCap, "tls cert path resolve failed");
 		goto done;
 	}
-	pCertText = xrtFileReadAll(sCertPath, &iCertSize);
-	pKeyText = xrtFileReadAll(sKeyPath, &iKeySize);
+	pCertText = XS_AppReadAll(sCertPath, &iCertSize, &bCertFromVfs);
+	pKeyText = XS_AppReadAll(sKeyPath, &iKeySize, &bKeyFromVfs);
 	if ( pCertText == NULL || pKeyText == NULL ) {
 		snprintf(sErr, iErrCap, "tls cert file read failed: %s", pHost->TlsCert);
 		goto done;
@@ -498,7 +503,7 @@ static xtlsidentity* XS_TlsLoadHost(XS_HostInfo* pHost, char* sErr, size_t iErrC
 	if ( sCaPath != NULL ) {
 		XS_TlsDer* pCombined;
 
-		pCaText = xrtFileReadAll(sCaPath, &iCaSize);
+		pCaText = XS_AppReadAll(sCaPath, &iCaSize, &bCaFromVfs);
 		if ( pCaText == NULL ) {
 			snprintf(sErr, iErrCap, "tls ca file read failed: %s", pHost->TlsCA);
 			goto done;
@@ -535,9 +540,9 @@ static xtlsidentity* XS_TlsLoadHost(XS_HostInfo* pHost, char* sErr, size_t iErrC
 done:
 	XS_TlsDerFree(arrCerts, iCertCount);
 	XS_TlsDerFree(arrCa, iCaCount);
-	xrtFree(pCertText);
-	xrtFree(pKeyText);
-	xrtFree(pCaText);
+	XS_AppFree(pCertText, bCertFromVfs);
+	XS_AppFree(pKeyText, bKeyFromVfs);
+	XS_AppFree(pCaText, bCaFromVfs);
 	xrtFree(sCertPath);
 	xrtFree(sKeyPath);
 	xrtFree(sCaPath);

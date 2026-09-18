@@ -57,6 +57,23 @@ Linux 使用相同参数，例如 `bash build.sh sqlite xtp xllm xsmtp`；需要
 
 后续库在 [扩展清单](/D:/GIT/xserver/tools/extensions.json) 登记源码、头文件、宏和符号清单，不需要修改两个平台的构建脚本或 TCC 宿主分支。参见[可选扩展库说明](/D:/GIT/xserver/docs/可选扩展库.md)。
 
+## 单文件发布（站点 VFS）
+
+把 `xs.json` 与整个站点（wwwroot、C 源码、TLS 证书）打成一个 LZMA 归档**追加**到 xs 末尾，得到一个可直接部署的单文件 exe：
+
+```bat
+release\\xs.exe pack <站点目录> -o app.exe    # 站点目录须含 xs.json；基底 = 当前 xs
+app.exe                                      # 无参启动：自动从包内读配置、出文件
+```
+
+- 压缩：逐条 LZMA（无收益自动 STORE）；`xs pack --list app.exe` 查看条目清单
+- **磁盘优先**：放同名文件到 exe 旁即覆盖包内版本（热修 CSS/证书免重打包），删除即恢复包内
+- `xs pack --extract app.exe -d out/` 解包取证；`xs pack --strip` 还原未打包二进制
+- `xs --no-vfs` 忽略应用包强制目录模式（调试用）
+- 归档探测零成本（读自身末尾 24B）；索引启动装载后不可变、内容首次访问惰性解压常驻缓存
+
+格式与设计细节见 [docs/站点VFS设计.md](docs/站点VFS设计.md)；端到端测试 `python tools/test_site_vfs.py`。
+
 ## 开源许可
 
 本项目自有代码以 MIT 授权（见 [LICENSE](/D:/GIT/xserver/LICENSE)）。仓库捆绑的第三方组件各自保留原许可：

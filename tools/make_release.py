@@ -35,6 +35,8 @@ VARIANTS = {
         "exe": "xs.exe",
         "os": "Windows 10/11 · x64",
         "note": "开箱即用，无需安装运行库",
+        # GUI 子系统变体（app 节点窗口、无控制台，见 docs/Webview扩展与app节点设计.md §6）
+        "extra_binaries": [(ROOT / "release" / "xsw.exe", "xsw.exe")],
     },
     "linux-x64-glibc": {
         "binary": ROOT / "release" / "xs-linux-x64-glibc",
@@ -100,6 +102,9 @@ def build_variant(name: str, meta: dict, when: str, commit: str, out_dir: Path) 
     entries: list[tuple[str, Path]] = []
     staging = f"xserver-{name}"
     entries.append(arc(staging, binary, meta["exe"]))
+    for extra, inner in meta.get("extra_binaries", []):
+        if extra.is_file():
+            entries.append(arc(staging, extra, inner))
     entries.append((f"{staging}/LICENSE", ROOT / "LICENSE"))
     entries.append((f"{staging}/VERSION", None))  # 占位，稍后写内容
     entries.append((f"{staging}/QUICKSTART.md", ROOT / "release" / "QUICKSTART.md"))
