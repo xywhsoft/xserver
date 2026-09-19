@@ -387,6 +387,9 @@ static bool xllm_session__default_build_prompt(xllm_session* pSession, const cha
              !xllm_session__buf_cstr(&tBuf, sPrevSummary) ||
              !xllm_session__buf_cstr(&tBuf, "\n</previous_summary>\n\n") ) goto fail;
     }
+    /* The asset ledger is harness truth (it survives compaction); hand it to
+     * the summarizer so file coverage stays exact across generations. */
+    if ( !xllm_session__append_ledger_blocks(&tBuf, pSession) ) goto fail;
     if ( !xllm_session__buf_cstr(&tBuf, "<conversation>\n") ||
          !xllm_session__buf_cstr(&tBuf, sCandidates ? sCandidates : "") ||
          !xllm_session__buf_cstr(&tBuf, "</conversation>\n") ) goto fail;
@@ -776,6 +779,8 @@ bool xllmSessionCommitCompaction(xllm_session* pSession, xllm_compaction* pCompa
     pSession->uCompactedThrough = pCompaction->uThroughSequence;
     ++pSession->uCompactionCount;
     ++pSession->uSummaryGeneration;
+    pSession->bStatsDirty = true;
+    ++pSession->uRenderGeneration;
     pSession->uSummaryPromptAtBirth = pCompaction->uUsagePromptTokens;
     pSession->uSummaryOutputAtBirth = pCompaction->uUsageOutputTokens;
     /* Streak anchor: compactions from here need a new user entry to reset. */
@@ -929,6 +934,8 @@ bool xllmSessionOverflowLadder(xllm_session* pSession, xllm_error* pError)
         }
         pSession->uTailFloor = uCut;
         ++pSession->uSummaryGeneration;
+        pSession->bStatsDirty = true;
+        ++pSession->uRenderGeneration;
         xllm_session__invalidate_fill(pSession);
         xllm_session__event(pSession, XLLM_SESSION_EVENT_LADDER_TRUNCATE, uOldFloor, uCut, "overflow_l2");
         return true;

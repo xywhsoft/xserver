@@ -4,7 +4,7 @@
 /* Bound sessions and the default meta call                            */
 /* ------------------------------------------------------------------ */
 
-static xllm_result xllm_session__dispatch_call(xllm_session* pSession, const xllm_request* pRequest,
+xllm_result xllm_session__dispatch_call(xllm_session* pSession, const xllm_request* pRequest,
     const xllm_stream_callbacks* pCallbacks, xllm_response** ppResponse, xllm_error* pError)
 {
     xllm_result eResult;
@@ -212,6 +212,37 @@ xllm_result xllmSessionSend(xllm_session* pSession, const char* sUserText,
 bool xllmSessionSetHooks(xllm_session* pSession, const xllm_session_hooks* pHooks)
 {
     if ( !pSession ) { return false; }
+    if ( pSession->pHooks != pHooks ) {
+        /* Render hooks reshape request bytes; cached wire prefixes built
+         * under the previous hooks must not survive the swap. */
+        ++pSession->uRenderGeneration;
+    }
     pSession->pHooks = pHooks;
+    return true;
+}
+
+bool xllmSessionBindClient(xllm_session* pSession, xllm_client* pClient)
+{
+    if ( !pSession || !pClient ) { return false; }
+    pSession->pClient = pClient;
+    return true;
+}
+
+bool xllmSessionSetTestCall(xllm_session* pSession, xllm_test_call_proc pCall, void* pUserData)
+{
+    if ( !pSession ) { return false; }
+    pSession->pTestCall = pCall;
+    pSession->pTestCallData = pCall ? pUserData : NULL;
+    return true;
+}
+
+bool xllmSessionForwardDriver(xllm_session* pDst, const xllm_session* pSrc)
+{
+    if ( !pDst || !pSrc ) { return false; }
+    if ( pSrc->pClient ) { pDst->pClient = pSrc->pClient; }
+    if ( pSrc->pTestCall ) {
+        pDst->pTestCall = pSrc->pTestCall;
+        pDst->pTestCallData = pSrc->pTestCallData;
+    }
     return true;
 }

@@ -37,6 +37,13 @@ struct xllm_session {
     char* sSummary;
     char* sJournalPath;
     char* sStyleStorage;           /* owned copy of the loaded summary style */
+    /* --- asset ledger (survives compaction by design) --- */
+    char** psReadFiles;
+    size_t iReadFileCount;
+    size_t iReadFileCap;
+    char** psModifiedFiles;
+    size_t iModifiedFileCount;
+    size_t iModifiedFileCap;
     /* --- v3 governance (exact feedback loop) --- */
     uint32_t uSummaryGeneration;       /* +1 per compaction or L2 truncation */
     uint64_t uSummaryPromptAtBirth;    /* meta-call usage, exact */
@@ -47,6 +54,17 @@ struct xllm_session {
     uint64_t uCachedInputTokens;
     uint64_t uIncrementMax;            /* worst-case next-turn growth envelope */
     uint32_t uAutoCompactStreak;
+    /* --- performance caches (尾账 #1/#3) ---
+     * bStatsDirty: any mutation that stats reads (entries, watermarks,
+     * summary, governance fill) sets it; GetStats rebuilds lazily. The
+     * const API keeps its promise — the cache is lazy evaluation, not
+     * observable state. uRenderGeneration: bumped by the same mutators;
+     * wire-prefix caches key on it (owner pointer + generation). */
+    bool bStatsDirty;
+    xllm_session_stats tStatsCache;
+    uint64_t uRenderGeneration;
+    uint64_t uSessionNonce;        /* global unique-per-instance: prefix-cache
+                                    * owner identity survives address reuse */
     uint64_t uLastUserSequence;        /* newest user entry at the last auto compaction */
     uint64_t uTailFloor;               /* L2: entries <= floor leave the rendered tail */
     xllm_session_pressure eLastPressure;
@@ -125,5 +143,13 @@ char* xllm_session__pruned_content(const xllm_session* pSession, const xllm_sess
 /* easy layer (easy.c) */
 bool xllm_session__client_summarize(xllm_session* pSession, const char* sPrompt,
     char** psSummary, xllm_usage* pUsage, xllm_error* pError);
+xllm_result xllm_session__dispatch_call(xllm_session* pSession, const xllm_request* pRequest,
+    const xllm_stream_callbacks* pCallbacks, xllm_response** ppResponse, xllm_error* pError);
+
+/* asset ledger (core.c) */
+bool xllm_session__note_file(char*** ppsList, size_t* piCount, size_t* piCap,
+    const char* sPath, bool* pbAdded);
+bool xllm_session__append_ledger_blocks(xllm_session_buf* pBuf, const xllm_session* pSession);
+bool xllm_session__journal_append_ledger(xllm_session* pSession, const char* sKind, const char* sPath);
 
 #endif

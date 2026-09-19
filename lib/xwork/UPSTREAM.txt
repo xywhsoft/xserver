@@ -1,0 +1,21 @@
+UPSTREAM
+
+xwork v2（agent 工具/任务/委派层）
+来源: D:/GIT/xrt 仓库 extlibs/xwork（基线 xrt@31cde60e）
+
+本目录为 xserver 的 vendored 副本：
+  xwork.h            公开 API 头（进 VFS: /xs/xwork.h）
+  xwork.c            unity TU（include src/ 下实现分片）
+  xwork-xrt.h        xrt 模块声明绑定（链接到 xllm-session 桥接链）
+  src/               实现分片与内部头
+
+有意未收录: xwork-xrt.c（自带 XRT_IMPLEMENTATION，严禁编译）、tests/、
+build.*、README.md、dev/、docs/。
+
+零分叉声明: 全部文件与上游字节等同（含桥接头）。
+依赖: xllm + xllm-session（extensions.json 已声明 requires）。
+xwork.h include xllm.h / xllm-executor.h / xllm-session.h——头内
+按 __TINYC__ 分流（上游源头写法）。
+
+同步上游后需重新生成 src/script/import_xwork.inc 并跑
+tools/test_extensions.py 覆盖率测试。

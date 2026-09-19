@@ -143,6 +143,8 @@ typedef struct xllm_part {
 } xllm_part;
 
 void xllmPartInit(xllm_part* pPart, xllm_part_kind eKind);
+/* Release a part constructed with the xllmPartSet* helpers (deep frees). */
+void xllmPartUnit(xllm_part* pPart);
 bool xllmPartSetText(xllm_part* pPart, const char* sText);
 bool xllmPartSetImageData(xllm_part* pPart, const void* pData, size_t iSize, const char* sMediaType);
 bool xllmPartSetImageUrl(xllm_part* pPart, const char* sUrl, const char* sMediaType);
@@ -415,6 +417,12 @@ typedef struct xllm_request {
     xllm_tool* pTools;
     size_t iToolCount;
     size_t iToolCap;
+    /* Borrowed-view bookkeeping (allocation discipline 改造 A/B): entries
+     * flagged true are shallow struct copies whose strings point into the
+     * lender's storage — xllmRequestUnit skips their deep teardown. NULL
+     * means "everything owned" (the default AddMessage/AddTool path). */
+    bool* pbMessageBorrowed;           /* parallel to pMessages; may be NULL */
+    bool* pbToolBorrowed;              /* parallel to pTools; may be NULL */
     char* sModel;
     char* sReasoningEffort;
     char* sNamedTool;
@@ -438,10 +446,24 @@ typedef struct xllm_request {
     uint64_t uDeadline;
     /* Borrowed per-call lifecycle hooks; replaces the client-level set. */
     const xllm_hooks* pHooks;
+    /* Wire-prefix cache stamp (set by borrowed-view renders only): the
+     * client's serialization cache reuses bytes for [0..iStableMessages)
+     * while (pStablePrefixOwner, uStablePrefixStamp) match. Cleared on
+     * request clones because hook mutations invalidate the prefix. */
+    void* pStablePrefixOwner;
+    uint64_t uStablePrefixStamp;
+    size_t iStableMessages;
 } xllm_request;
 
 void xllmRequestInit(xllm_request* pRequest);
 void xllmRequestUnit(xllm_request* pRequest);
+/* Shallow-append a message whose strings the lender owns (ledger entries,
+ * cached tool tables). The request must not outlive the lender; the lender
+ * must not mutate the message while the request holds it. */
+bool xllmRequestAddMessageView(xllm_request* pRequest, const xllm_message* pMessage);
+/* Attach a whole borrowed tool table (replaces any existing owned tools;
+ * frees what it replaces). Same lifetime contract as AddMessageView. */
+bool xllmRequestSetToolsView(xllm_request* pRequest, const xllm_tool* pTools, size_t iCount);
 bool xllmRequestSetModel(xllm_request* pRequest, const char* sModel);
 bool xllmRequestSetReasoningEffort(xllm_request* pRequest, const char* sEffort);
 bool xllmRequestSetStop(xllm_request* pRequest, const char* sStop);
@@ -556,6 +578,11 @@ xllm_client* xllmClientCreate(const xllm_client_config* pConfig, xllm_error* pEr
 void xllmClientSetHooks(xllm_client* pClient, const xllm_hooks* pHooks);
 void xllmClientDestroy(xllm_client* pClient);
 bool xllmClientGetModelProfile(const xllm_client* pClient, xllm_model_profile* pProfile);
+/* Replace the client's capability profile on an existing client (custom
+ * endpoints such as self-hosted models; config.pModelProfile covers the
+ * create-time path). The profile is validated first; the wire model stays
+ * the client's configured sModel. */
+bool xllmClientSetModelProfile(xllm_client* pClient, const xllm_model_profile* pProfile, xllm_error* pError);
 
 xllm_call* xllmClientStart(
     xllm_client* pClient,
@@ -579,6 +606,9 @@ xllm_result xllmClientComplete(
 );
 
 /* Builds the provider JSON body without credentials. Free with xllmFree(). */
+/* Full classic serialization for inspection/testing; it never reads or
+ * updates the client's wire-prefix cache (stamped view requests through
+ * this API also bypass it) and works on any dialect. */
 char* xllmClientBuildRequestJson(xllm_client* pClient, const xllm_request* pRequest, xllm_error* pError);
 void xllmFree(void* pMemory);
 

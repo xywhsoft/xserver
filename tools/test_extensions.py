@@ -65,7 +65,7 @@ class ExtensionTests(unittest.TestCase):
             (["sqlite", "xtp"], ["sqlite", "xtp"]),
             (["xtp", "SQLITE", "xtp", "sqlite"], ["sqlite", "xtp"]),
             (["xllm", "sqlite", "XTP"], ["sqlite", "xtp", "xllm"]),
-            (["xllm-session"], ["xllm-session"]),
+            (["xllm-session"], ["xllm", "xllm-session"]),
         ):
             with self.subTest(names=names):
                 self.assertEqual(list(select_extensions(names)), expected)
@@ -183,7 +183,7 @@ class ExtensionTests(unittest.TestCase):
         apis = set(re.findall(r"^[A-Za-z_][A-Za-z0-9_ *]*?\**\s*(xllm[A-Z]\w*)\s*\(",
                               header, re.MULTILINE))
         symbols = re.findall(r"XS_XLLM_SYMBOL\((\w+)\)", imports)
-        self.assertEqual(len(symbols), 64)
+        self.assertEqual(len(symbols), 68)
         self.assertEqual(len(symbols), len(set(symbols)))
         self.assertEqual(set(symbols), apis)
 

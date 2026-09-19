@@ -34,7 +34,8 @@
  "xllm": {
   "macro": "XS_USE_XLLM",
   "headers": {
-   "xllm.h": "lib/xllm/xllm.h"
+   "xllm.h": "lib/xllm/xllm.h",
+   "xllm-executor.h": "lib/xllm/xllm-executor.h"
   },
   "sources": [
    {
@@ -46,6 +47,7 @@
  },
  "xllm-session": {
   "macro": "XS_USE_XLLM_SESSION",
+  "requires": ["xllm"],
   "headers": {
    "xllm-session.h": "lib/xllm-session/xllm-session.h"
   },
@@ -56,6 +58,25 @@
   ],
   "symbols": "src/script/import_xllm_session.inc",
   "symbol_macro": "XS_XLLM_SESSION_SYMBOL"
+ },
+ "xwork": {
+  "macro": "XS_USE_XWORK",
+  "requires": ["xllm", "xllm-session"],
+  "host_includes": ["lib/xllm", "lib/xllm-session"],
+  "headers": {
+   "xwork.h": "lib/xwork/xwork.h"
+  },
+  "sources": [
+   {
+    "path": "lib/xwork/xwork.c",
+    "flags": [
+     "-Ilib/xllm",
+     "-Ilib/xllm-session"
+    ]
+   }
+  ],
+  "symbols": "src/script/import_xwork.inc",
+  "symbol_macro": "XS_XWORK_SYMBOL"
  },
  "xmail": {
   "macro": "XS_USE_XMAIL",
