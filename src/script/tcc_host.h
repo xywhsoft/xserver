@@ -60,6 +60,7 @@ static const XS_TccSymbol g_XS_ApiSymbols[] = {
 	XS_API_SYMBOL(xsCreateTCC)
 	XS_API_SYMBOL(xsDestroyTCC)
 	XS_API_SYMBOL(xsSwapTake)
+	XS_API_SYMBOL(xsTlsRefresh)
 };
 #undef XS_API_SYMBOL
 

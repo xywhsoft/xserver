@@ -8,10 +8,16 @@
 
 #include "../sdk/xsbase.h"
 #include "config.h"
+
+/* 前向声明：engine.h → driver.h → protocol/*.h 可能间接引入 tcc_host.h
+ * 的符号表（引用 xsTlsRefresh），而实现在 tls_refresh.h（须 core/tls.h 可见）。 */
+XRT_API bool xsTlsRefresh(const char* sServerName, char* sErr, size_t iErrCap);
+
 #include "engine.h"
-#include "../script/tcc_host.h"
 #include "../runtime/topology.h"
 #include "../runtime/reload.h"
+#include "../runtime/tls_refresh.h"	/* xsTlsRefresh 实现（覆盖前向声明） */
+#include "../script/tcc_host.h"
 
 static XS_App* g_XS_App = NULL;
 

@@ -15,6 +15,12 @@
 #include "generation.h"
 #include "topology.h"
 
+/* 前向声明（实现在 core/tls.h，由 tls_refresh.h 引入后使用） */
+typedef struct XS_TlsTable XS_TlsTable;
+typedef struct XS_TlsRefreshNode XS_TlsRefreshNode;
+
+/* 刷新链释放——须在 core/tls.h 可见后调用（由 tls_refresh.h 提供包装） */
+
 typedef struct XS_ListenerSlot {
 	xmutex*			pLock;
 	void*			pRuntime;
@@ -27,6 +33,8 @@ typedef struct XS_ListenerSlot {
 	bool			bAccepting;	/* 候选端点已 bind 但未发布时为 false */
 	bool			bClosing;
 	bool			bOwner;		/* 当前 driver runtime 的 owner ref */
+	/* 尾部追加（ABI 纪律：只增不改；xrtCalloc 零初始化） */
+	void*			pTlsRefreshNode; /* XS_TlsRefreshNode*（tls_refresh.h）；NULL=用原内嵌表 */
 } XS_ListenerSlot;
 
 typedef enum XS_ListenerResourceKind {
@@ -44,6 +52,9 @@ typedef struct XS_ListenerResources {
 static void XS_ListenerSlotFree(XS_ListenerSlot* pSlot)
 {
 	if ( pSlot == NULL ) return;
+	/* TLS 刷新链由 tls_refresh.h 的包装函数释放（须 core/tls.h 可见）；
+	 * 此处仅清指针——链释放由 tls_refresh 侧的清理路径覆盖。 */
+	pSlot->pTlsRefreshNode = NULL;
 	xrtMutexDestroy(pSlot->pLock);
 	xrtFree(pSlot);
 }
