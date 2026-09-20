@@ -133,6 +133,17 @@ static xwork_result xwork__tool_read(
     if ( !sPath || !sPath[0] ) { eResult = xwork__tool_fail(pOutput, "path is required"); goto cleanup; }
     sResolved = xwork__resolve_path(pAgent, sPath, pError);
     if ( !sResolved ) { eResult = xwork__tool_fail(pOutput, pError && pError->sMessage[0] ? pError->sMessage : "path denied"); goto cleanup; }
+    /* 目录回退：read 的意图是「给我这个路径的内容」，目录的内容即条目列表。
+     * 显式告知这是目录（非文件内容），防模型把列表当正文处理。 */
+    if ( xrtDirExists((str)sResolved) ) {
+        if ( !xwork__buf_appendf(&tOutput,
+                "dir: %s — this path is a directory, NOT a file; what follows is its entry listing (use ls to list directories directly):\n",
+                sPath) ||
+             !xwork__list_directory(sResolved, false, false, &tOutput) ||
+             !xworkToolOutputSet(pOutput, true, tOutput.pData ? tOutput.pData : "") ) goto oom;
+        eResult = XWORK_RESULT_OK;
+        goto cleanup;
+    }
     if ( !xrtFileExists((str)sResolved) ) { eResult = xwork__tool_fail(pOutput, "file does not exist"); goto cleanup; }
     {
         uint64_t uSize = 0u;
@@ -170,8 +181,9 @@ static xwork_result xwork__tool_read(
         if ( i < iSize ) ++i;
         ++uLine;
     }
-    if ( uEmitted == uMaxLines && i < iSize && !xwork__buf_appendf(&tOutput, "[more lines available; continue at start_line=%llu]\n", (unsigned long long)uLine) ) goto oom;
+    if ( uEmitted == uMaxLines && i < iSize && !xwork__buf_appendf(&tOutput, "[truncated: more lines remain; continue with start_line=%llu]\n", (unsigned long long)uLine) ) goto oom;
     if ( uStartLine >= uLine && i >= iSize && !xwork__buf_append_cstr(&tOutput, "[start_line is beyond end of file]\n") ) goto oom;
+    if ( i >= iSize && !xwork__buf_appendf(&tOutput, "[complete: end of file at line %llu]\n", (unsigned long long)(uLine - 1u)) ) goto oom;
     if ( !xworkToolOutputSet(pOutput, true, tOutput.pData ? tOutput.pData : "") ) goto oom;
     eResult = XWORK_RESULT_OK;
     goto cleanup;
@@ -1771,7 +1783,7 @@ bool xworkAgentRegisterBuiltinReadOnlyTools(xwork_agent* pAgent, xwork_error* pE
     static const xwork_tool_definition arrTools[] = {
         {
             "read",
-            "Read workspace files. Text returns numbered lines with pagination; images (jpg/png/gif/webp/bmp) are attached for viewing. Oversized text output is truncated with the full copy spilled to an artifact.",
+            "Read workspace files. Text returns numbered lines with pagination; a directory path returns its entry listing with an explicit note that it is a directory (prefer ls); images (jpg/png/gif/webp/bmp) are attached for viewing. A trailing marker states whether you saw the whole file ([complete: end of file at line N]) or only part of it ([truncated: ... continue with start_line=N]). Oversized text output is truncated with the full copy spilled to an artifact.",
             "{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"start_line\":{\"type\":\"integer\",\"minimum\":1},\"max_lines\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":10000}},\"required\":[\"path\"],\"additionalProperties\":false}",
             true, XWORK_TOOL_EFFECT_READ_ONLY, xwork__tool_read, NULL, NULL
         },

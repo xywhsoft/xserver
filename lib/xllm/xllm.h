@@ -571,6 +571,18 @@ typedef struct xllm_client_config {
     /* Optional borrowed profile. When present, model/provider/limits are
      * validated and the client retains an owned snapshot. */
     const xllm_model_profile* pModelProfile;
+    /* Outbound proxy (borrowed strings, deep-copied at create). Empty host or
+     * zero port disables proxying. eProxyKind selects HTTP CONNECT or SOCKS5;
+     * credentials are optional. sProxyBypass is a comma/semicolon separated
+     * host list with leading-trailing '*' wildcards (e.g. "localhost,*.corp");
+     * matching hosts dial directly. TLS stays end-to-end to the real target:
+     * SNI and certificate verification are unaffected by the proxy. */
+    int eProxyKind;                /* 0=none 1=socks5 2=http_connect */
+    const char* sProxyHost;
+    uint16_t uProxyPort;
+    const char* sProxyUser;
+    const char* sProxyPass;
+    const char* sProxyBypass;
 } xllm_client_config;
 
 void xllmClientConfigInit(xllm_client_config* pConfig);

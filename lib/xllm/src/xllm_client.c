@@ -232,6 +232,29 @@ xllm_client* xllmClientCreate(const xllm_client_config* pConfig, xllm_error* pEr
     pClient->pDialect = pDialect;
     pClient->pNetEngine = pConfig->pNetEngine;
     pClient->bEngineOwned = false;
+    /* 代理：深拷贝配置建 xnetproxy；bypass 由拨号时按目标匹配（存原串） */
+    pClient->sProxyBypass = xllm__strdup(pConfig->sProxyBypass ? pConfig->sProxyBypass : "");
+    if ( pConfig->sProxyHost && pConfig->sProxyHost[0] && pConfig->uProxyPort != 0u ) {
+        xnetproxyconfig tProxy;
+
+        xrtNetProxyConfigInit(&tProxy);
+        tProxy.Type = pConfig->eProxyKind == 1 ? XNET_PROXY_SOCKS5 : XNET_PROXY_HTTP_CONNECT;
+        tProxy.Host = xllm__sv(pConfig->sProxyHost);
+        tProxy.Port = pConfig->uProxyPort;
+        if ( pConfig->sProxyUser && pConfig->sProxyUser[0] ) {
+            tProxy.Auth = XNET_PROXY_AUTH_AUTO;
+            tProxy.Username.Data = (const unsigned char*)pConfig->sProxyUser;
+            tProxy.Username.Size = strlen(pConfig->sProxyUser);
+            tProxy.Password.Data = (const unsigned char*)(pConfig->sProxyPass ? pConfig->sProxyPass : "");
+            tProxy.Password.Size = pConfig->sProxyPass ? strlen(pConfig->sProxyPass) : 0u;
+        }
+        pClient->pProxy = xrtNetProxyCreate(&tProxy);
+        if ( !pClient->pProxy ) {
+            xllm__error_set(pError, XLLM_ERROR_INVALID_ARGUMENT, "invalid proxy configuration");
+            xllmClientDestroy(pClient);
+            return NULL;
+        }
+    }
     pClient->sBaseUrl = xllm__normalize_url(pConfig->sBaseUrl, pDialect);
     pClient->sApiKey = xllm__strdup(pConfig->sApiKey ? pConfig->sApiKey : "");
     pClient->sModel = xllm__strdup(sModel);
@@ -282,6 +305,7 @@ void xllmClientSetHooks(xllm_client* pClient, const xllm_hooks* pHooks)
 
 void xllmClientDestroy(xllm_client* pClient)
 {
+    if ( pClient && pClient->pProxy ) { xrtNetProxyRelease(pClient->pProxy); pClient->pProxy = NULL; }
     size_t i;
     if ( !pClient ) { return; }
     xllm__transport_client_unit(pClient);
@@ -1037,4 +1061,52 @@ char* xllmClientBuildRequestJson(xllm_client* pClient, const xllm_request* pRequ
         return NULL;
     }
     return pClient->pDialect->BuildRequest(pClient, pRequest, pError);
+}
+
+
+/* bypass：',' / ';' 分隔条目；条目 '*' 前缀/后缀通配；大小写不敏感。 */
+bool xllm__proxy_bypassed(const char* sBypass, const char* sHost)
+{
+    const char* p;
+
+    if ( !sBypass || !sBypass[0] || !sHost || !sHost[0] ) return false;
+    p = sBypass;
+    while ( *p ) {
+        const char* q = p;
+        size_t nEntry = 0, nHost = strlen(sHost);
+        char aEntry[128];
+        char aHost[256];
+        size_t i;
+
+        while ( *q && *q != ',' && *q != ';' ) q++;
+        nEntry = (size_t)(q - p);
+        while ( nEntry > 0 && (*p == ' ' || p[nEntry - 1] == ' ') ) {
+            if ( p[nEntry - 1] == ' ' ) nEntry--;
+            else p++;
+        }
+        if ( nEntry > 0 && nEntry < sizeof aEntry ) {
+            bool bLead = false, bTail = false;
+            const char* sE = p;
+            size_t nE = nEntry;
+
+            if ( sE[0] == '*' ) { bLead = true; sE++; nE--; }
+            if ( nE > 0 && sE[nE - 1] == '*' ) { bTail = true; nE--; }
+            for ( i = 0; i < nE && i < sizeof aEntry - 1; i++ )
+                aEntry[i] = (char)((sE[i] >= 'A' && sE[i] <= 'Z') ? sE[i] + 32 : sE[i]);
+            aEntry[nE] = 0;
+            for ( i = 0; i < nHost && i < sizeof aHost - 1; i++ )
+                aHost[i] = (char)((sHost[i] >= 'A' && sHost[i] <= 'Z') ? sHost[i] + 32 : sHost[i]);
+            aHost[nHost >= sizeof aHost ? sizeof aHost - 1 : nHost] = 0;
+            if ( aEntry[0] ) {
+                if ( !bLead && !bTail && strcmp(aEntry, aHost) == 0 ) return true;
+                if ( bLead && !bTail && nHost >= nE &&
+                    strcmp(aHost + nHost - nE, aEntry) == 0 ) return true;
+                if ( bTail && !bLead && strncmp(aHost, aEntry, nE) == 0 ) return true;
+                if ( bLead && bTail && nE == 0 ) return true;    /* "*" = 全通配 */
+                if ( bLead && bTail && strstr(aHost, aEntry) != NULL ) return true;
+            }
+        }
+        p = ( *q ) ? q + 1 : q;
+    }
+    return false;
 }

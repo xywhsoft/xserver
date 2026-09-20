@@ -916,6 +916,10 @@ void xllm__transport_begin(xllm_call* pCall)
         if ( pCall->uDeadline != XRT_DEADLINE_NEVER ) {
             tDial.Timeout = xrtDeadlineRemaining(pCall->uDeadline);
         }
+        if ( pClient->pProxy != NULL &&
+            !xllm__proxy_bypassed(pClient->sProxyBypass, pClient->sHost) ) {
+            tDial.pProxy = pClient->pProxy;
+        }
         pFuture = xrtTlsDialAsync(pClient->pNetEngine, pClient->pResolver,
             pClient->sHost, pClient->uPort, &tTls, &tDial, NULL, NULL);
         xllm__op_submit_chain(pCall, pFuture);
