@@ -4992,9 +4992,10 @@ typedef struct xrtownershipscope {
  * the complete mutation. Concurrent and nested mutations are allowed. Only a
  * currently frozen domain can delay entry; collectors never queue an upgrade
  * behind an active mutator. Scope entry/end allocate no memory or TLS slots.
- * xrtRefRetain/Release participate automatically for their atomic update, but
- * that alone does NOT cover an enclosing field update, callback, or destructor.
- * Callers adapting mutable state must guard that complete transition too. */
+ * xrtOwnershipRefRetain/Release can participate for one standalone atomic
+ * counter update. Generic xrtRefRetain/Release deliberately remain outside
+ * this domain. Neither pair covers an enclosing field update, callback, or
+ * destructor; graph adapters must guard each complete transition. */
 XRT_API bool xrtOwnershipMutationBegin(xrtownershipscope* pScope);
 
 /* Nonblocking exclusive admission. Busy returns false, leaves the zero scope
@@ -5105,13 +5106,23 @@ XRT_API void xrtResourceLimitsInit(xrtresourcelimits* pLimits);
 
 
 
-/* 原子增加有效引用计数，失败时返回 -1。 */
+/* 原子增加有效引用计数，失败时返回 -1；不加入 ownership freeze 域。 */
 XRT_API int32 xrtRefRetain(volatile int32* pCount);
 
 
 
-/* 原子减少有效引用计数，失败时返回 -1。 */
+/* 原子减少有效引用计数，失败时返回 -1；不加入 ownership freeze 域。 */
 XRT_API int32 xrtRefRelease(volatile int32* pCount);
+
+
+
+/* 对一个图可见引用计数执行受 ownership freeze 保护的原子增加。 */
+XRT_API int32 xrtOwnershipRefRetain(volatile int32* pCount);
+
+
+
+/* 对一个图可见引用计数执行受 ownership freeze 保护的原子减少。 */
+XRT_API int32 xrtOwnershipRefRelease(volatile int32* pCount);
 
 
 
@@ -13184,9 +13195,6 @@ typedef struct xvaluekey {
 /* 迭代器持有 backing 快照；活动迭代器必须先 End 才能再次 Begin。 */
 typedef struct xvalueiter {
 	ptr Backing;
-	/* Finalizer-backed identity objects additionally retain the actual source
-	 * shell. Ordinary COW snapshots still retain only Backing. Internal state. */
-	xvalue* FinalizerOwner;
 	xvaluetype Type;
 	int Direction;
 	size_t Index;
@@ -13194,6 +13202,14 @@ typedef struct xvalueiter {
 		xmapiter Map;
 		xintmapiter IntMap;
 		xsetiter Set;
+		/* Keep object-only bookkeeping in the pre-existing iterator-state
+		 * storage. xintmapiter remains the largest union member, so adding the
+		 * finalizer shell here does not change xvalueiter's public ABI. Map is
+		 * first so State.Map and State.Object.Map have identical addresses. */
+		struct {
+			xmapiter Map;
+			xvalue* FinalizerOwner;
+		} Object;
 	} State;
 } xvalueiter;
 
@@ -20880,6 +20896,8 @@ XRT_API size_t xrtCryptoHashSize(xcryptohash Hash);
 
 #define XRT_RSA_MODULUS_MIN_SIZE 128u
 #define XRT_RSA_MAX_MODULUS_SIZE 1024u
+/* Compatibility spelling retained for source compatibility with xrt <= 5.1. */
+#define XRT_RSA_MODULUS_MAX_SIZE XRT_RSA_MAX_MODULUS_SIZE
 
 /* RSA 公钥是对调用方持有的定宽大端模数和指数的只读视图。 */
 typedef struct xrsa_public_key {
@@ -26210,6 +26228,8 @@ XRT_EXTERN_C_END
 #ifndef XRT_TLS_STREAM_H
 #define XRT_TLS_STREAM_H
 
+#if defined(XRT_FEATURE_NET_PROXY_DIAL)
+#endif
 
 #if defined(XRT_FEATURE_TLS_STREAM_FUTURE) || \
 	defined(XRT_FEATURE_TLS_STREAM_DIAL_FUTURE) || \
@@ -26350,12 +26370,6 @@ typedef struct xtlsdialconfig {
 	xtlsstreamconfig Stream;
 	uint64 Timeout;
 	bool ServerNameFromHost;
-#if defined(XRT_FEATURE_NET_PROXY)
-	/* 非空时经代理 CONNECT 隧道连接目标（SOCKS5/HTTP CONNECT 由代理对象决定），
-	 * TLS 仍端到端握手到真实目标：SNI 与证书校验不受代理影响。借用引用，
-	 * 存活期须覆盖拨号全程。 */
-	const xnetproxy* pProxy;
-#endif
 } xtlsdialconfig;
 
 
@@ -26568,6 +26582,25 @@ XRT_API xtlsdial* xrtTlsDial(
 	xtlsdialproc pDone,
 	ptr pDoneData
 );
+
+
+
+#if defined(XRT_FEATURE_NET_PROXY_DIAL)
+/* 经代理 CONNECT 隧道后对真实目标完成端到端 TLS；代理只在调用期间借用。 */
+XRT_API xtlsdial* xrtTlsDialProxy(
+	xnetengine* pEngine,
+	xnetresolver* pResolver,
+	const xnetproxy* pProxy,
+	cstr sHost,
+	uint16 iPort,
+	const xtlsclientconfig* pTls,
+	const xtlsdialconfig* pConfig,
+	const xtlsstreamevents* pStreamEvents,
+	ptr pStreamData,
+	xtlsdialproc pDone,
+	ptr pDoneData
+);
+#endif
 
 
 
@@ -60677,11 +60710,25 @@ static int32 __xrtRefReleaseUnfenced(volatile int32* pCount)
 	#endif
 }
 
-/* The existing CAS/count semantics are unchanged. This short participation
- * makes native strong retain/release and Value weak promotion linearize on
- * the same side of an admitted ownership freeze. Enclosing edge mutations
- * still need an outer scope; a single RC update is not a graph transaction. */
+/* Generic native reference counters stay independent from the optional
+ * ownership graph. Most XRT objects are not graph participants, and imposing
+ * freeze-domain admission on every retain/release makes their hottest path
+ * several times more expensive. Graph-aware code uses the explicit
+ * xrtOwnershipRef* pair or, for multi-field transitions, an outer scope. */
 XRT_API int32 xrtRefRetain(volatile int32* pCount)
+{
+	return __xrtRefRetainUnfenced(pCount);
+}
+
+XRT_API int32 xrtRefRelease(volatile int32* pCount)
+{
+	return __xrtRefReleaseUnfenced(pCount);
+}
+
+
+
+/* Explicitly fence a standalone graph-participating counter update. */
+XRT_API int32 xrtOwnershipRefRetain(volatile int32* pCount)
 {
 	xrtownershipscope Scope = {0};
 	int32 iResult;
@@ -60692,7 +60739,7 @@ XRT_API int32 xrtRefRetain(volatile int32* pCount)
 	return iResult;
 }
 
-XRT_API int32 xrtRefRelease(volatile int32* pCount)
+XRT_API int32 xrtOwnershipRefRelease(volatile int32* pCount)
 {
 	xrtownershipscope Scope = {0};
 	int32 iResult;
@@ -63240,7 +63287,12 @@ XRT_API xerror* xrtErrorWrap(const xerror* pCause, xerrkind Kind, cstr sDomain, 
 XRT_API xerror* xrtErrorRef(const xerror* pError)
 {
 	if ( (pError != NULL) && ((pError->Flags & XRT_ERROR_STATIC) == 0) ) {
-		if ( xrtRefRetain((volatile int32*)&pError->RefCount) < 0 ) {
+		xrtownershipscope Mutation = {0};
+		int32 iReferences;
+		if (!xrtOwnershipMutationBegin(&Mutation)) return NULL;
+		iReferences = xrtRefRetain((volatile int32*)&pError->RefCount);
+		if (!xrtOwnershipScopeEnd(&Mutation)) abort();
+		if ( iReferences < 0 ) {
 			return NULL;
 		}
 	}
@@ -63253,6 +63305,11 @@ XRT_API xerror* xrtErrorRef(const xerror* pError)
 /* 释放错误对象引用。 */
 XRT_API void xrtErrorFree(xerror* pError)
 {
+	xrtownershipscope Mutation = {0};
+	if ( (pError == NULL) || ((pError->Flags & XRT_ERROR_STATIC) != 0) ) {
+		return;
+	}
+	if (!xrtOwnershipMutationBegin(&Mutation)) abort();
 	while ( (pError != NULL) &&
 		 ((pError->Flags & XRT_ERROR_STATIC) == 0) &&
 		 (xrtRefRelease(&pError->RefCount) == 0) ) {
@@ -63261,6 +63318,7 @@ XRT_API void xrtErrorFree(xerror* pError)
 		xrtFree(pError);
 		pError = pCause;
 	}
+	if (!xrtOwnershipScopeEnd(&Mutation)) abort();
 }
 
 
@@ -86658,7 +86716,7 @@ XRT_API xnetaddrlist* xrtNetAddrListRef(xnetaddrlist* pList)
 		__xrtErrorSetInvalidArgument();
 		return NULL;
 	}
-	if ( xrtRefRetain(&pList->References) < 0 ) {
+	if ( xrtOwnershipRefRetain(&pList->References) < 0 ) {
 		__xrtNetSetError(XERR_STATE, XNET_ERROR_DNS_RESULT,
 			"retain-addresses", "address list reference is invalid", 0);
 		return NULL;
@@ -87446,7 +87504,7 @@ static uint64 __xrtNetResolverHash(
 static bool __xrtNetResolverRetain(xnetresolver* pResolver)
 {
 	return (pResolver != NULL) &&
-		(xrtRefRetain(&pResolver->RefCount) >= 0);
+		(xrtOwnershipRefRetain(&pResolver->RefCount) >= 0);
 }
 
 
@@ -88950,7 +89008,10 @@ static bool __xrtNetResolverHold(const void* pData)
 {
 	xnetresolver* pResolver = (xnetresolver*)pData; xrtownershipscope Mutation = {0};
 	__xrtNetResolverLock(pResolver, &Mutation);
-	bool bHeld = !pResolver->OwnershipCleared && __xrtNetResolverRetain(pResolver);
+	/* Freeze already owns the mutation domain; avoid opening a redundant
+	 * nested admission for the adapter's temporary hold. */
+	bool bHeld = !pResolver->OwnershipCleared &&
+		xrtRefRetain(&pResolver->RefCount) >= 0;
 	__xrtNetResolverUnlock(pResolver, &Mutation); return bHeld;
 }
 static void __xrtNetResolverDrop(const void* pData) { __xrtNetResolverRelease((xnetresolver*)pData); }
@@ -106934,8 +106995,8 @@ static bool __xrtValueIterStartInternal(
 	pIterator->Direction = iDirection;
 	if (bKeepFinalizerShell && pBacking->Type == XVALUE_OBJECT &&
 		((xvalueobjectbacking*)pBacking)->Finalizer != NULL) {
-		pIterator->FinalizerOwner = xrtValueRetain(pValue);
-		if (pIterator->FinalizerOwner == NULL) {
+		pIterator->State.Object.FinalizerOwner = xrtValueRetain(pValue);
+		if (pIterator->State.Object.FinalizerOwner == NULL) {
 			__xrtValueBackingRelease(pBacking);
 			memset(pIterator, 0, sizeof(*pIterator));
 			return false;
@@ -106978,7 +107039,9 @@ static bool __xrtValueIterStartInternal(
 	}
 	if ( !bReady ) {
 		__xrtValueBackingRelease(pBacking);
-		xrtValueRelease(pIterator->FinalizerOwner);
+		if (pIterator->Type == XVALUE_OBJECT) {
+			xrtValueRelease(pIterator->State.Object.FinalizerOwner);
+		}
 		memset(pIterator, 0, sizeof(xvalueiter));
 		return false;
 	}
@@ -107239,7 +107302,9 @@ XRT_API void xrtValueIterEnd(xvalueiter* pIterator)
 		xrtMapIterEnd(&pIterator->State.Map);
 	}
 	pBacking = (xvaluebacking*)pIterator->Backing;
-	pOwner = pIterator->FinalizerOwner;
+	pOwner = pIterator->Type == XVALUE_OBJECT
+		? pIterator->State.Object.FinalizerOwner
+		: NULL;
 	/* Re-entry observes an ended cursor before either release can call user
 	 * code. The backing slot must go first; the shell owns the final duty. */
 	memset(pIterator, 0, sizeof(xvalueiter));
@@ -107263,16 +107328,20 @@ XRT_API void xrtValueIterDestroy(xvalueiter* pIterator)
 static bool __xrtValueIterOwnershipCount(const void* pData, size_t* pCount)
 {
 	const xvalueiter* pIterator = (const xvalueiter*)pData;
+	xvalue* pOwner;
 	if (pIterator == NULL || pCount == NULL) return false;
 	if (pIterator->Backing == NULL) {
-		if (pIterator->Type != 0 || pIterator->Direction != 0 || pIterator->Index != 0 || pIterator->FinalizerOwner != NULL) return false;
+		if (pIterator->Type != 0 || pIterator->Direction != 0 || pIterator->Index != 0 ||
+			pIterator->State.Object.FinalizerOwner != NULL) return false;
 	} else if ((pIterator->Direction != 1 && pIterator->Direction != -1) ||
 		!__xrtValueContainerType(pIterator->Type) ||
 		((const xvaluebacking*)pIterator->Backing)->Type != (uint16)pIterator->Type ||
 		__xrtAtomicRefLoad(&((const xvaluebacking*)pIterator->Backing)->RefCount) <= 0) return false;
-	if (pIterator->FinalizerOwner != NULL && (pIterator->Type != XVALUE_OBJECT ||
-		pIterator->FinalizerOwner->Data.Backing != pIterator->Backing ||
-		__xrtAtomicRefLoad(&pIterator->FinalizerOwner->RefCount) <= 0)) return false;
+	pOwner = pIterator->Type == XVALUE_OBJECT
+		? pIterator->State.Object.FinalizerOwner
+		: NULL;
+	if (pOwner != NULL && (pOwner->Data.Backing != pIterator->Backing ||
+		__xrtAtomicRefLoad(&pOwner->RefCount) <= 0)) return false;
 	/* Unique End/Destroy ownership; borrowed cursor aliases acquire no refs. */
 	*pCount = 1;
 	return true;
@@ -107280,11 +107349,15 @@ static bool __xrtValueIterOwnershipCount(const void* pData, size_t* pCount)
 static bool __xrtValueIterOwnershipTrace(const void* pData, xrtownershipvisitor pVisit, ptr pContext)
 {
 	const xvalueiter* pIterator = (const xvalueiter*)pData;
+	xvalue* pOwner;
 	size_t iCount;
 	if (pVisit == NULL || !__xrtValueIterOwnershipCount(pData, &iCount)) return false;
 	if (pIterator->Backing != NULL && !pVisit(
 		(xrtownershipref){pIterator->Backing, &__xrtValueBackingOwnershipOps}, pContext)) return false;
-	return pIterator->FinalizerOwner == NULL || pVisit(xrtValueOwnership(pIterator->FinalizerOwner), pContext);
+	pOwner = pIterator->Type == XVALUE_OBJECT
+		? pIterator->State.Object.FinalizerOwner
+		: NULL;
+	return pOwner == NULL || pVisit(xrtValueOwnership(pOwner), pContext);
 }
 static const xrtownershipops __xrtValueIterOwnershipOps = {
 	__xrtValueIterOwnershipCount, __xrtValueIterOwnershipTrace
@@ -160420,7 +160493,7 @@ struct xtlsdial {
 	xatomic64 Timer;
 	xatomicptr TransportDial;
 #if defined(XRT_FEATURE_NET_PROXY_DIAL)
-	xatomicptr ProxyDial;      /* 非空=TransportDial 槽实为 xnetproxydial* */
+	xatomicptr ProxyDial;
 #endif
 	xatomicptr Stream;
 	xnetengine* Engine;
@@ -160496,6 +160569,9 @@ XRT_API xtlsdial* xrtTlsDialRef(xtlsdial* pDial)
 XRT_API void xrtTlsDialDestroy(xtlsdial* pDial)
 {
 	xnetdial* pTransportDial;
+#if defined(XRT_FEATURE_NET_PROXY_DIAL)
+	xnetproxydial* pProxyDial;
+#endif
 	xtlsstream* pStream;
 
 	if ( (pDial == NULL) ||
@@ -160511,10 +160587,12 @@ XRT_API void xrtTlsDialDestroy(xtlsdial* pDial)
 		XMEMORY_ACQUIRE
 	);
 #if defined(XRT_FEATURE_NET_PROXY_DIAL)
-	if ( (xnetproxydial*)xrtAtomicPtrLoad(
-			&pDial->ProxyDial, XMEMORY_ACQUIRE) != NULL ) {
-		xrtNetProxyDialDestroy((xnetproxydial*)xrtAtomicPtrLoad(
-			&pDial->ProxyDial, XMEMORY_ACQUIRE));
+	pProxyDial = (xnetproxydial*)xrtAtomicPtrLoad(
+		&pDial->ProxyDial,
+		XMEMORY_ACQUIRE
+	);
+	if ( pProxyDial != NULL ) {
+		xrtNetProxyDialDestroy(pProxyDial);
 	} else
 #endif
 	{
@@ -160828,8 +160906,8 @@ static void __xrtTlsDialCancelStage(xtlsdial* pDial)
 			XMEMORY_ACQUIRE
 		);
 
-		if ( pProxyDial != NULL ) {
-			(void)xrtNetProxyDialCancel(pProxyDial);
+		if ( (pProxyDial != NULL) &&
+			xrtNetProxyDialCancel(pProxyDial) ) {
 			return;
 		}
 	}
@@ -160905,10 +160983,11 @@ XRT_API void xrtTlsDialConfigInit(xtlsdialconfig* pConfig)
 
 
 
-/* 复用 TCP Dial 的解析和地址竞速，TLS 层只负责安全握手发布。 */
-XRT_API xtlsdial* xrtTlsDial(
+/* 统一构造直接与代理 TLS Dial；公开入口只决定传输建立策略。 */
+static xtlsdial* __xrtTlsDialStart(
 	xnetengine* pEngine,
 	xnetresolver* pResolver,
+	const void* pProxy,
 	cstr sHost,
 	uint16 iPort,
 	const xtlsclientconfig* pTls,
@@ -160928,6 +161007,10 @@ XRT_API xtlsdial* xrtTlsDial(
 	xnetdial* pTransportDial;
 	xerror* pError;
 	uint64 Id;
+
+#if !defined(XRT_FEATURE_NET_PROXY_DIAL)
+	(void)pProxy;
+#endif
 
 	if ( (pEngine == NULL) || (pResolver == NULL) ||
 		(sHost == NULL) || (sHost[0] == 0) ||
@@ -160990,6 +161073,9 @@ XRT_API xtlsdial* xrtTlsDial(
 	xrtAtomic32Init(&pDial->TimerDone, 0);
 	xrtAtomic64Init(&pDial->Timer, 0);
 	xrtAtomicPtrInit(&pDial->TransportDial, NULL);
+#if defined(XRT_FEATURE_NET_PROXY_DIAL)
+	xrtAtomicPtrInit(&pDial->ProxyDial, NULL);
+#endif
 	xrtAtomicPtrInit(&pDial->Stream, NULL);
 	pDial->Engine = pEngine;
 	pDial->StreamData = pStreamData;
@@ -161054,17 +161140,19 @@ XRT_API xtlsdial* xrtTlsDial(
 		}
 	}
 #if defined(XRT_FEATURE_NET_PROXY_DIAL)
-	if ( pConfig != NULL && pConfig->pProxy != NULL ) {
+	if ( pProxy != NULL ) {
 		xnetproxydialconfig tProxyCfg;
 		xnetproxydial* pProxyDial;
 
 		xrtNetProxyDialConfigInit(&tProxyCfg);
 		tProxyCfg.Transport = Config.Transport;
-		tProxyCfg.Timeout = Config.Timeout;
+		/* The enclosing TLS timer is the sole end-to-end deadline. A zero
+		 * proxy timeout preserves Transport's own per-stage limits. */
+		tProxyCfg.Timeout = 0;
 		pProxyDial = xrtNetProxyDial(
 			pEngine,
 			pResolver,
-			pConfig->pProxy,
+			(const xnetproxy*)pProxy,
 			sHost,
 			iPort,
 			&tProxyCfg,
@@ -161096,7 +161184,11 @@ XRT_API xtlsdial* xrtTlsDial(
 			XMEMORY_RELEASE
 		);
 		if ( __xrtTlsDialStopping(pDial) ) {
-			(void)xrtNetProxyDialCancel(pProxyDial);
+			/* Submission and its Worker may run concurrently.  If CONNECT
+			 * already won before the handle was published, proxy cancellation
+			 * correctly refuses; the shared stage canceller then falls through
+			 * to the attached TLS Stream instead of losing the terminal request. */
+			__xrtTlsDialCancelStage(pDial);
 		}
 		__xrtNetEngineObjectRelease(pEngine);
 		return pDial;
@@ -161136,11 +161228,69 @@ XRT_API xtlsdial* xrtTlsDial(
 		XMEMORY_RELEASE
 	);
 	if ( __xrtTlsDialStopping(pDial) ) {
-		(void)xrtNetDialCancel(pTransportDial);
+		/* Cover the same submit/complete race for the direct transport. */
+		__xrtTlsDialCancelStage(pDial);
 	}
 	__xrtNetEngineObjectRelease(pEngine);
 	return pDial;
 }
+
+
+
+/* 复用 TCP Dial 的解析和地址竞速，TLS 层只负责安全握手发布。 */
+XRT_API xtlsdial* xrtTlsDial(
+	xnetengine* pEngine,
+	xnetresolver* pResolver,
+	cstr sHost,
+	uint16 iPort,
+	const xtlsclientconfig* pTls,
+	const xtlsdialconfig* pConfig,
+	const xtlsstreamevents* pStreamEvents,
+	ptr pStreamData,
+	xtlsdialproc pDone,
+	ptr pDoneData
+)
+{
+	return __xrtTlsDialStart(
+		pEngine, pResolver, NULL, sHost, iPort, pTls, pConfig,
+		pStreamEvents, pStreamData, pDone, pDoneData
+	);
+}
+
+
+
+#if defined(XRT_FEATURE_NET_PROXY_DIAL)
+/* 建立代理隧道后继续同一 TLS 状态机；不复制握手和终态逻辑。 */
+XRT_API xtlsdial* xrtTlsDialProxy(
+	xnetengine* pEngine,
+	xnetresolver* pResolver,
+	const xnetproxy* pProxy,
+	cstr sHost,
+	uint16 iPort,
+	const xtlsclientconfig* pTls,
+	const xtlsdialconfig* pConfig,
+	const xtlsstreamevents* pStreamEvents,
+	ptr pStreamData,
+	xtlsdialproc pDone,
+	ptr pDoneData
+)
+{
+	if ( pProxy == NULL ) {
+		__xrtTlsDialSetError(
+			XERR_ARGUMENT,
+			XTLS_ERROR_ARGUMENT,
+			"dial-tls-proxy",
+			"TLS proxy is null",
+			NULL
+		);
+		return NULL;
+	}
+	return __xrtTlsDialStart(
+		pEngine, pResolver, pProxy, sHost, iPort, pTls, pConfig,
+		pStreamEvents, pStreamData, pDone, pDoneData
+	);
+}
+#endif
 
 
 
