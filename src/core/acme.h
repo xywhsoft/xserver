@@ -278,12 +278,14 @@ static bool XS_AcmeParseGroup(xvalue* pObj, XS_AcmeGroup* pGroup,
 		return false;
 	}
 	pGroup->sName = (char*)sTmp;
+	sTmp = NULL;	/* TakeString 会释放 *pOut 旧值，防悬挂 */
 	if ( !XS_ConfigTakeString(pObj, "out_dir", &sTmp, sErr, iErrCap) ) return false;
 	if ( sTmp == NULL || sTmp[0] == '\0' ) {
 		snprintf(sErr, iErrCap, "acme certs[%s].out_dir required", pGroup->sName);
 		return false;
 	}
 	pGroup->sOutDir = (char*)sTmp;
+	sTmp = NULL;
 	pDomains = xrtValueObjectGet(pObj, XS_ConfigKey("domains"));
 	if ( pDomains == NULL || xrtValueType(pDomains) != XVALUE_ARRAY ||
 	     xrtValueCount(pDomains) == 0 ) {
