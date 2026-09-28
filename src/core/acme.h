@@ -31,15 +31,25 @@ typedef struct XS_AcmeGroup {
 	size_t			iServerCount;
 } XS_AcmeGroup;
 
+/* CA 回退链条目：有序数组，顺序即回退优先级（首个成功者胜出，
+ * 续签到期永远从首个重试——主 CA 恢复后自动回归）。 */
+typedef struct XS_AcmeCa {
+	char*			sName;			/* 展示名；空 = 取 URL 域名 */
+	char*			sUrl;			/* ACME directory URL（必填） */
+	char*			sCaFile;		/* 信任锚 PEM 文件；空 = 系统信任库 */
+	char*			sEabKidFile;		/* EAB KID 文件；与 hmac 成对可空 */
+	char*			sEabHmacFile;		/* EAB HMAC 文件 */
+} XS_AcmeCa;
+
 typedef struct XS_AcmeConfig {
 	bool			bEnabled;
-	char*			sAccountKeyFile;	/* 账户私钥 PEM；可空 = 新注册 */
+	char*			sAccountKeyFile;	/* 账户私钥 PEM；可空 = 新注册（各 CA 独立账户同钥） */
 	char*			sEmail;
-	char*			sDirectory;		/* ACME directory URL */
-	char*			sCaFile;		/* 可选信任 CA pem；空 = 系统库 */
 	char*			sDnsKeyFile;		/* DNS 凭据 JSON 文件 */
 	int			iRenewalDays;		/* 0 = 30 */
 	int			iCheckIntervalHours;	/* 0 = 12 */
+	XS_AcmeCa*		pCas;			/* 有序 CA 回退链（≥1） */
+	size_t			iCaCount;
 	XS_AcmeGroup*		pGroups;
 	size_t			iGroupCount;
 } XS_AcmeConfig;
@@ -65,9 +75,17 @@ static void XS_AcmeConfigFree(XS_AcmeConfig* pConfig)
 	if ( pConfig == NULL ) return;
 	xrtFree(pConfig->sAccountKeyFile);
 	xrtFree(pConfig->sEmail);
-	xrtFree(pConfig->sDirectory);
-	xrtFree(pConfig->sCaFile);
 	xrtFree(pConfig->sDnsKeyFile);
+	for ( i = 0; i < pConfig->iCaCount; i++ ) {
+		XS_AcmeCa* pCa = &pConfig->pCas[i];
+
+		xrtFree(pCa->sName);
+		xrtFree(pCa->sUrl);
+		xrtFree(pCa->sCaFile);
+		xrtFree(pCa->sEabKidFile);
+		xrtFree(pCa->sEabHmacFile);
+	}
+	xrtFree(pConfig->pCas);
 	for ( i = 0; i < pConfig->iGroupCount; i++ ) XS_AcmeFreeGroup(&pConfig->pGroups[i]);
 	xrtFree(pConfig->pGroups);
 	memset(pConfig, 0, sizeof(*pConfig));
@@ -106,11 +124,25 @@ static bool XS_AcmeConfigClone(const XS_AcmeConfig* pSrc, XS_AcmeConfig* pDst)
 	pDst->bEnabled = pSrc->bEnabled;
 	pDst->sAccountKeyFile = XS_AcmeDup(pSrc->sAccountKeyFile);
 	pDst->sEmail = XS_AcmeDup(pSrc->sEmail);
-	pDst->sDirectory = XS_AcmeDup(pSrc->sDirectory);
-	pDst->sCaFile = XS_AcmeDup(pSrc->sCaFile);
 	pDst->sDnsKeyFile = XS_AcmeDup(pSrc->sDnsKeyFile);
 	pDst->iRenewalDays = pSrc->iRenewalDays;
 	pDst->iCheckIntervalHours = pSrc->iCheckIntervalHours;
+	if ( pSrc->iCaCount > 0 ) {
+		pDst->pCas = (XS_AcmeCa*)xrtCalloc(pSrc->iCaCount, sizeof(XS_AcmeCa));
+		if ( pDst->pCas == NULL ) goto Fail;
+		pDst->iCaCount = pSrc->iCaCount;
+		for ( i = 0; i < pSrc->iCaCount; i++ ) {
+			const XS_AcmeCa* pS = &pSrc->pCas[i];
+			XS_AcmeCa* pD = &pDst->pCas[i];
+
+			pD->sName = XS_AcmeDup(pS->sName);
+			pD->sUrl = XS_AcmeDup(pS->sUrl);
+			pD->sCaFile = XS_AcmeDup(pS->sCaFile);
+			pD->sEabKidFile = XS_AcmeDup(pS->sEabKidFile);
+			pD->sEabHmacFile = XS_AcmeDup(pS->sEabHmacFile);
+			if ( pD->sUrl == NULL ) goto Fail;
+		}
+	}
 	if ( pSrc->iGroupCount > 0 ) {
 		pDst->pGroups = (XS_AcmeGroup*)xrtCalloc(pSrc->iGroupCount,
 			sizeof(XS_AcmeGroup));
@@ -204,6 +236,21 @@ static char* XS_AcmeReadText(const char* sPath)
 	return sText;
 }
 
+/* 就地去除首尾空白与换行（EAB 单行文件用）。 */
+static void XS_AcmeTrimLine(char* sText)
+{
+	size_t iBegin = 0, iEnd;
+
+	if ( sText == NULL ) return;
+	iEnd = strlen(sText);
+	while ( iBegin < iEnd && (unsigned char)sText[iBegin] <= ' ' ) iBegin++;
+	while ( iEnd > iBegin && (unsigned char)sText[iEnd - 1] <= ' ' ) iEnd--;
+	if ( iBegin > 0 || iEnd < strlen(sText) ) {
+		memmove(sText, sText + iBegin, iEnd - iBegin);
+	}
+	sText[iEnd - iBegin] = '\0';
+}
+
 /* 相对路径以 appPath 为基准转绝对（已有绝对路径保持不变）。 */
 static char* XS_AcmeResolve(const char* sPath, const char* sAppPath)
 {
@@ -269,14 +316,50 @@ static bool XS_AcmeParseGroup(xvalue* pObj, XS_AcmeGroup* pGroup,
 	return true;
 }
 
+/* 单个 CA 条目解析（directories[] 数组元素）。 */
+static bool XS_AcmeParseCa(xvalue* pObj, XS_AcmeCa* pCa,
+	char* sErr, size_t iErrCap)
+{
+	const char* sTmp = NULL;
+
+	memset(pCa, 0, sizeof(*pCa));
+	if ( !XS_ConfigTakeString(pObj, "name", &sTmp, sErr, iErrCap) ) return false;
+	pCa->sName = (char*)sTmp; sTmp = NULL;
+	if ( !XS_ConfigTakeString(pObj, "url", &sTmp, sErr, iErrCap) ) return false;
+	if ( sTmp == NULL || sTmp[0] == '\0' ) {
+		snprintf(sErr, iErrCap, "acme.directories[].url required");
+		return false;
+	}
+	pCa->sUrl = (char*)sTmp; sTmp = NULL;
+	if ( !XS_ConfigTakeString(pObj, "ca_file", &sTmp, sErr, iErrCap) ) return false;
+	pCa->sCaFile = (char*)sTmp; sTmp = NULL;
+	if ( !XS_ConfigTakeString(pObj, "eab_kid_file", &sTmp, sErr, iErrCap) ) return false;
+	pCa->sEabKidFile = (char*)sTmp; sTmp = NULL;
+	if ( !XS_ConfigTakeString(pObj, "eab_hmac_file", &sTmp, sErr, iErrCap) ) return false;
+	pCa->sEabHmacFile = (char*)sTmp; sTmp = NULL;
+	/* EAB 成对约束：只填一个 = 配置笔误 */
+	if ( (pCa->sEabKidFile == NULL) != (pCa->sEabHmacFile == NULL) ) {
+		snprintf(sErr, iErrCap,
+			"acme.directories['%s']: eab_kid_file/eab_hmac_file must appear in pair",
+			pCa->sName != NULL ? pCa->sName : pCa->sUrl);
+		return false;
+	}
+	return true;
+}
+
 /* 根节点解析（未配置返回 NULL+true；结构校验在此，host 引用交叉
- * 校验在 daemon 启动时——Servers 那时才装配）。 */
+ * 校验在 daemon 启动时——Servers 那时才装配）。
+ * 兼容：单字段 directory 等价单元素链；directory 与 directories
+ * 互斥（同时出现 fail-fast 防歧义）。 */
 static bool XS_AcmeRootParse(xvalue* pRoot, XS_AcmeConfig** ppConfig,
 	char* sErr, size_t iErrCap)
 {
 	xvalue* pAcme = xrtValueObjectGet(pRoot, XS_ConfigKey("acme"));
 	XS_AcmeConfig* pConfig;
 	xvalue* pCerts;
+	xvalue* pDirs;
+	const char* sLegacyUrl = NULL;
+	const char* sLegacyCa = NULL;
 	const char* sTmp = NULL;
 	int64 iVal = 0;
 	size_t i;
@@ -297,10 +380,6 @@ static bool XS_AcmeRootParse(xvalue* pRoot, XS_AcmeConfig** ppConfig,
 	pConfig->sAccountKeyFile = (char*)sTmp; sTmp = NULL;
 	if ( !XS_ConfigTakeString(pAcme, "email", &sTmp, sErr, iErrCap) ) goto Fail;
 	pConfig->sEmail = (char*)sTmp; sTmp = NULL;
-	if ( !XS_ConfigTakeString(pAcme, "directory", &sTmp, sErr, iErrCap) ) goto Fail;
-	pConfig->sDirectory = (char*)sTmp; sTmp = NULL;
-	if ( !XS_ConfigTakeString(pAcme, "ca_file", &sTmp, sErr, iErrCap) ) goto Fail;
-	pConfig->sCaFile = (char*)sTmp; sTmp = NULL;
 	if ( !XS_ConfigTakeString(pAcme, "dns_key_file", &sTmp, sErr, iErrCap) ) goto Fail;
 	pConfig->sDnsKeyFile = (char*)sTmp; sTmp = NULL;
 	if ( !XS_ConfigTakeInt(pAcme, "renew_before_days", &iVal, sErr, iErrCap) ) goto Fail;
@@ -308,10 +387,68 @@ static bool XS_AcmeRootParse(xvalue* pRoot, XS_AcmeConfig** ppConfig,
 	if ( !XS_ConfigTakeInt(pAcme, "check_interval_hours", &iVal, sErr, iErrCap) ) goto Fail;
 	pConfig->iCheckIntervalHours = (iVal > 0 && iVal <= 720) ? (int)iVal : 12;
 
-	if ( pConfig->sDirectory == NULL ) {
-		snprintf(sErr, iErrCap, "acme.directory required "
-			"(e.g. https://acme-v02.api.letsencrypt.org/directory)");
+	/* CA 回退链：directories 数组优先，directory 单字段兼容 */
+	pDirs = xrtValueObjectGet(pAcme, XS_ConfigKey("directories"));
+	if ( !XS_ConfigTakeString(pAcme, "directory", &sTmp, sErr, iErrCap) ) goto Fail;
+	sLegacyUrl = sTmp; sTmp = NULL;
+	if ( !XS_ConfigTakeString(pAcme, "ca_file", &sTmp, sErr, iErrCap) ) goto Fail;
+	sLegacyCa = sTmp; sTmp = NULL;
+	if ( pDirs != NULL && sLegacyUrl != NULL ) {
+		snprintf(sErr, iErrCap,
+			"acme: 'directory' and 'directories' are mutually exclusive");
 		goto Fail;
+	}
+	if ( pDirs != NULL ) {
+		if ( xrtValueType(pDirs) != XVALUE_ARRAY || xrtValueCount(pDirs) == 0 ) {
+			snprintf(sErr, iErrCap, "acme.directories expect non-empty array");
+			goto Fail;
+		}
+		pConfig->iCaCount = xrtValueCount(pDirs);
+		pConfig->pCas = (XS_AcmeCa*)xrtCalloc(pConfig->iCaCount,
+			sizeof(XS_AcmeCa));
+		if ( pConfig->pCas == NULL ) {
+			snprintf(sErr, iErrCap, "out of memory (acme directories)");
+			goto Fail;
+		}
+		for ( i = 0; i < pConfig->iCaCount; i++ ) {
+			xvalue* pItem = xrtValueArrayGet(pDirs, i);
+
+			if ( pItem == NULL || xrtValueType(pItem) != XVALUE_OBJECT ) {
+				snprintf(sErr, iErrCap, "acme.directories[%u] expect object",
+					(unsigned)i);
+				goto Fail;
+			}
+			if ( !XS_AcmeParseCa(pItem, &pConfig->pCas[i], sErr, iErrCap) ) goto Fail;
+		}
+	} else if ( sLegacyUrl != NULL ) {
+		pConfig->pCas = (XS_AcmeCa*)xrtCalloc(1, sizeof(XS_AcmeCa));
+		if ( pConfig->pCas == NULL ) {
+			snprintf(sErr, iErrCap, "out of memory (acme directory)");
+			goto Fail;
+		}
+		pConfig->iCaCount = 1;
+		pConfig->pCas[0].sUrl = xrtStrDup(sLegacyUrl);
+		pConfig->pCas[0].sCaFile = xrtStrDup(sLegacyCa);
+		if ( pConfig->pCas[0].sUrl == NULL ) {
+			snprintf(sErr, iErrCap, "out of memory (acme url)");
+			goto Fail;
+		}
+	} else {
+		snprintf(sErr, iErrCap, "acme.directories required "
+			"(e.g. [{\"url\":\"https://acme-v02.api.letsencrypt.org/directory\"}])");
+		goto Fail;
+	}
+	/* URL 去重（同 CA 配两遍 = 笔误） */
+	for ( i = 0; i < pConfig->iCaCount; i++ ) {
+		size_t j;
+
+		for ( j = i + 1; j < pConfig->iCaCount; j++ ) {
+			if ( strcmp(pConfig->pCas[i].sUrl, pConfig->pCas[j].sUrl) == 0 ) {
+				snprintf(sErr, iErrCap,
+					"acme.directories: duplicate url %s", pConfig->pCas[i].sUrl);
+				goto Fail;
+			}
+		}
 	}
 	if ( pConfig->sDnsKeyFile == NULL ) {
 		snprintf(sErr, iErrCap, "acme.dns_key_file required (dns-01)");
@@ -352,8 +489,20 @@ Fail:
 
 /* ---------------- daemon 状态 ---------------- */
 
+/* 运行期 CA 条目：启动时加载文件内容（路径解析 + EAB/信任锚读入），
+ * 之后线程私有。 */
+typedef struct XS_AcmeCaRt {
+	char*			sName;		/* 解析后的展示名（配置名或 URL 域名） */
+	char*			sUrl;
+	char*			sCaPem;		/* 已读入；NULL = 系统信任库 */
+	char*			sEabKid;	/* 已读入；NULL = 无 EAB */
+	char*			sEabHmac;
+} XS_AcmeCaRt;
+
 typedef struct XS_AcmeDaemon {
 	XS_AcmeConfig		tConfig;	/* 启动时深拷贝，此后线程私有 */
+	XS_AcmeCaRt*		pCas;		/* 运行期 CA 链（与 tConfig.pCas 同序） */
+	size_t			iCaCount;
 	char*			sStoreRoot;	/* xacme store 根（appPath/acme-store） */
 	char*			sAccountKeyPem;	/* 启动时读入（可空 = 新注册） */
 	char*			sAliKeyId;	/* 启动时读入 */
@@ -457,18 +606,10 @@ static bool XS_AcmeWriteGrant(const XS_AcmeGroup* pGroup,
 
 static void XS_AcmeRunGroup(XS_AcmeDaemon* pDaemon, XS_AcmeGroup* pGroup)
 {
-	xacmednaliconfig tAli;
-	xacmednsprovider tProvider;
-	xacmeaccountconfig tAccount;
-	xacmeobtainconfig tObtain;
-	xacmeissuegrant tGrant;
 	xstrview* tDomains;
-	const xerror* pError;
-	char* sCaPem;
 	char sErr[256];
-	bool bRenewed = false;
-	bool bOK;
 	size_t i;
+	size_t c;
 
 	if ( pGroup->iServerCount == 0 ) {
 		printf("[xs] acme '%s': out_dir not referenced by any tls host, skip\n",
@@ -486,70 +627,99 @@ static void XS_AcmeRunGroup(XS_AcmeDaemon* pDaemon, XS_AcmeGroup* pGroup)
 		tDomains[i] = xrtStrView(pGroup->sDomains[i]);
 	}
 
-	xrtAcmeDnsAliConfigInit(&tAli);
-	tAli.sAccessKeyId = pDaemon->sAliKeyId;
-	tAli.sAccessKeySecret = pDaemon->sAliKeySecret;
-	memset(&tProvider, 0, sizeof(tProvider));
-	if ( !xrtAcmeDnsAli(&tAli, pDaemon->pEngine, &tProvider) ) {
-		printf("[xs] acme '%s': alidns provider init failed\n", pGroup->sName);
-		xrtFree(tDomains);
-		return;
-	}
+	/* CA 回退链：按序逐 CA 尝试，首个成功者胜出。 */
+	for ( c = 0; c < pDaemon->iCaCount; c++ ) {
+		XS_AcmeCaRt* pCa = &pDaemon->pCas[c];
+		xacmednaliconfig tAli;
+		xacmednsprovider tProvider;
+		xacmeaccountconfig tAccount;
+		xacmeobtainconfig tObtain;
+		xacmeissuegrant tGrant;
+		const xerror* pError;
+		bool bRenewed = false;
+		bool bOK;
 
-	memset(&tAccount, 0, sizeof(tAccount));
-	tAccount.sDirectoryUrl = pDaemon->tConfig.sDirectory;
-	tAccount.sAccountKeyPem = pDaemon->sAccountKeyPem;
-	tAccount.sContactEmail = pDaemon->tConfig.sEmail;
-	xrtAcmeObtainConfigInit(&tObtain);
-	tObtain.pAccount = &tAccount;
-	sCaPem = XS_AcmeReadText(pDaemon->tConfig.sCaFile);
-	tObtain.sCaPem = sCaPem;			/* 可空 = 系统信任库 */
-	tObtain.pBorrowedEngine = pDaemon->pEngine;
-	tObtain.uIssueTimeoutUs = UINT64_C(300000000);	/* 单组 5 分钟 */
-	tObtain.sStoreRoot = pDaemon->sStoreRoot;
-	tObtain.iRenewalDays = pDaemon->tConfig.iRenewalDays;
-
-	memset(&tGrant, 0, sizeof(tGrant));
-	bOK = xrtAcmeObtain(&tObtain, tDomains, pGroup->iDomainCount,
-		&tProvider, &tGrant, &bRenewed);
-	xrtFree(sCaPem);
-	xrtAcmeDnsAliProviderUnit(&tProvider);
-
-	if ( !bOK ) {
-		pError = xrtGetError();
-		printf("[xs] acme '%s': obtain failed: %s\n", pGroup->sName,
-			(pError != NULL && xrtErrorMessage(pError) != NULL)
-				? xrtErrorMessage(pError) : "unknown");
-		xrtFree(tDomains);
-		return;
-	}
-	if ( !bRenewed ) {
-		printf("[xs] acme '%s': certificate valid, no renew needed\n",
-			pGroup->sName);
-		xrtAcmeGrantUnit(&tGrant);
-		xrtFree(tDomains);
-		return;
-	}
-	if ( !XS_AcmeWriteGrant(pGroup, &tGrant) ) {
-		printf("[xs] acme '%s': write cert files failed: %s\n",
-			pGroup->sName, pGroup->sOutDir);
-		xrtAcmeGrantUnit(&tGrant);
-		xrtFree(tDomains);
-		return;
-	}
-	xrtAcmeGrantUnit(&tGrant);
-	xrtFree(tDomains);
-	printf("[xs] acme '%s': renewed, refreshing %u server(s)\n",
-		pGroup->sName, (unsigned)pGroup->iServerCount);
-	for ( i = 0; i < pGroup->iServerCount; i++ ) {
-		if ( xsTlsRefresh(pGroup->sServers[i], sErr, sizeof(sErr)) ) {
-			printf("[xs] acme '%s': tls refresh '%s' ok\n",
-				pGroup->sName, pGroup->sServers[i]);
-		} else {
-			printf("[xs] acme '%s': tls refresh '%s' failed: %s\n",
-				pGroup->sName, pGroup->sServers[i], sErr);
+		/* CA 之间也响应停机 */
+		xrtMutexLock(pDaemon->pLock);
+		if ( pDaemon->bStop ) {
+			xrtMutexUnlock(pDaemon->pLock);
+			xrtFree(tDomains);
+			return;
 		}
+		xrtMutexUnlock(pDaemon->pLock);
+
+		/* 每次 CA 尝试全新 provider（RecordId 状态不跨 CA） */
+		xrtAcmeDnsAliConfigInit(&tAli);
+		tAli.sAccessKeyId = pDaemon->sAliKeyId;
+		tAli.sAccessKeySecret = pDaemon->sAliKeySecret;
+		memset(&tProvider, 0, sizeof(tProvider));
+		if ( !xrtAcmeDnsAli(&tAli, pDaemon->pEngine, &tProvider) ) {
+			printf("[xs] acme '%s': alidns provider init failed\n", pGroup->sName);
+			xrtFree(tDomains);
+			return;
+		}
+
+		memset(&tAccount, 0, sizeof(tAccount));
+		tAccount.sDirectoryUrl = pCa->sUrl;
+		tAccount.sAccountKeyPem = pDaemon->sAccountKeyPem;
+		tAccount.Eab.sKid = pCa->sEabKid;
+		tAccount.Eab.sHmac = pCa->sEabHmac;
+		tAccount.sContactEmail = pDaemon->tConfig.sEmail;
+		xrtAcmeObtainConfigInit(&tObtain);
+		tObtain.pAccount = &tAccount;
+		tObtain.sCaPem = pCa->sCaPem;		/* 可空 = 系统信任库 */
+		tObtain.pBorrowedEngine = pDaemon->pEngine;
+		tObtain.uIssueTimeoutUs = UINT64_C(300000000);	/* 单 CA 5 分钟 */
+		tObtain.sStoreRoot = pDaemon->sStoreRoot;
+		tObtain.iRenewalDays = pDaemon->tConfig.iRenewalDays;
+
+		memset(&tGrant, 0, sizeof(tGrant));
+		bOK = xrtAcmeObtain(&tObtain, tDomains, pGroup->iDomainCount,
+			&tProvider, &tGrant, &bRenewed);
+		xrtAcmeDnsAliProviderUnit(&tProvider);
+
+		if ( !bOK ) {
+			pError = xrtGetError();
+			printf("[xs] acme '%s': ca '%s' failed: %s%s\n",
+				pGroup->sName, pCa->sName,
+				(pError != NULL && xrtErrorMessage(pError) != NULL)
+					? xrtErrorMessage(pError) : "unknown",
+				(c + 1 < pDaemon->iCaCount)
+					? ", falling back to next ca" : "");
+			continue;
+		}
+		if ( !bRenewed ) {
+			printf("[xs] acme '%s': certificate valid (via %s), no renew needed\n",
+				pGroup->sName, pCa->sName);
+			xrtAcmeGrantUnit(&tGrant);
+			xrtFree(tDomains);
+			return;
+		}
+		if ( !XS_AcmeWriteGrant(pGroup, &tGrant) ) {
+			printf("[xs] acme '%s': write cert files failed: %s\n",
+				pGroup->sName, pGroup->sOutDir);
+			xrtAcmeGrantUnit(&tGrant);
+			xrtFree(tDomains);
+			return;
+		}
+		xrtAcmeGrantUnit(&tGrant);
+		xrtFree(tDomains);
+		printf("[xs] acme '%s': renewed via %s, refreshing %u server(s)\n",
+			pGroup->sName, pCa->sName, (unsigned)pGroup->iServerCount);
+		for ( i = 0; i < pGroup->iServerCount; i++ ) {
+			if ( xsTlsRefresh(pGroup->sServers[i], sErr, sizeof(sErr)) ) {
+				printf("[xs] acme '%s': tls refresh '%s' ok\n",
+					pGroup->sName, pGroup->sServers[i]);
+			} else {
+				printf("[xs] acme '%s': tls refresh '%s' failed: %s\n",
+					pGroup->sName, pGroup->sServers[i], sErr);
+			}
+		}
+		return;
 	}
+	printf("[xs] acme '%s': all %u ca(s) failed, retry next cycle\n",
+		pGroup->sName, (unsigned)pDaemon->iCaCount);
+	xrtFree(tDomains);
 }
 
 static void XS_AcmeRunCycle(XS_AcmeDaemon* pDaemon)
@@ -597,6 +767,8 @@ static int32 XS_AcmeThreadProc(ptr pData)
 
 static void XS_AcmeDaemonCleanup(XS_AcmeDaemon* pDaemon)
 {
+	size_t i;
+
 	if ( pDaemon->pThread != NULL ) { /* 未 join 的异常路径：不触达 */ }
 	if ( pDaemon->pWake != NULL ) xrtCondDestroy(pDaemon->pWake);
 	if ( pDaemon->pLock != NULL ) xrtMutexDestroy(pDaemon->pLock);
@@ -608,6 +780,16 @@ static void XS_AcmeDaemonCleanup(XS_AcmeDaemon* pDaemon)
 	xrtFree(pDaemon->sAliKeyId);
 	xrtFree(pDaemon->sAliKeySecret);
 	xrtFree(pDaemon->sStoreRoot);
+	for ( i = 0; i < pDaemon->iCaCount; i++ ) {
+		xrtFree(pDaemon->pCas[i].sName);
+		xrtFree(pDaemon->pCas[i].sUrl);
+		xrtFree(pDaemon->pCas[i].sCaPem);
+		xrtFree(pDaemon->pCas[i].sEabKid);
+		xrtFree(pDaemon->pCas[i].sEabHmac);
+	}
+	xrtFree(pDaemon->pCas);
+	pDaemon->pCas = NULL;
+	pDaemon->iCaCount = 0;
 	XS_AcmeConfigFree(&pDaemon->tConfig);
 }
 
@@ -634,9 +816,6 @@ static bool XS_AcmeDaemonStart(XS_App* pApp, XS_AcmeConfig* pConfig,
 		sAbs = XS_AcmeResolve(pDaemon->tConfig.sAccountKeyFile, sAppPath);
 		xrtFree(pDaemon->tConfig.sAccountKeyFile);
 		pDaemon->tConfig.sAccountKeyFile = sAbs;
-		sAbs = XS_AcmeResolve(pDaemon->tConfig.sCaFile, sAppPath);
-		xrtFree(pDaemon->tConfig.sCaFile);
-		pDaemon->tConfig.sCaFile = sAbs;
 		sAbs = XS_AcmeResolve(pDaemon->tConfig.sDnsKeyFile, sAppPath);
 		xrtFree(pDaemon->tConfig.sDnsKeyFile);
 		pDaemon->tConfig.sDnsKeyFile = sAbs;
@@ -649,6 +828,75 @@ static bool XS_AcmeDaemonStart(XS_App* pApp, XS_AcmeConfig* pConfig,
 			if ( pGroup->sOutDir == NULL ) {
 				snprintf(sErr, iErrCap, "acme: resolve out_dir failed");
 				goto Fail;
+			}
+		}
+		for ( i = 0; i < pDaemon->tConfig.iCaCount; i++ ) {
+			XS_AcmeCa* pCa = &pDaemon->tConfig.pCas[i];
+
+			sAbs = XS_AcmeResolve(pCa->sCaFile, sAppPath);
+			xrtFree(pCa->sCaFile);
+			pCa->sCaFile = sAbs;
+			sAbs = XS_AcmeResolve(pCa->sEabKidFile, sAppPath);
+			xrtFree(pCa->sEabKidFile);
+			pCa->sEabKidFile = sAbs;
+			sAbs = XS_AcmeResolve(pCa->sEabHmacFile, sAppPath);
+			xrtFree(pCa->sEabHmacFile);
+			pCa->sEabHmacFile = sAbs;
+		}
+	}
+	/* 运行期 CA 链：展示名解析 + 信任锚/EAB 文件读入（fail-fast） */
+	{
+		pDaemon->iCaCount = pDaemon->tConfig.iCaCount;
+		pDaemon->pCas = (XS_AcmeCaRt*)xrtCalloc(pDaemon->iCaCount,
+			sizeof(XS_AcmeCaRt));
+		if ( pDaemon->pCas == NULL ) {
+			snprintf(sErr, iErrCap, "acme: out of memory (ca chain)");
+			goto Fail;
+		}
+		for ( i = 0; i < pDaemon->iCaCount; i++ ) {
+			XS_AcmeCa* pCfg = &pDaemon->tConfig.pCas[i];
+			XS_AcmeCaRt* pRt = &pDaemon->pCas[i];
+
+			if ( pCfg->sName != NULL ) {
+				pRt->sName = xrtStrDup(pCfg->sName);
+			} else {
+				/* 取 URL 域名："://" 之后到下一个 '/' */
+				const char* pHost = strstr(pCfg->sUrl, "://");
+				const char* pEnd;
+
+				if ( pHost != NULL ) {
+					pHost += 3;
+					pEnd = strchr(pHost, '/');
+					pRt->sName = xrtStrDupN(pHost,
+						pEnd != NULL ? (size_t)(pEnd - pHost) : strlen(pHost));
+				}
+				if ( pRt->sName == NULL ) pRt->sName = xrtStrDup("ca");
+			}
+			pRt->sUrl = xrtStrDup(pCfg->sUrl);
+			if ( pRt->sName == NULL || pRt->sUrl == NULL ) {
+				snprintf(sErr, iErrCap, "acme: out of memory (ca entry)");
+				goto Fail;
+			}
+			if ( pCfg->sCaFile != NULL ) {
+				pRt->sCaPem = XS_AcmeReadText(pCfg->sCaFile);
+				if ( pRt->sCaPem == NULL ) {
+					snprintf(sErr, iErrCap, "acme ca '%s': ca_file unreadable: %s",
+						pRt->sName, pCfg->sCaFile);
+					goto Fail;
+				}
+			}
+			if ( pCfg->sEabKidFile != NULL ) {
+				pRt->sEabKid = XS_AcmeReadText(pCfg->sEabKidFile);
+				pRt->sEabHmac = XS_AcmeReadText(pCfg->sEabHmacFile);
+				if ( pRt->sEabKid == NULL || pRt->sEabHmac == NULL ) {
+					snprintf(sErr, iErrCap,
+						"acme ca '%s': eab files unreadable (%s)",
+						pRt->sName, pCfg->sEabKidFile);
+					goto Fail;
+				}
+				/* 去尾随换行 */
+				XS_AcmeTrimLine(pRt->sEabKid);
+				XS_AcmeTrimLine(pRt->sEabHmac);
 			}
 		}
 	}
@@ -732,8 +980,15 @@ static bool XS_AcmeDaemonStart(XS_App* pApp, XS_AcmeConfig* pConfig,
 		goto Fail;
 	}
 	pDaemon->bStarted = true;
-	printf("[xs] acme: daemon started (%u group(s), check every %dh, first check in 5min)\n",
-		(unsigned)pDaemon->tConfig.iGroupCount,
+	for ( i = 0; i < pDaemon->iCaCount; i++ ) {
+		printf("[xs] acme ca chain [%u]: '%s' -> %s%s%s\n",
+			(unsigned)i, pDaemon->pCas[i].sName, pDaemon->pCas[i].sUrl,
+			(pDaemon->pCas[i].sEabKid != NULL) ? " (eab)" : "",
+			(pDaemon->pCas[i].sCaPem != NULL) ? " (custom trust)" : "");
+	}
+	printf("[xs] acme: daemon started (%u group(s), %u ca(s) in fallback chain, "
+		"check every %dh, first check in 5min)\n",
+		(unsigned)pDaemon->tConfig.iGroupCount, (unsigned)pDaemon->iCaCount,
 		pDaemon->tConfig.iCheckIntervalHours);
 	return true;
 
