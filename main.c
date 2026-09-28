@@ -510,6 +510,11 @@ int main(int argc, char** argv)
 		return XS_MainExit(1, pOwnedArgv, iOwnedArgc);
 	}
 	XS_ReloadRuntimeStart();
+	if ( !XS_AcmeDaemonStart(&tApp, tApp.Acme,
+		tApp.ParseError, sizeof(tApp.ParseError)) ) {
+		printf("[xs] %s\n", tApp.ParseError);
+		/* 续签守护失败不阻断服务：证书维持现状，重启后重试 */
+	}
 	XS_AppFrontendReady(&tApp);
 
 	/* 信号与待机 */
@@ -528,6 +533,7 @@ int main(int argc, char** argv)
 	 * 退役 custom → 排空 reaper 上的 ServiceUnit/终析构 → 配置释放。 */
 	printf("[xs] stopping\n");
 	XS_AppFrontendUnit();
+	XS_AcmeDaemonStop();	/* 先于服务排空：续签写盘+刷新链不再触达拓扑 */
 	XS_ServersDrain(&tApp);
 	XS_ShutdownServers(&tApp);
 	XS_EngineShutdown(&tApp);

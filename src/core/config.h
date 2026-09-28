@@ -20,6 +20,7 @@
 #include "../sdk/xsbase.h"
 
 /* 宿主侧应用状态（契约结构体之外的装配信息，不进 ABI） */
+struct XS_AcmeConfig;				/* acme.h 稍后给出完整定义 */
 typedef struct XS_App {
 	char			ParseError[512];	/* 装载失败原因 */
 	xvalue*			Root;			/* xs.json 根对象（弹掉 services 后即根 Custom） */
@@ -29,6 +30,7 @@ typedef struct XS_App {
 	xnetengine*		Engine;			/* 引擎装配后由 engine.h 回填 */
 	uint32			TakenCount;		/* 持有的独立 xvalue 子树（services/hosts/...） */
 	xvalue**			Taken;
+	struct XS_AcmeConfig*	Acme;			/* 根级 acme 节（acme.h 解析） */
 } XS_App;
 
 /* 一次 reload 解析得到的不可变配置 revision。reload-all 的多个新
@@ -136,6 +138,8 @@ static bool XS_ConfigTakeString(xvalue* pObj, const char* sKey, const char** pOu
 	(void)xrtValueObjectRemove(pObj, XS_ConfigKey(sKey));
 	return true;
 }
+
+#include "acme.h"		/* 根级 acme 节解析 + 自动续签守护（XS_USE_XACME 门控） */
 
 /* 追踪一棵 Take 得到 / 新建的子树，卸载时统一释放 */
 static bool XS_ConfigTrack(XS_App* pApp, xvalue* pValue)
@@ -505,6 +509,12 @@ static bool XS_ConfigBuild(const char* sSource, xvalue* pRoot, XS_App* pApp)
 		pApp->EngineWorkers = (uint32)iWorkers;
 	}
 
+	/* 根级 acme 节：证书自动续签配置（acme.h；无 xacme 扩展时恒空） */
+	if ( !XS_AcmeRootParse(pRoot, &pApp->Acme,
+		pApp->ParseError, sizeof(pApp->ParseError)) ) {
+		return false;
+	}
+
 	/* services：以 Take 移交（各 server 的 Custom 指向其中对象） */
 	pServices = xrtValueObjectTake(pRoot, XRT_STR_LITERAL("services"));
 	if ( pServices == NULL ) {
@@ -632,6 +642,11 @@ static void XS_ConfigFree(XS_App* pApp)
 		xrtValueRelease(pApp->Taken[i]);
 	}
 	xrtFree(pApp->Taken);
+	if ( pApp->Acme != NULL ) {
+		XS_AcmeConfigFree(pApp->Acme);
+		xrtFree(pApp->Acme);
+		pApp->Acme = NULL;
+	}
 	if ( pApp->Root ) {
 		xrtValueRelease(pApp->Root);
 	}
