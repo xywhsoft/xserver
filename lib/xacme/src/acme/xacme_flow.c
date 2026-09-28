@@ -895,8 +895,9 @@ bool xacmeClientIssue(
 	pClient->bIssueDeadline = (pClient->uIssueTimeoutUs != 0u);
 	pClient->IssueDeadline = xrtClock() + pClient->uIssueTimeoutUs;
 
-	/* 1. 新订单；identifier 用去 *.\ 后的基础域并去重（通配符与
-	   裸域共用一次授权；通配符语义由 CSR 的 SAN 表达）。 */
+	/* 1. 新订单；identifier 用完整域名（通配符原样：*.example.com 是
+	   独立 identifier，CA 依此返回通配符授权）。去重按完整字符串——
+	   RFC 8555 要求订单 identifier 与 CSR SAN 严格一致。 */
 	xacmeflowurl Bases[16];
 	size_t iBaseCount = 0u;
 	xrtBufferInit(&Payload);
@@ -912,12 +913,6 @@ bool xacmeClientIssue(
 				XERR_ARGUMENT, XACME_FLOW_ERROR_ARGUMENT,
 				"acme issue domain list invalid");
 			goto Done;
-		}
-		if((Domain.Size >= 3u) && (Domain.Data[0] == '*') &&
-			(Domain.Data[1] == '.'))
-		{
-			Domain.Data += 2u;
-			Domain.Size -= 2u;
 		}
 		for(j = 0; j < iBaseCount; j++)
 		{
@@ -1128,12 +1123,31 @@ bool xacmeClientIssue(
 							if(getenv("XACME_DEBUG")) printf("[dbg] txt b64 null\n");
 							continue;
 						}
-						/* TXT 属主 = _acme-challenge.<基础域> */
+						/* TXT 属主 = _acme-challenge.<授权 identifier.value>
+						   （通配符授权返回的 value 已是基础域；协议正源，
+						   不依赖订单 identifier 的位置映射）。 */
 						{
 							xbuffer Fqdn;
-							xstrview Domain = (xstrview){
-								Bases[i].sData, Bases[i].iSize };
+							xvalue* pIdent = xrtValueObjectGet(
+								pAuthRoot, XRT_STR_LITERAL("identifier"));
+							xvalue* pIdentValue = (pIdent != NULL) ?
+								xrtValueObjectGet(
+									pIdent, XRT_STR_LITERAL("value")) : NULL;
+							xstrview Domain = { NULL, 0 };
 							bool bFqdnOk;
+							if((pIdentValue != NULL) &&
+								xrtValueGetString(pIdentValue, &Domain) &&
+								(Domain.Size != 0u))
+							{
+								/* 协议正源路径 */
+							}
+							else
+							{
+								/* 兜底：CA 未回 identifier 时退回订单侧
+								   完整域名（Bases 现为全量 identifier） */
+								Domain = (xstrview){
+									Bases[i].sData, Bases[i].iSize };
+							}
 							xrtBufferInit(&Fqdn);
 							bFqdnOk = xrtBufferAppend(
 								&Fqdn,
