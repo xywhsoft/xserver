@@ -900,6 +900,15 @@ bool xacmeClientIssue(
 	   RFC 8555 要求订单 identifier 与 CSR SAN 严格一致。 */
 	xacmeflowurl Bases[16];
 	size_t iBaseCount = 0u;
+	/* TXT 统一延后清理：同名多授权（裸域 + 通配符）场景下，先删后加
+	   会让 LE 次级验证器的递归缓存仍见旧值而判 Incorrect TXT；多值
+	   并存是 LE 明确允许的形态，全部验证完成后再统一 Remove。 */
+	struct
+	{
+		str sFqdn;
+		str sTxt;
+	} TxtPending[16];
+	size_t iTxtPending = 0u;
 	xrtBufferInit(&Payload);
 	for(i = 0; i < iDomainCount; i++)
 	{
@@ -1056,6 +1065,23 @@ bool xacmeClientIssue(
 					(strcmp(AuthzStatus.sData, "valid") == 0);
 				pChallenges = xrtValueObjectGet(
 					pAuthRoot, XRT_STR_LITERAL("challenges"));
+				if(getenv("XACME_DEBUG"))
+				{
+					xacmeflowurl AuthzIdent;
+					xvalue* pDbgIdent = xrtValueObjectGet(
+						pAuthRoot, XRT_STR_LITERAL("identifier"));
+					printf("[dbg] authz[%u] status=%s ident=%s challenges=%u\n",
+						(unsigned)i,
+						(xacmeJsonValueText(pAuthRoot, "status", &AuthzStatus)) ?
+							AuthzStatus.sData : "?",
+						((pDbgIdent != NULL) &&
+							xacmeJsonValueText(
+								pDbgIdent, "value", &AuthzIdent)) ?
+							AuthzIdent.sData : "?",
+						(unsigned)((pChallenges != NULL) &&
+							xrtValueIs(pChallenges, XVALUE_ARRAY)) ?
+							xrtValueCount(pChallenges) : 0u);
+				}
 				if(bValid)
 				{
 					/* 已有效的授权（如复用）视为已解决。 */
@@ -1077,6 +1103,13 @@ bool xacmeClientIssue(
 						!xacmeJsonValueText(pChallenge, "type", &Type) ||
 						(strcmp(Type.sData, "dns-01") != 0))
 					{
+						if(getenv("XACME_DEBUG"))
+						{
+							printf("[dbg] authz[%u] chal[%u] skip type=%s\n",
+								(unsigned)i, (unsigned)j,
+								xacmeJsonValueText(pChallenge, "type", &Type) ?
+									Type.sData : "?");
+						}
 						continue;
 					}
 						if(!xacmeJsonValueText(
@@ -1186,10 +1219,21 @@ bool xacmeClientIssue(
 							bValidNow = (sStatus != NULL) &&
 								(strcmp(sStatus, "valid") == 0);
 						}
-						/* TXT 记录使命完成，删除。 */
-						xacmeFlowDnsRemove(pDns, sFqdn, sTxt);
-						xrtFree(sFqdn);
-						xrtFree(sTxt);
+						/* TXT 记录延后到 Done 统一删除（同名多授权
+						   缓存竞态，见声明处注释）；表满退化为立即删。 */
+						if(iTxtPending <
+							(sizeof(TxtPending) / sizeof(TxtPending[0])))
+						{
+							TxtPending[iTxtPending].sFqdn = sFqdn;
+							TxtPending[iTxtPending].sTxt = sTxt;
+							iTxtPending++;
+						}
+						else
+						{
+							xacmeFlowDnsRemove(pDns, sFqdn, sTxt);
+							xrtFree(sFqdn);
+							xrtFree(sTxt);
+						}
 						if(!bValidNow)
 						{
 							char sChallengeError[200];
@@ -1425,6 +1469,19 @@ bool xacmeClientIssue(
 	bResult = true;
 
 Done:
+	/* TXT 统一清理：全部授权验证完成（或中途失败）后统一 Remove，
+	   期间多值并存规避次级验证器缓存竞态。 */
+	{
+		size_t k;
+
+		for(k = 0; k < iTxtPending; k++)
+		{
+			xacmeFlowDnsRemove(
+				pDns, TxtPending[k].sFqdn, TxtPending[k].sTxt);
+			xrtFree(TxtPending[k].sFqdn);
+			xrtFree(TxtPending[k].sTxt);
+		}
+	}
 	if(pRoot != NULL)
 	{
 		xrtValueRelease(pRoot);
