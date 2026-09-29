@@ -21,6 +21,8 @@
 #ifndef LIBTCC_H
 	#include "libtcc.h"
 #endif
+#include <string.h>	/* XS_ClassIsHttp 用 strcmp；宿主侧 xrt.h 已含
+				 string.h，脚本侧 xrt_decl.h 仅声明不含它 */
 
 /* 进程内直连：宿主单进程实现，脚本经 tcc_add_symbol 按地址解析，
  * 因此无需任何导出修饰 */
