@@ -18,6 +18,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 /* ---------------- 配置模型（不随扩展门控，定义零成本） ---------------- */
 
@@ -47,7 +48,9 @@ typedef struct XS_AcmeConfig {
 	char*			sEmail;
 	char*			sDnsKeyFile;		/* DNS 凭据 JSON 文件 */
 	int			iRenewalDays;		/* 0 = 30 */
-	int			iCheckIntervalHours;	/* 0 = 12 */
+	int			iCheckIntervalHours;	/* 0 = 12（间隔制） */
+	int			iCheckHour;		/* 固定制：check_time "HH:MM"（-1 = 间隔制） */
+	int			iCheckMinute;
 	XS_AcmeCa*		pCas;			/* 有序 CA 回退链（≥1） */
 	size_t			iCaCount;
 	XS_AcmeGroup*		pGroups;
@@ -127,6 +130,8 @@ static bool XS_AcmeConfigClone(const XS_AcmeConfig* pSrc, XS_AcmeConfig* pDst)
 	pDst->sDnsKeyFile = XS_AcmeDup(pSrc->sDnsKeyFile);
 	pDst->iRenewalDays = pSrc->iRenewalDays;
 	pDst->iCheckIntervalHours = pSrc->iCheckIntervalHours;
+	pDst->iCheckHour = pSrc->iCheckHour;
+	pDst->iCheckMinute = pSrc->iCheckMinute;
 	if ( pSrc->iCaCount > 0 ) {
 		pDst->pCas = (XS_AcmeCa*)xrtCalloc(pSrc->iCaCount, sizeof(XS_AcmeCa));
 		if ( pDst->pCas == NULL ) goto Fail;
@@ -386,6 +391,41 @@ static bool XS_AcmeRootParse(xvalue* pRoot, XS_AcmeConfig** ppConfig,
 	pConfig->sDnsKeyFile = (char*)sTmp; sTmp = NULL;
 	if ( !XS_ConfigTakeInt(pAcme, "renew_before_days", &iVal, sErr, iErrCap) ) goto Fail;
 	pConfig->iRenewalDays = (iVal > 0 && iVal <= 89) ? (int)iVal : 30;
+	pConfig->iCheckHour = -1;
+	pConfig->iCheckMinute = 0;
+	{
+		/* check_time 固定制与 check_interval_hours 间隔制互斥（同
+		 * directory/directories 的防歧义策略） */
+		xvalue* pKeyTime = xrtValueObjectGet(
+			pAcme, XS_ConfigKey("check_time"));
+		xvalue* pKeyInt = xrtValueObjectGet(
+			pAcme, XS_ConfigKey("check_interval_hours"));
+		if ( (pKeyTime != NULL) && (pKeyInt != NULL) ) {
+			snprintf(sErr, iErrCap,
+				"acme: 'check_time' and 'check_interval_hours' "
+				"are mutually exclusive");
+			goto Fail;
+		}
+	}
+	if ( !XS_ConfigTakeString(pAcme, "check_time", &sTmp, sErr, iErrCap) ) goto Fail;
+	if ( sTmp != NULL && sTmp[0] != '\0' ) {
+		int iHour = -1, iMin = -1;
+
+		if ( sscanf(sTmp, "%d:%d", &iHour, &iMin) == 2 &&
+		     iHour >= 0 && iHour <= 23 && iMin >= 0 && iMin <= 59 &&
+		     strchr(sTmp, ':') != NULL ) {
+			pConfig->iCheckHour = iHour;
+			pConfig->iCheckMinute = iMin;
+		} else {
+			snprintf(sErr, iErrCap,
+				"acme.check_time expect HH:MM (00:00-23:59), got '%s'",
+				sTmp);
+			xrtFree((void*)sTmp);
+			goto Fail;
+		}
+	}
+	xrtFree((void*)sTmp);
+	sTmp = NULL;
 	if ( !XS_ConfigTakeInt(pAcme, "check_interval_hours", &iVal, sErr, iErrCap) ) goto Fail;
 	pConfig->iCheckIntervalHours = (iVal > 0 && iVal <= 720) ? (int)iVal : 12;
 
@@ -741,11 +781,38 @@ static void XS_AcmeRunCycle(XS_AcmeDaemon* pDaemon)
 
 /* ---------------- 守护线程 ---------------- */
 
+/* 计算下一轮唤醒：固定制=下一个 HH:MM 墙钟点；间隔制=now+间隔。
+ * 首查固定 5 分钟（启动快速对账），此后按调度。 */
+static xdeadline XS_AcmeNextWake(XS_AcmeDaemon* pDaemon)
+{
+	if ( pDaemon->tConfig.iCheckHour >= 0 ) {
+		time_t Now = time(NULL);
+		struct tm Local;
+		int64 iCur, iTarget, iDelta;
+
+#if defined(_WIN32) || defined(_WIN64)
+		if ( localtime_s(&Local, &Now) != 0 )
+#else
+		if ( localtime_r(&Now, &Local) == NULL )
+#endif
+		{
+			return xrtDeadlineAfter(UINT64_C(3600000000));
+		}
+		iCur = (int64)Local.tm_hour * 3600 +
+			(int64)Local.tm_min * 60 + (int64)Local.tm_sec;
+		iTarget = (int64)pDaemon->tConfig.iCheckHour * 3600 +
+			(int64)pDaemon->tConfig.iCheckMinute * 60;
+		iDelta = iTarget - iCur;
+		if ( iDelta <= 0 ) iDelta += 86400;	/* 今日已过 → 明日 */
+		return xrtDeadlineAfter((uint64)iDelta * UINT64_C(1000000));
+	}
+	return xrtDeadlineAfter((uint64)pDaemon->tConfig.iCheckIntervalHours *
+		UINT64_C(3600000000));
+}
+
 static int32 XS_AcmeThreadProc(ptr pData)
 {
 	XS_AcmeDaemon* pDaemon = (XS_AcmeDaemon*)pData;
-	uint64 uInterval = (uint64)pDaemon->tConfig.iCheckIntervalHours *
-		UINT64_C(3600000000);			/* 小时 → 微秒 */
 	xdeadline tNext = xrtDeadlineAfter(UINT64_C(300000000));	/* 首查 5 分钟 */
 
 	for ( ; ; ) {
@@ -759,7 +826,7 @@ static int32 XS_AcmeThreadProc(ptr pData)
 		}
 		xrtMutexUnlock(pDaemon->pLock);
 		XS_AcmeRunCycle(pDaemon);
-		tNext = xrtDeadlineAfter(uInterval);
+		tNext = XS_AcmeNextWake(pDaemon);
 	}
 	printf("[xs] acme: daemon stopped\n");
 	return 0;
@@ -988,10 +1055,18 @@ static bool XS_AcmeDaemonStart(XS_App* pApp, XS_AcmeConfig* pConfig,
 			(pDaemon->pCas[i].sEabKid != NULL) ? " (eab)" : "",
 			(pDaemon->pCas[i].sCaPem != NULL) ? " (custom trust)" : "");
 	}
-	printf("[xs] acme: daemon started (%u group(s), %u ca(s) in fallback chain, "
-		"check every %dh, first check in 5min)\n",
-		(unsigned)pDaemon->tConfig.iGroupCount, (unsigned)pDaemon->iCaCount,
-		pDaemon->tConfig.iCheckIntervalHours);
+	if ( pDaemon->tConfig.iCheckHour >= 0 ) {
+		printf("[xs] acme: daemon started (%u group(s), %u ca(s) in fallback chain, "
+			"daily at %02u:%02u, first check in 5min)\n",
+			(unsigned)pDaemon->tConfig.iGroupCount, (unsigned)pDaemon->iCaCount,
+			(unsigned)pDaemon->tConfig.iCheckHour,
+			(unsigned)pDaemon->tConfig.iCheckMinute);
+	} else {
+		printf("[xs] acme: daemon started (%u group(s), %u ca(s) in fallback chain, "
+			"check every %dh, first check in 5min)\n",
+			(unsigned)pDaemon->tConfig.iGroupCount, (unsigned)pDaemon->iCaCount,
+			pDaemon->tConfig.iCheckIntervalHours);
+	}
 	return true;
 
 Fail:
