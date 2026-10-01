@@ -2182,9 +2182,31 @@ static bool XS_HttpStartEx(
 	}
 	if ( bStartEndpoint && pServer->TLS ) {
 		xtlslistenerconfig tTlsListen;
-		xtlscontext* pContext = XS_TlsSharedContext();
+		xtlscontextconfig tContextConfig;
+		xtlscontext* pShared = XS_TlsSharedContext();
+		xtlscontext* pContext;
 		xtlslistener* pTlsListener;
 
+		/* RequestProc sees a complete body. The TLS plaintext queue must reach
+		 * HTTP's receive window before that callback can consume it; the xrt
+		 * default 256 KiB would otherwise stall larger admitted requests. One
+		 * record of slack lets a final record reach the HTTP rejection boundary.
+		 * Keep policy and other TLS limits, with a separate context per listener;
+		 * neither the process default nor unrelated protocols are enlarged. */
+		if ( pShared == NULL || pRuntime->iReceiveLimit >
+		     SIZE_MAX - XTLS_RECORD_PLAINTEXT_MAX ) {
+			snprintf(sErr, iErrCap, "https server '%s' TLS receive window is invalid", pServer->Name);
+			return false;
+		}
+		xrtTlsContextConfigInit(&tContextConfig);
+		tContextConfig.Policy = xrtTlsContextPolicy(pShared);
+		tContextConfig.Limits = *xrtTlsContextLimits(pShared);
+		tContextConfig.Limits.PlainLimit = pRuntime->iReceiveLimit + XTLS_RECORD_PLAINTEXT_MAX;
+		pContext = xrtTlsContextCreate(&tContextConfig);
+		if ( pContext == NULL ) {
+			snprintf(sErr, iErrCap, "https server '%s' TLS receive context creation failed", pServer->Name);
+			return false;
+		}
 		xrtTlsListenerConfigInit(&tTlsListen);
 		tTlsListen.Listen.Address = tTlsAddr;
 		tTlsListen.Listen.ReuseAddress = true;
@@ -2198,9 +2220,14 @@ static bool XS_HttpStartEx(
 		tTlsListen.Tls.Select = XS_TlsSlotSelect;
 		tTlsListen.Tls.SelectContext = pRuntime->pListenerSlot;
 		if ( !XS_ListenerSlotResourceAdd(pRuntime->pListenerSlot,
-		     XS_LISTENER_RESOURCE_TLS) ) return false;
+		     XS_LISTENER_RESOURCE_TLS) ) {
+			xrtTlsContextRelease(pContext);
+			return false;
+		}
 		pTlsListener = xrtTlsListenerStart(pServer->Engine, &tTlsListen,
 			&g_XS_HttpTlsListenerEvents, NULL, pRuntime->pListenerSlot);
+		/* The listener retained its context; failed start retained nothing. */
+		xrtTlsContextRelease(pContext);
 		if ( pTlsListener == NULL ) {
 			XS_ListenerSlotResourceCancel(pRuntime->pListenerSlot,
 				XS_LISTENER_RESOURCE_TLS);
