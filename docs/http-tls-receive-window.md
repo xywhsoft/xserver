@@ -6,6 +6,13 @@ process default TLS context with a 256 KiB plaintext queue stalls an admitted
 larger body: HTTP waits for the final bytes before dispatch, while TLS waits for
 HTTP to consume buffered bytes.
 
+The HTTP driver also requests xrtTlsStreamReadMore while retaining a partial
+header, body or drain prefix. TLS normally publishes unconsumed plaintext only
+once; merely waiting for another Read callback would leave ciphertext paused.
+Empty buffers resume through ordinary consumption. A failed growth request
+aborts the connection instead of leaving it stuck. Existing HTTP quotas are
+checked before growth; taken-over connections keep their own event receiver.
+
 Each HTTP TLS listener now owns a context snapshot with the shared policy and
 other limits, and PlainLimit equal to its effective recv_limit plus one TLS
 plaintext record. That slack allows a final record to reach HTTP's rejection

@@ -1274,6 +1274,20 @@ static bool XS_HttpDispatch(XS_HttpRecord* pRec)
 	return !bClose;
 }
 
+/* TLS publishes retained plaintext once until consumed or explicitly grown.
+ * HTTP keeps prefixes/full bodies for its complete-request callback. Waiting
+ * without ReadMore would pause ciphertext transport forever after one record.
+ * Only call on our worker after a published prefix; an empty buffer already
+ * resumes normally. The listener context reserves a record beyond recv_limit. */
+static void XS_HttpWantMore(XS_HttpRecord* pRec)
+{
+	if ( pRec->tReg.pTls != NULL && XS_HttpAvail(pRec) != 0u &&
+	     xrtTlsStreamState(pRec->tReg.pTls) == XTLS_STREAM_OPEN &&
+	     !xrtTlsStreamReadMore(pRec->tReg.pTls) ) {
+		(void)xrtTlsStreamAbort(pRec->tReg.pTls);
+	}
+}
+
 static void XS_HttpDrive(XS_HttpRecord* pRec)
 {
 	XS_HttpRuntime* pRuntime = pRec->pRuntime;
@@ -1295,6 +1309,7 @@ static void XS_HttpDrive(XS_HttpRecord* pRec)
 				return;
 			}
 			if ( iReady == 0 ) {
+				XS_HttpWantMore(pRec);
 				return;
 			}
 			if ( !XS_HttpDispatch(pRec) ) {
@@ -1312,6 +1327,7 @@ static void XS_HttpDrive(XS_HttpRecord* pRec)
 				return;
 			}
 			if ( iDrain == 0 ) {
+				XS_HttpWantMore(pRec);
 				return;
 			}
 			bClose = (pRec->tHead.Flags & XHTTP1_CONNECTION_CLOSE) != 0;
@@ -1327,7 +1343,7 @@ static void XS_HttpDrive(XS_HttpRecord* pRec)
 			if ( XS_HttpAvail(pRec) >= pRuntime->iReceiveLimit ) {
 				XS_HttpErrorPage(pRec, 431);
 				XS_HttpFinishRequest(pRec, true);
-			}
+			} else XS_HttpWantMore(pRec);
 			return;
 		case XHTTP1_ERROR:
 			XS_HttpErrorPage(pRec, XS_HttpHeadErrorStatus(tErr.Code));
@@ -1410,6 +1426,7 @@ static void XS_HttpDrive(XS_HttpRecord* pRec)
 			}
 			if ( iReady == 0 ) {
 				pRec->iPhase = 2;
+				XS_HttpWantMore(pRec);
 				return;
 			}
 		}
