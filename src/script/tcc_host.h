@@ -10,6 +10,11 @@
  */
 
 #include <stdio.h>
+#if !defined(_WIN32) && !defined(_WIN64)
+#include <time.h>
+#include <sys/time.h>
+#include <stdlib.h>
+#endif
 
 #include "../../lib/libtcc.h"
 #include "../sdk/xsbase.h"
@@ -205,6 +210,21 @@ static TCCState* XS_TccCreate(void)
 	XS_TccAddSymbols(pTcc, g_XS_XrtSymbols, sizeof(g_XS_XrtSymbols) / sizeof(g_XS_XrtSymbols[0]));
 	XS_TccAddSymbols(pTcc, g_XS_ApiSymbols, sizeof(g_XS_ApiSymbols) / sizeof(g_XS_ApiSymbols[0]));
 	XS_TccAddSymbols(pTcc, g_XS_TccSymbols, sizeof(g_XS_TccSymbols) / sizeof(g_XS_TccSymbols[0]));
+#if !defined(_WIN32) && !defined(_WIN64)
+	/* A relocated libc.a has no process startup: musl's copied __libc.auxv
+	 * remains NULL and its first vDSO lookup crashes. Clock entry points
+	 * must use the initialized host libc, including nested xsCreateTCC().
+	 * These POSIX signatures match the target's bundled libc headers. */
+	tcc_add_symbol(pTcc, "time", (const void*)time);
+	tcc_add_symbol(pTcc, "clock_gettime", (const void*)clock_gettime);
+	tcc_add_symbol(pTcc, "clock_getres", (const void*)clock_getres);
+	tcc_add_symbol(pTcc, "gettimeofday", (const void*)gettimeofday);
+	/* Environment is also process-initialized; a copied libc sees an
+	 * empty environment and silently ignores deployment credentials. */
+	tcc_add_symbol(pTcc, "getenv", (const void*)getenv);
+	tcc_add_symbol(pTcc, "setenv", (const void*)setenv);
+	tcc_add_symbol(pTcc, "unsetenv", (const void*)unsetenv);
+#endif
 	XS_TccAddExtensions(pTcc);
 	return pTcc;
 }
