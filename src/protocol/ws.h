@@ -34,7 +34,7 @@ typedef struct XS_WsRuntime {
 	size_t			iReceiveLimit;	/* 握手期线路硬边界，防止 ReadLimit 满后永久 MORE */
 	str			sProtocol;	/* ws_protocol 旋钮（可空） */
 	uint64			iMessageLimit;	/* 0 = 内核默认 */
-	uint64			iIdleMs;	/* 0 = 关闭 idle 保护 */
+	uint64			iIdleMs;	/* 0 = 显式关闭；缺省 XS_IDLE_TIMEOUT_DEFAULT_MS */
 	XS_GenerationTimer	tSweepTimer;
 	struct XS_WsConn*	pConns;		/* 活动连接链（停机批量收口） */
 	uint32			iConnCount;
@@ -848,8 +848,8 @@ static bool XS_WsStartEx(
 	if ( !XS_CustomReadUInt(pServer->Custom, "ws_message_limit", &iVal,
 		sErr, iErrCap) ) return false;
 	pRuntime->iMessageLimit = iVal;
-	if ( !XS_CustomReadUInt(pServer->Custom, "idle_timeout", &iVal,
-		sErr, iErrCap) ) return false;
+	if ( !XS_CustomReadUIntDefault(pServer->Custom, "idle_timeout", &iVal,
+		XS_IDLE_TIMEOUT_DEFAULT_MS, sErr, iErrCap) ) return false;
 	pRuntime->iIdleMs = iVal;
 	{
 		if ( pServer->Custom != NULL ) {

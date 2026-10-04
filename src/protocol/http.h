@@ -9,6 +9,7 @@
  * - 静态层（XS_FALLBACK，GET/HEAD）：路径过滤（解码/穿越/点文件/反斜杠）→
  *   MIME → 自定义头（static.headers）→ 错误页（static.error_pages / 内置）→ SendFile
  * - Custom 旋钮：body_limit / header_limit / path_limit / idle_timeout
+ *   （idle_timeout 缺省 XS_IDLE_TIMEOUT_DEFAULT_MS，显式 0 关闭）
  * - 连接生命周期与 idle 保护复用注册表（与 tcp 驱动同构）
  */
 
@@ -45,7 +46,7 @@ typedef struct XS_HttpRuntime {
 	uint64			iBodyLimit;	/* 0 = recv_limit（整体 body 回调模型的有界默认） */
 	size_t			iReceiveLimit;	/* 完整请求回调模型的线路硬边界 */
 	uint64			iPathLimit;	/* 0 = 默认 2048 */
-	uint64			iIdleMs;
+	uint64			iIdleMs;	/* 0 = 显式关闭；缺省 XS_IDLE_TIMEOUT_DEFAULT_MS */
 	XS_GenerationTimer	tSweepTimer;
 	xatomic32		tStopping;
 	/* static.headers 装配期预渲染缓存（每 host 一条；请求路径零字符串处理） */
@@ -2100,8 +2101,8 @@ static bool XS_HttpStartEx(
 			"http server '%s' body_limit exceeds recv_limit", pServer->Name);
 		return false;
 	}
-	if ( !XS_CustomReadUInt(pServer->Custom, "idle_timeout", &iVal,
-		sErr, iErrCap) ) return false;
+	if ( !XS_CustomReadUIntDefault(pServer->Custom, "idle_timeout", &iVal,
+		XS_IDLE_TIMEOUT_DEFAULT_MS, sErr, iErrCap) ) return false;
 	pRuntime->iIdleMs = iVal;
 	if ( !XS_HttpHdrCacheBuildAll(pRuntime, pServer, sErr, iErrCap) ) {
 		if ( sErr[0] == '\0' ) {

@@ -5,8 +5,8 @@
  * xs3 TCP / TCP+TLS 驱动（设计 §6.3）
  * - xs 建监听（含 tcps：host 证书 → SNI 身份表），流事件透传脚本回调
  * - 连接生命周期由 xs 持有（Accept 接管 → 注册表 → Close 时 Destroy）
- * - Custom 旋钮：idle_timeout（毫秒，server Custom，缺省关闭）——超时连接
- *   graceful Close（复用注册表扫描；正式按代 drain 随重载工作包）
+ * - Custom 旋钮：idle_timeout（毫秒，server Custom，缺省 XS_IDLE_TIMEOUT_DEFAULT_MS，
+ *   显式 0 关闭）——超时连接 graceful Close（复用注册表扫描；正式按代 drain 随重载工作包）
  */
 
 #include <stdio.h>
@@ -27,7 +27,7 @@ typedef struct XS_TcpRuntime {
 	XS_TlsTable		tTls;
 	XS_ConnRegistry	tRegistry;
 	XS_ServerGeneration*	pGeneration;
-	uint64			iIdleMs;	/* 0 = 关闭 idle 保护 */
+	uint64			iIdleMs;	/* 0 = 显式关闭；缺省 XS_IDLE_TIMEOUT_DEFAULT_MS */
 	XS_GenerationTimer	tSweepTimer;
 	xatomic32		tStopping;
 } XS_TcpRuntime;
@@ -56,6 +56,28 @@ static bool XS_CustomReadUInt(
 	}
 	*pOut = (uint64)iValue;
 	return true;
+}
+
+/* idle_timeout 缺省值（毫秒）：未配置即保护，显式 0 才是关闭。 */
+#define XS_IDLE_TIMEOUT_DEFAULT_MS	UINT64_C(120000)
+
+/* 键缺失取缺省；显式 0 保留原语义（关闭），不回退缺省。 */
+static bool XS_CustomReadUIntDefault(
+	xvalue* pCustom,
+	const char* sKey,
+	uint64* pOut,
+	uint64 iDefault,
+	char* sErr,
+	size_t iErrCap)
+{
+	xvalue* pVal = (pCustom != NULL) ? xrtValueObjectGet(pCustom,
+		xrtStrViewN(sKey, strlen(sKey))) : NULL;
+
+	if ( pVal == NULL ) {
+		*pOut = iDefault;
+		return true;
+	}
+	return XS_CustomReadUInt(pCustom, sKey, pOut, sErr, iErrCap);
 }
 
 /* recv_limit 是缓冲硬上限；当它小于 xrt 默认单次读取块时，同步缩小
@@ -458,8 +480,8 @@ static bool XS_TcpStartEx(
 		snprintf(sErr, iErrCap, "registry init failed");
 		return false;
 	}
-	if ( !XS_CustomReadUInt(pServer->Custom, "idle_timeout", &iIdle,
-		sErr, iErrCap) ) return false;
+	if ( !XS_CustomReadUIntDefault(pServer->Custom, "idle_timeout", &iIdle,
+		XS_IDLE_TIMEOUT_DEFAULT_MS, sErr, iErrCap) ) return false;
 	pRuntime->iIdleMs = iIdle;
 
 	if ( pServer->TLS ) {
