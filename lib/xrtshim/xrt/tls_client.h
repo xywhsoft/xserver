@@ -1,3 +1,3 @@
-/* xserver shim: map the xrt modular header to the ungated full declarations. */
+/* Generated xrt modular header bridge. */
 #include <xrt/promote.h>
 #include <xrt_decl.h>

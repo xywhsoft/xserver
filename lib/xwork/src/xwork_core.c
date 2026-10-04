@@ -459,12 +459,6 @@ void xworkAgentConfigInit(xwork_agent_config* pConfig)
     pConfig->iMaxInlineToolBytes = 64u * 1024u;
     pConfig->iMaxCapturedCommandBytes = 8u * 1024u * 1024u;
     pConfig->bRegisterBuiltinTools = true;
-    pConfig->bRegisterExploreTools = false;   /* host opts in (mdo enables) */    pConfig->eExploreMode = XWORK_EXPLORE_INTERNAL;
-    pConfig->sLsProgram = "ls";
-    pConfig->sGlobProgram = "fd";
-    pConfig->sGrepProgram = "rg";
-    pConfig->bRegisterPythonTool = false;
-    pConfig->sPythonPath = "python";
     pConfig->bAutoSaveSession = true;
     pConfig->bAllowArtifactWrites = true;
     pConfig->bRequireVerificationAfterWrite = true;
@@ -666,17 +660,6 @@ xwork_agent* xworkAgentCreate(const xwork_agent_config* pConfig, xwork_error* pE
     pAgent->bAutoSaveSession = pConfig->bAutoSaveSession;
     pAgent->bAllowArtifactWrites = pConfig->bAllowArtifactWrites;
     pAgent->bRequireVerificationAfterWrite = pConfig->bRequireVerificationAfterWrite;
-    pAgent->bRegisterExploreTools = pConfig->bRegisterExploreTools;
-    pAgent->bExploreExternal = pConfig->eExploreMode == XWORK_EXPLORE_EXTERNAL;
-    snprintf(pAgent->sLsProgram, sizeof(pAgent->sLsProgram), "%s",
-        pConfig->sLsProgram ? pConfig->sLsProgram : "ls");
-    snprintf(pAgent->sGlobProgram, sizeof(pAgent->sGlobProgram), "%s",
-        pConfig->sGlobProgram ? pConfig->sGlobProgram : "fd");
-    snprintf(pAgent->sGrepProgram, sizeof(pAgent->sGrepProgram), "%s",
-        pConfig->sGrepProgram ? pConfig->sGrepProgram : "rg");
-    pAgent->bRegisterPythonTool = pConfig->bRegisterPythonTool;
-    snprintf(pAgent->sPythonPath, sizeof(pAgent->sPythonPath), "%s",
-        pConfig->sPythonPath ? pConfig->sPythonPath : "python");
 
     if ( !xllmSessionGetStats(pAgent->pSession, &tStats) ) {
         xworkAgentDestroy(pAgent);
@@ -695,14 +678,6 @@ xwork_agent* xworkAgentCreate(const xwork_agent_config* pConfig, xwork_error* pE
         xworkAgentDestroy(pAgent);
         return NULL;
     }
-    if ( pAgent->bRegisterExploreTools && !xwork__register_explore_tools(pAgent, pError) ) {
-        xworkAgentDestroy(pAgent);
-        return NULL;
-    }
-    if ( pAgent->bRegisterPythonTool && !xwork__register_python_tool(pAgent, pError) ) {
-        xworkAgentDestroy(pAgent);
-        return NULL;
-    }
     return pAgent;
 }
 
@@ -710,7 +685,6 @@ void xworkAgentDestroy(xwork_agent* pAgent)
 {
     size_t i;
     if ( !pAgent ) return;
-    xwork__python_unit(pAgent);
     xwork__processes_unit(pAgent);
     for ( i = 0u; i < pAgent->iToolCount; ++i ) xwork__tool_entry_unit(&pAgent->pTools[i]);
     free(pAgent->pTools);

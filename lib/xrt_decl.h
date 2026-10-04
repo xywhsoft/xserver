@@ -92,6 +92,15 @@
 #if !defined(XRT_FEATURE_CONSOLE)
 #define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_CONSOLE 1
 #endif
+#if !defined(XRT_FEATURE_CONSOLE_INPUT)
+#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_CONSOLE_INPUT 1
+#endif
+#if !defined(XRT_FEATURE_CONSOLE_SCREEN)
+#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_CONSOLE_SCREEN 1
+#endif
+#if !defined(XRT_FEATURE_CONSOLE_TERMINAL)
+#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_CONSOLE_TERMINAL 1
+#endif
 #if !defined(XRT_FEATURE_COROUTINE)
 #define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_COROUTINE 1
 #endif
@@ -439,6 +448,9 @@
 #endif
 #if !defined(XRT_FEATURE_IO_LINE)
 #define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_IO_LINE 1
+#endif
+#if !defined(XRT_FEATURE_IO_STANDARD)
+#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_IO_STANDARD 1
 #endif
 #if !defined(XRT_FEATURE_JSON)
 #define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_JSON 1
@@ -974,6 +986,9 @@
 #if !defined(XRT_FEATURE_TLS_STREAM_DIAL_FUTURE)
 #define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_TLS_STREAM_DIAL_FUTURE 1
 #endif
+#if !defined(XRT_FEATURE_TLS_STREAM_DIAL_PROXY)
+#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_TLS_STREAM_DIAL_PROXY 1
+#endif
 #if !defined(XRT_FEATURE_TLS_STREAM_FUTURE)
 #define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_TLS_STREAM_FUTURE 1
 #endif
@@ -1009,6 +1024,18 @@
 #endif
 #if !defined(XRT_FEATURE_VALUE_GRAPH)
 #define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_VALUE_GRAPH 1
+#endif
+#if !defined(XRT_FEATURE_VFS)
+#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_VFS 1
+#endif
+#if !defined(XRT_FEATURE_VFS_DISK)
+#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_VFS_DISK 1
+#endif
+#if !defined(XRT_FEATURE_VFS_MEMORY)
+#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_VFS_MEMORY 1
+#endif
+#if !defined(XRT_FEATURE_VFS_PACK)
+#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_VFS_PACK 1
 #endif
 #if !defined(XRT_FEATURE_WAIT)
 #define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_WAIT 1
@@ -1127,35 +1154,35 @@
 #if !defined(XRT_FEATURE_XID)
 #define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XID 1
 #endif
-#if !defined(XRT_FEATURE_XSON)
-#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSON 1
+#if !defined(XRT_FEATURE_XLON)
+#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLON 1
 #endif
-#if !defined(XRT_FEATURE_XSONL)
-#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSONL 1
+#if !defined(XRT_FEATURE_XLONL)
+#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLONL 1
 #endif
-#if !defined(XRT_FEATURE_XSONL_CORE)
-#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSONL_CORE 1
+#if !defined(XRT_FEATURE_XLONL_CORE)
+#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLONL_CORE 1
 #endif
-#if !defined(XRT_FEATURE_XSONL_FILE)
-#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSONL_FILE 1
+#if !defined(XRT_FEATURE_XLONL_FILE)
+#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLONL_FILE 1
 #endif
-#if !defined(XRT_FEATURE_XSONL_READ)
-#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSONL_READ 1
+#if !defined(XRT_FEATURE_XLONL_READ)
+#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLONL_READ 1
 #endif
-#if !defined(XRT_FEATURE_XSONL_WRITE)
-#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSONL_WRITE 1
+#if !defined(XRT_FEATURE_XLONL_WRITE)
+#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLONL_WRITE 1
 #endif
-#if !defined(XRT_FEATURE_XSON_CORE)
-#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSON_CORE 1
+#if !defined(XRT_FEATURE_XLON_CORE)
+#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLON_CORE 1
 #endif
-#if !defined(XRT_FEATURE_XSON_FILE)
-#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSON_FILE 1
+#if !defined(XRT_FEATURE_XLON_FILE)
+#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLON_FILE 1
 #endif
-#if !defined(XRT_FEATURE_XSON_READ)
-#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSON_READ 1
+#if !defined(XRT_FEATURE_XLON_READ)
+#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLON_READ 1
 #endif
-#if !defined(XRT_FEATURE_XSON_WRITE)
-#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSON_WRITE 1
+#if !defined(XRT_FEATURE_XLON_WRITE)
+#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLON_WRITE 1
 #endif
 #if !defined(XRT_MODULE_ALL)
 #define XRT_DECLARATIONS_RESTORE_XRT_MODULE_ALL 1
@@ -1225,6 +1252,15 @@
 #endif
 #if !defined(XRT_MODULE_CONSOLE)
 #define XRT_DECLARATIONS_RESTORE_XRT_MODULE_CONSOLE 1
+#endif
+#if !defined(XRT_MODULE_CONSOLE_INPUT)
+#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_CONSOLE_INPUT 1
+#endif
+#if !defined(XRT_MODULE_CONSOLE_SCREEN)
+#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_CONSOLE_SCREEN 1
+#endif
+#if !defined(XRT_MODULE_CONSOLE_TERMINAL)
+#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_CONSOLE_TERMINAL 1
 #endif
 #if !defined(XRT_MODULE_COROUTINE)
 #define XRT_DECLARATIONS_RESTORE_XRT_MODULE_COROUTINE 1
@@ -1573,6 +1609,9 @@
 #endif
 #if !defined(XRT_MODULE_IO_LINE)
 #define XRT_DECLARATIONS_RESTORE_XRT_MODULE_IO_LINE 1
+#endif
+#if !defined(XRT_MODULE_IO_STANDARD)
+#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_IO_STANDARD 1
 #endif
 #if !defined(XRT_MODULE_JSON)
 #define XRT_DECLARATIONS_RESTORE_XRT_MODULE_JSON 1
@@ -2108,6 +2147,9 @@
 #if !defined(XRT_MODULE_TLS_STREAM_DIAL_FUTURE)
 #define XRT_DECLARATIONS_RESTORE_XRT_MODULE_TLS_STREAM_DIAL_FUTURE 1
 #endif
+#if !defined(XRT_MODULE_TLS_STREAM_DIAL_PROXY)
+#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_TLS_STREAM_DIAL_PROXY 1
+#endif
 #if !defined(XRT_MODULE_TLS_STREAM_FUTURE)
 #define XRT_DECLARATIONS_RESTORE_XRT_MODULE_TLS_STREAM_FUTURE 1
 #endif
@@ -2143,6 +2185,18 @@
 #endif
 #if !defined(XRT_MODULE_VALUE_GRAPH)
 #define XRT_DECLARATIONS_RESTORE_XRT_MODULE_VALUE_GRAPH 1
+#endif
+#if !defined(XRT_MODULE_VFS)
+#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_VFS 1
+#endif
+#if !defined(XRT_MODULE_VFS_DISK)
+#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_VFS_DISK 1
+#endif
+#if !defined(XRT_MODULE_VFS_MEMORY)
+#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_VFS_MEMORY 1
+#endif
+#if !defined(XRT_MODULE_VFS_PACK)
+#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_VFS_PACK 1
 #endif
 #if !defined(XRT_MODULE_WAIT)
 #define XRT_DECLARATIONS_RESTORE_XRT_MODULE_WAIT 1
@@ -2261,35 +2315,35 @@
 #if !defined(XRT_MODULE_XID)
 #define XRT_DECLARATIONS_RESTORE_XRT_MODULE_XID 1
 #endif
-#if !defined(XRT_MODULE_XSON)
-#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSON 1
+#if !defined(XRT_MODULE_XLON)
+#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLON 1
 #endif
-#if !defined(XRT_MODULE_XSONL)
-#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSONL 1
+#if !defined(XRT_MODULE_XLONL)
+#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLONL 1
 #endif
-#if !defined(XRT_MODULE_XSONL_CORE)
-#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSONL_CORE 1
+#if !defined(XRT_MODULE_XLONL_CORE)
+#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLONL_CORE 1
 #endif
-#if !defined(XRT_MODULE_XSONL_FILE)
-#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSONL_FILE 1
+#if !defined(XRT_MODULE_XLONL_FILE)
+#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLONL_FILE 1
 #endif
-#if !defined(XRT_MODULE_XSONL_READ)
-#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSONL_READ 1
+#if !defined(XRT_MODULE_XLONL_READ)
+#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLONL_READ 1
 #endif
-#if !defined(XRT_MODULE_XSONL_WRITE)
-#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSONL_WRITE 1
+#if !defined(XRT_MODULE_XLONL_WRITE)
+#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLONL_WRITE 1
 #endif
-#if !defined(XRT_MODULE_XSON_CORE)
-#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSON_CORE 1
+#if !defined(XRT_MODULE_XLON_CORE)
+#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLON_CORE 1
 #endif
-#if !defined(XRT_MODULE_XSON_FILE)
-#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSON_FILE 1
+#if !defined(XRT_MODULE_XLON_FILE)
+#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLON_FILE 1
 #endif
-#if !defined(XRT_MODULE_XSON_READ)
-#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSON_READ 1
+#if !defined(XRT_MODULE_XLON_READ)
+#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLON_READ 1
 #endif
-#if !defined(XRT_MODULE_XSON_WRITE)
-#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSON_WRITE 1
+#if !defined(XRT_MODULE_XLON_WRITE)
+#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLON_WRITE 1
 #endif
 #if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_ALL)
 #define XRT_MODULE_ALL 1
@@ -2298,6 +2352,7 @@
 #define XRT_DECLARATIONS_RESTORE_XRT_EXCLUDE_MEMORY_DEBUG 1
 #undef XRT_EXCLUDE_MEMORY_DEBUG
 #endif
+#undef XRT_FEATURES_H
 
 
 /* ========================================================================== */
@@ -2480,6 +2535,16 @@
 #endif
 #endif
 
+/* process_open 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PROCESS_OPEN)
+#ifndef XRT_FEATURE_PROCESS_OPEN
+#define XRT_FEATURE_PROCESS_OPEN
+#endif
+#ifndef XRT_MODULE_PROCESS
+#define XRT_MODULE_PROCESS
+#endif
+#endif
+
 /* process_run 及其直接依赖。 */
 #if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PROCESS_RUN)
 #ifndef XRT_FEATURE_PROCESS_RUN
@@ -2493,16 +2558,6 @@
 #endif
 #ifndef XRT_MODULE_CANCEL
 #define XRT_MODULE_CANCEL
-#endif
-#endif
-
-/* process_open 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PROCESS_OPEN)
-#ifndef XRT_FEATURE_PROCESS_OPEN
-#define XRT_FEATURE_PROCESS_OPEN
-#endif
-#ifndef XRT_MODULE_PROCESS
-#define XRT_MODULE_PROCESS
 #endif
 #endif
 
@@ -2737,6 +2792,51 @@
 #endif
 #endif
 
+/* console_terminal 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CONSOLE_TERMINAL)
+#ifndef XRT_FEATURE_CONSOLE_TERMINAL
+#define XRT_FEATURE_CONSOLE_TERMINAL
+#endif
+#ifndef XRT_MODULE_CONSOLE_SCREEN
+#define XRT_MODULE_CONSOLE_SCREEN
+#endif
+#ifndef XRT_MODULE_IO_STANDARD
+#define XRT_MODULE_IO_STANDARD
+#endif
+#ifndef XRT_MODULE_BUFFER
+#define XRT_MODULE_BUFFER
+#endif
+#ifndef XRT_MODULE_THREAD
+#define XRT_MODULE_THREAD
+#endif
+#endif
+
+/* console_screen 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CONSOLE_SCREEN)
+#ifndef XRT_FEATURE_CONSOLE_SCREEN
+#define XRT_FEATURE_CONSOLE_SCREEN
+#endif
+#ifndef XRT_MODULE_CONSOLE
+#define XRT_MODULE_CONSOLE
+#endif
+#endif
+
+/* console_input 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CONSOLE_INPUT)
+#ifndef XRT_FEATURE_CONSOLE_INPUT
+#define XRT_FEATURE_CONSOLE_INPUT
+#endif
+#ifndef XRT_MODULE_CONSOLE
+#define XRT_MODULE_CONSOLE
+#endif
+#ifndef XRT_MODULE_IO_STANDARD
+#define XRT_MODULE_IO_STANDARD
+#endif
+#ifndef XRT_MODULE_BUFFER
+#define XRT_MODULE_BUFFER
+#endif
+#endif
+
 /* console 及其直接依赖。 */
 #if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CONSOLE)
 #ifndef XRT_FEATURE_CONSOLE
@@ -2831,62 +2931,62 @@
 #endif
 #endif
 
-/* xsonl 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XSONL)
-#ifndef XRT_FEATURE_XSONL
-#define XRT_FEATURE_XSONL
+/* xlonl 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XLONL)
+#ifndef XRT_FEATURE_XLONL
+#define XRT_FEATURE_XLONL
 #endif
-#ifndef XRT_MODULE_XSONL_FILE
-#define XRT_MODULE_XSONL_FILE
+#ifndef XRT_MODULE_XLONL_FILE
+#define XRT_MODULE_XLONL_FILE
 #endif
 #endif
 
-/* xsonl_file 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XSONL_FILE)
-#ifndef XRT_FEATURE_XSONL_FILE
-#define XRT_FEATURE_XSONL_FILE
+/* xlonl_file 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XLONL_FILE)
+#ifndef XRT_FEATURE_XLONL_FILE
+#define XRT_FEATURE_XLONL_FILE
 #endif
-#ifndef XRT_MODULE_XSONL_READ
-#define XRT_MODULE_XSONL_READ
+#ifndef XRT_MODULE_XLONL_READ
+#define XRT_MODULE_XLONL_READ
 #endif
-#ifndef XRT_MODULE_XSONL_WRITE
-#define XRT_MODULE_XSONL_WRITE
+#ifndef XRT_MODULE_XLONL_WRITE
+#define XRT_MODULE_XLONL_WRITE
 #endif
 #ifndef XRT_MODULE_FILE_WHOLE
 #define XRT_MODULE_FILE_WHOLE
 #endif
 #endif
 
-/* xsonl_write 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XSONL_WRITE)
-#ifndef XRT_FEATURE_XSONL_WRITE
-#define XRT_FEATURE_XSONL_WRITE
+/* xlonl_write 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XLONL_WRITE)
+#ifndef XRT_FEATURE_XLONL_WRITE
+#define XRT_FEATURE_XLONL_WRITE
 #endif
-#ifndef XRT_MODULE_XSONL_CORE
-#define XRT_MODULE_XSONL_CORE
+#ifndef XRT_MODULE_XLONL_CORE
+#define XRT_MODULE_XLONL_CORE
 #endif
-#ifndef XRT_MODULE_XSON_WRITE
-#define XRT_MODULE_XSON_WRITE
-#endif
-#endif
-
-/* xsonl_read 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XSONL_READ)
-#ifndef XRT_FEATURE_XSONL_READ
-#define XRT_FEATURE_XSONL_READ
-#endif
-#ifndef XRT_MODULE_XSONL_CORE
-#define XRT_MODULE_XSONL_CORE
-#endif
-#ifndef XRT_MODULE_XSON_READ
-#define XRT_MODULE_XSON_READ
+#ifndef XRT_MODULE_XLON_WRITE
+#define XRT_MODULE_XLON_WRITE
 #endif
 #endif
 
-/* xsonl_core 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XSONL_CORE)
-#ifndef XRT_FEATURE_XSONL_CORE
-#define XRT_FEATURE_XSONL_CORE
+/* xlonl_read 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XLONL_READ)
+#ifndef XRT_FEATURE_XLONL_READ
+#define XRT_FEATURE_XLONL_READ
+#endif
+#ifndef XRT_MODULE_XLONL_CORE
+#define XRT_MODULE_XLONL_CORE
+#endif
+#ifndef XRT_MODULE_XLON_READ
+#define XRT_MODULE_XLON_READ
+#endif
+#endif
+
+/* xlonl_core 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XLONL_CORE)
+#ifndef XRT_FEATURE_XLONL_CORE
+#define XRT_FEATURE_XLONL_CORE
 #endif
 #endif
 
@@ -2949,39 +3049,39 @@
 #endif
 #endif
 
-/* xson 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XSON)
-#ifndef XRT_FEATURE_XSON
-#define XRT_FEATURE_XSON
+/* xlon 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XLON)
+#ifndef XRT_FEATURE_XLON
+#define XRT_FEATURE_XLON
 #endif
-#ifndef XRT_MODULE_XSON_FILE
-#define XRT_MODULE_XSON_FILE
+#ifndef XRT_MODULE_XLON_FILE
+#define XRT_MODULE_XLON_FILE
 #endif
 #endif
 
-/* xson_file 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XSON_FILE)
-#ifndef XRT_FEATURE_XSON_FILE
-#define XRT_FEATURE_XSON_FILE
+/* xlon_file 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XLON_FILE)
+#ifndef XRT_FEATURE_XLON_FILE
+#define XRT_FEATURE_XLON_FILE
 #endif
-#ifndef XRT_MODULE_XSON_READ
-#define XRT_MODULE_XSON_READ
+#ifndef XRT_MODULE_XLON_READ
+#define XRT_MODULE_XLON_READ
 #endif
-#ifndef XRT_MODULE_XSON_WRITE
-#define XRT_MODULE_XSON_WRITE
+#ifndef XRT_MODULE_XLON_WRITE
+#define XRT_MODULE_XLON_WRITE
 #endif
 #ifndef XRT_MODULE_FILE_WHOLE
 #define XRT_MODULE_FILE_WHOLE
 #endif
 #endif
 
-/* xson_write 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XSON_WRITE)
-#ifndef XRT_FEATURE_XSON_WRITE
-#define XRT_FEATURE_XSON_WRITE
+/* xlon_write 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XLON_WRITE)
+#ifndef XRT_FEATURE_XLON_WRITE
+#define XRT_FEATURE_XLON_WRITE
 #endif
-#ifndef XRT_MODULE_XSON_CORE
-#define XRT_MODULE_XSON_CORE
+#ifndef XRT_MODULE_XLON_CORE
+#define XRT_MODULE_XLON_CORE
 #endif
 #ifndef XRT_MODULE_JSON_ESCAPE
 #define XRT_MODULE_JSON_ESCAPE
@@ -3009,13 +3109,13 @@
 #endif
 #endif
 
-/* xson_read 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XSON_READ)
-#ifndef XRT_FEATURE_XSON_READ
-#define XRT_FEATURE_XSON_READ
+/* xlon_read 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XLON_READ)
+#ifndef XRT_FEATURE_XLON_READ
+#define XRT_FEATURE_XLON_READ
 #endif
-#ifndef XRT_MODULE_XSON_CORE
-#define XRT_MODULE_XSON_CORE
+#ifndef XRT_MODULE_XLON_CORE
+#define XRT_MODULE_XLON_CORE
 #endif
 #ifndef XRT_MODULE_BUFFER
 #define XRT_MODULE_BUFFER
@@ -3040,10 +3140,10 @@
 #endif
 #endif
 
-/* xson_core 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XSON_CORE)
-#ifndef XRT_FEATURE_XSON_CORE
-#define XRT_FEATURE_XSON_CORE
+/* xlon_core 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XLON_CORE)
+#ifndef XRT_FEATURE_XLON_CORE
+#define XRT_FEATURE_XLON_CORE
 #endif
 #endif
 
@@ -3147,6 +3247,19 @@
 #endif
 #endif
 
+/* io_standard 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_IO_STANDARD)
+#ifndef XRT_FEATURE_IO_STANDARD
+#define XRT_FEATURE_IO_STANDARD
+#endif
+#ifndef XRT_MODULE_IO
+#define XRT_MODULE_IO
+#endif
+#ifndef XRT_MODULE_ATOMIC
+#define XRT_MODULE_ATOMIC
+#endif
+#endif
+
 /* io_line 及其直接依赖。 */
 #if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_IO_LINE)
 #ifndef XRT_FEATURE_IO_LINE
@@ -3220,6 +3333,32 @@
 #endif
 #endif
 
+/* vfs_pack 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_VFS_PACK)
+#ifndef XRT_FEATURE_VFS_PACK
+#define XRT_FEATURE_VFS_PACK
+#endif
+#ifndef XRT_MODULE_VFS
+#define XRT_MODULE_VFS
+#endif
+#ifndef XRT_MODULE_COND
+#define XRT_MODULE_COND
+#endif
+#endif
+
+/* vfs_disk 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_VFS_DISK)
+#ifndef XRT_FEATURE_VFS_DISK
+#define XRT_FEATURE_VFS_DISK
+#endif
+#ifndef XRT_MODULE_VFS
+#define XRT_MODULE_VFS
+#endif
+#ifndef XRT_MODULE_FILE_ROOT
+#define XRT_MODULE_FILE_ROOT
+#endif
+#endif
+
 /* file_root 及其直接依赖。 */
 #if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_ROOT)
 #ifndef XRT_FEATURE_FILE_ROOT
@@ -3228,18 +3367,34 @@
 #ifndef XRT_MODULE_FILE_LINK
 #define XRT_MODULE_FILE_LINK
 #endif
+#ifndef XRT_MODULE_DIR
+#define XRT_MODULE_DIR
+#endif
 #endif
 
-/* dir_temp 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_DIR_TEMP)
-#ifndef XRT_FEATURE_DIR_TEMP
-#define XRT_FEATURE_DIR_TEMP
+/* vfs_memory 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_VFS_MEMORY)
+#ifndef XRT_FEATURE_VFS_MEMORY
+#define XRT_FEATURE_VFS_MEMORY
+#endif
+#ifndef XRT_MODULE_VFS
+#define XRT_MODULE_VFS
+#endif
+#endif
+
+/* vfs 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_VFS)
+#ifndef XRT_FEATURE_VFS
+#define XRT_FEATURE_VFS
 #endif
 #ifndef XRT_MODULE_DIR
 #define XRT_MODULE_DIR
 #endif
-#ifndef XRT_MODULE_FILE_TEMP
-#define XRT_MODULE_FILE_TEMP
+#ifndef XRT_MODULE_MUTEX
+#define XRT_MODULE_MUTEX
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
 #endif
 #endif
 
@@ -3341,6 +3496,19 @@
 #endif
 #ifndef XRT_MODULE_FILE_ASYNC_COMMON
 #define XRT_MODULE_FILE_ASYNC_COMMON
+#endif
+#endif
+
+/* dir_temp 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_DIR_TEMP)
+#ifndef XRT_FEATURE_DIR_TEMP
+#define XRT_FEATURE_DIR_TEMP
+#endif
+#ifndef XRT_MODULE_DIR
+#define XRT_MODULE_DIR
+#endif
+#ifndef XRT_MODULE_FILE_TEMP
+#define XRT_MODULE_FILE_TEMP
 #endif
 #endif
 
@@ -3453,6 +3621,19 @@
 #endif
 #ifndef XRT_MODULE_NET_ENGINE
 #define XRT_MODULE_NET_ENGINE
+#endif
+#endif
+
+/* tls_stream_dial_proxy 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_STREAM_DIAL_PROXY)
+#ifndef XRT_FEATURE_TLS_STREAM_DIAL_PROXY
+#define XRT_FEATURE_TLS_STREAM_DIAL_PROXY
+#endif
+#ifndef XRT_MODULE_TLS_STREAM_DIAL
+#define XRT_MODULE_TLS_STREAM_DIAL
+#endif
+#ifndef XRT_MODULE_NET_PROXY_DIAL
+#define XRT_MODULE_NET_PROXY_DIAL
 #endif
 #endif
 
@@ -3715,22 +3896,6 @@
 #endif
 #endif
 
-/* net_resolver_future 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_RESOLVER_FUTURE)
-#ifndef XRT_FEATURE_NET_RESOLVER_FUTURE
-#define XRT_FEATURE_NET_RESOLVER_FUTURE
-#endif
-#ifndef XRT_MODULE_NET_RESOLVER
-#define XRT_MODULE_NET_RESOLVER
-#endif
-#ifndef XRT_MODULE_FUTURE
-#define XRT_MODULE_FUTURE
-#endif
-#ifndef XRT_MODULE_FUTURE_BRIDGE
-#define XRT_MODULE_FUTURE_BRIDGE
-#endif
-#endif
-
 /* net_interface_text 及其直接依赖。 */
 #if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_INTERFACE_TEXT)
 #ifndef XRT_FEATURE_NET_INTERFACE_TEXT
@@ -3842,13 +4007,6 @@
 #endif
 #ifndef XRT_MODULE_FUTURE
 #define XRT_MODULE_FUTURE
-#endif
-#endif
-
-/* thread_key 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_THREAD_KEY)
-#ifndef XRT_FEATURE_THREAD_KEY
-#define XRT_FEATURE_THREAD_KEY
 #endif
 #endif
 
@@ -6326,6 +6484,334 @@
 #endif
 #endif
 
+/* net_tcp_dial 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP_DIAL)
+#ifndef XRT_FEATURE_NET_TCP_DIAL
+#define XRT_FEATURE_NET_TCP_DIAL
+#endif
+#ifndef XRT_MODULE_NET_TCP
+#define XRT_MODULE_NET_TCP
+#endif
+#ifndef XRT_MODULE_NET_RESOLVER
+#define XRT_MODULE_NET_RESOLVER
+#endif
+#endif
+
+/* net_tcp 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP)
+#ifndef XRT_FEATURE_NET_TCP
+#define XRT_FEATURE_NET_TCP
+#endif
+#ifndef XRT_MODULE_NET_ENGINE
+#define XRT_MODULE_NET_ENGINE
+#endif
+#endif
+
+/* codec_base64 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CODEC_BASE64)
+#ifndef XRT_FEATURE_CODEC_BASE64
+#define XRT_FEATURE_CODEC_BASE64
+#endif
+#endif
+
+/* dir 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_DIR)
+#ifndef XRT_FEATURE_DIR
+#define XRT_FEATURE_DIR
+#endif
+#ifndef XRT_MODULE_FILE
+#define XRT_MODULE_FILE
+#endif
+#endif
+
+/* file_whole 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_WHOLE)
+#ifndef XRT_FEATURE_FILE_WHOLE
+#define XRT_FEATURE_FILE_WHOLE
+#endif
+#ifndef XRT_MODULE_FILE_TEMP
+#define XRT_MODULE_FILE_TEMP
+#endif
+#endif
+
+/* file_temp 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_TEMP)
+#ifndef XRT_FEATURE_FILE_TEMP
+#define XRT_FEATURE_FILE_TEMP
+#endif
+#ifndef XRT_MODULE_FILE
+#define XRT_MODULE_FILE
+#endif
+#ifndef XRT_MODULE_RANDOM_SECURE
+#define XRT_MODULE_RANDOM_SECURE
+#endif
+#endif
+
+/* random_secure 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_RANDOM_SECURE)
+#ifndef XRT_FEATURE_RANDOM_SECURE
+#define XRT_FEATURE_RANDOM_SECURE
+#endif
+#endif
+
+/* file 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE)
+#ifndef XRT_FEATURE_FILE
+#define XRT_FEATURE_FILE
+#endif
+#ifndef XRT_MODULE_PATH_SYSTEM
+#define XRT_MODULE_PATH_SYSTEM
+#endif
+#ifndef XRT_MODULE_TIME
+#define XRT_MODULE_TIME
+#endif
+#endif
+
+/* path_system 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PATH_SYSTEM)
+#ifndef XRT_FEATURE_PATH_SYSTEM
+#define XRT_FEATURE_PATH_SYSTEM
+#endif
+#ifndef XRT_MODULE_PATH
+#define XRT_MODULE_PATH
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
+#endif
+#endif
+
+/* path 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PATH)
+#ifndef XRT_FEATURE_PATH
+#define XRT_FEATURE_PATH
+#endif
+#ifndef XRT_MODULE_STRING
+#define XRT_MODULE_STRING
+#endif
+#endif
+
+/* string 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_STRING)
+#ifndef XRT_FEATURE_STRING
+#define XRT_FEATURE_STRING
+#endif
+#endif
+
+/* json_read 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSON_READ)
+#ifndef XRT_FEATURE_JSON_READ
+#define XRT_FEATURE_JSON_READ
+#endif
+#ifndef XRT_MODULE_JSON_CORE
+#define XRT_MODULE_JSON_CORE
+#endif
+#ifndef XRT_MODULE_BUFFER
+#define XRT_MODULE_BUFFER
+#endif
+#ifndef XRT_MODULE_NUMBER_INTEGER
+#define XRT_MODULE_NUMBER_INTEGER
+#endif
+#ifndef XRT_MODULE_NUMBER_FLOAT
+#define XRT_MODULE_NUMBER_FLOAT
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
+#endif
+#ifndef XRT_MODULE_VALUE_CONTAINER
+#define XRT_MODULE_VALUE_CONTAINER
+#endif
+#endif
+
+/* unicode 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_UNICODE)
+#ifndef XRT_FEATURE_UNICODE
+#define XRT_FEATURE_UNICODE
+#endif
+#endif
+
+/* number_float 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NUMBER_FLOAT)
+#ifndef XRT_FEATURE_NUMBER_FLOAT
+#define XRT_FEATURE_NUMBER_FLOAT
+#endif
+#endif
+
+/* number_integer 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NUMBER_INTEGER)
+#ifndef XRT_FEATURE_NUMBER_INTEGER
+#define XRT_FEATURE_NUMBER_INTEGER
+#endif
+#endif
+
+/* buffer 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_BUFFER)
+#ifndef XRT_FEATURE_BUFFER
+#define XRT_FEATURE_BUFFER
+#endif
+#ifndef XRT_MODULE_ARRAY
+#define XRT_MODULE_ARRAY
+#endif
+#endif
+
+/* json_core 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSON_CORE)
+#ifndef XRT_FEATURE_JSON_CORE
+#define XRT_FEATURE_JSON_CORE
+#endif
+#endif
+
+/* value_graph 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_VALUE_GRAPH)
+#ifndef XRT_FEATURE_VALUE_GRAPH
+#define XRT_FEATURE_VALUE_GRAPH
+#endif
+#ifndef XRT_MODULE_VALUE_CONTAINER
+#define XRT_MODULE_VALUE_CONTAINER
+#endif
+#endif
+
+/* value_container 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_VALUE_CONTAINER)
+#ifndef XRT_FEATURE_VALUE_CONTAINER
+#define XRT_FEATURE_VALUE_CONTAINER
+#endif
+#ifndef XRT_MODULE_VALUE
+#define XRT_MODULE_VALUE
+#endif
+#ifndef XRT_MODULE_PTR_ARRAY
+#define XRT_MODULE_PTR_ARRAY
+#endif
+#ifndef XRT_MODULE_INT_MAP
+#define XRT_MODULE_INT_MAP
+#endif
+#ifndef XRT_MODULE_MAP
+#define XRT_MODULE_MAP
+#endif
+#ifndef XRT_MODULE_SET
+#define XRT_MODULE_SET
+#endif
+#endif
+
+/* set 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_SET)
+#ifndef XRT_FEATURE_SET
+#define XRT_FEATURE_SET
+#endif
+#ifndef XRT_MODULE_HASH64
+#define XRT_MODULE_HASH64
+#endif
+#endif
+
+/* map 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_MAP)
+#ifndef XRT_FEATURE_MAP
+#define XRT_FEATURE_MAP
+#endif
+#ifndef XRT_MODULE_HASH64
+#define XRT_MODULE_HASH64
+#endif
+#endif
+
+/* int_map 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_INT_MAP)
+#ifndef XRT_FEATURE_INT_MAP
+#define XRT_FEATURE_INT_MAP
+#endif
+#ifndef XRT_MODULE_AVL_TREE
+#define XRT_MODULE_AVL_TREE
+#endif
+#endif
+
+/* avl_tree 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_AVL_TREE)
+#ifndef XRT_FEATURE_AVL_TREE
+#define XRT_FEATURE_AVL_TREE
+#endif
+#ifndef XRT_MODULE_AVL
+#define XRT_MODULE_AVL
+#endif
+#ifndef XRT_MODULE_POOL
+#define XRT_MODULE_POOL
+#endif
+#endif
+
+/* pool 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_POOL)
+#ifndef XRT_FEATURE_POOL
+#define XRT_FEATURE_POOL
+#endif
+#ifndef XRT_MODULE_POOL_PAGE
+#define XRT_MODULE_POOL_PAGE
+#endif
+#endif
+
+/* pool_page 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_POOL_PAGE)
+#ifndef XRT_FEATURE_POOL_PAGE
+#define XRT_FEATURE_POOL_PAGE
+#endif
+#endif
+
+/* avl 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_AVL)
+#ifndef XRT_FEATURE_AVL
+#define XRT_FEATURE_AVL
+#endif
+#endif
+
+/* ptr_array 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PTR_ARRAY)
+#ifndef XRT_FEATURE_PTR_ARRAY
+#define XRT_FEATURE_PTR_ARRAY
+#endif
+#ifndef XRT_MODULE_ARRAY
+#define XRT_MODULE_ARRAY
+#endif
+#endif
+
+/* array 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_ARRAY)
+#ifndef XRT_FEATURE_ARRAY
+#define XRT_FEATURE_ARRAY
+#endif
+#endif
+
+/* value 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_VALUE)
+#ifndef XRT_FEATURE_VALUE
+#define XRT_FEATURE_VALUE
+#endif
+#ifndef XRT_MODULE_HASH64
+#define XRT_MODULE_HASH64
+#endif
+#endif
+
+/* future_combine 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FUTURE_COMBINE)
+#ifndef XRT_FEATURE_FUTURE_COMBINE
+#define XRT_FEATURE_FUTURE_COMBINE
+#endif
+#ifndef XRT_MODULE_FUTURE
+#define XRT_MODULE_FUTURE
+#endif
+#endif
+
+/* net_resolver_future 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_RESOLVER_FUTURE)
+#ifndef XRT_FEATURE_NET_RESOLVER_FUTURE
+#define XRT_FEATURE_NET_RESOLVER_FUTURE
+#endif
+#ifndef XRT_MODULE_NET_RESOLVER
+#define XRT_MODULE_NET_RESOLVER
+#endif
+#ifndef XRT_MODULE_FUTURE
+#define XRT_MODULE_FUTURE
+#endif
+#ifndef XRT_MODULE_FUTURE_BRIDGE
+#define XRT_MODULE_FUTURE_BRIDGE
+#endif
+#endif
+
 /* future_bridge 及其直接依赖。 */
 #if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FUTURE_BRIDGE)
 #ifndef XRT_FEATURE_FUTURE_BRIDGE
@@ -6342,16 +6828,26 @@
 #endif
 #endif
 
-/* net_tcp_dial 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP_DIAL)
-#ifndef XRT_FEATURE_NET_TCP_DIAL
-#define XRT_FEATURE_NET_TCP_DIAL
+/* future 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FUTURE)
+#ifndef XRT_FEATURE_FUTURE
+#define XRT_FEATURE_FUTURE
 #endif
-#ifndef XRT_MODULE_NET_TCP
-#define XRT_MODULE_NET_TCP
+#ifndef XRT_MODULE_CANCEL
+#define XRT_MODULE_CANCEL
 #endif
-#ifndef XRT_MODULE_NET_RESOLVER
-#define XRT_MODULE_NET_RESOLVER
+#endif
+
+/* cancel 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CANCEL)
+#ifndef XRT_FEATURE_CANCEL
+#define XRT_FEATURE_CANCEL
+#endif
+#ifndef XRT_MODULE_MUTEX
+#define XRT_MODULE_MUTEX
+#endif
+#ifndef XRT_MODULE_COND
+#define XRT_MODULE_COND
 #endif
 #endif
 
@@ -6377,6 +6873,26 @@
 #endif
 #endif
 
+/* cond 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_COND)
+#ifndef XRT_FEATURE_COND
+#define XRT_FEATURE_COND
+#endif
+#ifndef XRT_MODULE_MUTEX
+#define XRT_MODULE_MUTEX
+#endif
+#ifndef XRT_MODULE_WAIT
+#define XRT_MODULE_WAIT
+#endif
+#endif
+
+/* hash64 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HASH64)
+#ifndef XRT_FEATURE_HASH64
+#define XRT_FEATURE_HASH64
+#endif
+#endif
+
 /* net_dns 及其直接依赖。 */
 #if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_DNS)
 #ifndef XRT_FEATURE_NET_DNS
@@ -6387,13 +6903,18 @@
 #endif
 #endif
 
-/* net_tcp 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP)
-#ifndef XRT_FEATURE_NET_TCP
-#define XRT_FEATURE_NET_TCP
+/* memory_debug 及其直接依赖。 */
+#if (defined(XRT_MODULE_ALL) && !defined(XRT_EXCLUDE_MEMORY_DEBUG)) || \
+	defined(XRT_MODULE_MEMORY_DEBUG)
+#ifndef XRT_FEATURE_MEMORY_DEBUG
+#define XRT_FEATURE_MEMORY_DEBUG
 #endif
-#ifndef XRT_MODULE_NET_ENGINE
-#define XRT_MODULE_NET_ENGINE
+#endif
+
+/* thread_key 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_THREAD_KEY)
+#ifndef XRT_FEATURE_THREAD_KEY
+#define XRT_FEATURE_THREAD_KEY
 #endif
 #endif
 
@@ -6560,367 +7081,20 @@
 #endif
 #endif
 
-/* net_socket 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_SOCKET)
-#ifndef XRT_FEATURE_NET_SOCKET
-#define XRT_FEATURE_NET_SOCKET
+/* mutex 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_MUTEX)
+#ifndef XRT_FEATURE_MUTEX
+#define XRT_FEATURE_MUTEX
 #endif
-#ifndef XRT_MODULE_NET
-#define XRT_MODULE_NET
-#endif
-#endif
-
-/* net 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET)
-#ifndef XRT_FEATURE_NET
-#define XRT_FEATURE_NET
+#ifndef XRT_MODULE_SYNC
+#define XRT_MODULE_SYNC
 #endif
 #endif
 
-/* codec_base64 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CODEC_BASE64)
-#ifndef XRT_FEATURE_CODEC_BASE64
-#define XRT_FEATURE_CODEC_BASE64
-#endif
-#endif
-
-/* dir 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_DIR)
-#ifndef XRT_FEATURE_DIR
-#define XRT_FEATURE_DIR
-#endif
-#ifndef XRT_MODULE_FILE
-#define XRT_MODULE_FILE
-#endif
-#endif
-
-/* file_whole 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_WHOLE)
-#ifndef XRT_FEATURE_FILE_WHOLE
-#define XRT_FEATURE_FILE_WHOLE
-#endif
-#ifndef XRT_MODULE_FILE_TEMP
-#define XRT_MODULE_FILE_TEMP
-#endif
-#endif
-
-/* file_temp 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_TEMP)
-#ifndef XRT_FEATURE_FILE_TEMP
-#define XRT_FEATURE_FILE_TEMP
-#endif
-#ifndef XRT_MODULE_FILE
-#define XRT_MODULE_FILE
-#endif
-#ifndef XRT_MODULE_RANDOM_SECURE
-#define XRT_MODULE_RANDOM_SECURE
-#endif
-#endif
-
-/* random_secure 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_RANDOM_SECURE)
-#ifndef XRT_FEATURE_RANDOM_SECURE
-#define XRT_FEATURE_RANDOM_SECURE
-#endif
-#endif
-
-/* file 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE)
-#ifndef XRT_FEATURE_FILE
-#define XRT_FEATURE_FILE
-#endif
-#ifndef XRT_MODULE_PATH_SYSTEM
-#define XRT_MODULE_PATH_SYSTEM
-#endif
-#ifndef XRT_MODULE_TIME
-#define XRT_MODULE_TIME
-#endif
-#endif
-
-/* path_system 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PATH_SYSTEM)
-#ifndef XRT_FEATURE_PATH_SYSTEM
-#define XRT_FEATURE_PATH_SYSTEM
-#endif
-#ifndef XRT_MODULE_PATH
-#define XRT_MODULE_PATH
-#endif
-#ifndef XRT_MODULE_UNICODE
-#define XRT_MODULE_UNICODE
-#endif
-#endif
-
-/* path 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PATH)
-#ifndef XRT_FEATURE_PATH
-#define XRT_FEATURE_PATH
-#endif
-#ifndef XRT_MODULE_STRING
-#define XRT_MODULE_STRING
-#endif
-#endif
-
-/* string 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_STRING)
-#ifndef XRT_FEATURE_STRING
-#define XRT_FEATURE_STRING
-#endif
-#endif
-
-/* json_read 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSON_READ)
-#ifndef XRT_FEATURE_JSON_READ
-#define XRT_FEATURE_JSON_READ
-#endif
-#ifndef XRT_MODULE_JSON_CORE
-#define XRT_MODULE_JSON_CORE
-#endif
-#ifndef XRT_MODULE_BUFFER
-#define XRT_MODULE_BUFFER
-#endif
-#ifndef XRT_MODULE_NUMBER_INTEGER
-#define XRT_MODULE_NUMBER_INTEGER
-#endif
-#ifndef XRT_MODULE_NUMBER_FLOAT
-#define XRT_MODULE_NUMBER_FLOAT
-#endif
-#ifndef XRT_MODULE_UNICODE
-#define XRT_MODULE_UNICODE
-#endif
-#ifndef XRT_MODULE_VALUE_CONTAINER
-#define XRT_MODULE_VALUE_CONTAINER
-#endif
-#endif
-
-/* unicode 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_UNICODE)
-#ifndef XRT_FEATURE_UNICODE
-#define XRT_FEATURE_UNICODE
-#endif
-#endif
-
-/* number_float 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NUMBER_FLOAT)
-#ifndef XRT_FEATURE_NUMBER_FLOAT
-#define XRT_FEATURE_NUMBER_FLOAT
-#endif
-#endif
-
-/* number_integer 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NUMBER_INTEGER)
-#ifndef XRT_FEATURE_NUMBER_INTEGER
-#define XRT_FEATURE_NUMBER_INTEGER
-#endif
-#endif
-
-/* buffer 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_BUFFER)
-#ifndef XRT_FEATURE_BUFFER
-#define XRT_FEATURE_BUFFER
-#endif
-#ifndef XRT_MODULE_ARRAY
-#define XRT_MODULE_ARRAY
-#endif
-#endif
-
-/* json_core 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSON_CORE)
-#ifndef XRT_FEATURE_JSON_CORE
-#define XRT_FEATURE_JSON_CORE
-#endif
-#endif
-
-/* atomic 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_ATOMIC)
-#ifndef XRT_FEATURE_ATOMIC
-#define XRT_FEATURE_ATOMIC
-#endif
-#endif
-
-/* memory_debug 及其直接依赖。 */
-#if (defined(XRT_MODULE_ALL) && !defined(XRT_EXCLUDE_MEMORY_DEBUG)) || \
-	defined(XRT_MODULE_MEMORY_DEBUG)
-#ifndef XRT_FEATURE_MEMORY_DEBUG
-#define XRT_FEATURE_MEMORY_DEBUG
-#endif
-#endif
-
-/* value_graph 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_VALUE_GRAPH)
-#ifndef XRT_FEATURE_VALUE_GRAPH
-#define XRT_FEATURE_VALUE_GRAPH
-#endif
-#ifndef XRT_MODULE_VALUE_CONTAINER
-#define XRT_MODULE_VALUE_CONTAINER
-#endif
-#endif
-
-/* value_container 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_VALUE_CONTAINER)
-#ifndef XRT_FEATURE_VALUE_CONTAINER
-#define XRT_FEATURE_VALUE_CONTAINER
-#endif
-#ifndef XRT_MODULE_VALUE
-#define XRT_MODULE_VALUE
-#endif
-#ifndef XRT_MODULE_PTR_ARRAY
-#define XRT_MODULE_PTR_ARRAY
-#endif
-#ifndef XRT_MODULE_INT_MAP
-#define XRT_MODULE_INT_MAP
-#endif
-#ifndef XRT_MODULE_MAP
-#define XRT_MODULE_MAP
-#endif
-#ifndef XRT_MODULE_SET
-#define XRT_MODULE_SET
-#endif
-#endif
-
-/* set 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_SET)
-#ifndef XRT_FEATURE_SET
-#define XRT_FEATURE_SET
-#endif
-#ifndef XRT_MODULE_HASH64
-#define XRT_MODULE_HASH64
-#endif
-#endif
-
-/* map 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_MAP)
-#ifndef XRT_FEATURE_MAP
-#define XRT_FEATURE_MAP
-#endif
-#ifndef XRT_MODULE_HASH64
-#define XRT_MODULE_HASH64
-#endif
-#endif
-
-/* int_map 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_INT_MAP)
-#ifndef XRT_FEATURE_INT_MAP
-#define XRT_FEATURE_INT_MAP
-#endif
-#ifndef XRT_MODULE_AVL_TREE
-#define XRT_MODULE_AVL_TREE
-#endif
-#endif
-
-/* avl_tree 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_AVL_TREE)
-#ifndef XRT_FEATURE_AVL_TREE
-#define XRT_FEATURE_AVL_TREE
-#endif
-#ifndef XRT_MODULE_AVL
-#define XRT_MODULE_AVL
-#endif
-#ifndef XRT_MODULE_POOL
-#define XRT_MODULE_POOL
-#endif
-#endif
-
-/* pool 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_POOL)
-#ifndef XRT_FEATURE_POOL
-#define XRT_FEATURE_POOL
-#endif
-#ifndef XRT_MODULE_POOL_PAGE
-#define XRT_MODULE_POOL_PAGE
-#endif
-#endif
-
-/* pool_page 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_POOL_PAGE)
-#ifndef XRT_FEATURE_POOL_PAGE
-#define XRT_FEATURE_POOL_PAGE
-#endif
-#endif
-
-/* avl 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_AVL)
-#ifndef XRT_FEATURE_AVL
-#define XRT_FEATURE_AVL
-#endif
-#endif
-
-/* ptr_array 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PTR_ARRAY)
-#ifndef XRT_FEATURE_PTR_ARRAY
-#define XRT_FEATURE_PTR_ARRAY
-#endif
-#ifndef XRT_MODULE_ARRAY
-#define XRT_MODULE_ARRAY
-#endif
-#endif
-
-/* array 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_ARRAY)
-#ifndef XRT_FEATURE_ARRAY
-#define XRT_FEATURE_ARRAY
-#endif
-#endif
-
-/* value 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_VALUE)
-#ifndef XRT_FEATURE_VALUE
-#define XRT_FEATURE_VALUE
-#endif
-#ifndef XRT_MODULE_HASH64
-#define XRT_MODULE_HASH64
-#endif
-#endif
-
-/* hash64 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HASH64)
-#ifndef XRT_FEATURE_HASH64
-#define XRT_FEATURE_HASH64
-#endif
-#endif
-
-/* future_combine 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FUTURE_COMBINE)
-#ifndef XRT_FEATURE_FUTURE_COMBINE
-#define XRT_FEATURE_FUTURE_COMBINE
-#endif
-#ifndef XRT_MODULE_FUTURE
-#define XRT_MODULE_FUTURE
-#endif
-#endif
-
-/* future 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FUTURE)
-#ifndef XRT_FEATURE_FUTURE
-#define XRT_FEATURE_FUTURE
-#endif
-#ifndef XRT_MODULE_CANCEL
-#define XRT_MODULE_CANCEL
-#endif
-#endif
-
-/* cancel 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CANCEL)
-#ifndef XRT_FEATURE_CANCEL
-#define XRT_FEATURE_CANCEL
-#endif
-#ifndef XRT_MODULE_MUTEX
-#define XRT_MODULE_MUTEX
-#endif
-#ifndef XRT_MODULE_COND
-#define XRT_MODULE_COND
-#endif
-#endif
-
-/* cond 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_COND)
-#ifndef XRT_FEATURE_COND
-#define XRT_FEATURE_COND
-#endif
-#ifndef XRT_MODULE_MUTEX
-#define XRT_MODULE_MUTEX
-#endif
-#ifndef XRT_MODULE_WAIT
-#define XRT_MODULE_WAIT
+/* sync 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_SYNC)
+#ifndef XRT_FEATURE_SYNC
+#define XRT_FEATURE_SYNC
 #endif
 #endif
 
@@ -6941,20 +7115,27 @@
 #endif
 #endif
 
-/* mutex 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_MUTEX)
-#ifndef XRT_FEATURE_MUTEX
-#define XRT_FEATURE_MUTEX
-#endif
-#ifndef XRT_MODULE_SYNC
-#define XRT_MODULE_SYNC
+/* atomic 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_ATOMIC)
+#ifndef XRT_FEATURE_ATOMIC
+#define XRT_FEATURE_ATOMIC
 #endif
 #endif
 
-/* sync 及其直接依赖。 */
-#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_SYNC)
-#ifndef XRT_FEATURE_SYNC
-#define XRT_FEATURE_SYNC
+/* net_socket 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_SOCKET)
+#ifndef XRT_FEATURE_NET_SOCKET
+#define XRT_FEATURE_NET_SOCKET
+#endif
+#ifndef XRT_MODULE_NET
+#define XRT_MODULE_NET
+#endif
+#endif
+
+/* net 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET)
+#ifndef XRT_FEATURE_NET
+#define XRT_FEATURE_NET
 #endif
 #endif
 
@@ -7245,9 +7426,10 @@ typedef struct xrtownershipscope {
  * the complete mutation. Concurrent and nested mutations are allowed. Only a
  * currently frozen domain can delay entry; collectors never queue an upgrade
  * behind an active mutator. Scope entry/end allocate no memory or TLS slots.
- * xrtRefRetain/Release participate automatically for their atomic update, but
- * that alone does NOT cover an enclosing field update, callback, or destructor.
- * Callers adapting mutable state must guard that complete transition too. */
+ * xrtOwnershipRefRetain/Release can participate for one standalone atomic
+ * counter update. Generic xrtRefRetain/Release deliberately remain outside
+ * this domain. Neither pair covers an enclosing field update, callback, or
+ * destructor; graph adapters must guard each complete transition. */
 XRT_API bool xrtOwnershipMutationBegin(xrtownershipscope* pScope);
 
 /* Nonblocking exclusive admission. Busy returns false, leaves the zero scope
@@ -7358,13 +7540,23 @@ XRT_API void xrtResourceLimitsInit(xrtresourcelimits* pLimits);
 
 
 
-/* 原子增加有效引用计数，失败时返回 -1。 */
+/* 原子增加有效引用计数，失败时返回 -1；不加入 ownership freeze 域。 */
 XRT_API int32 xrtRefRetain(volatile int32* pCount);
 
 
 
-/* 原子减少有效引用计数，失败时返回 -1。 */
+/* 原子减少有效引用计数，失败时返回 -1；不加入 ownership freeze 域。 */
 XRT_API int32 xrtRefRelease(volatile int32* pCount);
+
+
+
+/* 对一个图可见引用计数执行受 ownership freeze 保护的原子增加。 */
+XRT_API int32 xrtOwnershipRefRetain(volatile int32* pCount);
+
+
+
+/* 对一个图可见引用计数执行受 ownership freeze 保护的原子减少。 */
+XRT_API int32 xrtOwnershipRefRelease(volatile int32* pCount);
 
 
 
@@ -7754,6 +7946,352 @@ XRT_EXTERN_C_END
 	#define xrtFree(pMemory) xrtFreeAt((pMemory), __FILE__, (uint32)__LINE__)
 	#define xrtMemDup(pData, iSize) xrtMemDupAt((pData), (iSize), __FILE__, (uint32)__LINE__)
 #endif
+
+#endif
+
+
+/* ========================================================================== */
+/* public: include/xrt/atomic.h */
+/* ========================================================================== */
+
+#ifndef XRT_ATOMIC_H
+#define XRT_ATOMIC_H
+
+
+
+
+#if defined(XRT_FEATURE_ATOMIC)
+
+/* 原子操作的内存顺序与 C11 语义一致。 */
+typedef enum xmemoryorder {
+	XMEMORY_RELAXED = 0,
+	XMEMORY_ACQUIRE = 1,
+	XMEMORY_RELEASE = 2,
+	XMEMORY_ACQ_REL = 3,
+	XMEMORY_SEQ_CST = 4
+} xmemoryorder;
+
+
+
+#if defined(_MSC_VER) || \
+	(defined(__TINYC__) && (defined(_WIN32) || defined(_WIN64)))
+	#define XRT_ATOMIC_ALIGN(iAlignment) __declspec(align(iAlignment))
+#elif defined(__GNUC__) || defined(__clang__)
+	#define XRT_ATOMIC_ALIGN(iAlignment) __attribute__((aligned(iAlignment)))
+#else
+	#define XRT_ATOMIC_ALIGN(iAlignment)
+#endif
+
+#if UINTPTR_MAX == UINT64_MAX
+	#define XRT_ATOMIC_PTR_ALIGNMENT 8
+#else
+	#define XRT_ATOMIC_PTR_ALIGNMENT 4
+#endif
+
+
+
+/* 32 位原子整数只允许通过 Atomic API 并发访问 Value。 */
+typedef struct XRT_ATOMIC_ALIGN(4) xatomic32 {
+	volatile uint32 Value;
+} xatomic32;
+
+
+
+/* 64 位原子整数显式保证 8 字节对齐。 */
+typedef struct XRT_ATOMIC_ALIGN(8) xatomic64 {
+	volatile uint64 Value;
+} xatomic64;
+
+
+
+/* 原子指针只保存指针值，不拥有指针目标。 */
+typedef struct XRT_ATOMIC_ALIGN(XRT_ATOMIC_PTR_ALIGNMENT) xatomicptr {
+	ptr volatile Value;
+} xatomicptr;
+
+
+
+#undef XRT_ATOMIC_ALIGN
+#undef XRT_ATOMIC_PTR_ALIGNMENT
+
+
+
+/* 静态原子对象初始化器只能用于对象定义。 */
+#define XRT_ATOMIC32_INIT(iValue) { (uint32)(iValue) }
+#define XRT_ATOMIC64_INIT(iValue) { (uint64)(iValue) }
+#define XRT_ATOMICPTR_INIT(pValue) { (ptr)(pValue) }
+
+
+
+XRT_EXTERN_C_BEGIN
+
+
+
+/* 判断自然对齐的指定宽度是否由当前目标无锁实现。 */
+XRT_API bool xrtAtomicIsLockFree(size_t iSize);
+
+
+
+/* 在对象发布给其他线程前初始化 32 位原子值。 */
+XRT_API void xrtAtomic32Init(xatomic32* pAtomic, uint32 iValue);
+
+
+
+/* 按指定内存顺序读取 32 位原子值。 */
+XRT_API uint32 xrtAtomic32Load(const xatomic32* pAtomic, xmemoryorder iOrder);
+
+
+
+/* 按指定内存顺序写入 32 位原子值。 */
+XRT_API void xrtAtomic32Store(xatomic32* pAtomic, uint32 iValue, xmemoryorder iOrder);
+
+
+
+/* 原子交换 32 位值并返回旧值。 */
+XRT_API uint32 xrtAtomic32Exchange(xatomic32* pAtomic, uint32 iValue, xmemoryorder iOrder);
+
+
+
+/* 强比较交换 32 位值，失败时把实际值写回 Expected。 */
+XRT_API bool xrtAtomic32CompareExchange(
+	xatomic32* pAtomic,
+	uint32* pExpected,
+	uint32 iDesired,
+	xmemoryorder iSuccess,
+	xmemoryorder iFailure
+);
+
+
+
+/* 原子加 32 位值并返回修改前的值。 */
+XRT_API uint32 xrtAtomic32FetchAdd(xatomic32* pAtomic, uint32 iValue, xmemoryorder iOrder);
+
+
+
+/* 原子减 32 位值并返回修改前的值。 */
+XRT_API uint32 xrtAtomic32FetchSub(xatomic32* pAtomic, uint32 iValue, xmemoryorder iOrder);
+
+
+
+/* 原子按位与 32 位值并返回修改前的值。 */
+XRT_API uint32 xrtAtomic32FetchAnd(xatomic32* pAtomic, uint32 iValue, xmemoryorder iOrder);
+
+
+
+/* 原子按位或 32 位值并返回修改前的值。 */
+XRT_API uint32 xrtAtomic32FetchOr(xatomic32* pAtomic, uint32 iValue, xmemoryorder iOrder);
+
+
+
+/* 原子按位异或 32 位值并返回修改前的值。 */
+XRT_API uint32 xrtAtomic32FetchXor(xatomic32* pAtomic, uint32 iValue, xmemoryorder iOrder);
+
+
+
+/* 在对象发布给其他线程前初始化 64 位原子值。 */
+XRT_API void xrtAtomic64Init(xatomic64* pAtomic, uint64 iValue);
+
+
+
+/* 按指定内存顺序读取 64 位原子值。 */
+XRT_API uint64 xrtAtomic64Load(const xatomic64* pAtomic, xmemoryorder iOrder);
+
+
+
+/* 按指定内存顺序写入 64 位原子值。 */
+XRT_API void xrtAtomic64Store(xatomic64* pAtomic, uint64 iValue, xmemoryorder iOrder);
+
+
+
+/* 原子交换 64 位值并返回旧值。 */
+XRT_API uint64 xrtAtomic64Exchange(xatomic64* pAtomic, uint64 iValue, xmemoryorder iOrder);
+
+
+
+/* 强比较交换 64 位值，失败时把实际值写回 Expected。 */
+XRT_API bool xrtAtomic64CompareExchange(
+	xatomic64* pAtomic,
+	uint64* pExpected,
+	uint64 iDesired,
+	xmemoryorder iSuccess,
+	xmemoryorder iFailure
+);
+
+
+
+/* 原子加 64 位值并返回修改前的值。 */
+XRT_API uint64 xrtAtomic64FetchAdd(xatomic64* pAtomic, uint64 iValue, xmemoryorder iOrder);
+
+
+
+/* 原子减 64 位值并返回修改前的值。 */
+XRT_API uint64 xrtAtomic64FetchSub(xatomic64* pAtomic, uint64 iValue, xmemoryorder iOrder);
+
+
+
+/* 原子按位与 64 位值并返回修改前的值。 */
+XRT_API uint64 xrtAtomic64FetchAnd(xatomic64* pAtomic, uint64 iValue, xmemoryorder iOrder);
+
+
+
+/* 原子按位或 64 位值并返回修改前的值。 */
+XRT_API uint64 xrtAtomic64FetchOr(xatomic64* pAtomic, uint64 iValue, xmemoryorder iOrder);
+
+
+
+/* 原子按位异或 64 位值并返回修改前的值。 */
+XRT_API uint64 xrtAtomic64FetchXor(xatomic64* pAtomic, uint64 iValue, xmemoryorder iOrder);
+
+
+
+/* 在对象发布给其他线程前初始化原子指针。 */
+XRT_API void xrtAtomicPtrInit(xatomicptr* pAtomic, ptr pValue);
+
+
+
+/* 按指定内存顺序读取原子指针。 */
+XRT_API ptr xrtAtomicPtrLoad(const xatomicptr* pAtomic, xmemoryorder iOrder);
+
+
+
+/* 按指定内存顺序写入原子指针。 */
+XRT_API void xrtAtomicPtrStore(xatomicptr* pAtomic, ptr pValue, xmemoryorder iOrder);
+
+
+
+/* 原子交换指针并返回旧值。 */
+XRT_API ptr xrtAtomicPtrExchange(xatomicptr* pAtomic, ptr pValue, xmemoryorder iOrder);
+
+
+
+/* 强比较交换指针，失败时把实际值写回 Expected。 */
+XRT_API bool xrtAtomicPtrCompareExchange(
+	xatomicptr* pAtomic,
+	ptr* pExpected,
+	ptr pDesired,
+	xmemoryorder iSuccess,
+	xmemoryorder iFailure
+);
+
+
+
+/* 建立线程间内存栅栏。 */
+XRT_API void xrtAtomicThreadFence(xmemoryorder iOrder);
+
+
+
+/* 建立当前线程与信号处理器之间的编译器栅栏。 */
+XRT_API void xrtAtomicSignalFence(xmemoryorder iOrder);
+
+
+
+/* 向处理器提示当前线程处于短自旋等待。 */
+XRT_API void xrtAtomicPause(void);
+
+
+
+XRT_EXTERN_C_END
+
+#endif
+
+#endif
+
+
+/* ========================================================================== */
+/* public: include/xrt/hash.h */
+/* ========================================================================== */
+
+#ifndef XRT_HASH_H
+#define XRT_HASH_H
+
+
+
+
+#if defined(XRT_FEATURE_HASH_KEYED)
+
+/* SipHash 使用完整的 128 位密钥，不能用普通 64 位 seed 代替。 */
+typedef struct xsipkey {
+	uint64 Low;
+	uint64 High;
+} xsipkey;
+
+
+
+/* 流式状态可以放在栈上；字段公开只为避免隐藏分配，不应直接修改。 */
+typedef struct xsiphash {
+	uint64 State[4];
+	uint64 Total;
+	unsigned char Tail[8];
+	uint32 Guard;
+	uint8 TailSize;
+} xsiphash;
+
+#endif
+
+
+
+XRT_EXTERN_C_BEGIN
+
+
+
+#if defined(XRT_FEATURE_HASH32)
+
+/* 使用固定算法和默认 seed 计算确定性的 32 位非密码哈希。 */
+XRT_API uint32 xrtHash32(const void* pData, size_t iSize);
+
+
+
+/* 使用调用者提供的 seed 计算确定性的 32 位非密码哈希。 */
+XRT_API uint32 xrtHash32Seed(const void* pData, size_t iSize, uint32 iSeed);
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_HASH64)
+
+/* 使用固定算法和默认 seed 计算确定性的 64 位非密码哈希。 */
+XRT_API uint64 xrtHash64(const void* pData, size_t iSize);
+
+
+
+/* 使用调用者提供的 seed 计算确定性的 64 位非密码哈希。 */
+XRT_API uint64 xrtHash64Seed(const void* pData, size_t iSize, uint64 iSeed);
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_HASH_KEYED)
+
+/* 从两个 64 位字创建 SipHash 密钥。 */
+XRT_API xsipkey xrtSipKey(uint64 iLow, uint64 iHigh);
+
+
+
+/* 使用 SipHash-2-4 对一段连续数据执行带密钥哈希。 */
+XRT_API uint64 xrtSipHash(const void* pData, size_t iSize, xsipkey Key);
+
+
+
+/* 初始化一个可跨任意分块边界工作的 SipHash-2-4 状态。 */
+XRT_API void xrtSipHashInit(xsiphash* pState, xsipkey Key);
+
+
+
+/* 向状态追加字节；输入不得与状态重叠，失败时状态不变。 */
+XRT_API bool xrtSipHashUpdate(xsiphash* pState, const void* pData, size_t iSize);
+
+
+
+/* 计算当前状态的哈希值，不修改状态，可重复调用或继续追加。 */
+XRT_API uint64 xrtSipHashFinal(const xsiphash* pState);
+
+#endif
+
+
+
+XRT_EXTERN_C_END
 
 #endif
 
@@ -8184,6 +8722,3669 @@ XRT_EXTERN_C_END
 
 
 /* ========================================================================== */
+/* public: include/xrt/thread.h */
+/* ========================================================================== */
+
+#ifndef XRT_THREAD_H
+#define XRT_THREAD_H
+
+
+
+
+#if defined(XRT_FEATURE_ONCE)
+
+/* Once 使用固定存储并允许静态零初始化。 */
+#define XRT_ONCE_STORAGE_SIZE 16u
+
+
+
+/* Once 对象的字段保持不透明，只能使用 XRT_ONCE_INIT 或全零初始化。 */
+typedef union xonce {
+	uint64 Alignment;
+	uint8 Storage[XRT_ONCE_STORAGE_SIZE];
+} xonce;
+
+
+
+/* 初始化过程返回 true 时永久完成，返回 false 时允许后续调用重试。 */
+typedef bool (*xonceproc)(ptr pData);
+
+
+
+/* 静态 Once 对象初始化值。 */
+#define XRT_ONCE_INIT { 0 }
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_THREAD_KEY)
+
+/* 动态键按原生线程隔离，同一线程上的 Fiber 和协程共享其值。 */
+typedef struct xthreadkey xthreadkey;
+
+
+
+/* 非空线程局部值在线程退出、显式清理或被替换时交给析构过程。 */
+typedef void (*xthreadkeyproc)(ptr pValue);
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_THREAD) && !defined(XRT_FEATURE_WAIT)
+	#error "XRT_FEATURE_THREAD requires XRT_FEATURE_WAIT"
+#endif
+
+
+
+XRT_EXTERN_C_BEGIN
+
+
+
+#if defined(XRT_FEATURE_ONCE)
+/* 并发执行一次初始化；成功后所有调用返回 true，失败允许后续调用重试。 */
+XRT_API bool xrtOnce(xonce* pOnce, xonceproc pProc, ptr pData);
+#endif
+
+
+
+#if defined(XRT_FEATURE_THREAD_KEY)
+/* 创建动态原生线程局部键；析构过程可以为空。 */
+XRT_API xthreadkey* xrtThreadKeyCreate(xthreadkeyproc pDestroy);
+
+
+
+/* 关闭键；其他线程不得再主动访问，已有线程槽会在退出时延迟释放。 */
+XRT_API bool xrtThreadKeyDestroy(xthreadkey* pKey);
+
+
+
+/* 返回当前线程的借用值；当前线程尚未设置时返回空指针。 */
+XRT_API ptr xrtThreadKeyGet(const xthreadkey* pKey);
+
+
+
+/* 转移新值的所有权；成功替换后析构旧值，空值等价于清除。 */
+XRT_API bool xrtThreadKeySet(xthreadkey* pKey, ptr pValue);
+
+
+
+/* 取走当前线程的值但不执行析构；返回值所有权交给调用方。 */
+XRT_API ptr xrtThreadKeyTake(xthreadkey* pKey);
+
+
+
+/* 析构并清除当前原生线程的全部动态键值；XRT 创建的线程退出时自动调用。 */
+XRT_API bool xrtThreadKeysClear(void);
+#endif
+
+
+
+XRT_EXTERN_C_END
+
+
+
+#if defined(XRT_FEATURE_THREAD)
+
+/* 原生线程对象对外保持不透明，并使用引用计数管理生命周期。 */
+typedef struct xthread xthread;
+
+
+
+/* 线程入口返回稳定的 32 位退出码。 */
+typedef int32 (*xthreadproc)(ptr pData);
+
+
+
+/* 线程只有运行和完成两种可观测状态，停止请求不伪装成执行状态。 */
+typedef enum xthreadstate {
+	XTHREAD_RUNNING = 0,
+	XTHREAD_FINISHED = 1
+} xthreadstate;
+
+
+
+XRT_EXTERN_C_BEGIN
+
+
+
+/* 创建并立即启动线程；栈大小为零时使用平台默认值。 */
+XRT_API xthread* xrtThreadCreate(xthreadproc pProc, ptr pData, size_t iStackSize);
+
+
+
+/* 增加线程对象引用并返回原指针。 */
+XRT_API xthread* xrtThreadRef(xthread* pThread);
+
+
+
+/* 释放线程对象引用；运行线程自持引用，因此允许用它安全分离线程。 */
+XRT_API void xrtThreadDestroy(xthread* pThread);
+
+
+
+/* 等待线程执行体和 XRT 线程上下文清理完成，允许多个线程同时等待同一个对象。 */
+XRT_API xwaitresult xrtThreadWait(xthread* pThread);
+
+
+
+/* 在相对微秒数内等待线程执行体和 XRT 线程上下文清理完成。 */
+XRT_API xwaitresult xrtThreadWaitFor(xthread* pThread, uint64 iTimeout);
+
+
+
+/* 等待线程执行体和 XRT 线程上下文清理完成到指定单调时钟截止时间。 */
+XRT_API xwaitresult xrtThreadWaitUntil(xthread* pThread, xdeadline iDeadline);
+
+
+
+/* 幂等地请求线程协作停止，不会强制终止执行。 */
+XRT_API bool xrtThreadStop(xthread* pThread);
+
+
+
+/* 判断指定线程是否收到停止请求。 */
+XRT_API bool xrtThreadStopRequested(const xthread* pThread);
+
+
+
+/* 判断当前 XRT 线程是否收到停止请求。 */
+XRT_API bool xrtThreadStopping(void);
+
+
+
+/* 返回线程状态快照。 */
+XRT_API xthreadstate xrtThreadState(const xthread* pThread);
+
+/* Nonblocking, read-only observation for frozen ownership graphs. It never
+ * waits for the state mutex (which a finishing thread may hold while entering
+ * the mutation domain), calls no callback and preserves the ambient error.
+ * False leaves output unchanged on contention or invalid input. FINISHED has
+ * the same body/XRT-context completion meaning as ThreadState/ThreadWait; this
+ * query does not consume a thread reference or itself authorize code unload. */
+XRT_API bool xrtThreadStateTry(const xthread* pThread, xthreadstate* pState);
+
+
+
+/* 返回完成线程的退出码；线程仍运行或参数无效时返回零并设置错误。 */
+XRT_API int32 xrtThreadExitCode(const xthread* pThread);
+
+
+
+/* 返回线程对象在进程内稳定的非零平台标识；线程结束后该标识可能被平台复用。 */
+XRT_API uint64 xrtThreadId(const xthread* pThread);
+
+
+
+/* 返回当前线程在进程内稳定的非零平台标识，外部创建的线程同样可用。 */
+XRT_API uint64 xrtThreadCurrentId(void);
+
+
+
+/* 返回当前 XRT 创建线程的借用对象，外部线程返回空指针。 */
+XRT_API xthread* xrtThreadCurrent(void);
+
+
+
+/* 主动让出当前线程的处理器时间片。 */
+XRT_API void xrtThreadYield(void);
+
+
+
+XRT_EXTERN_C_END
+
+#endif
+
+#endif
+
+
+/* ========================================================================== */
+/* public: include/xrt/cancel.h */
+/* ========================================================================== */
+
+#ifndef XRT_CANCEL_H
+#define XRT_CANCEL_H
+
+
+
+
+#if defined(XRT_FEATURE_CANCEL) && !defined(XRT_FEATURE_MUTEX)
+	#error "XRT_FEATURE_CANCEL requires XRT_FEATURE_MUTEX"
+#endif
+
+#if defined(XRT_FEATURE_CANCEL) && !defined(XRT_FEATURE_COND)
+	#error "XRT_FEATURE_CANCEL requires XRT_FEATURE_COND"
+#endif
+
+
+
+#if defined(XRT_FEATURE_CANCEL)
+/* 取消令牌保存一次性取消状态，并可通过不可变父链继承取消。 */
+typedef struct xcancel xcancel;
+
+
+
+/* 取消监听保存一次回调注册及其并发生命周期。 */
+typedef struct xcancelwatch xcancelwatch;
+
+
+
+/* 取消回调由命中的取消请求线程或迟注册线程同步执行。 */
+typedef void (*xcancelproc)(ptr pData);
+
+/* Certified resident observer. A successful registration consumes ONE real
+ * Data reference described by Ops. Notify borrows it; Drop returns it once
+ * after Unwatch and every dispatch/plan pin have finished. Both callbacks
+ * coordinate their own graph transitions and code lifetime. They run outside
+ * this API's mutation scope, never by suspending a caller-owned outer scope.
+ * Policy identity is immutable and outlives the registration. A trace alone
+ * is not certification, nor permission to cancel or skip accepted work. */
+typedef struct xcancelwatchownershipv1 {
+	size_t size;
+	xcancelproc Notify;
+	void (*Drop)(const void* pData);
+	const xrtownershipops* Ops;
+} xcancelwatchownershipv1;
+
+
+
+XRT_EXTERN_C_BEGIN
+
+
+
+/* 创建一个独立的取消令牌。 */
+XRT_API xcancel* xrtCancelCreate(void);
+
+
+
+/* 创建一个继承父令牌取消状态的子令牌；父令牌可为空。 */
+XRT_API xcancel* xrtCancelChild(xcancel* pParent);
+
+
+
+/* 增加取消令牌引用并返回原指针。 */
+XRT_API xcancel* xrtCancelRef(xcancel* pCancel);
+
+
+
+/* 释放取消令牌引用；空指针视为空操作。 */
+XRT_API void xrtCancelDestroy(xcancel* pCancel);
+
+/* Borrowed physical ownership view; the retained parent is one owning edge.
+ * Watch-list links borrow registration storage and are not strong references.
+ * Caller provides whole-graph quiescence and code residency. */
+XRT_API xrtownershipref xrtCancelOwnership(const xcancel* pCancel);
+
+/* Explicit native adapter, queried under whole-graph freeze. Registered
+ * observers are refused before Trace, not treated as empty owning slots.
+ * The immutable parent tail remains owned through Finish and final Drop;
+ * each parent must independently be admitted. No CancelWatch certification. */
+XRT_API const xrtownershipadapterv1* xrtCancelOwnershipAdapterV1(xrtownershipref Reference);
+
+
+
+/* 请求取消；仅首次请求返回 true 并触发监听。 */
+XRT_API bool xrtCancelRequest(xcancel* pCancel);
+
+
+
+/* 查询令牌或任一祖先是否已请求取消；空指针表示未取消。 */
+XRT_API bool xrtCancelRequested(const xcancel* pCancel);
+
+
+
+/* 监听令牌及其不可变父链；回调至多同步执行一次。 */
+XRT_API xcancelwatch* xrtCancelWatch(
+	xcancel* pCancel,
+	xcancelproc pProc,
+	ptr pData
+);
+
+/* Failure consumes nothing. Success may notify synchronously if an ancestor
+ * is already cancelled, but retains Data until registration release. Legacy
+ * Watch remains borrowed/opaque and keeps its conservative callback scope. */
+XRT_API xcancelwatch* xrtCancelWatchOwnedV1(xcancel* pCancel, ptr pData,
+	const xcancelwatchownershipv1* pPolicy);
+
+/* Whole-graph freeze queries, matching policy identity before dereferencing
+ * it or tracing Data. Both lifecycle AND semantic preparation are required.
+ * Token list nodes borrow Watch storage: V2 does not invent token->Watch RC
+ * edges. Watch owns its Cancel and its certified Data reference independently.
+ * Active dispatch, publication/unlink, legacy/unknown observers are refused.
+ * Prepare only waits for the owner's actual Unwatch; it never requests
+ * cancellation or silently removes an accepted callback. Output preparation
+ * remains unchanged on refusal. Data/parents must be independently admitted. */
+XRT_API const xrtownershipadapterv1* xrtCancelOwnershipAdapterV2(xrtownershipref Reference,
+	const xcancelwatchownershipv1* const* pPolicies, size_t iPolicyCount,
+	const xrtownershippreparationv1** ppPreparation);
+XRT_API const xrtownershipadapterv1* xrtCancelWatchOwnershipAdapterV1(xrtownershipref Reference,
+	const xcancelwatchownershipv1* const* pPolicies, size_t iPolicyCount,
+	const xrtownershippreparationv1** ppPreparation);
+
+
+
+/* 查询监听是否已命中取消。 */
+XRT_API bool xrtCancelTriggered(const xcancelwatch* pWatch);
+
+
+
+/* Borrowed physical view: Unwatch owns this registration; it retains its
+ * Cancel (and thereby its parents). Proc/Data and linked cancellation nodes
+ * are borrowed, not additional owning slots. Active/destroying callbacks
+ * reject inspection. Whole-graph quiescence and code residency are required. */
+XRT_API xrtownershipref xrtCancelWatchOwnership(const xcancelwatch* pWatch);
+
+
+
+/* 注销并释放监听；从其他线程调用时等待正在执行的回调返回。 */
+XRT_API void xrtCancelUnwatch(xcancelwatch* pWatch);
+
+
+
+XRT_EXTERN_C_END
+#endif
+
+#endif
+
+
+/* ========================================================================== */
+/* public: include/xrt/future.h */
+/* ========================================================================== */
+
+#ifndef XRT_FUTURE_H
+#define XRT_FUTURE_H
+
+
+
+
+#if defined(XRT_FEATURE_FUTURE) && !defined(XRT_FEATURE_CANCEL)
+	#error "XRT_FEATURE_FUTURE requires XRT_FEATURE_CANCEL"
+#endif
+
+#if defined(XRT_FEATURE_FUTURE_COROUTINE) && !defined(XRT_FEATURE_FUTURE)
+	#error "XRT_FEATURE_FUTURE_COROUTINE requires XRT_FEATURE_FUTURE"
+#endif
+
+#if defined(XRT_FEATURE_FUTURE_COROUTINE) && !defined(XRT_FEATURE_COROUTINE_SCHEDULER)
+	#error "XRT_FEATURE_FUTURE_COROUTINE requires XRT_FEATURE_COROUTINE_SCHEDULER"
+#endif
+
+#if defined(XRT_FEATURE_FUTURE_COMBINE) && !defined(XRT_FEATURE_FUTURE)
+	#error "XRT_FEATURE_FUTURE_COMBINE requires XRT_FEATURE_FUTURE"
+#endif
+
+#if defined(XRT_FEATURE_FUTURE_CONTINUE) && !defined(XRT_FEATURE_FUTURE)
+	#error "XRT_FEATURE_FUTURE_CONTINUE requires XRT_FEATURE_FUTURE"
+#endif
+
+
+
+#if defined(XRT_FEATURE_FUTURE)
+
+/* Future 是只读共享结果，Promise 是唯一终态写入端。 */
+typedef struct xfuture xfuture;
+typedef struct xpromise xpromise;
+
+
+
+/* Future 终态明确区分成功、失败、协作取消和生产端关闭。 */
+typedef enum xfuturestate {
+	XFUTURE_PENDING = 0,
+	XFUTURE_RESOLVED = 1,
+	XFUTURE_FAILED = 2,
+	XFUTURE_CANCELLED = 3,
+	XFUTURE_CLOSED = 4
+} xfuturestate;
+
+
+
+/* Future 结果只借用值和错误，其生命周期由 Future 引用保护。 */
+typedef struct xfutureresult {
+	xfuturestate State;
+	ptr Value;
+	const xerror* Error;
+} xfutureresult;
+
+
+
+/* Future Watch 使用调用方存储提供无分配终态通知。 */
+#define XRT_FUTURE_WATCH_STORAGE_SIZE 64u
+
+
+
+/* Watch 回调在线程安全的 Future 完成路径中执行，不得重入同一个 Watch。 */
+typedef void (*xfuturewatchproc)(ptr pData);
+
+
+
+/* Watch 释放过程在线性化完成通知或成功摘除后执行一次。 */
+typedef void (*xfuturewatchreleaseproc)(ptr pData);
+
+
+
+/* Watch 的内部链表和并发状态保持不透明。 */
+typedef union xfuturewatch {
+	uint64 Alignment;
+	uint8 Storage[XRT_FUTURE_WATCH_STORAGE_SIZE];
+} xfuturewatch;
+
+
+
+/* 注册结果区分错误、Future 已完成和成功进入等待链。 */
+typedef enum xfuturewatchresult {
+	XFUTURE_WATCH_ERROR = -1,
+	XFUTURE_WATCH_READY = 0,
+	XFUTURE_WATCH_PENDING = 1
+} xfuturewatchresult;
+
+
+
+/* 成功值析构过程接收创建者提供的值和上下文。 */
+typedef void (*xfuturefreeproc)(ptr pValue, ptr pData);
+
+/* Describe exactly the owning slots released by an owned result's destructor,
+ * including its context. Unique boxes are folded into this Future's edges;
+ * shared reference-counted boxes must be reported as physical nodes. */
+typedef bool (*xfutureownershiptrace)(const void* pValue, const void* pData,
+	xrtownershipvisitor pVisit, ptr pContext);
+
+/* Explicit lifecycle certification, separate from an inspection-only trace.
+ * Immutable policy/code outlives the Future. Drop consumes a unique result
+ * box and exactly the owning slots described by Trace; context is NULL.
+ * Drop coordinates its own graph transitions, runs no new semantic finalizer
+ * after child finalization, and may execute outside XRT's mutation scope.
+ * Trace is allocation/callback-free apart from the supplied visitor. */
+typedef struct xfuturepayloadownershipv1 {
+	size_t size;
+	xfuturefreeproc Drop;
+	xfutureownershiptrace Trace;
+} xfuturepayloadownershipv1;
+
+/* One ACTUAL producer reference owned by a pending result, separate from
+ * PromiseRefs and from the terminal payload. The immutable resident Drop
+ * releases that reference outside this Future's lock/mutation; it coordinates
+ * its own transitions and code lifetime. It must not cancel accepted work or
+ * substitute for its semantic callback/finally. Completion preserves its own
+ * diagnostic across this mechanical release. The physical child is still
+ * independently admitted by the collector, never certified by this policy. */
+typedef struct xfutureproducerownershipv1 {
+	size_t size;
+	void (*Drop)(const void* pProducer);
+} xfutureproducerownershipv1;
+
+/* Optional explicit cooperative-cancellation capability of the SAME producer
+ * node. No Watch, hidden reference or additional graph edge is created.
+ * Both descriptors are immutable resident code for the full Future lifetime.
+ * Retain executes under the Future lock/mutation: it must only acquire one
+ * real producer reference, never call back into a Future, invoke semantic
+ * code, allocate, wait for work/callbacks or release a last reference.
+ * Request executes outside
+ * this API's lock/mutation with that real reference; it may wake accepted
+ * work, but must not execute language CFG inline or invent a terminal result.
+ * The ownership policy Drop returns the acquired reference afterwards.
+ * A caller-owned enclosing scope is never suspended. Request must be called
+ * outside such a scope if its producer may synchronize callback retirement.
+ * This capability does not admit the producer or its children for collection. */
+typedef struct xfutureproducercancellationv1 {
+	size_t size;
+	bool (*Retain)(const void* pProducer);
+	void (*Request)(const void* pProducer);
+} xfutureproducercancellationv1;
+
+/* A registered Watch owns exactly ONE Data node reference, returned by Release.
+ * Immutable resident callbacks coordinate their own activity and code lifetime;
+ * Ops describes that same physical node, not a synthetic watch leaf. The core
+ * traces this actual slot, but a collector independently admits Data and all
+ * of its captures. Legacy traced/phased watches are not silently certified. */
+typedef struct xfuturewatchownershipv1 {
+	size_t size;
+	xfuturewatchproc Notify;
+	xfuturewatchreleaseproc Release;
+	const xrtownershipops* Ops;
+} xfuturewatchownershipv1;
+
+/* The callback address may point inside the physical owner (for example an
+ * aggregate input slot). Reference projects that address to the ONE actual
+ * reference returned by Release; it neither acquires a reference nor traces
+ * captures. The projection is immutable, resident, allocation/lock/callback
+ * free and remains valid through the Release tail. It must not invent an
+ * alias RC node. Admission matches policy identity before invoking it. */
+typedef struct xfuturewatchownershipv2 {
+	size_t size;
+	xfuturewatchproc Notify;
+	xfuturewatchreleaseproc Release;
+	xrtownershipref (*Reference)(const void* pData);
+} xfuturewatchownershipv2;
+
+/* Closed policy sets for one collector domain. This is admission, not a
+ * registry granting unknown Data/code lifecycle authority. Children remain
+ * independently admitted. V1-V3 retain their original refusal boundaries. */
+typedef struct xfutureownershipadmissionv1 {
+	size_t size;
+	const xfuturepayloadownershipv1* const* PayloadPolicies;
+	size_t PayloadPolicyCount;
+	const xfutureproducerownershipv1* const* ProducerPolicies;
+	size_t ProducerPolicyCount;
+	const xfuturewatchownershipv1* const* WatchPolicies;
+	size_t WatchPolicyCount;
+	const xfuturewatchownershipv2* const* ProjectedWatchPolicies;
+	size_t ProjectedWatchPolicyCount;
+	const xcancelwatchownershipv1* const* CancelWatchPolicies;
+	size_t CancelWatchPolicyCount;
+} xfutureownershipadmissionv1;
+
+
+
+XRT_EXTERN_C_BEGIN
+
+
+
+/* 创建一对 Future/Promise；父取消令牌为空时使用独立取消源。 */
+XRT_API xpromise* xrtPromiseCreate(xfuture** ppFuture, xcancel* pParentCancel);
+
+/* Bind once to a private, pending, newly created Future/Promise pair (one
+ * reference per endpoint, no waiters). No allocation or user callback.
+ * Success consumes ONE existing Producer reference; failure consumes nothing.
+ * The result traces that real edge until terminal publication detaches it;
+ * completion releases it exactly once outside lock/mutation before notifying
+ * the result's waiters. Merely dropping a Future observer does not cancel work.
+ * The caller keeps an independent activation/registration reference until
+ * its own callback and release tails finish. An enclosing caller-owned scope
+ * is never suspended. A trace-only or unknown policy is not collection proof. */
+XRT_API bool xrtPromiseProducerBindTakeV1(xpromise* pPromise, xrtownershipref Producer,
+	const xfutureproducerownershipv1* pPolicy);
+
+/* Same bind-once/private-pair/transfer rules as V1. The cancellation capability
+ * belongs to that exact producer. xrtFutureCancel requests its output token,
+ * then calls Request only for the first accepted explicit request. Terminal
+ * publication may race Request; the independently retained producer decides
+ * whether any activation remains. Merely dropping an observer still does not
+ * cancel work. Raw token requests and PromiseClose are not routed through it. */
+XRT_API bool xrtPromiseProducerBindTakeV2(xpromise* pPromise, xrtownershipref Producer,
+	const xfutureproducerownershipv1* pPolicy, const xfutureproducercancellationv1* pCancellation);
+
+
+
+/* 增加 Promise 生产端引用并返回原指针。 */
+XRT_API xpromise* xrtPromiseRef(xpromise* pPromise);
+
+
+
+/* 释放生产端引用；最后一个未完成生产端会关闭 Future 并请求取消。 */
+XRT_API void xrtPromiseDestroy(xpromise* pPromise);
+
+
+
+/* 增加 Future 消费端引用并返回原指针。 */
+XRT_API xfuture* xrtFutureRef(xfuture* pFuture);
+
+
+
+/* 释放 Future 消费端引用；空指针视为空操作。 */
+XRT_API void xrtFutureDestroy(xfuture* pFuture);
+
+/* Borrowed views of the SAME physical control block: every FutureRef and
+ * PromiseRef owns one reference. Do not invent a second Promise node.
+ * Trace includes cancellation parents, error causes, forwarded source and
+ * explicitly described owned payload/context. Unknown owned payloads and
+ * registered waiters fail closed unless their complete adapters are supplied.
+ * Pending with no waiters is inspectable; producer references remain roots.
+ * Whole-graph quiescence through any later commit and callback code residency
+ * remain the caller's responsibility; this API does not establish either. */
+XRT_API xrtownershipref xrtFutureOwnership(const xfuture* pFuture);
+XRT_API xrtownershipref xrtPromiseOwnership(const xpromise* pPromise);
+
+/* Publish an explicitly certified owned result atomically. Failure does not
+ * consume the box. This does not authorize collection by itself: a resolver
+ * must recognize the exact policy identity and independently admit children. */
+XRT_API bool xrtPromiseResolveOwnedPolicyV1(xpromise* pPromise, ptr pValue,
+	const xfuturepayloadownershipv1* pPolicy);
+
+/* Query under whole-graph freeze before Count/Trace. Pending, forwarded and
+ * terminal control blocks share one physical adapter. Completing operations,
+ * all registered waiters, unrecognized owned policies and observed cancel
+ * tokens are refused without invoking any payload/waiter trace. An empty
+ * allowlist admits only results without an owned payload. Pending retirement
+ * preserves last-producer CLOSED/cancellation semantics at Clear, without
+ * notification. Finish releases actual retired slots outside freeze. */
+XRT_API const xrtownershipadapterv1* xrtFutureOwnershipAdapterV1(xrtownershipref Reference,
+	const xfuturepayloadownershipv1* const* pPolicies, size_t iPolicyCount);
+/* Add an explicit producer-policy allowlist. V1 continues to refuse any live
+ * producer edge. Neither entry admits registered waiters or an unknown child;
+ * identity is matched before reading a policy or invoking any child callback. */
+XRT_API const xrtownershipadapterv1* xrtFutureOwnershipAdapterV2(xrtownershipref Reference,
+	const xfuturepayloadownershipv1* const* pPolicies, size_t iPolicyCount,
+	const xfutureproducerownershipv1* const* pProducerPolicies, size_t iProducerPolicyCount);
+/* V3 additionally admits exact Watch policies and returns mandatory semantic
+ * preparation alongside the SAME lifecycle adapter. Before object Finalize,
+ * prepare producerless pending sources through normal CLOSED notification,
+ * then rebuild the whole graph. Produced results defer to their real producer;
+ * never close an intermediate result before its source's catch/finally runs.
+ * Closed dependency cycles may require a further explicit shutdown protocol;
+ * BUSY does not authorize clearing a live Watch or skipping accepted work.
+ * Output is unchanged on refusal. Use both descriptors, never V1-only planning. */
+XRT_API const xrtownershipadapterv1* xrtFutureOwnershipAdapterV3(xrtownershipref Reference,
+	const xfuturepayloadownershipv1* const* pPolicies, size_t iPolicyCount,
+	const xfutureproducerownershipv1* const* pProducerPolicies, size_t iProducerPolicyCount,
+	const xfuturewatchownershipv1* const* pWatchPolicies, size_t iWatchPolicyCount,
+	const xrtownershippreparationv1** ppPreparation);
+/* Preserve 64-byte Watch storage and READY/PENDING/ERROR ownership rules.
+ * Initialization alone does not consume Data; registration commits the same
+ * caller-owned reference that Release returns. READY is still caller-driven. */
+XRT_API bool xrtFutureWatchInitOwnershipV1(xfuturewatch* pWatch, ptr pData,
+	const xfuturewatchownershipv1* pPolicy);
+/* Same 64-byte storage and ERROR/READY/PENDING transfer rules as V1. No
+ * projection is invoked by initialization or adapter admission. */
+XRT_API bool xrtFutureWatchInitOwnershipV2(xfuturewatch* pWatch, ptr pData,
+	const xfuturewatchownershipv2* pPolicy);
+XRT_API const xrtownershipadapterv1* xrtFutureOwnershipAdapterV4(xrtownershipref Reference,
+	const xfutureownershipadmissionv1* pAdmission,
+	const xrtownershippreparationv1** ppPreparation);
+
+/* Atomically publish value, destructor, context and non-NULL ownership trace.
+ * Success transfers the same ownership as ResolveOwned. Failure (including
+ * duplicate completion) transfers nothing and never calls Destroy/Trace.
+ * The immutable trace and destructor remain resident for the result lifetime;
+ * trace follows the read-only xrtOwnershipInspect callback contract. */
+XRT_API bool xrtPromiseResolveOwnedTraced(xpromise* pPromise, ptr pValue,
+	xfuturefreeproc pDestroy, ptr pDestroyData, xfutureownershiptrace pTrace);
+
+
+
+/* 返回 Future 状态快照；参数无效时返回 CLOSED 并设置错误。 */
+XRT_API xfuturestate xrtFutureState(const xfuture* pFuture);
+
+
+
+/* 判断 Future 是否已经进入任一不可变终态。 */
+XRT_API bool xrtFutureDone(const xfuture* pFuture);
+
+
+
+/* 复制借用结果；尚未完成时返回 false 并设置 AGAIN。 */
+XRT_API bool xrtFutureResult(const xfuture* pFuture, xfutureresult* pResult);
+
+
+
+/* 返回成功值；非成功终态会把对应错误设置到当前执行上下文。 */
+XRT_API ptr xrtFutureValue(const xfuture* pFuture);
+
+
+
+/* 返回失败终态借用的结构化错误，其他状态返回空指针。 */
+XRT_API const xerror* xrtFutureError(const xfuture* pFuture);
+
+
+
+/* 请求生产过程协作取消；请求本身不伪造 Future 终态。 */
+XRT_API bool xrtFutureCancel(xfuture* pFuture);
+
+
+
+/* 返回增加引用后的取消令牌，调用方使用完毕后必须释放。 */
+XRT_API xcancel* xrtFutureCancelToken(const xfuture* pFuture);
+
+
+
+/* 返回增加引用后的生产端取消令牌。 */
+XRT_API xcancel* xrtPromiseCancelToken(const xpromise* pPromise);
+
+
+
+/* 初始化一个尚未注册的无分配 Future Watch。 */
+XRT_API bool xrtFutureWatchInit(
+	xfuturewatch* pWatch,
+	xfuturewatchproc pNotify,
+	xfuturewatchreleaseproc pRelease,
+	ptr pData
+);
+
+
+
+/* Initialize with an immutable description of the strong slots released by
+ * pRelease(pData). Both callbacks are required. Unique context storage is
+ * folded into the Future's edges; shared state is a physical node. Init is
+ * allocation-free and consumes nothing; only WatchAdd(PENDING) transfers the
+ * registration/release right. READY and ERROR keep it with the caller.
+ * Storage size and old Init semantics are unchanged. A linked adapter may be
+ * inspected only at a whole-graph quiescent point with callback code resident;
+ * this does not establish a safepoint or permit concurrent frame inspection. */
+XRT_API bool xrtFutureWatchInitTraced(xfuturewatch* pWatch,
+    xfuturewatchproc pNotify, xfuturewatchreleaseproc pRelease, ptr pData,
+    xrtownershiptrace pTrace);
+
+/* Explicit cooperative callback admission, not inferred from a Trace callback.
+ * Like InitTraced, but Notify/Release run outside the Future mutation domain.
+ * The resident callbacks must coordinate every count/edge/storage transition,
+ * reject inspection of active/private data, and independently pin their code.
+ * Detached notification/release callers retain their real ownership until the
+ * callback returns. No mutation scope may span a wait or arbitrary callback.
+ * Unphased Watch, internal waiters and payload finalizers keep conservative
+ * mutation scopes. Storage size, READY/PENDING/ERROR and release rules match
+ * InitTraced; READY still leaves Notify/Release to the registering caller. */
+XRT_API bool xrtFutureWatchInitPhased(xfuturewatch* pWatch,
+    xfuturewatchproc pNotify, xfuturewatchreleaseproc pRelease, ptr pData,
+    xrtownershiptrace pTrace);
+
+
+
+/* Future 未完成时注册 Watch；READY 时 Watch 未被接管且不执行 Release。 */
+XRT_API xfuturewatchresult xrtFutureWatchAdd(
+	xfuture* pFuture,
+	xfuturewatch* pWatch
+);
+
+
+
+/* 尝试摘除尚未开始通知的 Watch；成功时同步执行 Release。 */
+XRT_API bool xrtFutureWatchDetach(
+	xfuture* pFuture,
+	xfuturewatch* pWatch
+);
+
+
+
+/* 摘除 Watch 并等待已经开始的通知结束；禁止从自身通知中调用。 */
+XRT_API void xrtFutureWatchRemove(
+	xfuture* pFuture,
+	xfuturewatch* pWatch
+);
+
+
+
+/* 等待 Future 进入任一终态。 */
+XRT_API xwaitresult xrtFutureWait(xfuture* pFuture);
+
+
+
+/* 在相对微秒数内等待 Future 进入任一终态。 */
+XRT_API xwaitresult xrtFutureWaitFor(xfuture* pFuture, uint64 iTimeout);
+
+
+
+/* 等待 Future 到指定单调时钟截止时间。 */
+XRT_API xwaitresult xrtFutureWaitUntil(xfuture* pFuture, xdeadline iDeadline);
+
+
+
+/* 等待首个线性化事件；取消先取得等待锁后不会被迟到终态覆盖。 */
+XRT_API xwaitresult xrtFutureWaitUntilCancel(
+	xfuture* pFuture,
+	xdeadline iDeadline,
+	xcancel* pCancel
+);
+
+
+
+/* 以借用方式完成成功结果，值的生命周期由调用方保证。 */
+XRT_API bool xrtPromiseResolve(xpromise* pPromise, ptr pValue);
+
+
+
+/* 转移成功值所有权；完成失败时所有权仍归调用方。 */
+XRT_API bool xrtPromiseResolveOwned(
+	xpromise* pPromise,
+	ptr pValue,
+	xfuturefreeproc pDestroy,
+	ptr pDestroyData
+);
+
+
+
+/* 以增加引用方式完成失败结果。 */
+XRT_API bool xrtPromiseReject(xpromise* pPromise, const xerror* pError);
+
+
+
+/* 把已进入终态的源 Future 结果安全透传到 Promise。 */
+XRT_API bool xrtPromiseForward(xpromise* pPromise, xfuture* pSource);
+
+
+
+/* 完成取消终态；令牌请求通知结束后才向等待者发布取消终态。 */
+XRT_API bool xrtPromiseCancel(xpromise* pPromise);
+
+
+
+/* 请求生产过程停止，并在令牌通知结束后发布关闭终态。 */
+XRT_API bool xrtPromiseClose(xpromise* pPromise);
+
+
+
+/* 判断 Promise 对应的 Future 是否已经完成。 */
+XRT_API bool xrtPromiseDone(const xpromise* pPromise);
+
+
+
+XRT_EXTERN_C_END
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_FUTURE_COMBINE)
+
+/* Any 与 Race 的结果借用胜出源 Future；组合 Future 负责保留该引用。 */
+typedef struct xfuturepick {
+	size_t Index;
+	xfuture* Future;
+} xfuturepick;
+
+
+
+/* All 的结果按输入顺序借用全部源 Future；组合 Future 负责保留这些引用。 */
+typedef struct xfutureall {
+	size_t Count;
+	xfuture* const* Futures;
+} xfutureall;
+
+
+
+XRT_EXTERN_C_BEGIN
+
+
+
+/* 在任一源进入终态后，以 xfuturepick 成功完成；不改变其余源。 */
+XRT_API xfuture* xrtFutureAny(xfuture* const* pFutures, size_t iCount);
+
+
+
+/* 在全部源进入终态后，以保序的 xfutureall 成功完成；空集合立即完成。 */
+XRT_API xfuture* xrtFutureAll(xfuture* const* pFutures, size_t iCount);
+
+
+
+/* 在任一源进入终态后完成，并向其余未完成源发出协作取消请求。
+ * 取消请求在结果映射/发布之前完成；这不强制改变败者的终态。 */
+XRT_API xfuture* xrtFutureRace(xfuture* const* pFutures, size_t iCount);
+
+/* Synchronous result mapping is part of the aggregate's activation, not a
+ * separately allocated continuation attached after the sources start.
+ * Inputs and output Promise are borrowed for the call. The mapper must
+ * complete/forward the output before returning; an uncompleted output closes.
+ * It must not retain the input descriptors or defer work on this Promise. */
+typedef void (*xfutureallmapproc)(const xfutureall* pInput, xpromise* pOutput, ptr pData);
+typedef void (*xfuturepickmapproc)(const xfuturepick* pInput, xpromise* pOutput, ptr pData);
+
+/* All preparation succeeds before source notification/cancellation is possible.
+ * NULL return does not consume data, invoke map/destroy/trace, or cancel inputs.
+ * Non-NULL accepts data even if synchronous mapping fails: that failure is the
+ * returned Future's outcome. Destroy(data, destroyData) runs exactly once after
+ * mapping or cancellation and after the last source callback returns.
+ * Trace(data, destroyData) describes the exact strong slots Destroy releases;
+ * callbacks/code and borrowed pointers are not fictitious owning edges.
+ * Destroy and Trace are required, including for an empty context. The caller
+ * still supplies whole-graph quiescence and callback/code residency.
+ * Any/All/Race retain their existing selection/order/cancellation contracts. */
+XRT_API xfuture* xrtFutureAllMapOwnedTraced(xfuture* const* pFutures, size_t iCount,
+    xfutureallmapproc pMap, ptr pData, xfuturefreeproc pDestroy,
+    ptr pDestroyData, xfutureownershiptrace pTrace);
+XRT_API xfuture* xrtFutureAnyMapOwnedTraced(xfuture* const* pFutures, size_t iCount,
+    xfuturepickmapproc pMap, ptr pData, xfuturefreeproc pDestroy,
+    ptr pDestroyData, xfutureownershiptrace pTrace);
+XRT_API xfuture* xrtFutureRaceMapOwnedTraced(xfuture* const* pFutures, size_t iCount,
+    xfuturepickmapproc pMap, ptr pData, xfuturefreeproc pDestroy,
+    ptr pDestroyData, xfutureownershiptrace pTrace);
+
+/* A certified mapper owns one independently admitted physical Data reference.
+ * AllMap/PickMap borrow it and must synchronously finish the output. Drop
+ * returns that reference, never substitutes for Data's semantic preparation.
+ * Policy and callbacks are immutable/resident, and callbacks coordinate their
+ * own graph transitions and code lifetime outside API-owned scopes. */
+typedef struct xfuturecombineownershipv1 {
+	size_t size;
+	xfutureallmapproc AllMap;
+	xfuturepickmapproc PickMap;
+	void (*Drop)(const void* pData);
+	const xrtownershipops* Ops;
+} xfuturecombineownershipv1;
+XRT_API xfuture* xrtFutureAllMapOwnedPolicyV1(xfuture* const* pFutures, size_t iCount,
+	ptr pData, const xfuturecombineownershipv1* pPolicy);
+XRT_API xfuture* xrtFutureAnyMapOwnedPolicyV1(xfuture* const* pFutures, size_t iCount,
+	ptr pData, const xfuturecombineownershipv1* pPolicy);
+XRT_API xfuture* xrtFutureRaceMapOwnedPolicyV1(xfuture* const* pFutures, size_t iCount,
+	ptr pData, const xfuturecombineownershipv1* pPolicy);
+
+/* These exact resident policies describe real producer, source-registration,
+ * cancellation and raw-result references. Their presence does not admit the
+ * group or its Data: the collector independently resolves every node. */
+XRT_API const xfutureproducerownershipv1* xrtFutureCombineProducerPolicyV1Get(void);
+XRT_API const xfuturewatchownershipv2* xrtFutureCombineWatchPolicyV2Get(void);
+XRT_API const xcancelwatchownershipv1* xrtFutureCombineCancelPolicyV1Get(void);
+XRT_API const xfuturepayloadownershipv1* xrtFutureCombineAllPayloadPolicyV1Get(void);
+XRT_API const xfuturepayloadownershipv1* xrtFutureCombinePickPayloadPolicyV1Get(void);
+XRT_API const xrtownershipadapterv1* xrtFutureCombineOwnershipAdapterV1(xrtownershipref Reference,
+	const xfuturecombineownershipv1* const* pPolicies, size_t iPolicyCount,
+	const xrtownershippreparationv1** ppPreparation);
+
+typedef enum xfuturewaitrulev1 {
+	XFUTURE_WAIT_ALL_TERMINAL = 1,
+	XFUTURE_WAIT_ANY_TERMINAL = 2
+} xfuturewaitrulev1;
+typedef struct xfuturecombinewaitv1 {
+	size_t size;
+	xpromise* Output;
+	xfuture* const* Sources;
+	size_t Count;
+	xfuturewaitrulev1 Rule;
+	bool CancelRemaining;
+} xfuturecombinewaitv1;
+/* Borrowed semantic input slots, not arbitrary capture edges. The complete
+ * physical graph must be frozen and claimed unreachable by the same token.
+ * Only a stable pending group with real pending registrations is described;
+ * all completed slots are retained in order, including duplicates. ALL needs
+ * every input terminal; ANY/RACE need one, with Race alone cancelling losers.
+ * Output stays unchanged on refusal. This read-only fact is not cancellation
+ * authority, a deadlock proof, or permission to skip normal callbacks. */
+XRT_API bool xrtFutureCombineWaitV1(xrtownershipref Reference, const void* pToken,
+	xfuturecombinewaitv1* pWait);
+
+
+
+XRT_EXTERN_C_END
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_FUTURE_CONTINUE)
+
+/* 延续过程借用源结果和输出 Promise；保留 Promise 时必须先增加引用。 */
+typedef void (*xfuturecontinueproc)(
+	const xfutureresult* pInput,
+	xpromise* pOutput,
+	ptr pData
+);
+
+
+
+/* Finally 过程只观察源结果，输出 Future 自动安全透传源终态。 */
+typedef void (*xfuturefinallyproc)(const xfutureresult* pInput, ptr pData);
+
+
+
+XRT_EXTERN_C_BEGIN
+
+
+
+/* 对源的任意终态执行延续过程；过程负责完成或保留输出 Promise。 */
+XRT_API xfuture* xrtFutureContinue(
+	xfuture* pSource,
+	xfuturecontinueproc pProc,
+	ptr pData
+);
+
+
+
+/* 执行任意终态延续，并在执行、跳过或取消后释放受理的数据。 */
+XRT_API xfuture* xrtFutureContinueOwned(
+	xfuture* pSource,
+	xfuturecontinueproc pProc,
+	ptr pData,
+	xfuturefreeproc pDestroy,
+	ptr pDestroyData
+);
+
+
+
+/*
+	对独占源的任意终态执行延续；取消输出时同时请求取消源。
+	该入口只适用于调用方拥有完整生产链、不与其他消费者共享源的组合层。
+*/
+XRT_API xfuture* xrtFutureContinueOwnedCancelSource(
+	xfuture* pSource,
+	xfuturecontinueproc pProc,
+	ptr pData,
+	xfuturefreeproc pDestroy,
+	ptr pDestroyData
+);
+
+
+
+/* 仅在源成功时执行延续；其他终态自动透传。 */
+XRT_API xfuture* xrtFutureThen(
+	xfuture* pSource,
+	xfuturecontinueproc pProc,
+	ptr pData
+);
+
+
+
+/* 仅在源成功时执行延续，并负责释放受理的数据。 */
+XRT_API xfuture* xrtFutureThenOwned(
+	xfuture* pSource,
+	xfuturecontinueproc pProc,
+	ptr pData,
+	xfuturefreeproc pDestroy,
+	ptr pDestroyData
+);
+
+
+
+/*
+	仅在独占源成功时执行延续；取消输出时同时请求取消源。
+	源的失败、取消和关闭仍按 Then 契约自动透传。
+*/
+XRT_API xfuture* xrtFutureThenOwnedCancelSource(
+	xfuture* pSource,
+	xfuturecontinueproc pProc,
+	ptr pData,
+	xfuturefreeproc pDestroy,
+	ptr pDestroyData
+);
+
+
+
+/* 仅在源失败时执行延续；成功、取消和关闭终态自动透传。 */
+XRT_API xfuture* xrtFutureCatch(
+	xfuture* pSource,
+	xfuturecontinueproc pProc,
+	ptr pData
+);
+
+
+
+/* 仅在源失败时执行延续，并负责释放受理的数据。 */
+XRT_API xfuture* xrtFutureCatchOwned(
+	xfuture* pSource,
+	xfuturecontinueproc pProc,
+	ptr pData,
+	xfuturefreeproc pDestroy,
+	ptr pDestroyData
+);
+
+
+
+/* 观察源的任意终态，再把原结果安全透传到输出 Future。 */
+XRT_API xfuture* xrtFutureFinally(
+	xfuture* pSource,
+	xfuturefinallyproc pProc,
+	ptr pData
+);
+
+
+
+/* 观察源的任意终态、透传结果，并负责释放受理的数据。 */
+XRT_API xfuture* xrtFutureFinallyOwned(
+	xfuture* pSource,
+	xfuturefinallyproc pProc,
+	ptr pData,
+	xfuturefreeproc pDestroy,
+	ptr pDestroyData
+);
+
+
+
+XRT_EXTERN_C_END
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_FUTURE_COROUTINE)
+
+XRT_EXTERN_C_BEGIN
+
+
+
+/* 挂起当前调度协程，直到 Future 进入终态或协程被取消。 */
+XRT_API xwaitresult xrtFutureAwait(xfuture* pFuture);
+
+
+
+/* 在相对微秒数内挂起当前调度协程等待 Future。 */
+XRT_API xwaitresult xrtFutureAwaitFor(xfuture* pFuture, uint64 iTimeout);
+
+
+
+/* 挂起当前调度协程等待 Future 到指定截止时间。 */
+XRT_API xwaitresult xrtFutureAwaitUntil(xfuture* pFuture, xdeadline iDeadline);
+
+
+
+XRT_EXTERN_C_END
+
+#endif
+
+#endif
+
+
+/* ========================================================================== */
+/* public: include/xrt/queue.h */
+/* ========================================================================== */
+
+#ifndef XRT_QUEUE_H
+#define XRT_QUEUE_H
+
+
+
+
+#if defined(XRT_FEATURE_QUEUE) && !defined(XRT_FEATURE_ATOMIC)
+	#error "XRT_FEATURE_QUEUE requires XRT_FEATURE_ATOMIC"
+#endif
+
+#if defined(XRT_FEATURE_QUEUE_SPSC) && !defined(XRT_FEATURE_QUEUE)
+	#error "XRT_FEATURE_QUEUE_SPSC requires XRT_FEATURE_QUEUE"
+#endif
+
+#if defined(XRT_FEATURE_QUEUE_MPSC) && !defined(XRT_FEATURE_QUEUE)
+	#error "XRT_FEATURE_QUEUE_MPSC requires XRT_FEATURE_QUEUE"
+#endif
+
+#if defined(XRT_FEATURE_QUEUE_MPMC) && !defined(XRT_FEATURE_QUEUE)
+	#error "XRT_FEATURE_QUEUE_MPMC requires XRT_FEATURE_QUEUE"
+#endif
+
+
+
+#if defined(XRT_FEATURE_QUEUE)
+
+
+
+
+/* 热游标隔离跨度覆盖 XRT 支持架构上的常见最大数据缓存行。 */
+#if \
+	defined(__aarch64__) || \
+	defined(_M_ARM64) || \
+	defined(__powerpc64__) || \
+	defined(__ppc64__)
+	#define XRT_QUEUE_CACHE_SPAN 128u
+#else
+	#define XRT_QUEUE_CACHE_SPAN 64u
+#endif
+
+#define XRT_QUEUE_MAX_CAPACITY ((size_t)1u << 30)
+
+
+
+/* 队列结果把正常流控状态与真正错误分开表达。 */
+typedef enum xqueueresult {
+	XQUEUE_ERROR = -1,
+	XQUEUE_OK = 0,
+	XQUEUE_EMPTY = 1,
+	XQUEUE_FULL = 2,
+	XQUEUE_CLOSED = 3
+} xqueueresult;
+
+
+
+/* 批量操作同时返回流控状态和实际处理数量。 */
+typedef struct xqueuebatchresult {
+	xqueueresult Result;
+	size_t Count;
+} xqueuebatchresult;
+
+
+
+/* 排空回调接收已从队列移除的指针值。 */
+typedef void (*xqueuedrainfn)(ptr pItem, ptr pContext);
+
+
+
+XRT_EXTERN_C_BEGIN
+
+
+
+/* 把最小容量向上取整为队列可使用的 2 次幂容量。 */
+XRT_API size_t xrtQueueCapacity(size_t iMinimum);
+
+
+
+XRT_EXTERN_C_END
+
+#endif
+
+
+
+#if \
+	defined(XRT_FEATURE_QUEUE_SPSC) || \
+	defined(XRT_FEATURE_QUEUE_MPSC) || \
+	defined(XRT_FEATURE_QUEUE_MPMC)
+
+/* 32 位游标独占一个架构隔离跨度，避免生产者和消费者伪共享。 */
+typedef struct xqueuecursor32 {
+	xatomic32 Position;
+	uint8 Reserved[XRT_QUEUE_CACHE_SPAN - sizeof(xatomic32)];
+} xqueuecursor32;
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_QUEUE_MPSC) || defined(XRT_FEATURE_QUEUE_MPMC)
+
+/* 序列槽保存一个不拥有目标的指针，并用序号表达空闲和就绪代次。 */
+typedef struct xqueueslot {
+	xatomic32 Sequence;
+	ptr Item;
+} xqueueslot;
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_QUEUE_SPSC)
+
+
+
+/* SPSC 保存指针值，只允许一个生产者和一个消费者并发操作。 */
+typedef struct xspscqueue {
+	ptr* Items;
+	ptr Allocation;
+	size_t Capacity;
+	size_t Mask;
+	xatomic32 Closed;
+	xqueuecursor32 Tail;
+	xqueuecursor32 Head;
+} xspscqueue;
+
+
+
+XRT_EXTERN_C_BEGIN
+
+
+
+/* 初始化拥有内部指针环的单生产者单消费者队列。 */
+XRT_API bool xrtSPSCQueueInit(xspscqueue* pQueue, size_t iCapacity);
+
+
+
+/* 在调用方提供的 2 次幂指针环上初始化 SPSC 队列。 */
+XRT_API bool xrtSPSCQueueInitBuffer(
+	xspscqueue* pQueue,
+	ptr* pItems,
+	size_t iCapacity
+);
+
+
+
+/* 创建拥有结构和内部指针环的 SPSC 队列。 */
+XRT_API xspscqueue* xrtSPSCQueueCreate(size_t iCapacity);
+
+
+
+/* 释放拥有的指针环，但不释放队列结构或指针目标。 */
+XRT_API void xrtSPSCQueueUnit(xspscqueue* pQueue);
+
+
+
+/* 释放 Create 返回的队列结构和内部指针环。 */
+XRT_API void xrtSPSCQueueDestroy(xspscqueue* pQueue);
+
+
+
+/* 尝试压入一个可为空的指针值。 */
+XRT_API xqueueresult xrtSPSCQueueTryPush(xspscqueue* pQueue, ptr pItem);
+
+
+
+/* 尝试批量压入连续指针值；数组必须对齐且不与队列对象或内部环重叠。 */
+XRT_API xqueuebatchresult xrtSPSCQueuePushBatch(
+	xspscqueue* pQueue,
+	ptr const* pItems,
+	size_t iCount
+);
+
+
+
+/* 尝试弹出一个指针值；输出必须对齐且不与队列对象或内部环重叠。 */
+XRT_API xqueueresult xrtSPSCQueueTryPop(xspscqueue* pQueue, ptr* pItem);
+
+
+
+/* 尝试批量弹出连续指针值；数组必须对齐且不与队列对象或内部环重叠。 */
+XRT_API xqueuebatchresult xrtSPSCQueuePopBatch(
+	xspscqueue* pQueue,
+	ptr* pItems,
+	size_t iCapacity
+);
+
+
+
+/* 返回并发快照下的近似元素数量。 */
+XRT_API size_t xrtSPSCQueueCount(const xspscqueue* pQueue);
+
+
+
+/* 由唯一生产者幂等关闭写入端，并允许消费者继续排空已有元素。 */
+XRT_API void xrtSPSCQueueClose(xspscqueue* pQueue);
+
+
+
+/* 判断队列写入端是否已经关闭。 */
+XRT_API bool xrtSPSCQueueIsClosed(const xspscqueue* pQueue);
+
+
+
+/* 判断队列是否已经关闭且排空。 */
+XRT_API bool xrtSPSCQueueIsDrained(const xspscqueue* pQueue);
+
+
+
+/* 排空当前可见元素；回调为空时直接丢弃指针值。 */
+XRT_API size_t xrtSPSCQueueDrain(
+	xspscqueue* pQueue,
+	xqueuedrainfn pDrain,
+	ptr pContext
+);
+
+
+
+/* 在调用方独占且队列为空时重置游标并重新开放。 */
+XRT_API bool xrtSPSCQueueReset(xspscqueue* pQueue);
+
+
+
+XRT_EXTERN_C_END
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_QUEUE_MPSC)
+
+/* MPSC 允许多个生产者并发写入，只允许一个消费者读取。 */
+typedef struct xmpscqueue {
+	xqueueslot* Slots;
+	ptr Allocation;
+	size_t Capacity;
+	size_t Mask;
+	xatomic32 Closed;
+	xqueuecursor32 Tail;
+	xqueuecursor32 Head;
+} xmpscqueue;
+
+
+
+XRT_EXTERN_C_BEGIN
+
+
+
+/* 初始化拥有内部序列槽环的多生产者单消费者队列。 */
+XRT_API bool xrtMPSCQueueInit(xmpscqueue* pQueue, size_t iCapacity);
+
+
+
+/* 在调用方提供的 2 次幂序列槽环上初始化 MPSC 队列。 */
+XRT_API bool xrtMPSCQueueInitBuffer(
+	xmpscqueue* pQueue,
+	xqueueslot* pSlots,
+	size_t iCapacity
+);
+
+
+
+/* 创建拥有结构和内部序列槽环的 MPSC 队列。 */
+XRT_API xmpscqueue* xrtMPSCQueueCreate(size_t iCapacity);
+
+
+
+/* 释放拥有的序列槽环，但不释放队列结构或指针目标。 */
+XRT_API void xrtMPSCQueueUnit(xmpscqueue* pQueue);
+
+
+
+/* 释放 Create 返回的队列结构和内部序列槽环。 */
+XRT_API void xrtMPSCQueueDestroy(xmpscqueue* pQueue);
+
+
+
+/* 由任意生产者尝试压入一个可为空的指针值。 */
+XRT_API xqueueresult xrtMPSCQueueTryPush(xmpscqueue* pQueue, ptr pItem);
+
+
+
+/* 由任意生产者批量压入；数组必须对齐且不与队列对象或槽环重叠。 */
+XRT_API xqueuebatchresult xrtMPSCQueuePushBatch(
+	xmpscqueue* pQueue,
+	ptr const* pItems,
+	size_t iCount
+);
+
+
+
+/* 由唯一消费者弹出；输出必须对齐且不与队列对象或槽环重叠。 */
+XRT_API xqueueresult xrtMPSCQueueTryPop(xmpscqueue* pQueue, ptr* pItem);
+
+
+
+/* 由唯一消费者批量弹出；数组必须对齐且不与队列对象或槽环重叠。 */
+XRT_API xqueuebatchresult xrtMPSCQueuePopBatch(
+	xmpscqueue* pQueue,
+	ptr* pItems,
+	size_t iCapacity
+);
+
+
+
+/* 返回包含已预留槽位的并发近似元素数量。 */
+XRT_API size_t xrtMPSCQueueCount(const xmpscqueue* pQueue);
+
+
+
+/* 在全部生产者停止后幂等关闭写入端。 */
+XRT_API void xrtMPSCQueueClose(xmpscqueue* pQueue);
+
+
+
+/* 判断队列写入端是否已经关闭。 */
+XRT_API bool xrtMPSCQueueIsClosed(const xmpscqueue* pQueue);
+
+
+
+/* 判断队列是否已经关闭且排空。 */
+XRT_API bool xrtMPSCQueueIsDrained(const xmpscqueue* pQueue);
+
+
+
+/* 由唯一消费者排空元素；回调为空时直接丢弃指针值。 */
+XRT_API size_t xrtMPSCQueueDrain(
+	xmpscqueue* pQueue,
+	xqueuedrainfn pDrain,
+	ptr pContext
+);
+
+
+
+/* 在调用方独占且队列为空时重置全部序列槽并重新开放。 */
+XRT_API bool xrtMPSCQueueReset(xmpscqueue* pQueue);
+
+
+
+XRT_EXTERN_C_END
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_QUEUE_MPMC)
+
+/* MPMC 允许多个生产者和多个消费者并发访问同一个有界序列槽环。 */
+typedef struct xmpmcqueue {
+	xqueueslot* Slots;
+	ptr Allocation;
+	size_t Capacity;
+	size_t Mask;
+	xatomic32 Closed;
+	xqueuecursor32 Tail;
+	xqueuecursor32 Head;
+} xmpmcqueue;
+
+
+
+XRT_EXTERN_C_BEGIN
+
+
+
+/* 初始化拥有内部序列槽环的多生产者多消费者队列。 */
+XRT_API bool xrtMPMCQueueInit(xmpmcqueue* pQueue, size_t iCapacity);
+
+
+
+/* 在调用方提供的 2 次幂序列槽环上初始化 MPMC 队列。 */
+XRT_API bool xrtMPMCQueueInitBuffer(
+	xmpmcqueue* pQueue,
+	xqueueslot* pSlots,
+	size_t iCapacity
+);
+
+
+
+/* 创建拥有结构和内部序列槽环的 MPMC 队列。 */
+XRT_API xmpmcqueue* xrtMPMCQueueCreate(size_t iCapacity);
+
+
+
+/* 释放拥有的序列槽环，但不释放队列结构或指针目标。 */
+XRT_API void xrtMPMCQueueUnit(xmpmcqueue* pQueue);
+
+
+
+/* 释放 Create 返回的队列结构和内部序列槽环。 */
+XRT_API void xrtMPMCQueueDestroy(xmpmcqueue* pQueue);
+
+
+
+/* 由任意生产者尝试压入一个可为空的指针值。 */
+XRT_API xqueueresult xrtMPMCQueueTryPush(xmpmcqueue* pQueue, ptr pItem);
+
+
+
+/* 由任意生产者批量压入；数组必须对齐且不与队列对象或槽环重叠。 */
+XRT_API xqueuebatchresult xrtMPMCQueuePushBatch(
+	xmpmcqueue* pQueue,
+	ptr const* pItems,
+	size_t iCount
+);
+
+
+
+/* 由任意消费者弹出；输出必须对齐且不与队列对象或槽环重叠。 */
+XRT_API xqueueresult xrtMPMCQueueTryPop(xmpmcqueue* pQueue, ptr* pItem);
+
+
+
+/* 由任意消费者批量弹出；数组必须对齐且不与队列对象或槽环重叠。 */
+XRT_API xqueuebatchresult xrtMPMCQueuePopBatch(
+	xmpmcqueue* pQueue,
+	ptr* pItems,
+	size_t iCapacity
+);
+
+
+
+/* 返回包含已预留生产和消费区间的并发近似元素数量。 */
+XRT_API size_t xrtMPMCQueueCount(const xmpmcqueue* pQueue);
+
+
+
+/* 在全部生产者停止后幂等关闭写入端。 */
+XRT_API void xrtMPMCQueueClose(xmpmcqueue* pQueue);
+
+
+
+/* 判断队列写入端是否已经关闭。 */
+XRT_API bool xrtMPMCQueueIsClosed(const xmpmcqueue* pQueue);
+
+
+
+/* 判断队列是否已经关闭且没有尚未领取的元素。 */
+XRT_API bool xrtMPMCQueueIsDrained(const xmpmcqueue* pQueue);
+
+
+
+/* 由任意消费者排空元素；回调为空时直接丢弃指针值。 */
+XRT_API size_t xrtMPMCQueueDrain(
+	xmpmcqueue* pQueue,
+	xqueuedrainfn pDrain,
+	ptr pContext
+);
+
+
+
+/* 在调用方独占且队列为空时重置全部序列槽并重新开放。 */
+XRT_API bool xrtMPMCQueueReset(xmpmcqueue* pQueue);
+
+
+
+XRT_EXTERN_C_END
+
+#endif
+
+#endif
+
+
+/* ========================================================================== */
+/* public: include/xrt/net.h */
+/* ========================================================================== */
+
+#ifndef XRT_NET_H
+#define XRT_NET_H
+
+
+
+
+/* 网络累计统计按编译期级别裁剪；状态量和背压计数始终保留。 */
+#define XNET_STATS_OFF 0
+#define XNET_STATS_BASIC 1
+#define XNET_STATS_FULL 2
+
+#if !defined(XRT_NET_STATS_LEVEL)
+	#define XRT_NET_STATS_LEVEL XNET_STATS_FULL
+#endif
+
+#if (XRT_NET_STATS_LEVEL < XNET_STATS_OFF) || \
+	(XRT_NET_STATS_LEVEL > XNET_STATS_FULL)
+	#error "XRT_NET_STATS_LEVEL must be XNET_STATS_OFF, XNET_STATS_BASIC or XNET_STATS_FULL"
+#endif
+
+#if defined(XRT_FEATURE_NET_RESOLVER) || \
+	defined(XRT_FEATURE_NET_PORT) || \
+	defined(XRT_FEATURE_NET_PORT_URING) || \
+	defined(XRT_FEATURE_NET_PORT_IOCP)
+#endif
+
+#if defined(XRT_FEATURE_NET_RESOLVER)
+#endif
+
+#if defined(XRT_FEATURE_NET_RESOLVER_FUTURE)
+#endif
+
+#if defined(XRT_FEATURE_NET_PORT) || defined(XRT_FEATURE_NET_ENGINE)
+#endif
+
+#if defined(XRT_FEATURE_NET_ENGINE)
+#endif
+
+
+
+#if defined(XRT_FEATURE_NET_BUFFER) && !defined(XRT_FEATURE_NET)
+	#error "XRT network buffer support requires XRT_FEATURE_NET"
+#endif
+
+#if defined(XRT_FEATURE_NET_SOCKET) && !defined(XRT_FEATURE_NET)
+	#error "XRT socket support requires XRT_FEATURE_NET"
+#endif
+
+#if defined(XRT_FEATURE_NET_DNS) && !defined(XRT_FEATURE_NET)
+	#error "XRT DNS support requires XRT_FEATURE_NET"
+#endif
+
+#if defined(XRT_FEATURE_NET_RESOLVER) && \
+	(!defined(XRT_FEATURE_NET_DNS) || !defined(XRT_FEATURE_ATOMIC) || \
+	 !defined(XRT_FEATURE_HASH64) || !defined(XRT_FEATURE_THREAD) || \
+	 !defined(XRT_FEATURE_COND))
+	#error "XRT resolver support requires DNS, atomic, hash64, thread and condition support"
+#endif
+
+#if defined(XRT_FEATURE_NET_RESOLVER_FUTURE) && \
+	(!defined(XRT_FEATURE_NET_RESOLVER) || \
+	 !defined(XRT_FEATURE_FUTURE) || \
+	 !defined(XRT_FEATURE_FUTURE_BRIDGE))
+	#error "XRT resolver Future support requires resolver, Future and Future bridge support"
+#endif
+
+#if defined(XRT_FEATURE_NET_SYNC) && \
+	(!defined(XRT_FEATURE_NET_ENGINE) || !defined(XRT_FEATURE_FUTURE))
+	#error "XRT network sync support requires network engine and Future support"
+#endif
+
+#if defined(XRT_FEATURE_NET_PORT) && \
+	(!defined(XRT_FEATURE_NET_SOCKET) || !defined(XRT_FEATURE_ATOMIC) || \
+	 !defined(XRT_FEATURE_WAIT) || \
+	 !defined(XRT_FEATURE_MUTEX))
+	#error "XRT network port support requires socket, atomic, wait and mutex support"
+#endif
+
+#if defined(XRT_FEATURE_NET_PORT_SELECT) && !defined(XRT_FEATURE_NET_PORT)
+	#error "XRT select network port support requires XRT_FEATURE_NET_PORT"
+#endif
+
+#if defined(XRT_FEATURE_NET_PORT_EPOLL) && !defined(XRT_FEATURE_NET_PORT)
+	#error "XRT epoll network port support requires XRT_FEATURE_NET_PORT"
+#endif
+
+#if defined(XRT_FEATURE_NET_PORT_URING) && \
+	(!defined(XRT_FEATURE_NET_PORT) || !defined(XRT_FEATURE_ATOMIC))
+	#error "XRT io_uring network port support requires network port and atomic support"
+#endif
+
+#if defined(XRT_FEATURE_NET_PORT_KQUEUE) && !defined(XRT_FEATURE_NET_PORT)
+	#error "XRT kqueue network port support requires XRT_FEATURE_NET_PORT"
+#endif
+
+#if defined(XRT_FEATURE_NET_PORT_IOCP) && \
+	(!defined(XRT_FEATURE_NET_PORT) || !defined(XRT_FEATURE_ATOMIC))
+	#error "XRT IOCP network port support requires network port and atomic support"
+#endif
+
+#if defined(XRT_FEATURE_NET_ENGINE) && \
+	(!defined(XRT_FEATURE_NET_PORT) || !defined(XRT_FEATURE_NET_BUFFER) || \
+	 !defined(XRT_FEATURE_THREAD) || !defined(XRT_FEATURE_QUEUE_MPSC))
+	#error "XRT network engine support requires network port, buffer, thread and MPSC queue support"
+#endif
+
+#if defined(XRT_FEATURE_NET_ENGINE)
+	#if defined(_WIN32) || defined(_WIN64)
+		#if !defined(XRT_FEATURE_NET_PORT_IOCP) || \
+			!defined(XRT_FEATURE_NET_PORT_SELECT)
+			#error "XRT network engine requires IOCP and select fallback on Windows"
+		#endif
+	#elif defined(__linux__)
+		#if (!defined(XRT_FEATURE_NET_PORT_EPOLL) && \
+			 !defined(XRT_FEATURE_NET_PORT_URING)) || \
+			!defined(XRT_FEATURE_NET_PORT_SELECT)
+			#error "XRT network engine requires epoll or io_uring plus select fallback on Linux"
+		#endif
+	#elif defined(__APPLE__) || defined(__FreeBSD__) || \
+		defined(__OpenBSD__) || defined(__NetBSD__) || \
+		defined(__DragonFly__)
+		#if !defined(XRT_FEATURE_NET_PORT_KQUEUE) || \
+			!defined(XRT_FEATURE_NET_PORT_SELECT)
+			#error "XRT network engine requires kqueue and select fallback on Darwin/BSD"
+		#endif
+	#elif !defined(XRT_FEATURE_NET_PORT_SELECT)
+		#error "XRT network engine requires select fallback on this platform"
+	#endif
+#endif
+
+
+
+/* 地址族使用稳定值，不依赖平台 AF_INET 和 AF_INET6 常量。 */
+typedef enum xnetfamily {
+	XNET_FAMILY_UNSPEC = 0,
+	XNET_FAMILY_IPV4 = 4,
+	XNET_FAMILY_IPV6 = 6
+} xnetfamily;
+
+
+
+/* 端口使用主机字节序，地址字节始终使用网络字节序。 */
+typedef struct xnetaddr {
+	uint16 Family;
+	uint16 Port;
+	uint32 Scope;
+	uint8 Address[16];
+} xnetaddr;
+
+
+
+/* 网络操作把正常控制结果与结构化错误分开表达。 */
+typedef enum xnetresult {
+	XNET_RESULT_ERROR = -1,
+	XNET_RESULT_OK = 0,
+	XNET_RESULT_AGAIN,
+	XNET_RESULT_CLOSED,
+	XNET_RESULT_TRUNCATED,
+	XNET_RESULT_TIMEOUT,
+	XNET_RESULT_CANCELLED
+} xnetresult;
+
+
+
+/* 网络基础层稳定错误代码。 */
+typedef enum xneterror {
+	XNET_ERROR_NONE = 0,
+	XNET_ERROR_FORMAT,
+	XNET_ERROR_FAMILY,
+	XNET_ERROR_PORT,
+	XNET_ERROR_SCOPE,
+	XNET_ERROR_BUFFER,
+	XNET_ERROR_NATIVE,
+	XNET_ERROR_SYSTEM,
+	XNET_ERROR_INTERFACE_QUERY,
+	XNET_ERROR_INTERFACE_NAME,
+	XNET_ERROR_INTERFACE_INDEX,
+	XNET_ERROR_INTERFACE_ADDRESS,
+	XNET_ERROR_INTERFACE_HARDWARE,
+	XNET_ERROR_HOST_NAME,
+	XNET_ERROR_DNS_RESOLVE,
+	XNET_ERROR_DNS_REVERSE,
+	XNET_ERROR_DNS_RESULT,
+	XNET_ERROR_RESOLVER_CREATE,
+	XNET_ERROR_RESOLVER_SUBMIT,
+	XNET_ERROR_RESOLVER_CLOSED,
+	XNET_ERROR_RESOLVER_QUERY,
+	XNET_ERROR_BUFFER_STATE,
+	XNET_ERROR_POOL_BUSY,
+	XNET_ERROR_FRAME_CONFIG,
+	XNET_ERROR_FRAME_STATE,
+	XNET_ERROR_FRAME_LIMIT,
+	XNET_ERROR_FRAME_LENGTH,
+	XNET_ERROR_SOCKET_OPEN,
+	XNET_ERROR_SOCKET_CLOSE,
+	XNET_ERROR_SOCKET_OPTION,
+	XNET_ERROR_SOCKET_BIND,
+	XNET_ERROR_SOCKET_LISTEN,
+	XNET_ERROR_SOCKET_ACCEPT,
+	XNET_ERROR_SOCKET_CONNECT,
+	XNET_ERROR_SOCKET_SHUTDOWN,
+	XNET_ERROR_SOCKET_READ,
+	XNET_ERROR_SOCKET_WRITE,
+	XNET_ERROR_SOCKET_DGRAM_ERROR,
+	XNET_ERROR_PORT_CREATE,
+	XNET_ERROR_PORT_CLOSE,
+	XNET_ERROR_PORT_WATCH,
+	XNET_ERROR_PORT_WAIT,
+	XNET_ERROR_PORT_POST,
+	XNET_ERROR_PORT_SUBMIT,
+	XNET_ERROR_PORT_CANCEL,
+	XNET_ERROR_ENGINE_CREATE,
+	XNET_ERROR_ENGINE_START,
+	XNET_ERROR_ENGINE_STOP,
+	XNET_ERROR_ENGINE_POST,
+	XNET_ERROR_ENGINE_TIMER,
+	XNET_ERROR_STREAM_CONFIG,
+	XNET_ERROR_STREAM_CREATE,
+	XNET_ERROR_STREAM_CONNECT,
+	XNET_ERROR_STREAM_READ,
+	XNET_ERROR_STREAM_WRITE,
+	XNET_ERROR_STREAM_CLOSE,
+	XNET_ERROR_DIAL_CONFIG,
+	XNET_ERROR_DIAL_CREATE,
+	XNET_ERROR_DIAL_RESOLVE,
+	XNET_ERROR_DIAL_CONNECT,
+	XNET_ERROR_LISTENER_CREATE,
+	XNET_ERROR_LISTENER_ACCEPT,
+	XNET_ERROR_LISTENER_CLOSE,
+	XNET_ERROR_SERVER_CONFIG,
+	XNET_ERROR_SERVER_START,
+	XNET_ERROR_SERVER_ACCEPT,
+	XNET_ERROR_UDP_CONFIG,
+	XNET_ERROR_UDP_CREATE,
+	XNET_ERROR_UDP_RECEIVE,
+	XNET_ERROR_UDP_RECEIVE_QUEUE,
+	XNET_ERROR_UDP_SEND,
+	XNET_ERROR_UDP_CLOSE,
+	XNET_ERROR_PROXY_CONFIG,
+	XNET_ERROR_PROXY_CREATE,
+	XNET_ERROR_PROXY_PROTOCOL,
+	XNET_ERROR_PROXY_AUTH,
+	XNET_ERROR_PROXY_CONNECT,
+	XNET_ERROR_PROXY_LIMIT,
+	XNET_ERROR_PROXY_UNSUPPORTED
+} xneterror;
+
+
+
+/* 只读 Span 借用调用方内存，不拥有数据。 */
+typedef struct xnetspan {
+	cbytes Data;
+	size_t Size;
+} xnetspan;
+
+
+
+/* 可写 Span 借用调用方内存，不拥有数据。 */
+typedef struct xnetwspan {
+	bytes Data;
+	size_t Size;
+} xnetwspan;
+
+
+
+#if defined(XRT_FEATURE_NET_DNS)
+
+/* 地址列表是不可变共享结果，解析器缓存和调用方可以独立持有引用。 */
+typedef struct xnetaddrlist xnetaddrlist;
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_NET_ENGINE) || defined(XRT_FEATURE_NET_RESOLVER)
+
+/* 只有 READY 消费服务的创建者拥有权；BUSY 和 ERROR 均保留它。 */
+typedef enum xnetretireresult {
+	XNET_RETIRE_ERROR = -1,
+	XNET_RETIRE_BUSY = 0,
+	XNET_RETIRE_READY = 1
+} xnetretireresult;
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_NET_RESOLVER)
+
+/* Resolver 与解析操作均保持不透明，解析操作可以独立于调用方引用继续执行。 */
+typedef struct xnetresolver xnetresolver;
+typedef struct xnetresolveop xnetresolveop;
+
+
+
+/* 解析操作只允许从等待态进入运行态，再进入一个不可变终态。 */
+typedef enum xnetresolveopstate {
+	XNET_RESOLVE_PENDING = 0,
+	XNET_RESOLVE_RUNNING,
+	XNET_RESOLVE_RESOLVED,
+	XNET_RESOLVE_FAILED,
+	XNET_RESOLVE_CANCELLED
+} xnetresolveopstate;
+
+
+
+/* 自定义查询过程必须返回端口为零的不可变地址列表，并在失败时设置结构化错误。 */
+typedef xnetaddrlist* (*xnetresolverlookup)(
+	cstr sHost,
+	xnetfamily Family,
+	ptr pData
+);
+
+
+
+/* 完成回调借用操作对象；保留到回调之后时必须显式增加引用。 */
+typedef void (*xnetresolveproc)(xnetresolveop* pOperation, ptr pData);
+
+/* Certified resident callbacks. Success consumes one real Data reference;
+ * failure consumes none. Ops describes precisely that owner. Lookup data is
+ * retained through worker/TLS join; request data through its unique callback
+ * (including callback suppression), then Drop runs once outside mutation.
+ * Callbacks coordinate their own ownership transitions and code residency.
+ * Immutable policy identity must remain resident through the last release. */
+typedef struct xnetresolverlookupownershipv1 {
+	size_t size;
+	xnetresolverlookup Lookup;
+	void (*Drop)(const void* pData);
+	const xrtownershipops* Ops;
+} xnetresolverlookupownershipv1;
+typedef struct xnetresolveownershipv1 {
+	size_t size;
+	xnetresolveproc Done;
+	void (*Drop)(const void* pData);
+	const xrtownershipops* Ops;
+} xnetresolveownershipv1;
+
+
+
+/* 所有限额都是硬边界；TTL 使用单调微秒，零值关闭对应缓存。 */
+typedef struct xnetresolverconfig {
+	uint32 Workers;
+	size_t RequestLimit;
+	size_t QueryLimit;
+	size_t CacheEntries;
+	uint64 SuccessTTL;
+	uint64 FailureTTL;
+	size_t HostLimit;
+	size_t ThreadStack;
+	xnetresolverlookup Lookup;
+	ptr LookupData;
+} xnetresolverconfig;
+
+
+
+/* 统计值在 Resolver 锁内取得一致快照，不要求调用方停止提交。 */
+typedef struct xnetresolverstats {
+	uint32 Workers;
+	uint64 Submitted;
+	uint64 Rejected;
+	uint64 CacheHits;
+	uint64 CacheMisses;
+	uint64 Coalesced;
+	uint64 QueriesStarted;
+	uint64 Resolved;
+	uint64 Failed;
+	uint64 Cancelled;
+	size_t Outstanding;
+	size_t ActiveQueries;
+	size_t QueuedQueries;
+	size_t RunningQueries;
+	size_t ReadyCallbacks;
+	size_t CachedResults;
+} xnetresolverstats;
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_NET_SOCKET)
+
+#define XNET_DGRAM_BATCH_MAX 64u
+
+
+
+/* Socket 对象拥有一个原生句柄，生命周期操作由调用方串行化。 */
+typedef struct xnetsocket_impl* xnetsocket;
+
+
+
+/* Socket 类型使用稳定值，不直接暴露平台 SOCK_* 常量。 */
+typedef enum xnetsockettype {
+	XNET_SOCKET_STREAM = 1,
+	XNET_SOCKET_DGRAM = 2
+} xnetsockettype;
+
+
+
+/* 数据报元数据位既用于能力、启用配置，也用于标记每个报文的有效字段。 */
+typedef enum xnetdgrammetaflag {
+	XNET_DGRAM_META_DESTINATION = 0x0001,
+	XNET_DGRAM_META_INTERFACE = 0x0002,
+	XNET_DGRAM_META_HOP_LIMIT = 0x0004,
+	XNET_DGRAM_META_TRAFFIC_CLASS = 0x0008,
+	/* 合并接收时表示每个原始数据报的分段大小，最后一段允许更短。 */
+	XNET_DGRAM_META_SEGMENT_SIZE = 0x0010,
+	/* 控制缓冲被平台截断时保留已解析字段，并显式标记结果不完整。 */
+	XNET_DGRAM_META_TRUNCATED = 0x40000000
+} xnetdgrammetaflag;
+
+
+
+/* Destination 的端口恒为零；Flags 决定其余字段是否有效。 */
+typedef struct xnetdgrammeta {
+	uint32 Flags;
+	xnetaddr Destination;
+	uint32 Interface;
+	int HopLimit;
+	int TrafficClass;
+	uint32 SegmentSize;
+} xnetdgrammeta;
+
+
+
+/* 逐数据报发送控制位与接收元数据分离，避免 Source 和 Destination 语义混淆。 */
+typedef enum xnetdgramcontrolflag {
+	XNET_DGRAM_CONTROL_SOURCE = 0x0001,
+	XNET_DGRAM_CONTROL_INTERFACE = 0x0002,
+	XNET_DGRAM_CONTROL_HOP_LIMIT = 0x0004,
+	XNET_DGRAM_CONTROL_TRAFFIC_CLASS = 0x0008,
+	/* 把一个聚合负载分段发送；最后一个数据报允许短于 SegmentSize。 */
+	XNET_DGRAM_CONTROL_SEGMENT_SIZE = 0x0010
+} xnetdgramcontrolflag;
+
+
+
+/* Source 的端口必须为零；Flags 决定本次发送覆盖哪些 Socket 默认值。 */
+typedef struct xnetdgramcontrol {
+	uint32 Flags;
+	xnetaddr Source;
+	uint32 Interface;
+	int HopLimit;
+	int TrafficClass;
+	uint32 SegmentSize;
+} xnetdgramcontrol;
+
+
+
+/* 数据报高级能力按当前平台和 Socket 类型查询，不能用编译平台作运行时假设。 */
+typedef enum xnetdgramcap {
+	XNET_DGRAM_CAP_PATH_MTU_MODE = 0x0001,
+	XNET_DGRAM_CAP_PATH_MTU_QUERY = 0x0002,
+	XNET_DGRAM_CAP_ERROR_QUEUE = 0x0004,
+	XNET_DGRAM_CAP_SEGMENT_SEND = 0x0008,
+	XNET_DGRAM_CAP_SEGMENT_RECEIVE = 0x0010
+} xnetdgramcap;
+
+
+
+/* SYSTEM 保留平台默认；DISCOVER 禁止 IP 分片；FRAGMENT 允许分片；PROBE 忽略路径缓存。 */
+typedef enum xnetpmtumode {
+	XNET_PMTU_SYSTEM = 0,
+	XNET_PMTU_DISCOVER,
+	XNET_PMTU_FRAGMENT,
+	XNET_PMTU_PROBE
+} xnetpmtumode;
+
+
+
+/* 错误来源独立于 ICMP Type/Code，LOCAL 也可以携带路径 MTU。 */
+typedef enum xnetdgramerrororigin {
+	XNET_DGRAM_ERROR_UNKNOWN = 0,
+	XNET_DGRAM_ERROR_LOCAL,
+	XNET_DGRAM_ERROR_ICMP,
+	XNET_DGRAM_ERROR_ICMP6
+} xnetdgramerrororigin;
+
+
+
+/* Flags 精确说明地址、路径 MTU 与负载截断字段是否有效。 */
+typedef enum xnetdgramerrorflag {
+	XNET_DGRAM_ERROR_REMOTE = 0x0001,
+	XNET_DGRAM_ERROR_OFFENDER = 0x0002,
+	XNET_DGRAM_ERROR_PATH_MTU = 0x0004,
+	XNET_DGRAM_ERROR_PAYLOAD_TRUNCATED = 0x0008,
+	XNET_DGRAM_ERROR_META_TRUNCATED = 0x0010
+} xnetdgramerrorflag;
+
+
+
+/* 异步网络错误是可读取数据，不会污染当前执行上下文的错误对象。 */
+typedef struct xnetdgramerror {
+	uint32 Flags;
+	xnetdgramerrororigin Origin;
+	xerrkind Kind;
+	int SystemCode;
+	int Type;
+	int Code;
+	uint32 Info;
+	uint32 Data;
+	size_t PathMtu;
+	xnetaddr Remote;
+	xnetaddr Offender;
+} xnetdgramerror;
+
+
+
+/* 批量接收项由调用方提供缓冲，函数写入来源、可见长度和单报文结果。 */
+typedef struct xnetdgramrecv {
+	void* Data;
+	size_t Capacity;
+	xnetaddr Remote;
+	xnetdgrammeta Meta;
+	size_t Size;
+	xnetresult Result;
+} xnetdgramrecv;
+
+
+
+/* 批量发送项在调用期间借用数据；空远端表示使用连接式 UDP 的固定 Peer。 */
+typedef struct xnetdgramsend {
+	const xnetaddr* Remote;
+	const void* Data;
+	size_t Size;
+} xnetdgramsend;
+
+
+
+/* Socket 打开标志可以组合；系统句柄始终禁止被子进程继承。 */
+typedef enum xnetsocketflag {
+	XNET_SOCKET_NONBLOCK = 0x01
+} xnetsocketflag;
+
+
+
+/* 半关闭方向与平台 SHUT_* 常量保持隔离。 */
+typedef enum xnetshutdown {
+	XNET_SHUTDOWN_READ = 1,
+	XNET_SHUTDOWN_WRITE,
+	XNET_SHUTDOWN_BOTH
+} xnetshutdown;
+
+
+
+/* 通用 Socket 选项以 int64 表达；负 linger 值表示关闭 linger。 */
+typedef enum xnetoption {
+	XNET_OPTION_NONBLOCK = 1,
+	XNET_OPTION_REUSE_ADDRESS,
+	XNET_OPTION_REUSE_PORT,
+	XNET_OPTION_EXCLUSIVE_ADDRESS,
+	XNET_OPTION_NO_DELAY,
+	XNET_OPTION_KEEP_ALIVE,
+	XNET_OPTION_BROADCAST,
+	XNET_OPTION_IPV6_ONLY,
+	XNET_OPTION_RECEIVE_BUFFER,
+	XNET_OPTION_SEND_BUFFER,
+	XNET_OPTION_LINGER,
+	XNET_OPTION_HOP_LIMIT,
+	XNET_OPTION_TRAFFIC_CLASS,
+	XNET_OPTION_PATH_MTU_MODE,
+	XNET_OPTION_PATH_MTU,
+	XNET_OPTION_DGRAM_ERRORS,
+	XNET_OPTION_ERROR
+} xnetoption;
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_NET_PORT)
+
+/* 网络端口隐藏平台事件对象、注册表和跨线程唤醒资源。 */
+typedef struct xnetport_impl xnetport;
+
+
+
+/* AUTO 选择当前平台最优后端，显式值用于测试、降级和部署控制。 */
+typedef enum xnetportbackend {
+	XNET_PORT_AUTO = 0,
+	XNET_PORT_IOCP,
+	XNET_PORT_URING,
+	XNET_PORT_EPOLL,
+	XNET_PORT_KQUEUE,
+	XNET_PORT_SELECT
+} xnetportbackend;
+
+
+
+/* 能力位明确区分完成式 IO 与 readiness，避免后端伪造同一种语义。 */
+typedef enum xnetportcap {
+	XNET_PORT_CAP_READINESS = 0x0001,
+	XNET_PORT_CAP_COMPLETION = 0x0002,
+	XNET_PORT_CAP_ONESHOT = 0x0004,
+	XNET_PORT_CAP_EDGE = 0x0008,
+	XNET_PORT_CAP_BATCH = 0x0010,
+	XNET_PORT_CAP_WAKE = 0x0020,
+	XNET_PORT_CAP_POST = 0x0040,
+	XNET_PORT_CAP_CANCEL = 0x0080,
+	XNET_PORT_CAP_READ_PROBE = 0x0100,
+	XNET_PORT_CAP_DGRAM_ERROR = 0x0200,
+	XNET_PORT_CAP_SEND_FILE = 0x0400,
+	XNET_PORT_CAP_FILE_IO = 0x0800
+} xnetportcap;
+
+
+
+/* readiness 关注位；错误与挂断始终隐式观察。 */
+typedef enum xnetpoll {
+	XNET_POLL_READ = 0x01,
+	XNET_POLL_WRITE = 0x02
+} xnetpoll;
+
+
+
+/* 一个事件只属于一个稳定类别，具体 readiness 状态由 Flags 组合表达。 */
+typedef enum xnetporteventtype {
+	XNET_PORT_EVENT_READY = 1,
+	XNET_PORT_EVENT_ACCEPT,
+	XNET_PORT_EVENT_CONNECT,
+	XNET_PORT_EVENT_READ_PROBE,
+	XNET_PORT_EVENT_RECV,
+	XNET_PORT_EVENT_SEND,
+	XNET_PORT_EVENT_RECV_FROM,
+	XNET_PORT_EVENT_RECV_MSG,
+	XNET_PORT_EVENT_RECV_ERROR,
+	XNET_PORT_EVENT_SEND_TO,
+	XNET_PORT_EVENT_SEND_MSG,
+	XNET_PORT_EVENT_SEND_FILE,
+	XNET_PORT_EVENT_FILE_READ,
+	XNET_PORT_EVENT_FILE_WRITE,
+	XNET_PORT_EVENT_USER,
+	XNET_PORT_EVENT_WAKE
+} xnetporteventtype;
+
+
+
+/* 事件标志表达 readiness 方向及完成式 EOF、错误等稳定状态。 */
+typedef enum xnetporteventflag {
+	XNET_PORT_EVENT_READ = 0x0001,
+	XNET_PORT_EVENT_WRITE = 0x0002,
+	XNET_PORT_EVENT_ERROR = 0x0004,
+	XNET_PORT_EVENT_HANGUP = 0x0008,
+	XNET_PORT_EVENT_EOF = 0x0010,
+	XNET_PORT_EVENT_MORE = 0x0020
+} xnetporteventflag;
+
+
+
+/* 配置不带版本字段；OperationCache 是每个完成操作尺寸类的缓存上限，零值关闭缓存。 */
+typedef struct xnetportconfig {
+	xnetportbackend Backend;
+	uint32 Flags;
+	size_t PostLimit;
+	/* Watch/Operation 为零时按实际后端选择可扩展默认值。 */
+	size_t WatchLimit;
+	size_t OperationLimit;
+	size_t OperationCache;
+} xnetportconfig;
+
+
+
+/* 端口事件借用原 Socket；只有 Accepted 在接受完成时转移新对象所有权。 */
+typedef struct xnetportevent {
+	xnetporteventtype Type;
+	uint32 Flags;
+	xnetresult Result;
+	int SystemCode;
+	size_t Bytes;
+	uint64 Id;
+	xnetsocket Socket;
+	xnetsocket Accepted;
+	xnetaddr Address;
+	xnetdgrammeta Meta;
+	xnetdgramerror DgramError;
+	ptr User;
+} xnetportevent;
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_NET_BUFFER)
+typedef struct xnetbufpoolconfig xnetbufpoolconfig;
+typedef struct xnetbufpool xnetbufpool;
+typedef struct xnetbytes xnetbytes;
+#endif
+
+
+
+#if defined(XRT_FEATURE_NET_ENGINE)
+
+/* Engine 与 Worker 对外保持不透明，所有 Worker 资源都归所属 Engine 管理。 */
+typedef struct xnetengine xnetengine;
+typedef struct xnetworker xnetworker;
+
+
+
+/* Engine 生命周期状态可安全地跨线程查询。 */
+typedef enum xnetenginestate {
+	XNET_ENGINE_STOPPED = 0,
+	XNET_ENGINE_STARTING,
+	XNET_ENGINE_RUNNING,
+	XNET_ENGINE_STOPPING,
+	XNET_ENGINE_DESTROYING
+} xnetenginestate;
+
+
+
+/* Engine 任务始终在选定 Worker 上串行执行。 */
+typedef void (*xnettaskproc)(xnetworker* pWorker, ptr pData);
+
+
+
+/* 嵌入式 Post 提供不分配内存且不占公开命令队列容量的 Worker 投递。 */
+#define XNET_POST_STORAGE_SIZE 64u
+
+
+
+/* Post 的队列节点与并发门保持不透明，允许嵌入网络对象。 */
+typedef union xnetpost {
+	uint64 Alignment;
+	uint8 Storage[XNET_POST_STORAGE_SIZE];
+} xnetpost;
+
+
+
+/* Timer 受理后恰好终结一次，结果区分到期、取消、停止和内部失败。 */
+typedef void (*xnettimerproc)(xnetworker* pWorker,
+	uint64 Id, xnetresult Result, ptr pData);
+
+/* Immutable, resident descriptions of ONE transferred context reference.
+ * Owned submission consumes it only on success. Task/Proc runs once, followed
+ * by Drop exactly once, including callback/drop reentrancy. Ops describes the
+ * context's actual RC and every strong slot; its mutations must participate in
+ * the ownership domain. Borrowed Post/Schedule retain their existing contract. */
+typedef struct xnettaskownershipv1 {
+	size_t size;
+	xnettaskproc Task;
+	void (*Drop)(ptr pData);
+	const xrtownershipops* Ops;
+} xnettaskownershipv1;
+typedef struct xnettimerownershipv1 {
+	size_t size;
+	xnettimerproc Proc;
+	void (*Drop)(ptr pData);
+	const xrtownershipops* Ops;
+} xnettimerownershipv1;
+
+
+
+/* Engine 内的端口事件通过 Completion 回到所属 Worker。 */
+typedef void (*xnetcompletionproc)(xnetworker* pWorker,
+	const xnetportevent* pEvent, ptr pData);
+
+
+
+/* Completion 借用过程与数据，必须存活到对应端口事件回调结束。 */
+typedef struct xnetcompletion {
+	xnetcompletionproc Proc;
+	ptr Data;
+} xnetcompletion;
+
+
+
+/* 容量字段都是硬边界；CommandCapacity 会向上取整为 2 次幂。 */
+typedef struct xnetengineconfig {
+	xnetportbackend Backend;
+	uint32 Workers;
+	const xnetbufpoolconfig* BufferPool;
+	size_t CommandCapacity;
+	size_t NodeCacheBytes;
+	size_t TimerLimit;
+	size_t EventBatch;
+	size_t PortPostLimit;
+	/* 两个端口容量为零时由每个 Worker 的实际后端解析。 */
+	size_t PortWatchLimit;
+	size_t PortOperationLimit;
+	size_t PortOperationCache;
+	uint64 IdleWait;
+	size_t ThreadStack;
+} xnetengineconfig;
+
+
+
+/* Worker 统计是并发快照，计数在 Engine 重启后继续累计。 */
+typedef struct xnetworkerstats {
+	uint64 PostsAccepted;
+	uint64 PostsRejected;
+	uint64 PostsExecuted;
+	uint64 TimersAccepted;
+	uint64 TimersRejected;
+	uint64 TimersFired;
+	uint64 TimersCancelled;
+	uint64 TimersClosed;
+	uint64 TimerErrors;
+	uint64 Events;
+	uint64 WaitErrors;
+	uint64 WakeErrors;
+	/* BASIC 以上统计中，停机任务链未在安全代数内收敛的累计次数。 */
+	uint64 ShutdownStalls;
+	/* 最近一次端口等待错误；没有错误时 Code 为 XNET_ERROR_NONE。 */
+	xneterror LastWaitError;
+	int LastWaitSystemCode;
+	uint64 NodeCacheHits;
+	uint64 NodeCacheMisses;
+	size_t PendingCommands;
+	size_t ActiveTimers;
+	size_t NodeCachedBytes;
+} xnetworkerstats;
+
+
+
+/* Engine 统计聚合全部 Worker，并附带当前生命周期状态。 */
+typedef struct xnetenginestats {
+	xnetenginestate State;
+	uint32 Workers;
+	uint64 PostsAccepted;
+	uint64 PostsRejected;
+	uint64 PostsExecuted;
+	uint64 TimersAccepted;
+	uint64 TimersRejected;
+	uint64 TimersFired;
+	uint64 TimersCancelled;
+	uint64 TimersClosed;
+	uint64 TimerErrors;
+	uint64 Events;
+	uint64 WaitErrors;
+	uint64 WakeErrors;
+	/* BASIC 以上统计中，全部 Worker 停机任务链未收敛次数之和。 */
+	uint64 ShutdownStalls;
+	uint64 NodeCacheHits;
+	uint64 NodeCacheMisses;
+	size_t PendingCommands;
+	size_t ActiveTimers;
+	size_t NodeCachedBytes;
+	size_t LiveObjects;
+} xnetenginestats;
+
+#endif
+
+
+
+XRT_EXTERN_C_BEGIN
+
+
+
+#if defined(XRT_FEATURE_NET)
+
+/* 初始化一个指定地址族的未指定地址。 */
+XRT_API bool xrtNetAddrAny(xnetaddr* pAddr, xnetfamily Family, uint16 iPort);
+
+
+
+/* 初始化一个指定地址族的回环地址。 */
+XRT_API bool xrtNetAddrLoopback(xnetaddr* pAddr, xnetfamily Family, uint16 iPort);
+
+
+
+/* 严格解析数字 IPv4 或 IPv6；接口模块启用时 IPv6 Scope 也接受接口名称。 */
+XRT_API bool xrtNetAddrParse(xnetaddr* pAddr, cstr sIP, uint16 iPort);
+
+
+
+/* 解析 IPv4:port、[IPv6]:port 或使用默认端口的裸地址。 */
+XRT_API bool xrtNetAddrParseEndpoint(xnetaddr* pAddr, cstr sEndpoint, uint16 iDefaultPort);
+
+
+
+/* 输出规范 IP 文本，返回不含结尾零字节的所需长度。 */
+XRT_API size_t xrtNetAddrText(const xnetaddr* pAddr, char* sText, size_t iCapacity);
+
+
+
+/* 输出带端口的规范端点文本，IPv6 始终使用方括号。 */
+XRT_API size_t xrtNetAddrEndpointText(const xnetaddr* pAddr, char* sText, size_t iCapacity);
+
+
+
+/* 分配并返回规范 IP 文本。 */
+XRT_API str xrtNetAddrString(const xnetaddr* pAddr);
+
+
+
+/* 分配并返回带端口的规范端点文本。 */
+XRT_API str xrtNetAddrEndpointString(const xnetaddr* pAddr);
+
+
+
+/* 比较完整端点，包括地址族、地址、Scope 和端口。 */
+XRT_API bool xrtNetAddrEqual(const xnetaddr* pLeft, const xnetaddr* pRight);
+
+
+
+/* 只比较地址族、地址和 IPv6 Scope，不比较端口。 */
+XRT_API bool xrtNetAddrSameIP(const xnetaddr* pLeft, const xnetaddr* pRight);
+
+
+
+/* 为 Map、排序和稳定去重提供完整端点全序。 */
+XRT_API int xrtNetAddrCompare(const xnetaddr* pLeft, const xnetaddr* pRight);
+
+
+
+/* 判断地址是否为 IPv4 0.0.0.0 或 IPv6 ::。 */
+XRT_API bool xrtNetAddrIsUnspecified(const xnetaddr* pAddr);
+
+
+
+/* 判断地址是否属于 IPv4 127/8 或 IPv6 ::1。 */
+XRT_API bool xrtNetAddrIsLoopback(const xnetaddr* pAddr);
+
+
+
+/* 判断地址是否属于 IPv4 224/4 或 IPv6 ff00::/8。 */
+XRT_API bool xrtNetAddrIsMulticast(const xnetaddr* pAddr);
+
+
+
+/* 判断地址是否属于 IPv4 169.254/16 或 IPv6 fe80::/10。 */
+XRT_API bool xrtNetAddrIsLinkLocal(const xnetaddr* pAddr);
+
+
+
+/* 判断地址是否属于 RFC 1918 IPv4 或 RFC 4193 IPv6 私有范围。 */
+XRT_API bool xrtNetAddrIsPrivate(const xnetaddr* pAddr);
+
+
+
+/* 判断 IPv6 地址是否为 ::ffff:0:0/96 IPv4 映射地址。 */
+XRT_API bool xrtNetAddrIsMapped(const xnetaddr* pAddr);
+
+
+
+/* 把 IPv4 映射 IPv6 地址转换为 IPv4，其他地址原样复制。 */
+XRT_API bool xrtNetAddrUnmap(const xnetaddr* pAddr, xnetaddr* pResult);
+
+
+
+/* 转换为平台 sockaddr；空输出可查询所需大小。 */
+XRT_API bool xrtNetAddrToNative(const xnetaddr* pAddr, void* pNative, size_t* pSize);
+
+
+
+/* 从平台 sockaddr 转换为稳定地址结构。 */
+XRT_API bool xrtNetAddrFromNative(xnetaddr* pAddr, const void* pNative, size_t iSize);
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_NET_DNS)
+
+/* 解析主机的全部地址；保留系统顺序、去除重复项并允许端口为零。 */
+/* 只查询主机地址，返回列表中的端口全部为零。 */
+XRT_API xnetaddrlist* xrtNetLookup(cstr sHost, xnetfamily Family);
+
+
+
+XRT_API xnetaddrlist* xrtNetResolve(
+	cstr sHost,
+	uint16 iPort,
+	xnetfamily Family
+);
+
+
+
+/* 解析并复制系统顺序中的第一个地址，常见单地址场景无需管理列表。 */
+XRT_API bool xrtNetResolveOne(
+	xnetaddr* pAddr,
+	cstr sHost,
+	uint16 iPort,
+	xnetfamily Family
+);
+
+
+
+/* 反向解析一个数字地址；成功返回调用方拥有的主机名。 */
+XRT_API str xrtNetReverse(const xnetaddr* pAddr);
+
+
+
+/* 复制、校验并去重调用方地址，建立一份不可变地址列表。 */
+XRT_API xnetaddrlist* xrtNetAddrListCreate(
+	const xnetaddr* pAddresses,
+	size_t iCount
+);
+
+
+
+/* 复制列表并统一替换端口；端口已经一致时只增加引用。 */
+XRT_API xnetaddrlist* xrtNetAddrListWithPort(
+	xnetaddrlist* pList,
+	uint16 iPort
+);
+
+
+
+/* 增加不可变地址列表引用并返回原指针。 */
+XRT_API xnetaddrlist* xrtNetAddrListRef(xnetaddrlist* pList);
+
+
+
+/* 释放地址列表引用；空指针视为空操作。 */
+XRT_API void xrtNetAddrListDestroy(xnetaddrlist* pList);
+
+/* Immutable leaf: exact physical RC, no outgoing ownership or user callbacks.
+ * Borrowed view and adapter query require whole-graph freeze/code residency. */
+XRT_API xrtownershipref xrtNetAddrListOwnership(const xnetaddrlist* pList);
+XRT_API const xrtownershipadapterv1* xrtNetAddrListOwnershipAdapterV1(xrtownershipref Reference);
+
+
+
+/* 返回地址数量；空列表返回零。 */
+XRT_API size_t xrtNetAddrListCount(const xnetaddrlist* pList);
+
+
+
+/* 返回借用地址；索引越界返回空指针并设置范围错误。 */
+XRT_API const xnetaddr* xrtNetAddrListGet(
+	const xnetaddrlist* pList,
+	size_t iIndex
+);
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_NET_RESOLVER)
+
+/* 写入兼顾桌面与高并发服务的默认配置。 */
+XRT_API void xrtNetResolverConfigInit(xnetresolverconfig* pConfig);
+
+
+
+/* 创建并立即启动独立解析工作池；空配置使用默认值。 */
+XRT_API xnetresolver* xrtNetResolverCreate(
+	const xnetresolverconfig* pConfig
+);
+
+/* Config must leave Lookup/LookupData empty. The explicit policy supplies both.
+ * Ordinary Create remains borrowed/opaque for custom lookup callbacks. */
+XRT_API xnetresolver* xrtNetResolverCreateOwnedV1(const xnetresolverconfig* pConfig,
+	ptr pData, const xnetresolverlookupownershipv1* pPolicy);
+
+
+
+/* 排空请求并等待回调；与其他所有者操作串行。仅成功时消费拥有权，失败可重试。 */
+XRT_API bool xrtNetResolverDestroy(xnetresolver* pResolver);
+
+
+
+/*
+	关闭接纳并推进销毁，不等待查询、回调或线程退出；自身 Worker 调用返回 BUSY。
+	与其他所有者操作串行。BUSY 不设置错误，保留指针并允许稍后重试（或 Destroy）。
+	READY 表示所有 Worker 及线程清理已结束并消费创建者拥有权；独立操作引用仍有效。
+	ERROR 同样保留拥有权。空指针为 READY，BUSY/READY 保留调用前诊断。
+*/
+XRT_API xnetretireresult xrtNetResolverTryDestroy(xnetresolver* pResolver);
+
+
+
+/* 提交主机查询；同一规范化主机与地址族只执行一次底层查询。 */
+XRT_API xnetresolveop* xrtNetResolverResolve(
+	xnetresolver* pResolver,
+	cstr sHost,
+	xnetfamily Family,
+	xnetresolveproc pDone,
+	ptr pData
+);
+
+XRT_API xnetresolveop* xrtNetResolverResolveOwnedV1(xnetresolver* pResolver,
+	cstr sHost, xnetfamily Family, ptr pData, const xnetresolveownershipv1* pPolicy);
+
+/* Actual creator/operation/plan RC, not worker counts or inferred liveness.
+ * Each queued request is one service-owned edge; hash/queue links are borrowed.
+ * Operations own their service, result/error, and certified callback context.
+ * Running lookup/dispatch, joining and construction reject inspection. Parked
+ * workers own no fabricated RC nodes; preparation drains accepted work and
+ * proves native thread/TLS join before Clear. No cancellation is synthesized.
+ * Query adapters under freeze; unknown policy identities reject BEFORE context
+ * Count/Trace. Output preparation remains unchanged on rejection. Legacy custom
+ * lookup/request callbacks stay opaque until they have actually been retired.
+ * This certifies resolver nodes only, not the entire native network graph. */
+XRT_API xrtownershipref xrtNetResolverOwnership(const xnetresolver* pResolver);
+XRT_API xrtownershipref xrtNetResolveOpOwnership(const xnetresolveop* pOperation);
+XRT_API const xrtownershipadapterv1* xrtNetResolverOwnershipAdapterV1(xrtownershipref Reference,
+	const xnetresolverlookupownershipv1* const* pPolicies, size_t iPolicyCount,
+	const xrtownershippreparationv1** ppPreparation);
+XRT_API const xrtownershipadapterv1* xrtNetResolveOpOwnershipAdapterV1(xrtownershipref Reference,
+	const xnetresolveownershipv1* const* pPolicies, size_t iPolicyCount,
+	const xrtownershippreparationv1** ppPreparation);
+
+
+
+/* 清空成功和失败缓存；已经运行或排队的查询不受影响。 */
+XRT_API bool xrtNetResolverClear(xnetresolver* pResolver);
+
+
+
+/* 取得 Resolver 的并发一致统计快照。 */
+XRT_API bool xrtNetResolverStats(
+	const xnetresolver* pResolver,
+	xnetresolverstats* pStats
+);
+
+
+
+/* 增加解析操作引用并返回原指针。 */
+XRT_API xnetresolveop* xrtNetResolveOpRef(xnetresolveop* pOperation);
+
+
+
+/* 释放解析操作引用；空指针视为空操作。 */
+XRT_API void xrtNetResolveOpDestroy(xnetresolveop* pOperation);
+
+
+
+/* 协作取消尚未进入终态的操作；回调仍在 Resolver Worker 上执行一次。 */
+XRT_API bool xrtNetResolveOpCancel(xnetresolveop* pOperation);
+
+
+
+/* 返回解析操作当前状态的原子快照。 */
+XRT_API xnetresolveopstate xrtNetResolveOpState(
+	const xnetresolveop* pOperation
+);
+
+
+
+/* 成功时返回增加引用的完整地址列表，其他状态返回空指针并设置对应错误。 */
+XRT_API xnetaddrlist* xrtNetResolveOpResult(
+	const xnetresolveop* pOperation
+);
+
+
+
+/* 失败或取消时返回借用的结构化错误，其他状态返回空指针。 */
+XRT_API const xerror* xrtNetResolveOpError(
+	const xnetresolveop* pOperation
+);
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_NET_RESOLVER_FUTURE)
+
+/* 把 Resolver 查询包装为 Future；成功值是由 Future 持有的地址列表。 */
+XRT_API xfuture* xrtNetResolveAsync(
+	xnetresolver* pResolver,
+	cstr sHost,
+	xnetfamily Family
+);
+
+/* Resident identities for the actual ResolveAsync transport. The producer
+ * owns Promise, Operation and the bridge's certified cancellation Watch.
+ * Promise and Future identify the SAME physical node. The success payload
+ * owns one immutable AddrList. Independently admit each policy on its actual
+ * participant; these identities do not certify arbitrary native callbacks or
+ * the complete network graph. Prepare waits for accepted work, never cancels
+ * it or closes its Future to manufacture a collectible intermediate graph.
+ * Query under freeze; failure leaves the preparation output unchanged. */
+XRT_API const xfutureproducerownershipv1* xrtNetResolverFutureProducerPolicyV1Get(void);
+XRT_API const xcancelwatchownershipv1* xrtNetResolverFutureCancelPolicyV1Get(void);
+XRT_API const xnetresolveownershipv1* xrtNetResolverFutureRequestPolicyV1Get(void);
+XRT_API const xfuturepayloadownershipv1* xrtNetResolverFuturePayloadPolicyV1Get(void);
+XRT_API const xrtownershipadapterv1* xrtNetResolverFutureOwnershipAdapterV1(xrtownershipref Reference,
+	const xrtownershippreparationv1** ppPreparation);
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_NET_SOCKET)
+
+/* 打开一个流式或数据报 Socket；成功返回的对象拥有原生句柄。 */
+XRT_API xnetsocket xrtNetSocketOpen(xnetfamily Family,
+	xnetsockettype Type, uint32 iFlags);
+
+
+
+/* 关闭原生句柄并销毁对象；即使系统关闭失败，对象也立即失效。 */
+XRT_API bool xrtNetSocketClose(xnetsocket Socket);
+
+
+
+/* 返回借用的原生句柄，调用方不得自行关闭。 */
+XRT_API intptr_t xrtNetSocketNative(xnetsocket Socket);
+
+
+
+/* 返回 Socket 创建时确定的地址族。 */
+XRT_API xnetfamily xrtNetSocketFamily(xnetsocket Socket);
+
+
+
+/* 返回 Socket 创建时确定的类型。 */
+XRT_API xnetsockettype xrtNetSocketType(xnetsocket Socket);
+
+
+
+/* 查询当前可立即读取的字节数；成功才修改输出。 */
+XRT_API bool xrtNetSocketAvailable(xnetsocket Socket, size_t* pSize);
+
+
+
+/* 设置一个通用 Socket 选项。 */
+XRT_API bool xrtNetSocketSet(xnetsocket Socket,
+	xnetoption Option, int64 iValue);
+
+
+
+/* 查询一个通用 Socket 选项，成功才修改输出。 */
+XRT_API bool xrtNetSocketGet(xnetsocket Socket,
+	xnetoption Option, int64* pValue);
+
+
+
+/* 返回当前平台和地址族可能提供的数据报接收元数据位。 */
+XRT_API uint32 xrtNetSocketDgramMetaAvailable(xnetsocket Socket);
+
+
+
+/* 返回 Socket 当前已经启用的数据报接收元数据位。 */
+XRT_API uint32 xrtNetSocketDgramMetaEnabled(xnetsocket Socket);
+
+
+
+/* 成功后精确设置接收元数据位；失败后可查询平台已经生效的实际状态。 */
+XRT_API bool xrtNetSocketDgramMetaSet(xnetsocket Socket, uint32 iFlags);
+
+
+
+/* 返回当前平台、地址族和 Socket Provider 可用的逐数据报发送控制位。 */
+XRT_API uint32 xrtNetSocketDgramControlAvailable(xnetsocket Socket);
+
+
+
+/* 返回 PMTU、错误队列及后续高级数据报能力；非数据报 Socket 返回零。 */
+XRT_API uint32 xrtNetSocketDgramCapabilities(xnetsocket Socket);
+
+
+
+/* 将数据报 Socket 加入一个同地址族多播组；IPv6 接口使用 Scope 作为接口索引。 */
+XRT_API bool xrtNetSocketMulticastJoin(xnetsocket Socket,
+	const xnetaddr* pGroup, const xnetaddr* pInterface);
+
+
+
+/* 将数据报 Socket 移出一个同地址族多播组。 */
+XRT_API bool xrtNetSocketMulticastLeave(xnetsocket Socket,
+	const xnetaddr* pGroup, const xnetaddr* pInterface);
+
+
+
+/* 设置数据报 Socket 是否接收自己发出的多播报文。 */
+XRT_API bool xrtNetSocketMulticastLoop(xnetsocket Socket, bool bEnabled);
+
+
+
+/* 设置数据报 Socket 的多播跳数，合法范围为 0 到 255。 */
+XRT_API bool xrtNetSocketMulticastHopLimit(xnetsocket Socket, int iHopLimit);
+
+
+
+/* 选择多播发送接口；空接口恢复系统默认，IPv6 使用 Scope 接口索引。 */
+XRT_API bool xrtNetSocketMulticastInterface(xnetsocket Socket,
+	const xnetaddr* pInterface);
+
+
+
+/* 把 Socket 绑定到本地地址，端口为零时由系统分配端口。 */
+XRT_API bool xrtNetSocketBind(xnetsocket Socket, const xnetaddr* pAddress);
+
+
+
+/* 把已绑定的流式 Socket 转为监听状态。 */
+XRT_API bool xrtNetSocketListen(xnetsocket Socket, int iBacklog);
+
+
+
+/* 接受一个连接；非阻塞 Socket 暂无连接时返回 AGAIN。 */
+XRT_API xnetresult xrtNetSocketAccept(xnetsocket Socket,
+	xnetsocket* pClient, xnetaddr* pRemote);
+
+
+
+/* 发起连接；非阻塞连接尚未完成时返回 AGAIN。 */
+XRT_API xnetresult xrtNetSocketConnect(xnetsocket Socket,
+	const xnetaddr* pRemote);
+
+
+
+/* 在可写事件到达后读取 SO_ERROR，完成非阻塞连接判定。 */
+XRT_API xnetresult xrtNetSocketFinishConnect(xnetsocket Socket);
+
+
+
+/* 半关闭指定方向，不销毁 Socket 对象。 */
+XRT_API bool xrtNetSocketShutdown(xnetsocket Socket, xnetshutdown Direction);
+
+
+
+/* 查询实际本地地址，成功才修改输出。 */
+XRT_API bool xrtNetSocketLocal(xnetsocket Socket, xnetaddr* pAddress);
+
+
+
+/* 查询已连接的对端地址，成功才修改输出。 */
+XRT_API bool xrtNetSocketRemote(xnetsocket Socket, xnetaddr* pAddress);
+
+
+
+/* 单次接收；流式 EOF 返回 CLOSED，数据报过长返回 TRUNCATED。 */
+XRT_API xnetresult xrtNetSocketRecv(xnetsocket Socket,
+	void* pData, size_t iSize, size_t* pReceived);
+
+
+
+/* 单次发送；允许成功短写，非阻塞无法推进时返回 AGAIN。 */
+XRT_API xnetresult xrtNetSocketSend(xnetsocket Socket,
+	const void* pData, size_t iSize, size_t* pSent);
+
+
+
+/* 单次分散接收；数据报过长返回 TRUNCATED，Span 数量不能超过 64。 */
+XRT_API xnetresult xrtNetSocketRecvVec(xnetsocket Socket,
+	xnetwspan* pSpans, size_t iCount, size_t* pReceived);
+
+
+
+/* 单次聚集发送，Span 数量不能超过 64。 */
+XRT_API xnetresult xrtNetSocketSendVec(xnetsocket Socket,
+	const xnetspan* pSpans, size_t iCount, size_t* pSent);
+
+
+
+/* 单次接收数据报；零长度返回 OK，缓冲不足返回 TRUNCATED。 */
+XRT_API xnetresult xrtNetSocketRecvFrom(xnetsocket Socket,
+	void* pData, size_t iSize, size_t* pReceived, xnetaddr* pRemote);
+
+
+
+/* 单次发送数据报；允许发送零长度数据报。 */
+XRT_API xnetresult xrtNetSocketSendTo(xnetsocket Socket,
+	const void* pData, size_t iSize, size_t* pSent, const xnetaddr* pRemote);
+
+
+
+/* 单次分散接收数据报；缓冲不足返回 TRUNCATED，Span 数量不能超过 64。 */
+XRT_API xnetresult xrtNetSocketRecvFromVec(xnetsocket Socket,
+	xnetwspan* pSpans, size_t iCount, size_t* pReceived, xnetaddr* pRemote);
+
+
+
+/* 接收数据报及已启用的目标、接口、Hop Limit 和 Traffic Class 元数据。 */
+XRT_API xnetresult xrtNetSocketRecvMsg(xnetsocket Socket,
+	void* pData, size_t iSize, size_t* pReceived,
+	xnetaddr* pRemote, xnetdgrammeta* pMeta);
+
+
+
+/* 分散接收数据报及已启用元数据，Span 数量不能超过 64。 */
+XRT_API xnetresult xrtNetSocketRecvMsgVec(xnetsocket Socket,
+	xnetwspan* pSpans, size_t iCount, size_t* pReceived,
+	xnetaddr* pRemote, xnetdgrammeta* pMeta);
+
+
+
+/* 非阻塞读取一个已启用的异步数据报错误；空队列返回 AGAIN。 */
+XRT_API xnetresult xrtNetSocketDgramRecvError(xnetsocket Socket,
+	void* pData, size_t iSize, size_t* pReceived,
+	xnetdgramerror* pError);
+
+
+
+/* 单次聚集发送数据报，Span 数量不能超过 64。 */
+XRT_API xnetresult xrtNetSocketSendToVec(xnetsocket Socket,
+	const xnetspan* pSpans, size_t iCount, size_t* pSent,
+	const xnetaddr* pRemote);
+
+
+
+/* 发送数据报并覆盖本包源地址、接口、Hop Limit 或 Traffic Class。 */
+XRT_API xnetresult xrtNetSocketSendMsg(xnetsocket Socket,
+	const void* pData, size_t iSize, size_t* pSent,
+	const xnetaddr* pRemote, const xnetdgramcontrol* pControl);
+
+
+
+/* 聚集发送带逐包控制的数据报；Span 数量不能超过 64。 */
+XRT_API xnetresult xrtNetSocketSendMsgVec(xnetsocket Socket,
+	const xnetspan* pSpans, size_t iCount, size_t* pSent,
+	const xnetaddr* pRemote, const xnetdgramcontrol* pControl);
+
+
+
+/* 接收最多 64 个数据报；返回已消费前缀，每项独立记录 OK 或 TRUNCATED。 */
+XRT_API xnetresult xrtNetSocketRecvBatch(xnetsocket Socket,
+	xnetdgramrecv* pItems, size_t iCapacity, size_t* pReceived);
+
+
+
+/* 发送最多 64 个数据报；返回已经完整发送的输入前缀。 */
+XRT_API xnetresult xrtNetSocketSendBatch(xnetsocket Socket,
+	const xnetdgramsend* pItems, size_t iCount, size_t* pSent);
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_NET_PORT)
+
+/*
+	端口由创建线程拥有，Watch、提交、取消、等待和销毁只能由拥有线程执行。
+	查询函数以及 Post、Wake 可跨线程调用；调用方仍须保证端口对象存活。
+*/
+
+/* 初始化网络端口默认配置。 */
+XRT_API void xrtNetPortConfigInit(xnetportconfig* pConfig);
+
+
+
+/* 创建事件端口；AUTO 在当前已编译后端中选择最高能力实现。 */
+XRT_API xnetport* xrtNetPortCreate(const xnetportconfig* pConfig);
+
+
+
+/* 取消并排空在途 IO，再销毁端口、观察、用户事件及唤醒资源。 */
+XRT_API bool xrtNetPortDestroy(xnetport* pPort);
+
+
+
+/* 返回实际启用的后端。 */
+XRT_API xnetportbackend xrtNetPortBackend(const xnetport* pPort);
+
+
+
+/* 返回已经解析 AUTO 容量和实际后端的有效配置。 */
+XRT_API bool xrtNetPortGetConfig(
+	const xnetport* pPort,
+	xnetportconfig* pConfig
+);
+
+
+
+/* 返回静态后端名称。 */
+XRT_API cstr xrtNetPortName(const xnetport* pPort);
+
+
+
+/* 返回实际后端能力位。 */
+XRT_API uint32 xrtNetPortCapabilities(const xnetport* pPort);
+
+
+
+/* 替换一个 Socket 的 readiness 关注位；事件为零等价于 Unwatch。 */
+XRT_API bool xrtNetPortWatch(xnetport* pPort, xnetsocket Socket,
+	uint64 Id, uint32 iEvents, ptr pUser);
+
+
+
+/* 幂等移除观察；失败也会退休用户身份，调用方随后必须关闭 Socket。 */
+XRT_API bool xrtNetPortUnwatch(xnetport* pPort, xnetsocket Socket);
+
+
+
+/* 异步接受一个连接；成功提交后 Accepted 由终态事件转移给调用方。 */
+XRT_API bool xrtNetPortAccept(xnetport* pPort,
+	xnetsocket Socket, uint64 Id, ptr pUser);
+
+
+
+/* 异步连接远端地址；终态事件到达前 Socket 必须保持有效。 */
+XRT_API bool xrtNetPortConnect(xnetport* pPort, xnetsocket Socket,
+	const xnetaddr* pRemote, uint64 Id, ptr pUser);
+
+
+
+/* 异步等待流 Socket 可读；不借用数据缓冲，终态到达后再提交 Recv。 */
+XRT_API bool xrtNetPortReadProbe(xnetport* pPort,
+	xnetsocket Socket, uint64 Id, ptr pUser);
+
+
+
+/* 异步接收到调用方缓冲；支持流和已连接数据报，单次最多 INT_MAX 字节。 */
+XRT_API bool xrtNetPortRecv(xnetport* pPort, xnetsocket Socket,
+	void* pData, size_t iSize, uint64 Id, ptr pUser);
+
+
+
+/* 异步分散接收；支持流和已连接数据报，总长度最多 INT_MAX 字节。 */
+XRT_API bool xrtNetPortRecvVec(xnetport* pPort, xnetsocket Socket,
+	const xnetwspan* pSpans, size_t iCount, uint64 Id, ptr pUser);
+
+
+
+/* 异步发送调用方缓冲；支持流和已连接数据报，单次最多 INT_MAX 字节。 */
+XRT_API bool xrtNetPortSend(xnetport* pPort, xnetsocket Socket,
+	const void* pData, size_t iSize, uint64 Id, ptr pUser);
+
+
+
+/* 异步聚集发送；支持流和已连接数据报，总长度最多 INT_MAX 字节。 */
+XRT_API bool xrtNetPortSendVec(xnetport* pPort, xnetsocket Socket,
+	const xnetspan* pSpans, size_t iCount, uint64 Id, ptr pUser);
+
+
+
+/*
+	从原生文件句柄的绝对偏移异步读取到调用方缓冲。
+	文件必须以 XFILE_ASYNC 打开，句柄和缓冲必须存活到唯一终态事件。
+*/
+/* 原生文件完成提交由 net_file 层绑定文件对象后提供。 */
+
+
+
+/*
+	把调用方缓冲异步写入原生文件句柄的绝对偏移。
+	文件必须以 XFILE_ASYNC 打开，句柄和缓冲必须存活到唯一终态事件。
+*/
+/* 公共端口层不暴露无法表达 owner 的裸文件句柄接口。 */
+
+
+
+/* 异步接收数据报；远端地址由终态事件返回。 */
+XRT_API bool xrtNetPortRecvFrom(xnetport* pPort, xnetsocket Socket,
+	void* pData, size_t iSize, uint64 Id, ptr pUser);
+
+
+
+/* 异步分散接收数据报；缓冲不足由终态事件返回 TRUNCATED。 */
+XRT_API bool xrtNetPortRecvFromVec(xnetport* pPort, xnetsocket Socket,
+	const xnetwspan* pSpans, size_t iCount, uint64 Id, ptr pUser);
+
+
+
+/* 异步接收数据报及 Socket 已启用的元数据。 */
+XRT_API bool xrtNetPortRecvMsg(xnetport* pPort, xnetsocket Socket,
+	void* pData, size_t iSize, uint64 Id, ptr pUser);
+
+
+
+/* 异步分散接收数据报及元数据；终态事件同时返回 Address 和 Meta。 */
+XRT_API bool xrtNetPortRecvMsgVec(xnetport* pPort, xnetsocket Socket,
+	const xnetwspan* pSpans, size_t iCount, uint64 Id, ptr pUser);
+
+
+
+/* 异步等待并读取一个数据报错误；终态同时返回原负载前缀和 DgramError。 */
+XRT_API bool xrtNetPortRecvError(xnetport* pPort, xnetsocket Socket,
+	void* pData, size_t iSize, uint64 Id, ptr pUser);
+
+
+
+/* 异步发送数据报；远端地址在提交时复制。 */
+XRT_API bool xrtNetPortSendTo(xnetport* pPort, xnetsocket Socket,
+	const void* pData, size_t iSize, const xnetaddr* pRemote,
+	uint64 Id, ptr pUser);
+
+
+
+/* 异步聚集发送数据报；远端地址和 Span 描述符在提交时复制。 */
+XRT_API bool xrtNetPortSendToVec(xnetport* pPort, xnetsocket Socket,
+	const xnetspan* pSpans, size_t iCount, const xnetaddr* pRemote,
+	uint64 Id, ptr pUser);
+
+
+
+/*
+	异步发送带逐包控制的数据报；地址和控制值在提交时复制。
+	非零控制 Flags 的终态为 SEND_MSG；空控制或零 Flags 走普通发送路径，
+	有 pRemote 时终态为 SEND_TO，否则为 SEND（Socket 须已连接）。
+*/
+XRT_API bool xrtNetPortSendMsg(xnetport* pPort, xnetsocket Socket,
+	const void* pData, size_t iSize, const xnetaddr* pRemote,
+	const xnetdgramcontrol* pControl, uint64 Id, ptr pUser);
+
+
+
+/*
+	异步聚集发送带逐包控制的数据报；Span 描述符、地址和控制值在提交时复制。
+	终态类型与 SendMsg 相同：非零控制 Flags 为 SEND_MSG；空控制或零 Flags
+	在有 pRemote 时为 SEND_TO，否则为 SEND（Socket 须已连接）。
+*/
+XRT_API bool xrtNetPortSendMsgVec(xnetport* pPort, xnetsocket Socket,
+	const xnetspan* pSpans, size_t iCount, const xnetaddr* pRemote,
+	const xnetdgramcontrol* pControl, uint64 Id, ptr pUser);
+
+
+
+/* 请求取消指定 ID 的在途操作；操作仍以一个终态事件结束。 */
+XRT_API bool xrtNetPortCancel(xnetport* pPort, uint64 Id);
+
+
+
+/* 跨线程投递一个不会合并的用户事件。 */
+XRT_API bool xrtNetPortPost(xnetport* pPort, uint64 Id, ptr pUser);
+
+
+
+/* 跨线程请求一个可合并的 WAKE 事件。 */
+XRT_API bool xrtNetPortWake(xnetport* pPort);
+
+
+
+/* 等待到事件、截止时间或错误；成功和超时都会先清零输出数量。 */
+XRT_API xnetresult xrtNetPortWait(xnetport* pPort,
+	xnetportevent* pEvents, size_t iCapacity,
+	xdeadline iDeadline, size_t* pCount);
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_NET_ENGINE)
+
+/* 初始化兼顾吞吐与内存占用的 Engine 默认配置。 */
+XRT_API void xrtNetEngineConfigInit(xnetengineconfig* pConfig);
+
+
+
+/* 初始化一个借用过程和数据的端口 Completion。 */
+XRT_API void xrtNetCompletionInit(xnetcompletion* pCompletion,
+	xnetcompletionproc pProc, ptr pData);
+
+
+
+/* 创建停止状态的 Engine；Worker 线程和端口在 Start 时建立。 */
+XRT_API xnetengine* xrtNetEngineCreate(const xnetengineconfig* pConfig);
+
+
+
+/* 停止并销毁 Engine；仍有高层对象或外借池块时失败并保留对象。 */
+XRT_API bool xrtNetEngineDestroy(xnetengine* pEngine);
+
+/* Whole-domain freeze is required for views/adapter resolution. The physical
+ * RC counts the creator, actual object/Pin owners and independent plan holds;
+ * LiveObjects and embedded workers are NOT invented references. Trace visits
+ * one owned context per accepted command/timer, not borrowed heap/hash links.
+ * Running callbacks, partial submissions, legacy pending work, exposed raw
+ * port duties and live pool blocks conservatively refuse inspection. This does
+ * not yet certify arbitrary transport objects or complete native service graphs.
+ * Exact policy identities must be admitted before inspecting context code.
+ * Prepare drains callbacks and joins XRT thread cleanup without consuming the
+ * creator or freeing worker resources; Clear/Finish keep counted shells alive.
+ * Native OS exit/code-unload proof remains a separate host responsibility.
+ * Rejection leaves the preparation output and ambient error unchanged. */
+XRT_API xrtownershipref xrtNetEngineOwnership(const xnetengine* pEngine);
+XRT_API const xrtownershipadapterv1* xrtNetEngineOwnershipAdapterV1(
+	xrtownershipref Reference,
+	const xnettaskownershipv1* const* pTaskPolicies, size_t iTaskPolicyCount,
+	const xnettimerownershipv1* const* pTimerPolicies, size_t iTimerPolicyCount,
+	const xrtownershippreparationv1** ppPreparation);
+XRT_API bool xrtNetEnginePostOwnedV1(xnetengine* pEngine, uint64 iAffinity,
+	ptr pData, const xnettaskownershipv1* pPolicy);
+XRT_API uint64 xrtNetEngineScheduleOwnedV1(xnetengine* pEngine, uint64 iAffinity,
+	xdeadline iDeadline, ptr pData, const xnettimerownershipv1* pPolicy);
+
+
+
+/*
+	与 Start/Stop/Destroy 及其他 TryDestroy 串行，不等待提交者、Worker 或线程清理。
+	活动对象/Pin 保留运行态并返回 BUSY；否则关闭接纳并进入不可重启的 DESTROYING。
+	自身 Worker、尚未退出的线程或外借池块返回 BUSY，保留创建者拥有权供稍后重试。
+	只有 READY 消费拥有权；ERROR 保留指针。Destroy 也可完成已开始的退休。
+	空指针为 READY，BUSY/READY 保留调用前诊断；不表示完整对象拥有图已经可追踪。
+*/
+XRT_API xnetretireresult xrtNetEngineTryDestroy(xnetengine* pEngine);
+
+
+
+/* 建立全部 Worker、端口和线程；已经运行时幂等成功。 */
+XRT_API bool xrtNetEngineStart(xnetengine* pEngine);
+
+
+
+/*
+	排空任务并释放运行资源。
+	任务链不收敛或仍有外借池块时返回失败，但 Engine 仍进入可重启的停止状态。
+*/
+XRT_API bool xrtNetEngineStop(xnetengine* pEngine);
+
+
+
+/* 返回当前生命周期状态。 */
+XRT_API xnetenginestate xrtNetEngineState(const xnetengine* pEngine);
+
+
+
+/* 返回 Engine 固定的 Worker 数量。 */
+XRT_API uint32 xrtNetEngineWorkerCount(const xnetengine* pEngine);
+
+
+
+/* 返回借用的指定 Worker；索引越界时返回空指针。 */
+XRT_API xnetworker* xrtNetEngineWorker(xnetengine* pEngine, uint32 iIndex);
+
+
+
+/* 返回当前线程所属的借用 Worker，不属于该 Engine 时返回空指针。 */
+XRT_API xnetworker* xrtNetEngineCurrent(xnetengine* pEngine);
+
+
+
+/* 返回 Worker 所属的借用 Engine。 */
+XRT_API xnetengine* xrtNetWorkerEngine(const xnetworker* pWorker);
+
+
+
+/* 返回 Worker 在所属 Engine 内的稳定索引。 */
+XRT_API uint32 xrtNetWorkerIndex(const xnetworker* pWorker);
+
+
+
+/* 判断调用线程是否正是指定 Worker。 */
+XRT_API bool xrtNetWorkerIsCurrent(const xnetworker* pWorker);
+
+
+
+/* 返回运行期间借用的端口；调用方必须保证借用操作先于 Stop 结束。 */
+XRT_API xnetport* xrtNetWorkerPort(xnetworker* pWorker);
+
+
+
+/* 返回 Worker 独占的自适应缓冲池；只能从该 Worker 的回调中调用。 */
+XRT_API xnetbufpool* xrtNetWorkerBufPool(xnetworker* pWorker);
+
+
+
+/* 从 Worker 的线程安全分级缓存分配并清零一块内存；调用方必须保持 Worker 生命周期有效。 */
+XRT_API ptr xrtNetWorkerAlloc(xnetworker* pWorker, size_t iSize);
+
+
+
+/* 把 Worker 分配的内存归还同一 Worker；空指针可以直接释放。 */
+XRT_API void xrtNetWorkerFree(
+	xnetworker* pWorker,
+	ptr pMemory,
+	size_t iSize
+);
+
+
+
+/* 分配 Engine 内唯一的非零端口操作 ID，可从任意线程调用。 */
+XRT_API uint64 xrtNetWorkerOperationId(xnetworker* pWorker);
+
+
+
+/* 初始化一个尚未投递的嵌入式 Post。 */
+XRT_API bool xrtNetPostInit(xnetpost* pPost);
+
+
+
+/* 判断嵌入式 Post 是否仍在 Worker 队列中等待执行。 */
+XRT_API bool xrtNetPostPending(const xnetpost* pPost);
+
+
+
+/*
+	无分配地投递到指定 Worker；同一 Post 在出队前不能再次投递。
+	调用方必须通过网络对象引用保证 Worker 和 Post 存活到回调返回。
+*/
+XRT_API bool xrtNetPost(
+	xnetworker* pWorker,
+	xnetpost* pPost,
+	xnettaskproc pProc,
+	ptr pData
+);
+
+
+
+/* 有界投递任务；成功受理后必在亲和 Worker 上执行一次。 */
+XRT_API bool xrtNetEnginePost(xnetengine* pEngine,
+	uint64 iAffinity, xnettaskproc pProc, ptr pData);
+
+
+
+/* 按单调时钟截止时间调度 Timer；成功返回非零 ID。 */
+XRT_API uint64 xrtNetEngineSchedule(xnetengine* pEngine,
+	uint64 iAffinity, xdeadline iDeadline,
+	xnettimerproc pProc, ptr pData);
+
+
+
+/* 按相对微秒数调度 Timer；零表示在下一次 Worker 循环到期。 */
+XRT_API uint64 xrtNetEngineAfter(xnetengine* pEngine,
+	uint64 iAffinity, uint64 iTimeout,
+	xnettimerproc pProc, ptr pData);
+
+
+
+/* 异步请求取消 Timer；成功只表示请求已进入目标 Worker。 */
+XRT_API bool xrtNetEngineTimerCancel(xnetengine* pEngine, uint64 Id);
+
+
+
+/*
+	只在 Timer 所属 Worker 上立即取消且不分配内存。
+	不在所属 Worker、Timer 尚未入堆或已经终结时返回 false，且不修改线程错误。
+*/
+XRT_API bool xrtNetEngineTimerCancelCurrent(
+	xnetengine* pEngine,
+	uint64 Id
+);
+
+
+
+/* 读取一个 Worker 的统计快照。 */
+XRT_API bool xrtNetWorkerStats(const xnetworker* pWorker,
+	xnetworkerstats* pStats);
+
+
+
+/* 聚合全部 Worker 的统计快照。 */
+XRT_API bool xrtNetEngineStats(const xnetengine* pEngine,
+	xnetenginestats* pStats);
+
+
+
+/*
+	占用一个正在运行的 Engine 生命周期，供组合网络对象保存借用指针。
+	每次成功占用必须由一次 xrtNetEngineUnpin 配对释放。
+*/
+XRT_API bool xrtNetEnginePin(xnetengine* pEngine);
+
+
+
+/* 释放一次 Engine 生命周期占用；没有匹配占用时返回状态错误。 */
+XRT_API bool xrtNetEngineUnpin(xnetengine* pEngine);
+
+#endif
+
+
+
+XRT_EXTERN_C_END
+
+
+
+#if defined(XRT_FEATURE_NET_BUFFER)
+
+/* 网络缓冲池包含四个可配置尺寸类。 */
+#define XNET_BUFFER_CLASS_COUNT 4u
+
+
+
+/* 外部引用的释放过程在最后一段数据离开缓冲时执行一次。 */
+typedef void (*xnetreleaseproc)(ptr pContext, cbytes pData, size_t iSize);
+
+
+
+/* 引用 Span 在受理后转移释放责任，零长度 Span 不转移所有权。 */
+typedef struct xnetref {
+	cbytes Data;
+	size_t Size;
+	xnetreleaseproc Release;
+	ptr Context;
+} xnetref;
+
+
+
+/* 每个尺寸类独立控制块容量和最大缓存数量，总缓存还受字节上限约束。 */
+struct xnetbufpoolconfig {
+	size_t BlockSize[XNET_BUFFER_CLASS_COUNT];
+	size_t CacheLimit[XNET_BUFFER_CLASS_COUNT];
+	size_t MaxCacheBytes;
+};
+
+
+
+/* 缓冲池统计区分实时、缓存、分配、复用和动态大块。 */
+typedef struct xnetbufpoolinfo {
+	size_t LiveBlocks;
+	size_t LiveBytes;
+	size_t PeakBlocks;
+	size_t PeakBytes;
+	size_t CachedBlocks;
+	size_t CachedBytes;
+	uint64 AllocCount;
+	uint64 ReuseCount;
+	uint64 DynamicCount;
+	uint64 RefCount;
+} xnetbufpoolinfo;
+
+
+
+typedef struct xnetblock xnetblock;
+
+
+
+/* 缓冲链可栈上使用；字段用于零分配查询，调用方不得直接修改。 */
+typedef struct xnetbuf {
+	xnetblock* Head;
+	xnetblock* Tail;
+	xnetblock* Reserved;
+	xnetbufpool* Pool;
+	size_t Size;
+	size_t Blocks;
+	bool ReservedNew;
+} xnetbuf;
+
+
+
+XRT_EXTERN_C_BEGIN
+
+
+
+/* 增加拥有型网络字节结果的引用并返回原指针。 */
+XRT_API xnetbytes* xrtNetBytesRef(xnetbytes* pBytes);
+
+
+
+/* 释放拥有型网络字节结果；空指针视为空操作。 */
+XRT_API void xrtNetBytesDestroy(xnetbytes* pBytes);
+
+
+
+/* 返回拥有型网络字节结果的借用视图。 */
+XRT_API xbytesview xrtNetBytesView(const xnetbytes* pBytes);
+
+
+
+/* 写入默认尺寸类 512、2048、8192、32768 字节及有界缓存策略。 */
+XRT_API void xrtNetBufPoolConfigInit(xnetbufpoolconfig* pConfig);
+
+
+
+/* 创建线程归属的缓冲池；空配置使用默认值。 */
+XRT_API xnetbufpool* xrtNetBufPoolCreate(const xnetbufpoolconfig* pConfig);
+
+
+
+/* 销毁没有实时块的缓冲池；仍有块时失败且保持池有效。 */
+XRT_API bool xrtNetBufPoolDestroy(xnetbufpool* pPool);
+
+
+
+/* 将缓存裁剪到不超过指定字节数，返回真正释放的块数。 */
+XRT_API size_t xrtNetBufPoolTrim(xnetbufpool* pPool, size_t iRetainBytes);
+
+
+
+/* 复制缓冲池当前统计，不分配内存。 */
+XRT_API void xrtNetBufPoolGet(const xnetbufpool* pPool, xnetbufpoolinfo* pInfo);
+
+
+
+/* 初始化空缓冲链；池为空时所有块直接使用全局分配器。 */
+XRT_API bool xrtNetBufInit(xnetbuf* pBuffer, xnetbufpool* pPool);
+
+
+
+/* 释放全部块并取消尚未提交的写入预留。 */
+XRT_API void xrtNetBufClear(xnetbuf* pBuffer);
+
+
+
+/* 返回缓冲链总字节数。 */
+XRT_API size_t xrtNetBufSize(const xnetbuf* pBuffer);
+
+
+
+/* 返回缓冲链是否为空。 */
+XRT_API bool xrtNetBufEmpty(const xnetbuf* pBuffer);
+
+
+
+/* 返回当前非空 Span 数。 */
+XRT_API size_t xrtNetBufSpanCount(const xnetbuf* pBuffer);
+
+
+
+/* 获取文件区间前最多指定数量的只读 Span。 */
+XRT_API size_t xrtNetBufSpans(const xnetbuf* pBuffer, xnetspan* pSpans, size_t iCapacity);
+
+
+
+/* 获取首个内存 Span；缓冲为空或队首为文件区间时清空输出并返回 false。 */
+XRT_API bool xrtNetBufFront(const xnetbuf* pBuffer, xnetspan* pSpan);
+
+
+
+/* 原子追加一份数据副本，失败时缓冲内容保持不变。 */
+XRT_API bool xrtNetBufAppend(xnetbuf* pBuffer, const void* pData, size_t iSize);
+
+
+
+/* 在缓冲链首部复制一段数据；成功后原有块和外部引用保持不动。 */
+XRT_API bool xrtNetBufPrepend(
+	xnetbuf* pBuffer,
+	const void* pData,
+	size_t iSize
+);
+
+
+
+/* 追加借用数据，调用方必须保证数据存活到该段被消费或清除。 */
+XRT_API bool xrtNetBufAppendBorrow(xnetbuf* pBuffer, const void* pData, size_t iSize);
+
+
+
+/* 接管一段由 xrtMalloc 家族分配的数据，成功后由缓冲调用 xrtFree。 */
+XRT_API bool xrtNetBufAppendTake(xnetbuf* pBuffer, ptr pData, size_t iSize);
+
+
+
+/* 接管带自定义释放过程的外部数据；失败时所有权仍归调用方。 */
+XRT_API bool xrtNetBufAppendRef(xnetbuf* pBuffer, const void* pData,
+	size_t iSize, xnetreleaseproc pRelease, ptr pContext);
+
+
+
+/* 预留至少指定大小的连续尾部空间，供 Socket 或编解码器直接写入。 */
+XRT_API bool xrtNetBufReserve(xnetbuf* pBuffer, size_t iMinimum, xnetwspan* pSpan);
+
+
+
+/* 提交预留空间中已经写入的字节数。 */
+XRT_API bool xrtNetBufCommit(xnetbuf* pBuffer, size_t iSize);
+
+
+
+/* 放弃当前预留，缓冲内容保持不变。 */
+XRT_API bool xrtNetBufCancel(xnetbuf* pBuffer);
+
+
+
+/* 把源缓冲的全部块移动到目标尾部，源缓冲恢复为空。 */
+XRT_API bool xrtNetBufMove(xnetbuf* pTarget, xnetbuf* pSource);
+
+
+
+/* 确保指定长度的内存前缀连续；前缀包含文件区间时失败。 */
+XRT_API bool xrtNetBufPullup(xnetbuf* pBuffer, size_t iSize, xnetspan* pSpan);
+
+
+
+/* 从指定偏移复制最多给定字节，遇到文件区间时停止。 */
+XRT_API size_t xrtNetBufPeek(const xnetbuf* pBuffer,
+	size_t iOffset, void* pOutput, size_t iSize);
+
+
+
+/* 复制并消费最多给定字节；遇到文件区间时停止。 */
+XRT_API size_t xrtNetBufRead(xnetbuf* pBuffer, void* pOutput, size_t iSize);
+
+
+
+/* 从指定偏移查找一个字节，遇到文件区间或未找到时返回 XRT_NPOS。 */
+XRT_API size_t xrtNetBufFind(const xnetbuf* pBuffer, uint8 iByte, size_t iOffset);
+
+
+
+/* 消费最多给定字节；不会释放仍被活动写预留借用的尾块。 */
+XRT_API size_t xrtNetBufConsume(xnetbuf* pBuffer, size_t iSize);
+
+
+
+XRT_EXTERN_C_END
+
+#endif
+
+#endif
+
+
+/* ========================================================================== */
 /* public: include/xrt/time.h */
 /* ========================================================================== */
 
@@ -8595,52 +12796,114 @@ XRT_EXTERN_C_END
 
 
 /* ========================================================================== */
-/* public: include/xrt/cancel.h */
+/* public: include/xrt/memory_debug.h */
 /* ========================================================================== */
 
-#ifndef XRT_CANCEL_H
-#define XRT_CANCEL_H
+#ifndef XRT_MEMORY_DEBUG_H
+#define XRT_MEMORY_DEBUG_H
 
 
 
 
-#if defined(XRT_FEATURE_CANCEL) && !defined(XRT_FEATURE_MUTEX)
-	#error "XRT_FEATURE_CANCEL requires XRT_FEATURE_MUTEX"
-#endif
-
-#if defined(XRT_FEATURE_CANCEL) && !defined(XRT_FEATURE_COND)
-	#error "XRT_FEATURE_CANCEL requires XRT_FEATURE_COND"
+#if defined(XRT_FEATURE_MEMORY_DEBUG_REPORT) && !defined(XRT_FEATURE_MEMORY_DEBUG)
+	#error "XRT_FEATURE_MEMORY_DEBUG_REPORT requires XRT_FEATURE_MEMORY_DEBUG"
 #endif
 
 
 
-#if defined(XRT_FEATURE_CANCEL)
-/* 取消令牌保存一次性取消状态，并可通过不可变父链继承取消。 */
-typedef struct xcancel xcancel;
+#if defined(XRT_FEATURE_MEMORY_DEBUG)
+
+/* 调试器固定保留最近 512 条事件。 */
+#define XRT_MEMDEBUG_EVENT_LIMIT 512u
 
 
 
-/* 取消监听保存一次回调注册及其并发生命周期。 */
-typedef struct xcancelwatch xcancelwatch;
+/* 内存调试事件类型。 */
+typedef enum xmemdebugeventkind {
+	XMEMDEBUG_ALLOC = 1,
+	XMEMDEBUG_FREE,
+	XMEMDEBUG_REALLOC,
+	XMEMDEBUG_DOUBLE_FREE,
+	XMEMDEBUG_INVALID_FREE,
+	XMEMDEBUG_OVERFLOW,
+	XMEMDEBUG_UNDERFLOW,
+	XMEMDEBUG_USE_AFTER_FREE,
+	XMEMDEBUG_TEMP_ALLOC,
+	XMEMDEBUG_TEMP_REWIND,
+	XMEMDEBUG_TEMP_RESET
+} xmemdebugeventkind;
 
 
 
-/* 取消回调由命中的取消请求线程或迟注册线程同步执行。 */
-typedef void (*xcancelproc)(ptr pData);
+/* 内存调试事件是只包含借用信息的值对象。 */
+typedef struct xmemdebugevent {
+	xmemdebugeventkind Kind;
+	uint64 Sequence;
+	ptr Address;
+	size_t Size;
+	cstr File;
+	uint32 Line;
+} xmemdebugevent;
 
-/* Certified resident observer. A successful registration consumes ONE real
- * Data reference described by Ops. Notify borrows it; Drop returns it once
- * after Unwatch and every dispatch/plan pin have finished. Both callbacks
- * coordinate their own graph transitions and code lifetime. They run outside
- * this API's mutation scope, never by suspending a caller-owned outer scope.
- * Policy identity is immutable and outlives the registration. A trace alone
- * is not certification, nor permission to cancel or skip accepted work. */
-typedef struct xcancelwatchownershipv1 {
-	size_t size;
-	xcancelproc Notify;
-	void (*Drop)(const void* pData);
-	const xrtownershipops* Ops;
-} xcancelwatchownershipv1;
+
+
+/* 内存调试快照用于测试、诊断和外部报告。 */
+typedef struct xmemdebugsnapshot {
+	bool Enabled;
+	size_t LiveCount;
+	size_t LiveBytes;
+	size_t PeakCount;
+	size_t PeakBytes;
+	size_t QuarantineCount;
+	size_t QuarantineBytes;
+	uint64 AllocCount;
+	uint64 FreeCount;
+	uint64 ReallocCount;
+	uint64 DoubleFreeCount;
+	uint64 InvalidFreeCount;
+	uint64 OverflowCount;
+	uint64 UnderflowCount;
+	uint64 UseAfterFreeCount;
+	size_t TempCurrentBytes;
+	size_t TempPeakBytes;
+	uint64 TempResetCount;
+	size_t EventCount;
+} xmemdebugsnapshot;
+
+
+
+/* 事件访问器返回 false 时停止遍历。 */
+typedef bool (*xmemdebugvisitor)(const xmemdebugevent* pEvent, ptr pUserData);
+
+
+
+/* 活动分配记录借用分配点字符串，不转移内存所有权。 */
+typedef struct xmemdebugallocation {
+	ptr Address;
+	size_t Size;
+	cstr File;
+	uint32 Line;
+} xmemdebugallocation;
+
+
+
+/* 活动分配访问器返回 false 时停止遍历。 */
+typedef bool (*xmemdebugallocationvisitor)(const xmemdebugallocation* pAllocation, ptr pUserData);
+
+
+
+#if defined(XRT_FEATURE_MEMORY_DEBUG_REPORT)
+/* 报告格式与具体输出目标解耦。 */
+typedef enum xmemdebugreportformat {
+	XMEMDEBUG_REPORT_TEXT = 1,
+	XMEMDEBUG_REPORT_JSON
+} xmemdebugreportformat;
+
+
+
+/* 报告写入器成功消费全部数据时返回 true。 */
+typedef bool (*xmemdebugwriteproc)(xbytesview Data, ptr pUserData);
+#endif
 
 
 
@@ -8648,824 +12911,184 @@ XRT_EXTERN_C_BEGIN
 
 
 
-/* 创建一个独立的取消令牌。 */
-XRT_API xcancel* xrtCancelCreate(void);
+/* 返回稳定的事件名称，未知事件返回 unknown。 */
+XRT_API cstr xrtMemDebugEventName(xmemdebugeventkind Kind);
 
 
 
-/* 创建一个继承父令牌取消状态的子令牌；父令牌可为空。 */
-XRT_API xcancel* xrtCancelChild(xcancel* pParent);
+/* 在没有活动分配时开启或关闭运行时内存调试记录。 */
+XRT_API bool xrtMemDebugEnable(bool bEnable);
 
 
 
-/* 增加取消令牌引用并返回原指针。 */
-XRT_API xcancel* xrtCancelRef(xcancel* pCancel);
+/* 返回运行时内存调试是否开启。 */
+XRT_API bool xrtMemDebugEnabled(void);
 
 
 
-/* 释放取消令牌引用；空指针视为空操作。 */
-XRT_API void xrtCancelDestroy(xcancel* pCancel);
-
-/* Borrowed physical ownership view; the retained parent is one owning edge.
- * Watch-list links borrow registration storage and are not strong references.
- * Caller provides whole-graph quiescence and code residency. */
-XRT_API xrtownershipref xrtCancelOwnership(const xcancel* pCancel);
-
-/* Explicit native adapter, queried under whole-graph freeze. Registered
- * observers are refused before Trace, not treated as empty owning slots.
- * The immutable parent tail remains owned through Finish and final Drop;
- * each parent must independently be admitted. No CancelWatch certification. */
-XRT_API const xrtownershipadapterv1* xrtCancelOwnershipAdapterV1(xrtownershipref Reference);
+/* 当前线程允许指定次数成功分配后，让下一次逻辑分配失败一次。 */
+XRT_API bool xrtMemDebugFailAfter(uint64 iSuccessfulAllocations);
 
 
 
-/* 请求取消；仅首次请求返回 true 并触发监听。 */
-XRT_API bool xrtCancelRequest(xcancel* pCancel);
+/* 清除当前线程尚未触发的分配故障。 */
+XRT_API void xrtMemDebugFailClear(void);
 
 
 
-/* 查询令牌或任一祖先是否已请求取消；空指针表示未取消。 */
-XRT_API bool xrtCancelRequested(const xcancel* pCancel);
+/* 返回当前线程最近配置的分配故障是否已经触发。 */
+XRT_API bool xrtMemDebugFailTriggered(void);
 
 
 
-/* 监听令牌及其不可变父链；回调至多同步执行一次。 */
-XRT_API xcancelwatch* xrtCancelWatch(
-	xcancel* pCancel,
-	xcancelproc pProc,
-	ptr pData
+/* 在没有活动分配时清空统计、事件和隔离队列。 */
+XRT_API bool xrtMemDebugReset(void);
+
+
+
+/* 获取一致的内存调试统计快照。 */
+XRT_API void xrtMemDebugSnapshot(xmemdebugsnapshot* pSnapshot);
+
+
+
+/* 按时间顺序访问当前保留的调试事件。 */
+XRT_API size_t xrtMemDebugVisit(xmemdebugvisitor pVisitor, ptr pUserData);
+
+
+
+/* 访问内部锁线性化点捕获的完整活动分配快照。 */
+XRT_API size_t xrtMemDebugVisitLive(xmemdebugallocationvisitor pVisitor, ptr pUserData);
+
+
+
+#if defined(XRT_FEATURE_MEMORY_DEBUG_REPORT)
+/* 把当前调试快照流式写为文本或 JSON。 */
+XRT_API bool xrtMemDebugReport(
+	xmemdebugreportformat Format,
+	xmemdebugwriteproc pWriter,
+	ptr pUserData
+);
+#endif
+
+
+
+XRT_EXTERN_C_END
+
+#endif
+
+#endif
+
+
+/* ========================================================================== */
+/* public: include/xrt/future_bridge.h */
+/* ========================================================================== */
+
+#ifndef XRT_FUTURE_BRIDGE_H
+#define XRT_FUTURE_BRIDGE_H
+
+
+
+
+#if defined(XRT_FEATURE_FUTURE_BRIDGE) && !defined(XRT_FEATURE_FUTURE)
+	#error "XRT_FEATURE_FUTURE_BRIDGE requires XRT_FEATURE_FUTURE"
+#endif
+
+#if defined(XRT_FEATURE_FUTURE_BRIDGE) && !defined(XRT_FEATURE_THREAD)
+	#error "XRT_FEATURE_FUTURE_BRIDGE requires XRT_FEATURE_THREAD"
+#endif
+
+#if defined(XRT_FEATURE_FUTURE_BRIDGE) && !defined(XRT_FEATURE_ATOMIC)
+	#error "XRT_FEATURE_FUTURE_BRIDGE requires XRT_FEATURE_ATOMIC"
+#endif
+
+
+
+#if defined(XRT_FEATURE_FUTURE_BRIDGE)
+
+/* Future 桥只保存装配状态、借用的 Promise 与一个取消监听。 */
+#define XRT_FUTURE_BRIDGE_STORAGE_SIZE 32u
+
+
+
+/* Future 桥的内部状态保持不透明，可直接嵌入异步操作上下文。 */
+typedef union xfuturebridge {
+	uint64 Alignment;
+	uint8 Storage[XRT_FUTURE_BRIDGE_STORAGE_SIZE];
+} xfuturebridge;
+
+
+
+XRT_EXTERN_C_BEGIN
+
+
+
+/* 使用一个已有 Promise 初始化桥；Promise 的所有权仍由调用方持有。 */
+XRT_API bool xrtFutureBridgeInit(
+	xfuturebridge* pBridge,
+	xpromise* pPromise
 );
 
-/* Failure consumes nothing. Success may notify synchronously if an ancestor
- * is already cancelled, but retains Data until registration release. Legacy
- * Watch remains borrowed/opaque and keeps its conservative callback scope. */
-XRT_API xcancelwatch* xrtCancelWatchOwnedV1(xcancel* pCancel, ptr pData,
+
+
+/* 创建 Future/Promise 对并初始化桥；返回的 Future 由调用方持有。 */
+XRT_API xfuture* xrtFutureBridgeCreate(
+	xfuturebridge* pBridge,
+	xcancel* pParent
+);
+
+
+
+/* 返回桥借用的 Promise；调用方负责按原有所有权契约销毁它。 */
+XRT_API xpromise* xrtFutureBridgePromise(
+	const xfuturebridge* pBridge
+);
+
+
+
+/* 把 Future 的协作取消转发给底层异步操作。 */
+XRT_API bool xrtFutureBridgeWatch(
+	xfuturebridge* pBridge,
+	xcancelproc pCancelProc,
+	ptr pCancelData
+);
+
+/* Same bridge storage and setup protocol; success consumes one real Data
+ * reference under the explicit resident cancel policy, failure consumes none.
+ * Notify/Drop and Unwatch waits run outside bridge-owned mutation scopes.
+ * The embedding owner coordinates its own activity, RC and code residency.
+ * As with the legacy bridge, mutating calls are owner-serialized; only Wait
+ * observes setup concurrently. Reentrant installation/unlink is rejected. */
+XRT_API bool xrtFutureBridgeWatchOwnedV1(xfuturebridge* pBridge, ptr pData,
 	const xcancelwatchownershipv1* pPolicy);
 
-/* Whole-graph freeze queries, matching policy identity before dereferencing
- * it or tracing Data. Both lifecycle AND semantic preparation are required.
- * Token list nodes borrow Watch storage: V2 does not invent token->Watch RC
- * edges. Watch owns its Cancel and its certified Data reference independently.
- * Active dispatch, publication/unlink, legacy/unknown observers are refused.
- * Prepare only waits for the owner's actual Unwatch; it never requests
- * cancellation or silently removes an accepted callback. Output preparation
- * remains unchanged on refusal. Data/parents must be independently admitted. */
-XRT_API const xrtownershipadapterv1* xrtCancelOwnershipAdapterV2(xrtownershipref Reference,
-	const xcancelwatchownershipv1* const* pPolicies, size_t iPolicyCount,
-	const xrtownershippreparationv1** ppPreparation);
-XRT_API const xrtownershipadapterv1* xrtCancelWatchOwnershipAdapterV1(xrtownershipref Reference,
-	const xcancelwatchownershipv1* const* pPolicies, size_t iPolicyCount,
-	const xrtownershippreparationv1** ppPreparation);
+/* Read-only under whole-graph freeze: the ONE actual owned Watch, never the
+ * borrowed Promise or a synthetic bridge node. Installation, unlink, unpublished
+ * setup and a live legacy borrowed-data Watch refuse without modifying output
+ * or diagnostics. A successful empty reference means no owned registration.
+ * The owner must separately trace its real Promise and independently admit
+ * Watch/context policy identities; this view is not lifecycle certification. */
+XRT_API bool xrtFutureBridgeWatchOwnershipV1(const xfuturebridge* pBridge,
+	xrtownershipref* pReference);
 
 
 
-/* 查询监听是否已命中取消。 */
-XRT_API bool xrtCancelTriggered(const xcancelwatch* pWatch);
+/* 发布装配成功，允许底层完成回调向 Promise 写入终态。 */
+XRT_API bool xrtFutureBridgeReady(xfuturebridge* pBridge);
 
 
 
-/* Borrowed physical view: Unwatch owns this registration; it retains its
- * Cancel (and thereby its parents). Proc/Data and linked cancellation nodes
- * are borrowed, not additional owning slots. Active/destroying callbacks
- * reject inspection. Whole-graph quiescence and code residency are required. */
-XRT_API xrtownershipref xrtCancelWatchOwnership(const xcancelwatch* pWatch);
+/* 发布装配失败，要求底层完成回调只回收结果。 */
+XRT_API bool xrtFutureBridgeFail(xfuturebridge* pBridge);
 
 
 
-/* 注销并释放监听；从其他线程调用时等待正在执行的回调返回。 */
-XRT_API void xrtCancelUnwatch(xcancelwatch* pWatch);
+/* 等待极短的装配窗口，并返回底层结果能否写入 Promise。 */
+XRT_API bool xrtFutureBridgeWait(const xfuturebridge* pBridge);
 
 
 
-XRT_EXTERN_C_END
-#endif
-
-#endif
-
-
-/* ========================================================================== */
-/* public: include/xrt/future.h */
-/* ========================================================================== */
-
-#ifndef XRT_FUTURE_H
-#define XRT_FUTURE_H
-
-
-
-
-#if defined(XRT_FEATURE_FUTURE) && !defined(XRT_FEATURE_CANCEL)
-	#error "XRT_FEATURE_FUTURE requires XRT_FEATURE_CANCEL"
-#endif
-
-#if defined(XRT_FEATURE_FUTURE_COROUTINE) && !defined(XRT_FEATURE_FUTURE)
-	#error "XRT_FEATURE_FUTURE_COROUTINE requires XRT_FEATURE_FUTURE"
-#endif
-
-#if defined(XRT_FEATURE_FUTURE_COROUTINE) && !defined(XRT_FEATURE_COROUTINE_SCHEDULER)
-	#error "XRT_FEATURE_FUTURE_COROUTINE requires XRT_FEATURE_COROUTINE_SCHEDULER"
-#endif
-
-#if defined(XRT_FEATURE_FUTURE_COMBINE) && !defined(XRT_FEATURE_FUTURE)
-	#error "XRT_FEATURE_FUTURE_COMBINE requires XRT_FEATURE_FUTURE"
-#endif
-
-#if defined(XRT_FEATURE_FUTURE_CONTINUE) && !defined(XRT_FEATURE_FUTURE)
-	#error "XRT_FEATURE_FUTURE_CONTINUE requires XRT_FEATURE_FUTURE"
-#endif
-
-
-
-#if defined(XRT_FEATURE_FUTURE)
-
-/* Future 是只读共享结果，Promise 是唯一终态写入端。 */
-typedef struct xfuture xfuture;
-typedef struct xpromise xpromise;
-
-
-
-/* Future 终态明确区分成功、失败、协作取消和生产端关闭。 */
-typedef enum xfuturestate {
-	XFUTURE_PENDING = 0,
-	XFUTURE_RESOLVED = 1,
-	XFUTURE_FAILED = 2,
-	XFUTURE_CANCELLED = 3,
-	XFUTURE_CLOSED = 4
-} xfuturestate;
-
-
-
-/* Future 结果只借用值和错误，其生命周期由 Future 引用保护。 */
-typedef struct xfutureresult {
-	xfuturestate State;
-	ptr Value;
-	const xerror* Error;
-} xfutureresult;
-
-
-
-/* Future Watch 使用调用方存储提供无分配终态通知。 */
-#define XRT_FUTURE_WATCH_STORAGE_SIZE 64u
-
-
-
-/* Watch 回调在线程安全的 Future 完成路径中执行，不得重入同一个 Watch。 */
-typedef void (*xfuturewatchproc)(ptr pData);
-
-
-
-/* Watch 释放过程在线性化完成通知或成功摘除后执行一次。 */
-typedef void (*xfuturewatchreleaseproc)(ptr pData);
-
-
-
-/* Watch 的内部链表和并发状态保持不透明。 */
-typedef union xfuturewatch {
-	uint64 Alignment;
-	uint8 Storage[XRT_FUTURE_WATCH_STORAGE_SIZE];
-} xfuturewatch;
-
-
-
-/* 注册结果区分错误、Future 已完成和成功进入等待链。 */
-typedef enum xfuturewatchresult {
-	XFUTURE_WATCH_ERROR = -1,
-	XFUTURE_WATCH_READY = 0,
-	XFUTURE_WATCH_PENDING = 1
-} xfuturewatchresult;
-
-
-
-/* 成功值析构过程接收创建者提供的值和上下文。 */
-typedef void (*xfuturefreeproc)(ptr pValue, ptr pData);
-
-/* Describe exactly the owning slots released by an owned result's destructor,
- * including its context. Unique boxes are folded into this Future's edges;
- * shared reference-counted boxes must be reported as physical nodes. */
-typedef bool (*xfutureownershiptrace)(const void* pValue, const void* pData,
-	xrtownershipvisitor pVisit, ptr pContext);
-
-/* Explicit lifecycle certification, separate from an inspection-only trace.
- * Immutable policy/code outlives the Future. Drop consumes a unique result
- * box and exactly the owning slots described by Trace; context is NULL.
- * Drop coordinates its own graph transitions, runs no new semantic finalizer
- * after child finalization, and may execute outside XRT's mutation scope.
- * Trace is allocation/callback-free apart from the supplied visitor. */
-typedef struct xfuturepayloadownershipv1 {
-	size_t size;
-	xfuturefreeproc Drop;
-	xfutureownershiptrace Trace;
-} xfuturepayloadownershipv1;
-
-/* One ACTUAL producer reference owned by a pending result, separate from
- * PromiseRefs and from the terminal payload. The immutable resident Drop
- * releases that reference outside this Future's lock/mutation; it coordinates
- * its own transitions and code lifetime. It must not cancel accepted work or
- * substitute for its semantic callback/finally. Completion preserves its own
- * diagnostic across this mechanical release. The physical child is still
- * independently admitted by the collector, never certified by this policy. */
-typedef struct xfutureproducerownershipv1 {
-	size_t size;
-	void (*Drop)(const void* pProducer);
-} xfutureproducerownershipv1;
-
-/* A registered Watch owns exactly ONE Data node reference, returned by Release.
- * Immutable resident callbacks coordinate their own activity and code lifetime;
- * Ops describes that same physical node, not a synthetic watch leaf. The core
- * traces this actual slot, but a collector independently admits Data and all
- * of its captures. Legacy traced/phased watches are not silently certified. */
-typedef struct xfuturewatchownershipv1 {
-	size_t size;
-	xfuturewatchproc Notify;
-	xfuturewatchreleaseproc Release;
-	const xrtownershipops* Ops;
-} xfuturewatchownershipv1;
-
-/* The callback address may point inside the physical owner (for example an
- * aggregate input slot). Reference projects that address to the ONE actual
- * reference returned by Release; it neither acquires a reference nor traces
- * captures. The projection is immutable, resident, allocation/lock/callback
- * free and remains valid through the Release tail. It must not invent an
- * alias RC node. Admission matches policy identity before invoking it. */
-typedef struct xfuturewatchownershipv2 {
-	size_t size;
-	xfuturewatchproc Notify;
-	xfuturewatchreleaseproc Release;
-	xrtownershipref (*Reference)(const void* pData);
-} xfuturewatchownershipv2;
-
-/* Closed policy sets for one collector domain. This is admission, not a
- * registry granting unknown Data/code lifecycle authority. Children remain
- * independently admitted. V1-V3 retain their original refusal boundaries. */
-typedef struct xfutureownershipadmissionv1 {
-	size_t size;
-	const xfuturepayloadownershipv1* const* PayloadPolicies;
-	size_t PayloadPolicyCount;
-	const xfutureproducerownershipv1* const* ProducerPolicies;
-	size_t ProducerPolicyCount;
-	const xfuturewatchownershipv1* const* WatchPolicies;
-	size_t WatchPolicyCount;
-	const xfuturewatchownershipv2* const* ProjectedWatchPolicies;
-	size_t ProjectedWatchPolicyCount;
-	const xcancelwatchownershipv1* const* CancelWatchPolicies;
-	size_t CancelWatchPolicyCount;
-} xfutureownershipadmissionv1;
-
-
-
-XRT_EXTERN_C_BEGIN
-
-
-
-/* 创建一对 Future/Promise；父取消令牌为空时使用独立取消源。 */
-XRT_API xpromise* xrtPromiseCreate(xfuture** ppFuture, xcancel* pParentCancel);
-
-/* Bind once to a private, pending, newly created Future/Promise pair (one
- * reference per endpoint, no waiters). No allocation or user callback.
- * Success consumes ONE existing Producer reference; failure consumes nothing.
- * The result traces that real edge until terminal publication detaches it;
- * completion releases it exactly once outside lock/mutation before notifying
- * the result's waiters. Merely dropping a Future observer does not cancel work.
- * The caller keeps an independent activation/registration reference until
- * its own callback and release tails finish. An enclosing caller-owned scope
- * is never suspended. A trace-only or unknown policy is not collection proof. */
-XRT_API bool xrtPromiseProducerBindTakeV1(xpromise* pPromise, xrtownershipref Producer,
-	const xfutureproducerownershipv1* pPolicy);
-
-
-
-/* 增加 Promise 生产端引用并返回原指针。 */
-XRT_API xpromise* xrtPromiseRef(xpromise* pPromise);
-
-
-
-/* 释放生产端引用；最后一个未完成生产端会关闭 Future 并请求取消。 */
-XRT_API void xrtPromiseDestroy(xpromise* pPromise);
-
-
-
-/* 增加 Future 消费端引用并返回原指针。 */
-XRT_API xfuture* xrtFutureRef(xfuture* pFuture);
-
-
-
-/* 释放 Future 消费端引用；空指针视为空操作。 */
-XRT_API void xrtFutureDestroy(xfuture* pFuture);
-
-/* Borrowed views of the SAME physical control block: every FutureRef and
- * PromiseRef owns one reference. Do not invent a second Promise node.
- * Trace includes cancellation parents, error causes, forwarded source and
- * explicitly described owned payload/context. Unknown owned payloads and
- * registered waiters fail closed unless their complete adapters are supplied.
- * Pending with no waiters is inspectable; producer references remain roots.
- * Whole-graph quiescence through any later commit and callback code residency
- * remain the caller's responsibility; this API does not establish either. */
-XRT_API xrtownershipref xrtFutureOwnership(const xfuture* pFuture);
-XRT_API xrtownershipref xrtPromiseOwnership(const xpromise* pPromise);
-
-/* Publish an explicitly certified owned result atomically. Failure does not
- * consume the box. This does not authorize collection by itself: a resolver
- * must recognize the exact policy identity and independently admit children. */
-XRT_API bool xrtPromiseResolveOwnedPolicyV1(xpromise* pPromise, ptr pValue,
-	const xfuturepayloadownershipv1* pPolicy);
-
-/* Query under whole-graph freeze before Count/Trace. Pending, forwarded and
- * terminal control blocks share one physical adapter. Completing operations,
- * all registered waiters, unrecognized owned policies and observed cancel
- * tokens are refused without invoking any payload/waiter trace. An empty
- * allowlist admits only results without an owned payload. Pending retirement
- * preserves last-producer CLOSED/cancellation semantics at Clear, without
- * notification. Finish releases actual retired slots outside freeze. */
-XRT_API const xrtownershipadapterv1* xrtFutureOwnershipAdapterV1(xrtownershipref Reference,
-	const xfuturepayloadownershipv1* const* pPolicies, size_t iPolicyCount);
-/* Add an explicit producer-policy allowlist. V1 continues to refuse any live
- * producer edge. Neither entry admits registered waiters or an unknown child;
- * identity is matched before reading a policy or invoking any child callback. */
-XRT_API const xrtownershipadapterv1* xrtFutureOwnershipAdapterV2(xrtownershipref Reference,
-	const xfuturepayloadownershipv1* const* pPolicies, size_t iPolicyCount,
-	const xfutureproducerownershipv1* const* pProducerPolicies, size_t iProducerPolicyCount);
-/* V3 additionally admits exact Watch policies and returns mandatory semantic
- * preparation alongside the SAME lifecycle adapter. Before object Finalize,
- * prepare producerless pending sources through normal CLOSED notification,
- * then rebuild the whole graph. Produced results defer to their real producer;
- * never close an intermediate result before its source's catch/finally runs.
- * Closed dependency cycles may require a further explicit shutdown protocol;
- * BUSY does not authorize clearing a live Watch or skipping accepted work.
- * Output is unchanged on refusal. Use both descriptors, never V1-only planning. */
-XRT_API const xrtownershipadapterv1* xrtFutureOwnershipAdapterV3(xrtownershipref Reference,
-	const xfuturepayloadownershipv1* const* pPolicies, size_t iPolicyCount,
-	const xfutureproducerownershipv1* const* pProducerPolicies, size_t iProducerPolicyCount,
-	const xfuturewatchownershipv1* const* pWatchPolicies, size_t iWatchPolicyCount,
-	const xrtownershippreparationv1** ppPreparation);
-/* Preserve 64-byte Watch storage and READY/PENDING/ERROR ownership rules.
- * Initialization alone does not consume Data; registration commits the same
- * caller-owned reference that Release returns. READY is still caller-driven. */
-XRT_API bool xrtFutureWatchInitOwnershipV1(xfuturewatch* pWatch, ptr pData,
-	const xfuturewatchownershipv1* pPolicy);
-/* Same 64-byte storage and ERROR/READY/PENDING transfer rules as V1. No
- * projection is invoked by initialization or adapter admission. */
-XRT_API bool xrtFutureWatchInitOwnershipV2(xfuturewatch* pWatch, ptr pData,
-	const xfuturewatchownershipv2* pPolicy);
-XRT_API const xrtownershipadapterv1* xrtFutureOwnershipAdapterV4(xrtownershipref Reference,
-	const xfutureownershipadmissionv1* pAdmission,
-	const xrtownershippreparationv1** ppPreparation);
-
-/* Atomically publish value, destructor, context and non-NULL ownership trace.
- * Success transfers the same ownership as ResolveOwned. Failure (including
- * duplicate completion) transfers nothing and never calls Destroy/Trace.
- * The immutable trace and destructor remain resident for the result lifetime;
- * trace follows the read-only xrtOwnershipInspect callback contract. */
-XRT_API bool xrtPromiseResolveOwnedTraced(xpromise* pPromise, ptr pValue,
-	xfuturefreeproc pDestroy, ptr pDestroyData, xfutureownershiptrace pTrace);
-
-
-
-/* 返回 Future 状态快照；参数无效时返回 CLOSED 并设置错误。 */
-XRT_API xfuturestate xrtFutureState(const xfuture* pFuture);
-
-
-
-/* 判断 Future 是否已经进入任一不可变终态。 */
-XRT_API bool xrtFutureDone(const xfuture* pFuture);
-
-
-
-/* 复制借用结果；尚未完成时返回 false 并设置 AGAIN。 */
-XRT_API bool xrtFutureResult(const xfuture* pFuture, xfutureresult* pResult);
-
-
-
-/* 返回成功值；非成功终态会把对应错误设置到当前执行上下文。 */
-XRT_API ptr xrtFutureValue(const xfuture* pFuture);
-
-
-
-/* 返回失败终态借用的结构化错误，其他状态返回空指针。 */
-XRT_API const xerror* xrtFutureError(const xfuture* pFuture);
-
-
-
-/* 请求生产过程协作取消；请求本身不伪造 Future 终态。 */
-XRT_API bool xrtFutureCancel(xfuture* pFuture);
-
-
-
-/* 返回增加引用后的取消令牌，调用方使用完毕后必须释放。 */
-XRT_API xcancel* xrtFutureCancelToken(const xfuture* pFuture);
-
-
-
-/* 返回增加引用后的生产端取消令牌。 */
-XRT_API xcancel* xrtPromiseCancelToken(const xpromise* pPromise);
-
-
-
-/* 初始化一个尚未注册的无分配 Future Watch。 */
-XRT_API bool xrtFutureWatchInit(
-	xfuturewatch* pWatch,
-	xfuturewatchproc pNotify,
-	xfuturewatchreleaseproc pRelease,
-	ptr pData
-);
-
-
-
-/* Initialize with an immutable description of the strong slots released by
- * pRelease(pData). Both callbacks are required. Unique context storage is
- * folded into the Future's edges; shared state is a physical node. Init is
- * allocation-free and consumes nothing; only WatchAdd(PENDING) transfers the
- * registration/release right. READY and ERROR keep it with the caller.
- * Storage size and old Init semantics are unchanged. A linked adapter may be
- * inspected only at a whole-graph quiescent point with callback code resident;
- * this does not establish a safepoint or permit concurrent frame inspection. */
-XRT_API bool xrtFutureWatchInitTraced(xfuturewatch* pWatch,
-    xfuturewatchproc pNotify, xfuturewatchreleaseproc pRelease, ptr pData,
-    xrtownershiptrace pTrace);
-
-/* Explicit cooperative callback admission, not inferred from a Trace callback.
- * Like InitTraced, but Notify/Release run outside the Future mutation domain.
- * The resident callbacks must coordinate every count/edge/storage transition,
- * reject inspection of active/private data, and independently pin their code.
- * Detached notification/release callers retain their real ownership until the
- * callback returns. No mutation scope may span a wait or arbitrary callback.
- * Unphased Watch, internal waiters and payload finalizers keep conservative
- * mutation scopes. Storage size, READY/PENDING/ERROR and release rules match
- * InitTraced; READY still leaves Notify/Release to the registering caller. */
-XRT_API bool xrtFutureWatchInitPhased(xfuturewatch* pWatch,
-    xfuturewatchproc pNotify, xfuturewatchreleaseproc pRelease, ptr pData,
-    xrtownershiptrace pTrace);
-
-
-
-/* Future 未完成时注册 Watch；READY 时 Watch 未被接管且不执行 Release。 */
-XRT_API xfuturewatchresult xrtFutureWatchAdd(
-	xfuture* pFuture,
-	xfuturewatch* pWatch
-);
-
-
-
-/* 尝试摘除尚未开始通知的 Watch；成功时同步执行 Release。 */
-XRT_API bool xrtFutureWatchDetach(
-	xfuture* pFuture,
-	xfuturewatch* pWatch
-);
-
-
-
-/* 摘除 Watch 并等待已经开始的通知结束；禁止从自身通知中调用。 */
-XRT_API void xrtFutureWatchRemove(
-	xfuture* pFuture,
-	xfuturewatch* pWatch
-);
-
-
-
-/* 等待 Future 进入任一终态。 */
-XRT_API xwaitresult xrtFutureWait(xfuture* pFuture);
-
-
-
-/* 在相对微秒数内等待 Future 进入任一终态。 */
-XRT_API xwaitresult xrtFutureWaitFor(xfuture* pFuture, uint64 iTimeout);
-
-
-
-/* 等待 Future 到指定单调时钟截止时间。 */
-XRT_API xwaitresult xrtFutureWaitUntil(xfuture* pFuture, xdeadline iDeadline);
-
-
-
-/* 等待首个线性化事件；取消先取得等待锁后不会被迟到终态覆盖。 */
-XRT_API xwaitresult xrtFutureWaitUntilCancel(
-	xfuture* pFuture,
-	xdeadline iDeadline,
-	xcancel* pCancel
-);
-
-
-
-/* 以借用方式完成成功结果，值的生命周期由调用方保证。 */
-XRT_API bool xrtPromiseResolve(xpromise* pPromise, ptr pValue);
-
-
-
-/* 转移成功值所有权；完成失败时所有权仍归调用方。 */
-XRT_API bool xrtPromiseResolveOwned(
-	xpromise* pPromise,
-	ptr pValue,
-	xfuturefreeproc pDestroy,
-	ptr pDestroyData
-);
-
-
-
-/* 以增加引用方式完成失败结果。 */
-XRT_API bool xrtPromiseReject(xpromise* pPromise, const xerror* pError);
-
-
-
-/* 把已进入终态的源 Future 结果安全透传到 Promise。 */
-XRT_API bool xrtPromiseForward(xpromise* pPromise, xfuture* pSource);
-
-
-
-/* 完成取消终态；令牌请求通知结束后才向等待者发布取消终态。 */
-XRT_API bool xrtPromiseCancel(xpromise* pPromise);
-
-
-
-/* 请求生产过程停止，并在令牌通知结束后发布关闭终态。 */
-XRT_API bool xrtPromiseClose(xpromise* pPromise);
-
-
-
-/* 判断 Promise 对应的 Future 是否已经完成。 */
-XRT_API bool xrtPromiseDone(const xpromise* pPromise);
-
-
-
-XRT_EXTERN_C_END
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_FUTURE_COMBINE)
-
-/* Any 与 Race 的结果借用胜出源 Future；组合 Future 负责保留该引用。 */
-typedef struct xfuturepick {
-	size_t Index;
-	xfuture* Future;
-} xfuturepick;
-
-
-
-/* All 的结果按输入顺序借用全部源 Future；组合 Future 负责保留这些引用。 */
-typedef struct xfutureall {
-	size_t Count;
-	xfuture* const* Futures;
-} xfutureall;
-
-
-
-XRT_EXTERN_C_BEGIN
-
-
-
-/* 在任一源进入终态后，以 xfuturepick 成功完成；不改变其余源。 */
-XRT_API xfuture* xrtFutureAny(xfuture* const* pFutures, size_t iCount);
-
-
-
-/* 在全部源进入终态后，以保序的 xfutureall 成功完成；空集合立即完成。 */
-XRT_API xfuture* xrtFutureAll(xfuture* const* pFutures, size_t iCount);
-
-
-
-/* 在任一源进入终态后完成，并向其余未完成源发出协作取消请求。 */
-XRT_API xfuture* xrtFutureRace(xfuture* const* pFutures, size_t iCount);
-
-/* Synchronous result mapping is part of the aggregate's activation, not a
- * separately allocated continuation attached after the sources start.
- * Inputs and output Promise are borrowed for the call. The mapper must
- * complete/forward the output before returning; an uncompleted output closes.
- * It must not retain the input descriptors or defer work on this Promise. */
-typedef void (*xfutureallmapproc)(const xfutureall* pInput, xpromise* pOutput, ptr pData);
-typedef void (*xfuturepickmapproc)(const xfuturepick* pInput, xpromise* pOutput, ptr pData);
-
-/* All preparation succeeds before source notification/cancellation is possible.
- * NULL return does not consume data, invoke map/destroy/trace, or cancel inputs.
- * Non-NULL accepts data even if synchronous mapping fails: that failure is the
- * returned Future's outcome. Destroy(data, destroyData) runs exactly once after
- * mapping or cancellation and after the last source callback returns.
- * Trace(data, destroyData) describes the exact strong slots Destroy releases;
- * callbacks/code and borrowed pointers are not fictitious owning edges.
- * Destroy and Trace are required, including for an empty context. The caller
- * still supplies whole-graph quiescence and callback/code residency.
- * Any/All/Race retain their existing selection/order/cancellation contracts. */
-XRT_API xfuture* xrtFutureAllMapOwnedTraced(xfuture* const* pFutures, size_t iCount,
-    xfutureallmapproc pMap, ptr pData, xfuturefreeproc pDestroy,
-    ptr pDestroyData, xfutureownershiptrace pTrace);
-XRT_API xfuture* xrtFutureAnyMapOwnedTraced(xfuture* const* pFutures, size_t iCount,
-    xfuturepickmapproc pMap, ptr pData, xfuturefreeproc pDestroy,
-    ptr pDestroyData, xfutureownershiptrace pTrace);
-XRT_API xfuture* xrtFutureRaceMapOwnedTraced(xfuture* const* pFutures, size_t iCount,
-    xfuturepickmapproc pMap, ptr pData, xfuturefreeproc pDestroy,
-    ptr pDestroyData, xfutureownershiptrace pTrace);
-
-/* A certified mapper owns one independently admitted physical Data reference.
- * AllMap/PickMap borrow it and must synchronously finish the output. Drop
- * returns that reference, never substitutes for Data's semantic preparation.
- * Policy and callbacks are immutable/resident, and callbacks coordinate their
- * own graph transitions and code lifetime outside API-owned scopes. */
-typedef struct xfuturecombineownershipv1 {
-	size_t size;
-	xfutureallmapproc AllMap;
-	xfuturepickmapproc PickMap;
-	void (*Drop)(const void* pData);
-	const xrtownershipops* Ops;
-} xfuturecombineownershipv1;
-XRT_API xfuture* xrtFutureAllMapOwnedPolicyV1(xfuture* const* pFutures, size_t iCount,
-	ptr pData, const xfuturecombineownershipv1* pPolicy);
-XRT_API xfuture* xrtFutureAnyMapOwnedPolicyV1(xfuture* const* pFutures, size_t iCount,
-	ptr pData, const xfuturecombineownershipv1* pPolicy);
-XRT_API xfuture* xrtFutureRaceMapOwnedPolicyV1(xfuture* const* pFutures, size_t iCount,
-	ptr pData, const xfuturecombineownershipv1* pPolicy);
-
-/* These exact resident policies describe real producer, source-registration,
- * cancellation and raw-result references. Their presence does not admit the
- * group or its Data: the collector independently resolves every node. */
-XRT_API const xfutureproducerownershipv1* xrtFutureCombineProducerPolicyV1Get(void);
-XRT_API const xfuturewatchownershipv2* xrtFutureCombineWatchPolicyV2Get(void);
-XRT_API const xcancelwatchownershipv1* xrtFutureCombineCancelPolicyV1Get(void);
-XRT_API const xfuturepayloadownershipv1* xrtFutureCombineAllPayloadPolicyV1Get(void);
-XRT_API const xfuturepayloadownershipv1* xrtFutureCombinePickPayloadPolicyV1Get(void);
-XRT_API const xrtownershipadapterv1* xrtFutureCombineOwnershipAdapterV1(xrtownershipref Reference,
-	const xfuturecombineownershipv1* const* pPolicies, size_t iPolicyCount,
-	const xrtownershippreparationv1** ppPreparation);
-
-typedef enum xfuturewaitrulev1 {
-	XFUTURE_WAIT_ALL_TERMINAL = 1,
-	XFUTURE_WAIT_ANY_TERMINAL = 2
-} xfuturewaitrulev1;
-typedef struct xfuturecombinewaitv1 {
-	size_t size;
-	xpromise* Output;
-	xfuture* const* Sources;
-	size_t Count;
-	xfuturewaitrulev1 Rule;
-	bool CancelRemaining;
-} xfuturecombinewaitv1;
-/* Borrowed semantic input slots, not arbitrary capture edges. The complete
- * physical graph must be frozen and claimed unreachable by the same token.
- * Only a stable pending group with real pending registrations is described;
- * all completed slots are retained in order, including duplicates. ALL needs
- * every input terminal; ANY/RACE need one, with Race alone cancelling losers.
- * Output stays unchanged on refusal. This read-only fact is not cancellation
- * authority, a deadlock proof, or permission to skip normal callbacks. */
-XRT_API bool xrtFutureCombineWaitV1(xrtownershipref Reference, const void* pToken,
-	xfuturecombinewaitv1* pWait);
-
-
-
-XRT_EXTERN_C_END
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_FUTURE_CONTINUE)
-
-/* 延续过程借用源结果和输出 Promise；保留 Promise 时必须先增加引用。 */
-typedef void (*xfuturecontinueproc)(
-	const xfutureresult* pInput,
-	xpromise* pOutput,
-	ptr pData
-);
-
-
-
-/* Finally 过程只观察源结果，输出 Future 自动安全透传源终态。 */
-typedef void (*xfuturefinallyproc)(const xfutureresult* pInput, ptr pData);
-
-
-
-XRT_EXTERN_C_BEGIN
-
-
-
-/* 对源的任意终态执行延续过程；过程负责完成或保留输出 Promise。 */
-XRT_API xfuture* xrtFutureContinue(
-	xfuture* pSource,
-	xfuturecontinueproc pProc,
-	ptr pData
-);
-
-
-
-/* 执行任意终态延续，并在执行、跳过或取消后释放受理的数据。 */
-XRT_API xfuture* xrtFutureContinueOwned(
-	xfuture* pSource,
-	xfuturecontinueproc pProc,
-	ptr pData,
-	xfuturefreeproc pDestroy,
-	ptr pDestroyData
-);
-
-
-
-/*
-	对独占源的任意终态执行延续；取消输出时同时请求取消源。
-	该入口只适用于调用方拥有完整生产链、不与其他消费者共享源的组合层。
-*/
-XRT_API xfuture* xrtFutureContinueOwnedCancelSource(
-	xfuture* pSource,
-	xfuturecontinueproc pProc,
-	ptr pData,
-	xfuturefreeproc pDestroy,
-	ptr pDestroyData
-);
-
-
-
-/* 仅在源成功时执行延续；其他终态自动透传。 */
-XRT_API xfuture* xrtFutureThen(
-	xfuture* pSource,
-	xfuturecontinueproc pProc,
-	ptr pData
-);
-
-
-
-/* 仅在源成功时执行延续，并负责释放受理的数据。 */
-XRT_API xfuture* xrtFutureThenOwned(
-	xfuture* pSource,
-	xfuturecontinueproc pProc,
-	ptr pData,
-	xfuturefreeproc pDestroy,
-	ptr pDestroyData
-);
-
-
-
-/*
-	仅在独占源成功时执行延续；取消输出时同时请求取消源。
-	源的失败、取消和关闭仍按 Then 契约自动透传。
-*/
-XRT_API xfuture* xrtFutureThenOwnedCancelSource(
-	xfuture* pSource,
-	xfuturecontinueproc pProc,
-	ptr pData,
-	xfuturefreeproc pDestroy,
-	ptr pDestroyData
-);
-
-
-
-/* 仅在源失败时执行延续；成功、取消和关闭终态自动透传。 */
-XRT_API xfuture* xrtFutureCatch(
-	xfuture* pSource,
-	xfuturecontinueproc pProc,
-	ptr pData
-);
-
-
-
-/* 仅在源失败时执行延续，并负责释放受理的数据。 */
-XRT_API xfuture* xrtFutureCatchOwned(
-	xfuture* pSource,
-	xfuturecontinueproc pProc,
-	ptr pData,
-	xfuturefreeproc pDestroy,
-	ptr pDestroyData
-);
-
-
-
-/* 观察源的任意终态，再把原结果安全透传到输出 Future。 */
-XRT_API xfuture* xrtFutureFinally(
-	xfuture* pSource,
-	xfuturefinallyproc pProc,
-	ptr pData
-);
-
-
-
-/* 观察源的任意终态、透传结果，并负责释放受理的数据。 */
-XRT_API xfuture* xrtFutureFinallyOwned(
-	xfuture* pSource,
-	xfuturefinallyproc pProc,
-	ptr pData,
-	xfuturefreeproc pDestroy,
-	ptr pDestroyData
-);
-
-
-
-XRT_EXTERN_C_END
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_FUTURE_COROUTINE)
-
-XRT_EXTERN_C_BEGIN
-
-
-
-/* 挂起当前调度协程，直到 Future 进入终态或协程被取消。 */
-XRT_API xwaitresult xrtFutureAwait(xfuture* pFuture);
-
-
-
-/* 在相对微秒数内挂起当前调度协程等待 Future。 */
-XRT_API xwaitresult xrtFutureAwaitFor(xfuture* pFuture, uint64 iTimeout);
-
-
-
-/* 挂起当前调度协程等待 Future 到指定截止时间。 */
-XRT_API xwaitresult xrtFutureAwaitUntil(xfuture* pFuture, xdeadline iDeadline);
+/* 注销取消监听，并与正在执行的取消回调汇合。 */
+XRT_API void xrtFutureBridgeUnwatch(xfuturebridge* pBridge);
 
 
 
@@ -11617,7 +15240,9 @@ typedef enum xvaluetype {
 	XVALUE_INT_MAP,
 	XVALUE_SET,
 	XVALUE_OBJECT,
-	XVALUE_UINT
+	XVALUE_UINT,
+	/* Unicode scalar value. Appended to preserve all published type ids. */
+	XVALUE_CHAR
 } xvaluetype;
 
 
@@ -11744,6 +15369,26 @@ XRT_API bool xrtValueObjectIdentityBindV1(xvalue* pObject, xvalueidentityhash pH
 	xvalueidentityequal pEqual, const xvalueobjectownershipv1* pExpectedPolicy);
 XRT_API const xrtownershipadapterv1* xrtValueObjectOwnershipAdapterV1(
 	xrtownershipref Reference, const xvalueobjectownershipv1* pExpectedPolicy);
+/* Borrowed discovery anchors for this instance's live, explicitly certified
+ * Object backings. Policy identity is exact; COW/deep-clone backings are each
+ * visited once, with their shared Lifetime UserData (possibly NULL). Ordinary
+ * objects and other policies are not enrolled. Enrollment/removal allocates
+ * nothing and changes NO reference count or owning graph edge.
+ *
+ * Caller holds exclusive whole-domain Freeze throughout enumeration and the
+ * subsequent snapshot/pin transaction. Visitor must remain read-only: it may
+ * collect/filter anchors, but must not mutate/release nodes or invoke their
+ * callbacks. Anchors are NOT internal slots and must never be subtracted from
+ * StrongCount. They are not pins, roots, reverse strong edges or unload proof.
+ * A running/finalizing backing may be discovered but must still be refused by
+ * snapshot admission; discovery is not lifecycle certification. Clear removes
+ * enrollment before Lifetime context retirement. false stops enumeration;
+ * prior visitor effects are not rolled back, so discard partial anchor lists.
+ * This is internal collector support, not automatic cycle collection. */
+typedef bool (*xvalueobjectownershipdiscoverv1)(xrtownershipref Reference,
+	const void* pLifetimeContext, ptr pContext);
+XRT_API bool xrtValueObjectOwnershipDiscoverV1(const xvalueobjectownershipv1* pExpectedPolicy,
+	xvalueobjectownershipdiscoverv1 pVisit, ptr pContext);
 /* Authorize a known resident Handle bridge, before any policy callback. The
  * expected immutable Ops/Trace must cover the complete coordinated payload;
  * identity hooks and non-NULL UserData are independently refused. This does
@@ -11783,6 +15428,11 @@ XRT_API xvalue* xrtValueInt(int64 iValue);
 
 /* 创建不可变的 64 位无符号整数值。 */
 XRT_API xvalue* xrtValueUInt(uint64 iValue);
+
+
+
+/* 创建不可变的 Unicode 标量值；代理项和超出 Unicode 范围的值失败。 */
+XRT_API xvalue* xrtValueChar(uint32 iValue);
 
 
 
@@ -11946,6 +15596,11 @@ XRT_API bool xrtValueGetUInt(const xvalue* pValue, uint64* pResult);
 
 
 
+/* 精确读取 Unicode 标量值，类型不匹配时失败。 */
+XRT_API bool xrtValueGetChar(const xvalue* pValue, uint32* pResult);
+
+
+
 /* 精确读取浮点值，类型不匹配时失败。 */
 XRT_API bool xrtValueGetFloat(const xvalue* pValue, double* pResult);
 
@@ -12035,9 +15690,6 @@ typedef struct xvaluekey {
 /* 迭代器持有 backing 快照；活动迭代器必须先 End 才能再次 Begin。 */
 typedef struct xvalueiter {
 	ptr Backing;
-	/* Finalizer-backed identity objects additionally retain the actual source
-	 * shell. Ordinary COW snapshots still retain only Backing. Internal state. */
-	xvalue* FinalizerOwner;
 	xvaluetype Type;
 	int Direction;
 	size_t Index;
@@ -12045,6 +15697,14 @@ typedef struct xvalueiter {
 		xmapiter Map;
 		xintmapiter IntMap;
 		xsetiter Set;
+		/* Keep object-only bookkeeping in the pre-existing iterator-state
+		 * storage. xintmapiter remains the largest union member, so adding the
+		 * finalizer shell here does not change xvalueiter's public ABI. Map is
+		 * first so State.Map and State.Object.Map have identical addresses. */
+		struct {
+			xmapiter Map;
+			xvalue* FinalizerOwner;
+		} Object;
 	} State;
 } xvalueiter;
 
@@ -12651,437 +16311,6 @@ XRT_API xvalue* xrtValueDeepClone(const xvalue* pValue);
 	两个不同 Handle 只有在同一策略域提供 Equal 时才可比较。
 */
 XRT_API bool xrtValueEqual(const xvalue* pLeft, const xvalue* pRight);
-
-
-
-XRT_EXTERN_C_END
-
-#endif
-
-#endif
-
-
-/* ========================================================================== */
-/* public: include/xrt/memory_debug.h */
-/* ========================================================================== */
-
-#ifndef XRT_MEMORY_DEBUG_H
-#define XRT_MEMORY_DEBUG_H
-
-
-
-
-#if defined(XRT_FEATURE_MEMORY_DEBUG_REPORT) && !defined(XRT_FEATURE_MEMORY_DEBUG)
-	#error "XRT_FEATURE_MEMORY_DEBUG_REPORT requires XRT_FEATURE_MEMORY_DEBUG"
-#endif
-
-
-
-#if defined(XRT_FEATURE_MEMORY_DEBUG)
-
-/* 调试器固定保留最近 512 条事件。 */
-#define XRT_MEMDEBUG_EVENT_LIMIT 512u
-
-
-
-/* 内存调试事件类型。 */
-typedef enum xmemdebugeventkind {
-	XMEMDEBUG_ALLOC = 1,
-	XMEMDEBUG_FREE,
-	XMEMDEBUG_REALLOC,
-	XMEMDEBUG_DOUBLE_FREE,
-	XMEMDEBUG_INVALID_FREE,
-	XMEMDEBUG_OVERFLOW,
-	XMEMDEBUG_UNDERFLOW,
-	XMEMDEBUG_USE_AFTER_FREE,
-	XMEMDEBUG_TEMP_ALLOC,
-	XMEMDEBUG_TEMP_REWIND,
-	XMEMDEBUG_TEMP_RESET
-} xmemdebugeventkind;
-
-
-
-/* 内存调试事件是只包含借用信息的值对象。 */
-typedef struct xmemdebugevent {
-	xmemdebugeventkind Kind;
-	uint64 Sequence;
-	ptr Address;
-	size_t Size;
-	cstr File;
-	uint32 Line;
-} xmemdebugevent;
-
-
-
-/* 内存调试快照用于测试、诊断和外部报告。 */
-typedef struct xmemdebugsnapshot {
-	bool Enabled;
-	size_t LiveCount;
-	size_t LiveBytes;
-	size_t PeakCount;
-	size_t PeakBytes;
-	size_t QuarantineCount;
-	size_t QuarantineBytes;
-	uint64 AllocCount;
-	uint64 FreeCount;
-	uint64 ReallocCount;
-	uint64 DoubleFreeCount;
-	uint64 InvalidFreeCount;
-	uint64 OverflowCount;
-	uint64 UnderflowCount;
-	uint64 UseAfterFreeCount;
-	size_t TempCurrentBytes;
-	size_t TempPeakBytes;
-	uint64 TempResetCount;
-	size_t EventCount;
-} xmemdebugsnapshot;
-
-
-
-/* 事件访问器返回 false 时停止遍历。 */
-typedef bool (*xmemdebugvisitor)(const xmemdebugevent* pEvent, ptr pUserData);
-
-
-
-/* 活动分配记录借用分配点字符串，不转移内存所有权。 */
-typedef struct xmemdebugallocation {
-	ptr Address;
-	size_t Size;
-	cstr File;
-	uint32 Line;
-} xmemdebugallocation;
-
-
-
-/* 活动分配访问器返回 false 时停止遍历。 */
-typedef bool (*xmemdebugallocationvisitor)(const xmemdebugallocation* pAllocation, ptr pUserData);
-
-
-
-#if defined(XRT_FEATURE_MEMORY_DEBUG_REPORT)
-/* 报告格式与具体输出目标解耦。 */
-typedef enum xmemdebugreportformat {
-	XMEMDEBUG_REPORT_TEXT = 1,
-	XMEMDEBUG_REPORT_JSON
-} xmemdebugreportformat;
-
-
-
-/* 报告写入器成功消费全部数据时返回 true。 */
-typedef bool (*xmemdebugwriteproc)(xbytesview Data, ptr pUserData);
-#endif
-
-
-
-XRT_EXTERN_C_BEGIN
-
-
-
-/* 返回稳定的事件名称，未知事件返回 unknown。 */
-XRT_API cstr xrtMemDebugEventName(xmemdebugeventkind Kind);
-
-
-
-/* 在没有活动分配时开启或关闭运行时内存调试记录。 */
-XRT_API bool xrtMemDebugEnable(bool bEnable);
-
-
-
-/* 返回运行时内存调试是否开启。 */
-XRT_API bool xrtMemDebugEnabled(void);
-
-
-
-/* 当前线程允许指定次数成功分配后，让下一次逻辑分配失败一次。 */
-XRT_API bool xrtMemDebugFailAfter(uint64 iSuccessfulAllocations);
-
-
-
-/* 清除当前线程尚未触发的分配故障。 */
-XRT_API void xrtMemDebugFailClear(void);
-
-
-
-/* 返回当前线程最近配置的分配故障是否已经触发。 */
-XRT_API bool xrtMemDebugFailTriggered(void);
-
-
-
-/* 在没有活动分配时清空统计、事件和隔离队列。 */
-XRT_API bool xrtMemDebugReset(void);
-
-
-
-/* 获取一致的内存调试统计快照。 */
-XRT_API void xrtMemDebugSnapshot(xmemdebugsnapshot* pSnapshot);
-
-
-
-/* 按时间顺序访问当前保留的调试事件。 */
-XRT_API size_t xrtMemDebugVisit(xmemdebugvisitor pVisitor, ptr pUserData);
-
-
-
-/* 访问内部锁线性化点捕获的完整活动分配快照。 */
-XRT_API size_t xrtMemDebugVisitLive(xmemdebugallocationvisitor pVisitor, ptr pUserData);
-
-
-
-#if defined(XRT_FEATURE_MEMORY_DEBUG_REPORT)
-/* 把当前调试快照流式写为文本或 JSON。 */
-XRT_API bool xrtMemDebugReport(
-	xmemdebugreportformat Format,
-	xmemdebugwriteproc pWriter,
-	ptr pUserData
-);
-#endif
-
-
-
-XRT_EXTERN_C_END
-
-#endif
-
-#endif
-
-
-/* ========================================================================== */
-/* public: include/xrt/atomic.h */
-/* ========================================================================== */
-
-#ifndef XRT_ATOMIC_H
-#define XRT_ATOMIC_H
-
-
-
-
-#if defined(XRT_FEATURE_ATOMIC)
-
-/* 原子操作的内存顺序与 C11 语义一致。 */
-typedef enum xmemoryorder {
-	XMEMORY_RELAXED = 0,
-	XMEMORY_ACQUIRE = 1,
-	XMEMORY_RELEASE = 2,
-	XMEMORY_ACQ_REL = 3,
-	XMEMORY_SEQ_CST = 4
-} xmemoryorder;
-
-
-
-#if defined(_MSC_VER) || \
-	(defined(__TINYC__) && (defined(_WIN32) || defined(_WIN64)))
-	#define XRT_ATOMIC_ALIGN(iAlignment) __declspec(align(iAlignment))
-#elif defined(__GNUC__) || defined(__clang__)
-	#define XRT_ATOMIC_ALIGN(iAlignment) __attribute__((aligned(iAlignment)))
-#else
-	#define XRT_ATOMIC_ALIGN(iAlignment)
-#endif
-
-#if UINTPTR_MAX == UINT64_MAX
-	#define XRT_ATOMIC_PTR_ALIGNMENT 8
-#else
-	#define XRT_ATOMIC_PTR_ALIGNMENT 4
-#endif
-
-
-
-/* 32 位原子整数只允许通过 Atomic API 并发访问 Value。 */
-typedef struct XRT_ATOMIC_ALIGN(4) xatomic32 {
-	volatile uint32 Value;
-} xatomic32;
-
-
-
-/* 64 位原子整数显式保证 8 字节对齐。 */
-typedef struct XRT_ATOMIC_ALIGN(8) xatomic64 {
-	volatile uint64 Value;
-} xatomic64;
-
-
-
-/* 原子指针只保存指针值，不拥有指针目标。 */
-typedef struct XRT_ATOMIC_ALIGN(XRT_ATOMIC_PTR_ALIGNMENT) xatomicptr {
-	ptr volatile Value;
-} xatomicptr;
-
-
-
-#undef XRT_ATOMIC_ALIGN
-#undef XRT_ATOMIC_PTR_ALIGNMENT
-
-
-
-/* 静态原子对象初始化器只能用于对象定义。 */
-#define XRT_ATOMIC32_INIT(iValue) { (uint32)(iValue) }
-#define XRT_ATOMIC64_INIT(iValue) { (uint64)(iValue) }
-#define XRT_ATOMICPTR_INIT(pValue) { (ptr)(pValue) }
-
-
-
-XRT_EXTERN_C_BEGIN
-
-
-
-/* 判断自然对齐的指定宽度是否由当前目标无锁实现。 */
-XRT_API bool xrtAtomicIsLockFree(size_t iSize);
-
-
-
-/* 在对象发布给其他线程前初始化 32 位原子值。 */
-XRT_API void xrtAtomic32Init(xatomic32* pAtomic, uint32 iValue);
-
-
-
-/* 按指定内存顺序读取 32 位原子值。 */
-XRT_API uint32 xrtAtomic32Load(const xatomic32* pAtomic, xmemoryorder iOrder);
-
-
-
-/* 按指定内存顺序写入 32 位原子值。 */
-XRT_API void xrtAtomic32Store(xatomic32* pAtomic, uint32 iValue, xmemoryorder iOrder);
-
-
-
-/* 原子交换 32 位值并返回旧值。 */
-XRT_API uint32 xrtAtomic32Exchange(xatomic32* pAtomic, uint32 iValue, xmemoryorder iOrder);
-
-
-
-/* 强比较交换 32 位值，失败时把实际值写回 Expected。 */
-XRT_API bool xrtAtomic32CompareExchange(
-	xatomic32* pAtomic,
-	uint32* pExpected,
-	uint32 iDesired,
-	xmemoryorder iSuccess,
-	xmemoryorder iFailure
-);
-
-
-
-/* 原子加 32 位值并返回修改前的值。 */
-XRT_API uint32 xrtAtomic32FetchAdd(xatomic32* pAtomic, uint32 iValue, xmemoryorder iOrder);
-
-
-
-/* 原子减 32 位值并返回修改前的值。 */
-XRT_API uint32 xrtAtomic32FetchSub(xatomic32* pAtomic, uint32 iValue, xmemoryorder iOrder);
-
-
-
-/* 原子按位与 32 位值并返回修改前的值。 */
-XRT_API uint32 xrtAtomic32FetchAnd(xatomic32* pAtomic, uint32 iValue, xmemoryorder iOrder);
-
-
-
-/* 原子按位或 32 位值并返回修改前的值。 */
-XRT_API uint32 xrtAtomic32FetchOr(xatomic32* pAtomic, uint32 iValue, xmemoryorder iOrder);
-
-
-
-/* 原子按位异或 32 位值并返回修改前的值。 */
-XRT_API uint32 xrtAtomic32FetchXor(xatomic32* pAtomic, uint32 iValue, xmemoryorder iOrder);
-
-
-
-/* 在对象发布给其他线程前初始化 64 位原子值。 */
-XRT_API void xrtAtomic64Init(xatomic64* pAtomic, uint64 iValue);
-
-
-
-/* 按指定内存顺序读取 64 位原子值。 */
-XRT_API uint64 xrtAtomic64Load(const xatomic64* pAtomic, xmemoryorder iOrder);
-
-
-
-/* 按指定内存顺序写入 64 位原子值。 */
-XRT_API void xrtAtomic64Store(xatomic64* pAtomic, uint64 iValue, xmemoryorder iOrder);
-
-
-
-/* 原子交换 64 位值并返回旧值。 */
-XRT_API uint64 xrtAtomic64Exchange(xatomic64* pAtomic, uint64 iValue, xmemoryorder iOrder);
-
-
-
-/* 强比较交换 64 位值，失败时把实际值写回 Expected。 */
-XRT_API bool xrtAtomic64CompareExchange(
-	xatomic64* pAtomic,
-	uint64* pExpected,
-	uint64 iDesired,
-	xmemoryorder iSuccess,
-	xmemoryorder iFailure
-);
-
-
-
-/* 原子加 64 位值并返回修改前的值。 */
-XRT_API uint64 xrtAtomic64FetchAdd(xatomic64* pAtomic, uint64 iValue, xmemoryorder iOrder);
-
-
-
-/* 原子减 64 位值并返回修改前的值。 */
-XRT_API uint64 xrtAtomic64FetchSub(xatomic64* pAtomic, uint64 iValue, xmemoryorder iOrder);
-
-
-
-/* 原子按位与 64 位值并返回修改前的值。 */
-XRT_API uint64 xrtAtomic64FetchAnd(xatomic64* pAtomic, uint64 iValue, xmemoryorder iOrder);
-
-
-
-/* 原子按位或 64 位值并返回修改前的值。 */
-XRT_API uint64 xrtAtomic64FetchOr(xatomic64* pAtomic, uint64 iValue, xmemoryorder iOrder);
-
-
-
-/* 原子按位异或 64 位值并返回修改前的值。 */
-XRT_API uint64 xrtAtomic64FetchXor(xatomic64* pAtomic, uint64 iValue, xmemoryorder iOrder);
-
-
-
-/* 在对象发布给其他线程前初始化原子指针。 */
-XRT_API void xrtAtomicPtrInit(xatomicptr* pAtomic, ptr pValue);
-
-
-
-/* 按指定内存顺序读取原子指针。 */
-XRT_API ptr xrtAtomicPtrLoad(const xatomicptr* pAtomic, xmemoryorder iOrder);
-
-
-
-/* 按指定内存顺序写入原子指针。 */
-XRT_API void xrtAtomicPtrStore(xatomicptr* pAtomic, ptr pValue, xmemoryorder iOrder);
-
-
-
-/* 原子交换指针并返回旧值。 */
-XRT_API ptr xrtAtomicPtrExchange(xatomicptr* pAtomic, ptr pValue, xmemoryorder iOrder);
-
-
-
-/* 强比较交换指针，失败时把实际值写回 Expected。 */
-XRT_API bool xrtAtomicPtrCompareExchange(
-	xatomicptr* pAtomic,
-	ptr* pExpected,
-	ptr pDesired,
-	xmemoryorder iSuccess,
-	xmemoryorder iFailure
-);
-
-
-
-/* 建立线程间内存栅栏。 */
-XRT_API void xrtAtomicThreadFence(xmemoryorder iOrder);
-
-
-
-/* 建立当前线程与信号处理器之间的编译器栅栏。 */
-XRT_API void xrtAtomicSignalFence(xmemoryorder iOrder);
-
-
-
-/* 向处理器提示当前线程处于短自旋等待。 */
-XRT_API void xrtAtomicPause(void);
 
 
 
@@ -14444,6 +17673,14 @@ XRT_API str xrtUIntFormat(uint64 iValue, xstrview Format);
 /* 格式化 double 并返回由 xrtFree 释放的零结尾字符串。 */
 XRT_API str xrtNumFormat(double fValue, xstrview Format);
 
+/* Exact-size owned results, including U+0000 for integer character format.
+ * pOutputSize is required and must not overlap Format. Ordinary failure sets
+ * it to zero; invalid output-slot aliasing leaves the input unchanged.
+ * Successful Data is zero-terminated but Size excludes that terminator. */
+XRT_API str xrtIntFormatSized(int64 iValue, xstrview Format, size_t* pOutputSize);
+XRT_API str xrtUIntFormatSized(uint64 iValue, xstrview Format, size_t* pOutputSize);
+XRT_API str xrtNumFormatSized(double fValue, xstrview Format, size_t* pOutputSize);
+
 #endif
 
 
@@ -14873,6 +18110,16 @@ XRT_API str xrtUtf8PadRight(xstrview Text, size_t iWidth, xstrview Fill);
 /* 按 Unicode 标量宽度在两侧重复填充严格 UTF-8 文本。 */
 XRT_API str xrtUtf8PadCenter(xstrview Text, size_t iWidth, xstrview Fill);
 
+/* 与上述填充函数共用实现，交付包含内嵌 NUL 的精确结果字节数。
+ * pOutputSize 可为 NULL；普通失败清零。输出指针不得重叠输入字节区域，
+ * 拒绝重叠时保持输入和输出原值。结果由 xrtFree 释放。 */
+XRT_API str xrtUtf8PadLeftSized(xstrview Text, size_t iWidth,
+	xstrview Fill, size_t* pOutputSize);
+XRT_API str xrtUtf8PadRightSized(xstrview Text, size_t iWidth,
+	xstrview Fill, size_t* pOutputSize);
+XRT_API str xrtUtf8PadCenterSized(xstrview Text, size_t iWidth,
+	xstrview Fill, size_t* pOutputSize);
+
 
 
 /* 按 Unicode 标量反转严格 UTF-8 文本到调用方缓冲区；允许原地反转。 */
@@ -15239,6 +18486,11 @@ XRT_API str xrtStrConcat(xstrview Left, xstrview Right);
 /* 使用分隔符连接一组字符串视图。 */
 XRT_API str xrtStrJoin(xstrview Separator, const xstrview* arrText, size_t iCount);
 
+/* 共用连接实现，交付精确结果字节数（不含末尾零）。普通失败清零；
+ * 输出槽不得重叠分隔符、视图表或任意输入字节，别名拒绝时不改槽。 */
+XRT_API str xrtStrJoinSized(xstrview Separator, const xstrview* arrText,
+	size_t iCount, size_t* pOutputSize);
+
 
 
 /* 重复字符串指定次数。 */
@@ -15248,6 +18500,14 @@ XRT_API str xrtStrRepeat(xstrview Text, size_t iCount);
 
 /* 替换所有不重叠子串。 */
 XRT_API str xrtStrReplace(xstrview Text, xstrview Part, xstrview Replacement);
+
+
+
+/* 替换所有不重叠子串并返回精确字节长度（不含终止 NUL）。
+ * pOutputSize 可为 NULL；失败时非空输出长度清零，结果由 xrtFree 释放。
+ * 输出长度指针必须与所有输入字节区域不重叠；拒绝重叠时不写输出指针。 */
+XRT_API str xrtStrReplaceSized(xstrview Text, xstrview Part,
+	xstrview Replacement, size_t* pOutputSize);
 
 
 
@@ -15935,8 +19195,9 @@ XRT_EXTERN_C_END
 #endif
 
 #if defined(XRT_FEATURE_FILE_ROOT) && \
-	(!defined(XRT_FEATURE_FILE) || !defined(XRT_FEATURE_FILE_LINK))
-	#error "XRT file roots require file and file-link support"
+	(!defined(XRT_FEATURE_FILE) || !defined(XRT_FEATURE_FILE_LINK) || \
+	 !defined(XRT_FEATURE_DIR))
+	#error "XRT file roots require file, file-link, and directory support"
 #endif
 
 #if defined(XRT_FEATURE_FILE_FIFO) && !defined(XRT_FEATURE_FILE)
@@ -16076,6 +19337,23 @@ typedef struct xfileinfo {
 	xtime Created;
 	xtime Changed;
 } xfileinfo;
+
+/* Structural backend capabilities filtered by the handle's access/mode.
+ * A bit does not guarantee a particular range, filesystem object or option.
+ * Native-control permits requesting native locks/maps; it is not a handle. */
+typedef enum xfilecapability {
+    XFILE_CAP_READ = 0x001,
+    XFILE_CAP_WRITE = 0x002,
+    XFILE_CAP_READ_AT = 0x004,
+    XFILE_CAP_WRITE_AT = 0x008,
+    XFILE_CAP_SEEK = 0x010,
+    XFILE_CAP_STAT = 0x020,
+    XFILE_CAP_RESIZE = 0x040,
+    XFILE_CAP_FLUSH = 0x080,
+    XFILE_CAP_NATIVE = 0x100,
+    XFILE_CAP_NATIVE_CONTROL = 0x200,
+    XFILE_CAP_ASYNC_BIND = 0x400
+} xfilecapability;
 
 
 
@@ -16468,6 +19746,10 @@ XRT_API bool xrtFlush(xfile File);
 /* 返回打开文件经过验证的标志；失败返回 0。 */
 XRT_API uint32 xrtFileFlags(xfile File);
 
+/* Zero-allocation capability query; NULL is an error, not an empty mask.
+ * Async-only handles suppress synchronous operations but retain metadata. */
+XRT_API uint64 xrtFileCapabilities(xfile File);
+
 
 
 /* 返回 HANDLE 或文件描述符的整数表示；失败返回 -1。 */
@@ -16523,6 +19805,14 @@ XRT_API bool xrtPathRename(cstr sSource, cstr sTarget, bool bReplace);
 
 /* 删除一个非目录文件或链接。 */
 XRT_API bool xrtFileDelete(cstr sPath);
+
+/* Remove an open native non-directory file without allocating on success.
+ * The caller retains File and must close it. Windows marks the opened object
+ * for deletion on last close; sPath is the POSIX name to unlink. POSIX checks
+ * device/inode before unlink, but the caller must serialize namespace changes.
+ * A missing POSIX name is success; a replaced name is never knowingly removed.
+ * Virtual files are unsupported. */
+XRT_API bool xrtFileDeleteOpen(xfile File, cstr sPath);
 
 
 
@@ -16629,6 +19919,11 @@ XRT_API bool xrtRootStat(xroot Root, cstr sPath,
 
 
 
+/* 从锚定目录句柄打开根内目录迭代器，不重新按诊断路径查找。 */
+XRT_API xdir xrtRootDirOpen(xroot Root, cstr sPath, uint32 iFlags);
+
+
+
 /* 在根内创建一个目录；POSIX 使用显式模式，Windows 接受但忽略模式。 */
 XRT_API bool xrtRootDirCreate(xroot Root, cstr sPath, uint32 iMode);
 
@@ -16660,7 +19955,8 @@ XRT_API bool xrtRootFifoCreate(xroot Root, cstr sPath, uint32 iMode);
 
 
 
-/* 在根内设置对象权限；跟随链接时仍由根解析器阻止越界。 */
+/* 在根内设置 POSIX 对象权限；Windows 返回 XERR_UNSUPPORTED。
+ * 跟随链接时仍由根解析器阻止越界。 */
 XRT_API bool xrtRootSetMode(xroot Root, cstr sPath,
 	bool bFollowLink, uint32 iMode);
 
@@ -16929,2708 +20225,6 @@ XRT_API bool xrtDirEnsureEmpty(cstr sPath);
 
 
 XRT_EXTERN_C_END
-
-#endif
-
-
-/* ========================================================================== */
-/* public: include/xrt/hash.h */
-/* ========================================================================== */
-
-#ifndef XRT_HASH_H
-#define XRT_HASH_H
-
-
-
-
-#if defined(XRT_FEATURE_HASH_KEYED)
-
-/* SipHash 使用完整的 128 位密钥，不能用普通 64 位 seed 代替。 */
-typedef struct xsipkey {
-	uint64 Low;
-	uint64 High;
-} xsipkey;
-
-
-
-/* 流式状态可以放在栈上；字段公开只为避免隐藏分配，不应直接修改。 */
-typedef struct xsiphash {
-	uint64 State[4];
-	uint64 Total;
-	unsigned char Tail[8];
-	uint32 Guard;
-	uint8 TailSize;
-} xsiphash;
-
-#endif
-
-
-
-XRT_EXTERN_C_BEGIN
-
-
-
-#if defined(XRT_FEATURE_HASH32)
-
-/* 使用固定算法和默认 seed 计算确定性的 32 位非密码哈希。 */
-XRT_API uint32 xrtHash32(const void* pData, size_t iSize);
-
-
-
-/* 使用调用者提供的 seed 计算确定性的 32 位非密码哈希。 */
-XRT_API uint32 xrtHash32Seed(const void* pData, size_t iSize, uint32 iSeed);
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_HASH64)
-
-/* 使用固定算法和默认 seed 计算确定性的 64 位非密码哈希。 */
-XRT_API uint64 xrtHash64(const void* pData, size_t iSize);
-
-
-
-/* 使用调用者提供的 seed 计算确定性的 64 位非密码哈希。 */
-XRT_API uint64 xrtHash64Seed(const void* pData, size_t iSize, uint64 iSeed);
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_HASH_KEYED)
-
-/* 从两个 64 位字创建 SipHash 密钥。 */
-XRT_API xsipkey xrtSipKey(uint64 iLow, uint64 iHigh);
-
-
-
-/* 使用 SipHash-2-4 对一段连续数据执行带密钥哈希。 */
-XRT_API uint64 xrtSipHash(const void* pData, size_t iSize, xsipkey Key);
-
-
-
-/* 初始化一个可跨任意分块边界工作的 SipHash-2-4 状态。 */
-XRT_API void xrtSipHashInit(xsiphash* pState, xsipkey Key);
-
-
-
-/* 向状态追加字节；输入不得与状态重叠，失败时状态不变。 */
-XRT_API bool xrtSipHashUpdate(xsiphash* pState, const void* pData, size_t iSize);
-
-
-
-/* 计算当前状态的哈希值，不修改状态，可重复调用或继续追加。 */
-XRT_API uint64 xrtSipHashFinal(const xsiphash* pState);
-
-#endif
-
-
-
-XRT_EXTERN_C_END
-
-#endif
-
-
-/* ========================================================================== */
-/* public: include/xrt/thread.h */
-/* ========================================================================== */
-
-#ifndef XRT_THREAD_H
-#define XRT_THREAD_H
-
-
-
-
-#if defined(XRT_FEATURE_ONCE)
-
-/* Once 使用固定存储并允许静态零初始化。 */
-#define XRT_ONCE_STORAGE_SIZE 16u
-
-
-
-/* Once 对象的字段保持不透明，只能使用 XRT_ONCE_INIT 或全零初始化。 */
-typedef union xonce {
-	uint64 Alignment;
-	uint8 Storage[XRT_ONCE_STORAGE_SIZE];
-} xonce;
-
-
-
-/* 初始化过程返回 true 时永久完成，返回 false 时允许后续调用重试。 */
-typedef bool (*xonceproc)(ptr pData);
-
-
-
-/* 静态 Once 对象初始化值。 */
-#define XRT_ONCE_INIT { 0 }
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_THREAD_KEY)
-
-/* 动态键按原生线程隔离，同一线程上的 Fiber 和协程共享其值。 */
-typedef struct xthreadkey xthreadkey;
-
-
-
-/* 非空线程局部值在线程退出、显式清理或被替换时交给析构过程。 */
-typedef void (*xthreadkeyproc)(ptr pValue);
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_THREAD) && !defined(XRT_FEATURE_WAIT)
-	#error "XRT_FEATURE_THREAD requires XRT_FEATURE_WAIT"
-#endif
-
-
-
-XRT_EXTERN_C_BEGIN
-
-
-
-#if defined(XRT_FEATURE_ONCE)
-/* 并发执行一次初始化；成功后所有调用返回 true，失败允许后续调用重试。 */
-XRT_API bool xrtOnce(xonce* pOnce, xonceproc pProc, ptr pData);
-#endif
-
-
-
-#if defined(XRT_FEATURE_THREAD_KEY)
-/* 创建动态原生线程局部键；析构过程可以为空。 */
-XRT_API xthreadkey* xrtThreadKeyCreate(xthreadkeyproc pDestroy);
-
-
-
-/* 关闭键；其他线程不得再主动访问，已有线程槽会在退出时延迟释放。 */
-XRT_API bool xrtThreadKeyDestroy(xthreadkey* pKey);
-
-
-
-/* 返回当前线程的借用值；当前线程尚未设置时返回空指针。 */
-XRT_API ptr xrtThreadKeyGet(const xthreadkey* pKey);
-
-
-
-/* 转移新值的所有权；成功替换后析构旧值，空值等价于清除。 */
-XRT_API bool xrtThreadKeySet(xthreadkey* pKey, ptr pValue);
-
-
-
-/* 取走当前线程的值但不执行析构；返回值所有权交给调用方。 */
-XRT_API ptr xrtThreadKeyTake(xthreadkey* pKey);
-
-
-
-/* 析构并清除当前原生线程的全部动态键值；XRT 创建的线程退出时自动调用。 */
-XRT_API bool xrtThreadKeysClear(void);
-#endif
-
-
-
-XRT_EXTERN_C_END
-
-
-
-#if defined(XRT_FEATURE_THREAD)
-
-/* 原生线程对象对外保持不透明，并使用引用计数管理生命周期。 */
-typedef struct xthread xthread;
-
-
-
-/* 线程入口返回稳定的 32 位退出码。 */
-typedef int32 (*xthreadproc)(ptr pData);
-
-
-
-/* 线程只有运行和完成两种可观测状态，停止请求不伪装成执行状态。 */
-typedef enum xthreadstate {
-	XTHREAD_RUNNING = 0,
-	XTHREAD_FINISHED = 1
-} xthreadstate;
-
-
-
-XRT_EXTERN_C_BEGIN
-
-
-
-/* 创建并立即启动线程；栈大小为零时使用平台默认值。 */
-XRT_API xthread* xrtThreadCreate(xthreadproc pProc, ptr pData, size_t iStackSize);
-
-
-
-/* 增加线程对象引用并返回原指针。 */
-XRT_API xthread* xrtThreadRef(xthread* pThread);
-
-
-
-/* 释放线程对象引用；运行线程自持引用，因此允许用它安全分离线程。 */
-XRT_API void xrtThreadDestroy(xthread* pThread);
-
-
-
-/* 等待线程执行体和 XRT 线程上下文清理完成，允许多个线程同时等待同一个对象。 */
-XRT_API xwaitresult xrtThreadWait(xthread* pThread);
-
-
-
-/* 在相对微秒数内等待线程执行体和 XRT 线程上下文清理完成。 */
-XRT_API xwaitresult xrtThreadWaitFor(xthread* pThread, uint64 iTimeout);
-
-
-
-/* 等待线程执行体和 XRT 线程上下文清理完成到指定单调时钟截止时间。 */
-XRT_API xwaitresult xrtThreadWaitUntil(xthread* pThread, xdeadline iDeadline);
-
-
-
-/* 幂等地请求线程协作停止，不会强制终止执行。 */
-XRT_API bool xrtThreadStop(xthread* pThread);
-
-
-
-/* 判断指定线程是否收到停止请求。 */
-XRT_API bool xrtThreadStopRequested(const xthread* pThread);
-
-
-
-/* 判断当前 XRT 线程是否收到停止请求。 */
-XRT_API bool xrtThreadStopping(void);
-
-
-
-/* 返回线程状态快照。 */
-XRT_API xthreadstate xrtThreadState(const xthread* pThread);
-
-
-
-/* 返回完成线程的退出码；线程仍运行或参数无效时返回零并设置错误。 */
-XRT_API int32 xrtThreadExitCode(const xthread* pThread);
-
-
-
-/* 返回线程对象在进程内稳定的非零平台标识；线程结束后该标识可能被平台复用。 */
-XRT_API uint64 xrtThreadId(const xthread* pThread);
-
-
-
-/* 返回当前线程在进程内稳定的非零平台标识，外部创建的线程同样可用。 */
-XRT_API uint64 xrtThreadCurrentId(void);
-
-
-
-/* 返回当前 XRT 创建线程的借用对象，外部线程返回空指针。 */
-XRT_API xthread* xrtThreadCurrent(void);
-
-
-
-/* 主动让出当前线程的处理器时间片。 */
-XRT_API void xrtThreadYield(void);
-
-
-
-XRT_EXTERN_C_END
-
-#endif
-
-#endif
-
-
-/* ========================================================================== */
-/* public: include/xrt/queue.h */
-/* ========================================================================== */
-
-#ifndef XRT_QUEUE_H
-#define XRT_QUEUE_H
-
-
-
-
-#if defined(XRT_FEATURE_QUEUE) && !defined(XRT_FEATURE_ATOMIC)
-	#error "XRT_FEATURE_QUEUE requires XRT_FEATURE_ATOMIC"
-#endif
-
-#if defined(XRT_FEATURE_QUEUE_SPSC) && !defined(XRT_FEATURE_QUEUE)
-	#error "XRT_FEATURE_QUEUE_SPSC requires XRT_FEATURE_QUEUE"
-#endif
-
-#if defined(XRT_FEATURE_QUEUE_MPSC) && !defined(XRT_FEATURE_QUEUE)
-	#error "XRT_FEATURE_QUEUE_MPSC requires XRT_FEATURE_QUEUE"
-#endif
-
-#if defined(XRT_FEATURE_QUEUE_MPMC) && !defined(XRT_FEATURE_QUEUE)
-	#error "XRT_FEATURE_QUEUE_MPMC requires XRT_FEATURE_QUEUE"
-#endif
-
-
-
-#if defined(XRT_FEATURE_QUEUE)
-
-
-
-
-/* 热游标隔离跨度覆盖 XRT 支持架构上的常见最大数据缓存行。 */
-#if \
-	defined(__aarch64__) || \
-	defined(_M_ARM64) || \
-	defined(__powerpc64__) || \
-	defined(__ppc64__)
-	#define XRT_QUEUE_CACHE_SPAN 128u
-#else
-	#define XRT_QUEUE_CACHE_SPAN 64u
-#endif
-
-#define XRT_QUEUE_MAX_CAPACITY ((size_t)1u << 30)
-
-
-
-/* 队列结果把正常流控状态与真正错误分开表达。 */
-typedef enum xqueueresult {
-	XQUEUE_ERROR = -1,
-	XQUEUE_OK = 0,
-	XQUEUE_EMPTY = 1,
-	XQUEUE_FULL = 2,
-	XQUEUE_CLOSED = 3
-} xqueueresult;
-
-
-
-/* 批量操作同时返回流控状态和实际处理数量。 */
-typedef struct xqueuebatchresult {
-	xqueueresult Result;
-	size_t Count;
-} xqueuebatchresult;
-
-
-
-/* 排空回调接收已从队列移除的指针值。 */
-typedef void (*xqueuedrainfn)(ptr pItem, ptr pContext);
-
-
-
-XRT_EXTERN_C_BEGIN
-
-
-
-/* 把最小容量向上取整为队列可使用的 2 次幂容量。 */
-XRT_API size_t xrtQueueCapacity(size_t iMinimum);
-
-
-
-XRT_EXTERN_C_END
-
-#endif
-
-
-
-#if \
-	defined(XRT_FEATURE_QUEUE_SPSC) || \
-	defined(XRT_FEATURE_QUEUE_MPSC) || \
-	defined(XRT_FEATURE_QUEUE_MPMC)
-
-/* 32 位游标独占一个架构隔离跨度，避免生产者和消费者伪共享。 */
-typedef struct xqueuecursor32 {
-	xatomic32 Position;
-	uint8 Reserved[XRT_QUEUE_CACHE_SPAN - sizeof(xatomic32)];
-} xqueuecursor32;
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_QUEUE_MPSC) || defined(XRT_FEATURE_QUEUE_MPMC)
-
-/* 序列槽保存一个不拥有目标的指针，并用序号表达空闲和就绪代次。 */
-typedef struct xqueueslot {
-	xatomic32 Sequence;
-	ptr Item;
-} xqueueslot;
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_QUEUE_SPSC)
-
-
-
-/* SPSC 保存指针值，只允许一个生产者和一个消费者并发操作。 */
-typedef struct xspscqueue {
-	ptr* Items;
-	ptr Allocation;
-	size_t Capacity;
-	size_t Mask;
-	xatomic32 Closed;
-	xqueuecursor32 Tail;
-	xqueuecursor32 Head;
-} xspscqueue;
-
-
-
-XRT_EXTERN_C_BEGIN
-
-
-
-/* 初始化拥有内部指针环的单生产者单消费者队列。 */
-XRT_API bool xrtSPSCQueueInit(xspscqueue* pQueue, size_t iCapacity);
-
-
-
-/* 在调用方提供的 2 次幂指针环上初始化 SPSC 队列。 */
-XRT_API bool xrtSPSCQueueInitBuffer(
-	xspscqueue* pQueue,
-	ptr* pItems,
-	size_t iCapacity
-);
-
-
-
-/* 创建拥有结构和内部指针环的 SPSC 队列。 */
-XRT_API xspscqueue* xrtSPSCQueueCreate(size_t iCapacity);
-
-
-
-/* 释放拥有的指针环，但不释放队列结构或指针目标。 */
-XRT_API void xrtSPSCQueueUnit(xspscqueue* pQueue);
-
-
-
-/* 释放 Create 返回的队列结构和内部指针环。 */
-XRT_API void xrtSPSCQueueDestroy(xspscqueue* pQueue);
-
-
-
-/* 尝试压入一个可为空的指针值。 */
-XRT_API xqueueresult xrtSPSCQueueTryPush(xspscqueue* pQueue, ptr pItem);
-
-
-
-/* 尝试批量压入连续指针值；数组必须对齐且不与队列对象或内部环重叠。 */
-XRT_API xqueuebatchresult xrtSPSCQueuePushBatch(
-	xspscqueue* pQueue,
-	ptr const* pItems,
-	size_t iCount
-);
-
-
-
-/* 尝试弹出一个指针值；输出必须对齐且不与队列对象或内部环重叠。 */
-XRT_API xqueueresult xrtSPSCQueueTryPop(xspscqueue* pQueue, ptr* pItem);
-
-
-
-/* 尝试批量弹出连续指针值；数组必须对齐且不与队列对象或内部环重叠。 */
-XRT_API xqueuebatchresult xrtSPSCQueuePopBatch(
-	xspscqueue* pQueue,
-	ptr* pItems,
-	size_t iCapacity
-);
-
-
-
-/* 返回并发快照下的近似元素数量。 */
-XRT_API size_t xrtSPSCQueueCount(const xspscqueue* pQueue);
-
-
-
-/* 由唯一生产者幂等关闭写入端，并允许消费者继续排空已有元素。 */
-XRT_API void xrtSPSCQueueClose(xspscqueue* pQueue);
-
-
-
-/* 判断队列写入端是否已经关闭。 */
-XRT_API bool xrtSPSCQueueIsClosed(const xspscqueue* pQueue);
-
-
-
-/* 判断队列是否已经关闭且排空。 */
-XRT_API bool xrtSPSCQueueIsDrained(const xspscqueue* pQueue);
-
-
-
-/* 排空当前可见元素；回调为空时直接丢弃指针值。 */
-XRT_API size_t xrtSPSCQueueDrain(
-	xspscqueue* pQueue,
-	xqueuedrainfn pDrain,
-	ptr pContext
-);
-
-
-
-/* 在调用方独占且队列为空时重置游标并重新开放。 */
-XRT_API bool xrtSPSCQueueReset(xspscqueue* pQueue);
-
-
-
-XRT_EXTERN_C_END
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_QUEUE_MPSC)
-
-/* MPSC 允许多个生产者并发写入，只允许一个消费者读取。 */
-typedef struct xmpscqueue {
-	xqueueslot* Slots;
-	ptr Allocation;
-	size_t Capacity;
-	size_t Mask;
-	xatomic32 Closed;
-	xqueuecursor32 Tail;
-	xqueuecursor32 Head;
-} xmpscqueue;
-
-
-
-XRT_EXTERN_C_BEGIN
-
-
-
-/* 初始化拥有内部序列槽环的多生产者单消费者队列。 */
-XRT_API bool xrtMPSCQueueInit(xmpscqueue* pQueue, size_t iCapacity);
-
-
-
-/* 在调用方提供的 2 次幂序列槽环上初始化 MPSC 队列。 */
-XRT_API bool xrtMPSCQueueInitBuffer(
-	xmpscqueue* pQueue,
-	xqueueslot* pSlots,
-	size_t iCapacity
-);
-
-
-
-/* 创建拥有结构和内部序列槽环的 MPSC 队列。 */
-XRT_API xmpscqueue* xrtMPSCQueueCreate(size_t iCapacity);
-
-
-
-/* 释放拥有的序列槽环，但不释放队列结构或指针目标。 */
-XRT_API void xrtMPSCQueueUnit(xmpscqueue* pQueue);
-
-
-
-/* 释放 Create 返回的队列结构和内部序列槽环。 */
-XRT_API void xrtMPSCQueueDestroy(xmpscqueue* pQueue);
-
-
-
-/* 由任意生产者尝试压入一个可为空的指针值。 */
-XRT_API xqueueresult xrtMPSCQueueTryPush(xmpscqueue* pQueue, ptr pItem);
-
-
-
-/* 由任意生产者批量压入；数组必须对齐且不与队列对象或槽环重叠。 */
-XRT_API xqueuebatchresult xrtMPSCQueuePushBatch(
-	xmpscqueue* pQueue,
-	ptr const* pItems,
-	size_t iCount
-);
-
-
-
-/* 由唯一消费者弹出；输出必须对齐且不与队列对象或槽环重叠。 */
-XRT_API xqueueresult xrtMPSCQueueTryPop(xmpscqueue* pQueue, ptr* pItem);
-
-
-
-/* 由唯一消费者批量弹出；数组必须对齐且不与队列对象或槽环重叠。 */
-XRT_API xqueuebatchresult xrtMPSCQueuePopBatch(
-	xmpscqueue* pQueue,
-	ptr* pItems,
-	size_t iCapacity
-);
-
-
-
-/* 返回包含已预留槽位的并发近似元素数量。 */
-XRT_API size_t xrtMPSCQueueCount(const xmpscqueue* pQueue);
-
-
-
-/* 在全部生产者停止后幂等关闭写入端。 */
-XRT_API void xrtMPSCQueueClose(xmpscqueue* pQueue);
-
-
-
-/* 判断队列写入端是否已经关闭。 */
-XRT_API bool xrtMPSCQueueIsClosed(const xmpscqueue* pQueue);
-
-
-
-/* 判断队列是否已经关闭且排空。 */
-XRT_API bool xrtMPSCQueueIsDrained(const xmpscqueue* pQueue);
-
-
-
-/* 由唯一消费者排空元素；回调为空时直接丢弃指针值。 */
-XRT_API size_t xrtMPSCQueueDrain(
-	xmpscqueue* pQueue,
-	xqueuedrainfn pDrain,
-	ptr pContext
-);
-
-
-
-/* 在调用方独占且队列为空时重置全部序列槽并重新开放。 */
-XRT_API bool xrtMPSCQueueReset(xmpscqueue* pQueue);
-
-
-
-XRT_EXTERN_C_END
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_QUEUE_MPMC)
-
-/* MPMC 允许多个生产者和多个消费者并发访问同一个有界序列槽环。 */
-typedef struct xmpmcqueue {
-	xqueueslot* Slots;
-	ptr Allocation;
-	size_t Capacity;
-	size_t Mask;
-	xatomic32 Closed;
-	xqueuecursor32 Tail;
-	xqueuecursor32 Head;
-} xmpmcqueue;
-
-
-
-XRT_EXTERN_C_BEGIN
-
-
-
-/* 初始化拥有内部序列槽环的多生产者多消费者队列。 */
-XRT_API bool xrtMPMCQueueInit(xmpmcqueue* pQueue, size_t iCapacity);
-
-
-
-/* 在调用方提供的 2 次幂序列槽环上初始化 MPMC 队列。 */
-XRT_API bool xrtMPMCQueueInitBuffer(
-	xmpmcqueue* pQueue,
-	xqueueslot* pSlots,
-	size_t iCapacity
-);
-
-
-
-/* 创建拥有结构和内部序列槽环的 MPMC 队列。 */
-XRT_API xmpmcqueue* xrtMPMCQueueCreate(size_t iCapacity);
-
-
-
-/* 释放拥有的序列槽环，但不释放队列结构或指针目标。 */
-XRT_API void xrtMPMCQueueUnit(xmpmcqueue* pQueue);
-
-
-
-/* 释放 Create 返回的队列结构和内部序列槽环。 */
-XRT_API void xrtMPMCQueueDestroy(xmpmcqueue* pQueue);
-
-
-
-/* 由任意生产者尝试压入一个可为空的指针值。 */
-XRT_API xqueueresult xrtMPMCQueueTryPush(xmpmcqueue* pQueue, ptr pItem);
-
-
-
-/* 由任意生产者批量压入；数组必须对齐且不与队列对象或槽环重叠。 */
-XRT_API xqueuebatchresult xrtMPMCQueuePushBatch(
-	xmpmcqueue* pQueue,
-	ptr const* pItems,
-	size_t iCount
-);
-
-
-
-/* 由任意消费者弹出；输出必须对齐且不与队列对象或槽环重叠。 */
-XRT_API xqueueresult xrtMPMCQueueTryPop(xmpmcqueue* pQueue, ptr* pItem);
-
-
-
-/* 由任意消费者批量弹出；数组必须对齐且不与队列对象或槽环重叠。 */
-XRT_API xqueuebatchresult xrtMPMCQueuePopBatch(
-	xmpmcqueue* pQueue,
-	ptr* pItems,
-	size_t iCapacity
-);
-
-
-
-/* 返回包含已预留生产和消费区间的并发近似元素数量。 */
-XRT_API size_t xrtMPMCQueueCount(const xmpmcqueue* pQueue);
-
-
-
-/* 在全部生产者停止后幂等关闭写入端。 */
-XRT_API void xrtMPMCQueueClose(xmpmcqueue* pQueue);
-
-
-
-/* 判断队列写入端是否已经关闭。 */
-XRT_API bool xrtMPMCQueueIsClosed(const xmpmcqueue* pQueue);
-
-
-
-/* 判断队列是否已经关闭且没有尚未领取的元素。 */
-XRT_API bool xrtMPMCQueueIsDrained(const xmpmcqueue* pQueue);
-
-
-
-/* 由任意消费者排空元素；回调为空时直接丢弃指针值。 */
-XRT_API size_t xrtMPMCQueueDrain(
-	xmpmcqueue* pQueue,
-	xqueuedrainfn pDrain,
-	ptr pContext
-);
-
-
-
-/* 在调用方独占且队列为空时重置全部序列槽并重新开放。 */
-XRT_API bool xrtMPMCQueueReset(xmpmcqueue* pQueue);
-
-
-
-XRT_EXTERN_C_END
-
-#endif
-
-#endif
-
-
-/* ========================================================================== */
-/* public: include/xrt/net.h */
-/* ========================================================================== */
-
-#ifndef XRT_NET_H
-#define XRT_NET_H
-
-
-
-
-/* 网络累计统计按编译期级别裁剪；状态量和背压计数始终保留。 */
-#define XNET_STATS_OFF 0
-#define XNET_STATS_BASIC 1
-#define XNET_STATS_FULL 2
-
-#if !defined(XRT_NET_STATS_LEVEL)
-	#define XRT_NET_STATS_LEVEL XNET_STATS_FULL
-#endif
-
-#if (XRT_NET_STATS_LEVEL < XNET_STATS_OFF) || \
-	(XRT_NET_STATS_LEVEL > XNET_STATS_FULL)
-	#error "XRT_NET_STATS_LEVEL must be XNET_STATS_OFF, XNET_STATS_BASIC or XNET_STATS_FULL"
-#endif
-
-#if defined(XRT_FEATURE_NET_RESOLVER) || \
-	defined(XRT_FEATURE_NET_PORT) || \
-	defined(XRT_FEATURE_NET_PORT_URING) || \
-	defined(XRT_FEATURE_NET_PORT_IOCP)
-#endif
-
-#if defined(XRT_FEATURE_NET_RESOLVER)
-#endif
-
-#if defined(XRT_FEATURE_NET_RESOLVER_FUTURE)
-#endif
-
-#if defined(XRT_FEATURE_NET_PORT) || defined(XRT_FEATURE_NET_ENGINE)
-#endif
-
-#if defined(XRT_FEATURE_NET_ENGINE)
-#endif
-
-
-
-#if defined(XRT_FEATURE_NET_BUFFER) && !defined(XRT_FEATURE_NET)
-	#error "XRT network buffer support requires XRT_FEATURE_NET"
-#endif
-
-#if defined(XRT_FEATURE_NET_SOCKET) && !defined(XRT_FEATURE_NET)
-	#error "XRT socket support requires XRT_FEATURE_NET"
-#endif
-
-#if defined(XRT_FEATURE_NET_DNS) && !defined(XRT_FEATURE_NET)
-	#error "XRT DNS support requires XRT_FEATURE_NET"
-#endif
-
-#if defined(XRT_FEATURE_NET_RESOLVER) && \
-	(!defined(XRT_FEATURE_NET_DNS) || !defined(XRT_FEATURE_ATOMIC) || \
-	 !defined(XRT_FEATURE_HASH64) || !defined(XRT_FEATURE_THREAD) || \
-	 !defined(XRT_FEATURE_COND))
-	#error "XRT resolver support requires DNS, atomic, hash64, thread and condition support"
-#endif
-
-#if defined(XRT_FEATURE_NET_RESOLVER_FUTURE) && \
-	(!defined(XRT_FEATURE_NET_RESOLVER) || \
-	 !defined(XRT_FEATURE_FUTURE) || \
-	 !defined(XRT_FEATURE_FUTURE_BRIDGE))
-	#error "XRT resolver Future support requires resolver, Future and Future bridge support"
-#endif
-
-#if defined(XRT_FEATURE_NET_SYNC) && \
-	(!defined(XRT_FEATURE_NET_ENGINE) || !defined(XRT_FEATURE_FUTURE))
-	#error "XRT network sync support requires network engine and Future support"
-#endif
-
-#if defined(XRT_FEATURE_NET_PORT) && \
-	(!defined(XRT_FEATURE_NET_SOCKET) || !defined(XRT_FEATURE_ATOMIC) || \
-	 !defined(XRT_FEATURE_WAIT) || \
-	 !defined(XRT_FEATURE_MUTEX))
-	#error "XRT network port support requires socket, atomic, wait and mutex support"
-#endif
-
-#if defined(XRT_FEATURE_NET_PORT_SELECT) && !defined(XRT_FEATURE_NET_PORT)
-	#error "XRT select network port support requires XRT_FEATURE_NET_PORT"
-#endif
-
-#if defined(XRT_FEATURE_NET_PORT_EPOLL) && !defined(XRT_FEATURE_NET_PORT)
-	#error "XRT epoll network port support requires XRT_FEATURE_NET_PORT"
-#endif
-
-#if defined(XRT_FEATURE_NET_PORT_URING) && \
-	(!defined(XRT_FEATURE_NET_PORT) || !defined(XRT_FEATURE_ATOMIC))
-	#error "XRT io_uring network port support requires network port and atomic support"
-#endif
-
-#if defined(XRT_FEATURE_NET_PORT_KQUEUE) && !defined(XRT_FEATURE_NET_PORT)
-	#error "XRT kqueue network port support requires XRT_FEATURE_NET_PORT"
-#endif
-
-#if defined(XRT_FEATURE_NET_PORT_IOCP) && \
-	(!defined(XRT_FEATURE_NET_PORT) || !defined(XRT_FEATURE_ATOMIC))
-	#error "XRT IOCP network port support requires network port and atomic support"
-#endif
-
-#if defined(XRT_FEATURE_NET_ENGINE) && \
-	(!defined(XRT_FEATURE_NET_PORT) || !defined(XRT_FEATURE_NET_BUFFER) || \
-	 !defined(XRT_FEATURE_THREAD) || !defined(XRT_FEATURE_QUEUE_MPSC))
-	#error "XRT network engine support requires network port, buffer, thread and MPSC queue support"
-#endif
-
-#if defined(XRT_FEATURE_NET_ENGINE)
-	#if defined(_WIN32) || defined(_WIN64)
-		#if !defined(XRT_FEATURE_NET_PORT_IOCP) || \
-			!defined(XRT_FEATURE_NET_PORT_SELECT)
-			#error "XRT network engine requires IOCP and select fallback on Windows"
-		#endif
-	#elif defined(__linux__)
-		#if (!defined(XRT_FEATURE_NET_PORT_EPOLL) && \
-			 !defined(XRT_FEATURE_NET_PORT_URING)) || \
-			!defined(XRT_FEATURE_NET_PORT_SELECT)
-			#error "XRT network engine requires epoll or io_uring plus select fallback on Linux"
-		#endif
-	#elif defined(__APPLE__) || defined(__FreeBSD__) || \
-		defined(__OpenBSD__) || defined(__NetBSD__) || \
-		defined(__DragonFly__)
-		#if !defined(XRT_FEATURE_NET_PORT_KQUEUE) || \
-			!defined(XRT_FEATURE_NET_PORT_SELECT)
-			#error "XRT network engine requires kqueue and select fallback on Darwin/BSD"
-		#endif
-	#elif !defined(XRT_FEATURE_NET_PORT_SELECT)
-		#error "XRT network engine requires select fallback on this platform"
-	#endif
-#endif
-
-
-
-/* 地址族使用稳定值，不依赖平台 AF_INET 和 AF_INET6 常量。 */
-typedef enum xnetfamily {
-	XNET_FAMILY_UNSPEC = 0,
-	XNET_FAMILY_IPV4 = 4,
-	XNET_FAMILY_IPV6 = 6
-} xnetfamily;
-
-
-
-/* 端口使用主机字节序，地址字节始终使用网络字节序。 */
-typedef struct xnetaddr {
-	uint16 Family;
-	uint16 Port;
-	uint32 Scope;
-	uint8 Address[16];
-} xnetaddr;
-
-
-
-/* 网络操作把正常控制结果与结构化错误分开表达。 */
-typedef enum xnetresult {
-	XNET_RESULT_ERROR = -1,
-	XNET_RESULT_OK = 0,
-	XNET_RESULT_AGAIN,
-	XNET_RESULT_CLOSED,
-	XNET_RESULT_TRUNCATED,
-	XNET_RESULT_TIMEOUT,
-	XNET_RESULT_CANCELLED
-} xnetresult;
-
-
-
-/* 网络基础层稳定错误代码。 */
-typedef enum xneterror {
-	XNET_ERROR_NONE = 0,
-	XNET_ERROR_FORMAT,
-	XNET_ERROR_FAMILY,
-	XNET_ERROR_PORT,
-	XNET_ERROR_SCOPE,
-	XNET_ERROR_BUFFER,
-	XNET_ERROR_NATIVE,
-	XNET_ERROR_SYSTEM,
-	XNET_ERROR_INTERFACE_QUERY,
-	XNET_ERROR_INTERFACE_NAME,
-	XNET_ERROR_INTERFACE_INDEX,
-	XNET_ERROR_INTERFACE_ADDRESS,
-	XNET_ERROR_INTERFACE_HARDWARE,
-	XNET_ERROR_HOST_NAME,
-	XNET_ERROR_DNS_RESOLVE,
-	XNET_ERROR_DNS_REVERSE,
-	XNET_ERROR_DNS_RESULT,
-	XNET_ERROR_RESOLVER_CREATE,
-	XNET_ERROR_RESOLVER_SUBMIT,
-	XNET_ERROR_RESOLVER_CLOSED,
-	XNET_ERROR_RESOLVER_QUERY,
-	XNET_ERROR_BUFFER_STATE,
-	XNET_ERROR_POOL_BUSY,
-	XNET_ERROR_FRAME_CONFIG,
-	XNET_ERROR_FRAME_STATE,
-	XNET_ERROR_FRAME_LIMIT,
-	XNET_ERROR_FRAME_LENGTH,
-	XNET_ERROR_SOCKET_OPEN,
-	XNET_ERROR_SOCKET_CLOSE,
-	XNET_ERROR_SOCKET_OPTION,
-	XNET_ERROR_SOCKET_BIND,
-	XNET_ERROR_SOCKET_LISTEN,
-	XNET_ERROR_SOCKET_ACCEPT,
-	XNET_ERROR_SOCKET_CONNECT,
-	XNET_ERROR_SOCKET_SHUTDOWN,
-	XNET_ERROR_SOCKET_READ,
-	XNET_ERROR_SOCKET_WRITE,
-	XNET_ERROR_SOCKET_DGRAM_ERROR,
-	XNET_ERROR_PORT_CREATE,
-	XNET_ERROR_PORT_CLOSE,
-	XNET_ERROR_PORT_WATCH,
-	XNET_ERROR_PORT_WAIT,
-	XNET_ERROR_PORT_POST,
-	XNET_ERROR_PORT_SUBMIT,
-	XNET_ERROR_PORT_CANCEL,
-	XNET_ERROR_ENGINE_CREATE,
-	XNET_ERROR_ENGINE_START,
-	XNET_ERROR_ENGINE_STOP,
-	XNET_ERROR_ENGINE_POST,
-	XNET_ERROR_ENGINE_TIMER,
-	XNET_ERROR_STREAM_CONFIG,
-	XNET_ERROR_STREAM_CREATE,
-	XNET_ERROR_STREAM_CONNECT,
-	XNET_ERROR_STREAM_READ,
-	XNET_ERROR_STREAM_WRITE,
-	XNET_ERROR_STREAM_CLOSE,
-	XNET_ERROR_DIAL_CONFIG,
-	XNET_ERROR_DIAL_CREATE,
-	XNET_ERROR_DIAL_RESOLVE,
-	XNET_ERROR_DIAL_CONNECT,
-	XNET_ERROR_LISTENER_CREATE,
-	XNET_ERROR_LISTENER_ACCEPT,
-	XNET_ERROR_LISTENER_CLOSE,
-	XNET_ERROR_SERVER_CONFIG,
-	XNET_ERROR_SERVER_START,
-	XNET_ERROR_SERVER_ACCEPT,
-	XNET_ERROR_UDP_CONFIG,
-	XNET_ERROR_UDP_CREATE,
-	XNET_ERROR_UDP_RECEIVE,
-	XNET_ERROR_UDP_RECEIVE_QUEUE,
-	XNET_ERROR_UDP_SEND,
-	XNET_ERROR_UDP_CLOSE,
-	XNET_ERROR_PROXY_CONFIG,
-	XNET_ERROR_PROXY_CREATE,
-	XNET_ERROR_PROXY_PROTOCOL,
-	XNET_ERROR_PROXY_AUTH,
-	XNET_ERROR_PROXY_CONNECT,
-	XNET_ERROR_PROXY_LIMIT,
-	XNET_ERROR_PROXY_UNSUPPORTED
-} xneterror;
-
-
-
-/* 只读 Span 借用调用方内存，不拥有数据。 */
-typedef struct xnetspan {
-	cbytes Data;
-	size_t Size;
-} xnetspan;
-
-
-
-/* 可写 Span 借用调用方内存，不拥有数据。 */
-typedef struct xnetwspan {
-	bytes Data;
-	size_t Size;
-} xnetwspan;
-
-
-
-#if defined(XRT_FEATURE_NET_DNS)
-
-/* 地址列表是不可变共享结果，解析器缓存和调用方可以独立持有引用。 */
-typedef struct xnetaddrlist xnetaddrlist;
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_NET_RESOLVER)
-
-/* Resolver 与解析操作均保持不透明，解析操作可以独立于调用方引用继续执行。 */
-typedef struct xnetresolver xnetresolver;
-typedef struct xnetresolveop xnetresolveop;
-
-
-
-/* 解析操作只允许从等待态进入运行态，再进入一个不可变终态。 */
-typedef enum xnetresolveopstate {
-	XNET_RESOLVE_PENDING = 0,
-	XNET_RESOLVE_RUNNING,
-	XNET_RESOLVE_RESOLVED,
-	XNET_RESOLVE_FAILED,
-	XNET_RESOLVE_CANCELLED
-} xnetresolveopstate;
-
-
-
-/* 自定义查询过程必须返回端口为零的不可变地址列表，并在失败时设置结构化错误。 */
-typedef xnetaddrlist* (*xnetresolverlookup)(
-	cstr sHost,
-	xnetfamily Family,
-	ptr pData
-);
-
-
-
-/* 完成回调借用操作对象；保留到回调之后时必须显式增加引用。 */
-typedef void (*xnetresolveproc)(xnetresolveop* pOperation, ptr pData);
-
-
-
-/* 所有限额都是硬边界；TTL 使用单调微秒，零值关闭对应缓存。 */
-typedef struct xnetresolverconfig {
-	uint32 Workers;
-	size_t RequestLimit;
-	size_t QueryLimit;
-	size_t CacheEntries;
-	uint64 SuccessTTL;
-	uint64 FailureTTL;
-	size_t HostLimit;
-	size_t ThreadStack;
-	xnetresolverlookup Lookup;
-	ptr LookupData;
-} xnetresolverconfig;
-
-
-
-/* 统计值在 Resolver 锁内取得一致快照，不要求调用方停止提交。 */
-typedef struct xnetresolverstats {
-	uint32 Workers;
-	uint64 Submitted;
-	uint64 Rejected;
-	uint64 CacheHits;
-	uint64 CacheMisses;
-	uint64 Coalesced;
-	uint64 QueriesStarted;
-	uint64 Resolved;
-	uint64 Failed;
-	uint64 Cancelled;
-	size_t Outstanding;
-	size_t ActiveQueries;
-	size_t QueuedQueries;
-	size_t RunningQueries;
-	size_t ReadyCallbacks;
-	size_t CachedResults;
-} xnetresolverstats;
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_NET_SOCKET)
-
-#define XNET_DGRAM_BATCH_MAX 64u
-
-
-
-/* Socket 对象拥有一个原生句柄，生命周期操作由调用方串行化。 */
-typedef struct xnetsocket_impl* xnetsocket;
-
-
-
-/* Socket 类型使用稳定值，不直接暴露平台 SOCK_* 常量。 */
-typedef enum xnetsockettype {
-	XNET_SOCKET_STREAM = 1,
-	XNET_SOCKET_DGRAM = 2
-} xnetsockettype;
-
-
-
-/* 数据报元数据位既用于能力、启用配置，也用于标记每个报文的有效字段。 */
-typedef enum xnetdgrammetaflag {
-	XNET_DGRAM_META_DESTINATION = 0x0001,
-	XNET_DGRAM_META_INTERFACE = 0x0002,
-	XNET_DGRAM_META_HOP_LIMIT = 0x0004,
-	XNET_DGRAM_META_TRAFFIC_CLASS = 0x0008,
-	/* 合并接收时表示每个原始数据报的分段大小，最后一段允许更短。 */
-	XNET_DGRAM_META_SEGMENT_SIZE = 0x0010,
-	/* 控制缓冲被平台截断时保留已解析字段，并显式标记结果不完整。 */
-	XNET_DGRAM_META_TRUNCATED = 0x40000000
-} xnetdgrammetaflag;
-
-
-
-/* Destination 的端口恒为零；Flags 决定其余字段是否有效。 */
-typedef struct xnetdgrammeta {
-	uint32 Flags;
-	xnetaddr Destination;
-	uint32 Interface;
-	int HopLimit;
-	int TrafficClass;
-	uint32 SegmentSize;
-} xnetdgrammeta;
-
-
-
-/* 逐数据报发送控制位与接收元数据分离，避免 Source 和 Destination 语义混淆。 */
-typedef enum xnetdgramcontrolflag {
-	XNET_DGRAM_CONTROL_SOURCE = 0x0001,
-	XNET_DGRAM_CONTROL_INTERFACE = 0x0002,
-	XNET_DGRAM_CONTROL_HOP_LIMIT = 0x0004,
-	XNET_DGRAM_CONTROL_TRAFFIC_CLASS = 0x0008,
-	/* 把一个聚合负载分段发送；最后一个数据报允许短于 SegmentSize。 */
-	XNET_DGRAM_CONTROL_SEGMENT_SIZE = 0x0010
-} xnetdgramcontrolflag;
-
-
-
-/* Source 的端口必须为零；Flags 决定本次发送覆盖哪些 Socket 默认值。 */
-typedef struct xnetdgramcontrol {
-	uint32 Flags;
-	xnetaddr Source;
-	uint32 Interface;
-	int HopLimit;
-	int TrafficClass;
-	uint32 SegmentSize;
-} xnetdgramcontrol;
-
-
-
-/* 数据报高级能力按当前平台和 Socket 类型查询，不能用编译平台作运行时假设。 */
-typedef enum xnetdgramcap {
-	XNET_DGRAM_CAP_PATH_MTU_MODE = 0x0001,
-	XNET_DGRAM_CAP_PATH_MTU_QUERY = 0x0002,
-	XNET_DGRAM_CAP_ERROR_QUEUE = 0x0004,
-	XNET_DGRAM_CAP_SEGMENT_SEND = 0x0008,
-	XNET_DGRAM_CAP_SEGMENT_RECEIVE = 0x0010
-} xnetdgramcap;
-
-
-
-/* SYSTEM 保留平台默认；DISCOVER 禁止 IP 分片；FRAGMENT 允许分片；PROBE 忽略路径缓存。 */
-typedef enum xnetpmtumode {
-	XNET_PMTU_SYSTEM = 0,
-	XNET_PMTU_DISCOVER,
-	XNET_PMTU_FRAGMENT,
-	XNET_PMTU_PROBE
-} xnetpmtumode;
-
-
-
-/* 错误来源独立于 ICMP Type/Code，LOCAL 也可以携带路径 MTU。 */
-typedef enum xnetdgramerrororigin {
-	XNET_DGRAM_ERROR_UNKNOWN = 0,
-	XNET_DGRAM_ERROR_LOCAL,
-	XNET_DGRAM_ERROR_ICMP,
-	XNET_DGRAM_ERROR_ICMP6
-} xnetdgramerrororigin;
-
-
-
-/* Flags 精确说明地址、路径 MTU 与负载截断字段是否有效。 */
-typedef enum xnetdgramerrorflag {
-	XNET_DGRAM_ERROR_REMOTE = 0x0001,
-	XNET_DGRAM_ERROR_OFFENDER = 0x0002,
-	XNET_DGRAM_ERROR_PATH_MTU = 0x0004,
-	XNET_DGRAM_ERROR_PAYLOAD_TRUNCATED = 0x0008,
-	XNET_DGRAM_ERROR_META_TRUNCATED = 0x0010
-} xnetdgramerrorflag;
-
-
-
-/* 异步网络错误是可读取数据，不会污染当前执行上下文的错误对象。 */
-typedef struct xnetdgramerror {
-	uint32 Flags;
-	xnetdgramerrororigin Origin;
-	xerrkind Kind;
-	int SystemCode;
-	int Type;
-	int Code;
-	uint32 Info;
-	uint32 Data;
-	size_t PathMtu;
-	xnetaddr Remote;
-	xnetaddr Offender;
-} xnetdgramerror;
-
-
-
-/* 批量接收项由调用方提供缓冲，函数写入来源、可见长度和单报文结果。 */
-typedef struct xnetdgramrecv {
-	void* Data;
-	size_t Capacity;
-	xnetaddr Remote;
-	xnetdgrammeta Meta;
-	size_t Size;
-	xnetresult Result;
-} xnetdgramrecv;
-
-
-
-/* 批量发送项在调用期间借用数据；空远端表示使用连接式 UDP 的固定 Peer。 */
-typedef struct xnetdgramsend {
-	const xnetaddr* Remote;
-	const void* Data;
-	size_t Size;
-} xnetdgramsend;
-
-
-
-/* Socket 打开标志可以组合；系统句柄始终禁止被子进程继承。 */
-typedef enum xnetsocketflag {
-	XNET_SOCKET_NONBLOCK = 0x01
-} xnetsocketflag;
-
-
-
-/* 半关闭方向与平台 SHUT_* 常量保持隔离。 */
-typedef enum xnetshutdown {
-	XNET_SHUTDOWN_READ = 1,
-	XNET_SHUTDOWN_WRITE,
-	XNET_SHUTDOWN_BOTH
-} xnetshutdown;
-
-
-
-/* 通用 Socket 选项以 int64 表达；负 linger 值表示关闭 linger。 */
-typedef enum xnetoption {
-	XNET_OPTION_NONBLOCK = 1,
-	XNET_OPTION_REUSE_ADDRESS,
-	XNET_OPTION_REUSE_PORT,
-	XNET_OPTION_EXCLUSIVE_ADDRESS,
-	XNET_OPTION_NO_DELAY,
-	XNET_OPTION_KEEP_ALIVE,
-	XNET_OPTION_BROADCAST,
-	XNET_OPTION_IPV6_ONLY,
-	XNET_OPTION_RECEIVE_BUFFER,
-	XNET_OPTION_SEND_BUFFER,
-	XNET_OPTION_LINGER,
-	XNET_OPTION_HOP_LIMIT,
-	XNET_OPTION_TRAFFIC_CLASS,
-	XNET_OPTION_PATH_MTU_MODE,
-	XNET_OPTION_PATH_MTU,
-	XNET_OPTION_DGRAM_ERRORS,
-	XNET_OPTION_ERROR
-} xnetoption;
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_NET_PORT)
-
-/* 网络端口隐藏平台事件对象、注册表和跨线程唤醒资源。 */
-typedef struct xnetport_impl xnetport;
-
-
-
-/* AUTO 选择当前平台最优后端，显式值用于测试、降级和部署控制。 */
-typedef enum xnetportbackend {
-	XNET_PORT_AUTO = 0,
-	XNET_PORT_IOCP,
-	XNET_PORT_URING,
-	XNET_PORT_EPOLL,
-	XNET_PORT_KQUEUE,
-	XNET_PORT_SELECT
-} xnetportbackend;
-
-
-
-/* 能力位明确区分完成式 IO 与 readiness，避免后端伪造同一种语义。 */
-typedef enum xnetportcap {
-	XNET_PORT_CAP_READINESS = 0x0001,
-	XNET_PORT_CAP_COMPLETION = 0x0002,
-	XNET_PORT_CAP_ONESHOT = 0x0004,
-	XNET_PORT_CAP_EDGE = 0x0008,
-	XNET_PORT_CAP_BATCH = 0x0010,
-	XNET_PORT_CAP_WAKE = 0x0020,
-	XNET_PORT_CAP_POST = 0x0040,
-	XNET_PORT_CAP_CANCEL = 0x0080,
-	XNET_PORT_CAP_READ_PROBE = 0x0100,
-	XNET_PORT_CAP_DGRAM_ERROR = 0x0200,
-	XNET_PORT_CAP_SEND_FILE = 0x0400,
-	XNET_PORT_CAP_FILE_IO = 0x0800
-} xnetportcap;
-
-
-
-/* readiness 关注位；错误与挂断始终隐式观察。 */
-typedef enum xnetpoll {
-	XNET_POLL_READ = 0x01,
-	XNET_POLL_WRITE = 0x02
-} xnetpoll;
-
-
-
-/* 一个事件只属于一个稳定类别，具体 readiness 状态由 Flags 组合表达。 */
-typedef enum xnetporteventtype {
-	XNET_PORT_EVENT_READY = 1,
-	XNET_PORT_EVENT_ACCEPT,
-	XNET_PORT_EVENT_CONNECT,
-	XNET_PORT_EVENT_READ_PROBE,
-	XNET_PORT_EVENT_RECV,
-	XNET_PORT_EVENT_SEND,
-	XNET_PORT_EVENT_RECV_FROM,
-	XNET_PORT_EVENT_RECV_MSG,
-	XNET_PORT_EVENT_RECV_ERROR,
-	XNET_PORT_EVENT_SEND_TO,
-	XNET_PORT_EVENT_SEND_MSG,
-	XNET_PORT_EVENT_SEND_FILE,
-	XNET_PORT_EVENT_FILE_READ,
-	XNET_PORT_EVENT_FILE_WRITE,
-	XNET_PORT_EVENT_USER,
-	XNET_PORT_EVENT_WAKE
-} xnetporteventtype;
-
-
-
-/* 事件标志表达 readiness 方向及完成式 EOF、错误等稳定状态。 */
-typedef enum xnetporteventflag {
-	XNET_PORT_EVENT_READ = 0x0001,
-	XNET_PORT_EVENT_WRITE = 0x0002,
-	XNET_PORT_EVENT_ERROR = 0x0004,
-	XNET_PORT_EVENT_HANGUP = 0x0008,
-	XNET_PORT_EVENT_EOF = 0x0010,
-	XNET_PORT_EVENT_MORE = 0x0020
-} xnetporteventflag;
-
-
-
-/* 配置不带版本字段；OperationCache 是每个完成操作尺寸类的缓存上限，零值关闭缓存。 */
-typedef struct xnetportconfig {
-	xnetportbackend Backend;
-	uint32 Flags;
-	size_t PostLimit;
-	/* Watch/Operation 为零时按实际后端选择可扩展默认值。 */
-	size_t WatchLimit;
-	size_t OperationLimit;
-	size_t OperationCache;
-} xnetportconfig;
-
-
-
-/* 端口事件借用原 Socket；只有 Accepted 在接受完成时转移新对象所有权。 */
-typedef struct xnetportevent {
-	xnetporteventtype Type;
-	uint32 Flags;
-	xnetresult Result;
-	int SystemCode;
-	size_t Bytes;
-	uint64 Id;
-	xnetsocket Socket;
-	xnetsocket Accepted;
-	xnetaddr Address;
-	xnetdgrammeta Meta;
-	xnetdgramerror DgramError;
-	ptr User;
-} xnetportevent;
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_NET_BUFFER)
-typedef struct xnetbufpoolconfig xnetbufpoolconfig;
-typedef struct xnetbufpool xnetbufpool;
-typedef struct xnetbytes xnetbytes;
-#endif
-
-
-
-#if defined(XRT_FEATURE_NET_ENGINE)
-
-/* Engine 与 Worker 对外保持不透明，所有 Worker 资源都归所属 Engine 管理。 */
-typedef struct xnetengine xnetengine;
-typedef struct xnetworker xnetworker;
-
-
-
-/* Engine 生命周期状态可安全地跨线程查询。 */
-typedef enum xnetenginestate {
-	XNET_ENGINE_STOPPED = 0,
-	XNET_ENGINE_STARTING,
-	XNET_ENGINE_RUNNING,
-	XNET_ENGINE_STOPPING,
-	XNET_ENGINE_DESTROYING
-} xnetenginestate;
-
-
-
-/* Engine 任务始终在选定 Worker 上串行执行。 */
-typedef void (*xnettaskproc)(xnetworker* pWorker, ptr pData);
-
-
-
-/* 嵌入式 Post 提供不分配内存且不占公开命令队列容量的 Worker 投递。 */
-#define XNET_POST_STORAGE_SIZE 64u
-
-
-
-/* Post 的队列节点与并发门保持不透明，允许嵌入网络对象。 */
-typedef union xnetpost {
-	uint64 Alignment;
-	uint8 Storage[XNET_POST_STORAGE_SIZE];
-} xnetpost;
-
-
-
-/* Timer 受理后恰好终结一次，结果区分到期、取消、停止和内部失败。 */
-typedef void (*xnettimerproc)(xnetworker* pWorker,
-	uint64 Id, xnetresult Result, ptr pData);
-
-
-
-/* Engine 内的端口事件通过 Completion 回到所属 Worker。 */
-typedef void (*xnetcompletionproc)(xnetworker* pWorker,
-	const xnetportevent* pEvent, ptr pData);
-
-
-
-/* Completion 借用过程与数据，必须存活到对应端口事件回调结束。 */
-typedef struct xnetcompletion {
-	xnetcompletionproc Proc;
-	ptr Data;
-} xnetcompletion;
-
-
-
-/* 容量字段都是硬边界；CommandCapacity 会向上取整为 2 次幂。 */
-typedef struct xnetengineconfig {
-	xnetportbackend Backend;
-	uint32 Workers;
-	const xnetbufpoolconfig* BufferPool;
-	size_t CommandCapacity;
-	size_t NodeCacheBytes;
-	size_t TimerLimit;
-	size_t EventBatch;
-	size_t PortPostLimit;
-	/* 两个端口容量为零时由每个 Worker 的实际后端解析。 */
-	size_t PortWatchLimit;
-	size_t PortOperationLimit;
-	size_t PortOperationCache;
-	uint64 IdleWait;
-	size_t ThreadStack;
-} xnetengineconfig;
-
-
-
-/* Worker 统计是并发快照，计数在 Engine 重启后继续累计。 */
-typedef struct xnetworkerstats {
-	uint64 PostsAccepted;
-	uint64 PostsRejected;
-	uint64 PostsExecuted;
-	uint64 TimersAccepted;
-	uint64 TimersRejected;
-	uint64 TimersFired;
-	uint64 TimersCancelled;
-	uint64 TimersClosed;
-	uint64 TimerErrors;
-	uint64 Events;
-	uint64 WaitErrors;
-	uint64 WakeErrors;
-	/* BASIC 以上统计中，停机任务链未在安全代数内收敛的累计次数。 */
-	uint64 ShutdownStalls;
-	/* 最近一次端口等待错误；没有错误时 Code 为 XNET_ERROR_NONE。 */
-	xneterror LastWaitError;
-	int LastWaitSystemCode;
-	uint64 NodeCacheHits;
-	uint64 NodeCacheMisses;
-	size_t PendingCommands;
-	size_t ActiveTimers;
-	size_t NodeCachedBytes;
-} xnetworkerstats;
-
-
-
-/* Engine 统计聚合全部 Worker，并附带当前生命周期状态。 */
-typedef struct xnetenginestats {
-	xnetenginestate State;
-	uint32 Workers;
-	uint64 PostsAccepted;
-	uint64 PostsRejected;
-	uint64 PostsExecuted;
-	uint64 TimersAccepted;
-	uint64 TimersRejected;
-	uint64 TimersFired;
-	uint64 TimersCancelled;
-	uint64 TimersClosed;
-	uint64 TimerErrors;
-	uint64 Events;
-	uint64 WaitErrors;
-	uint64 WakeErrors;
-	/* BASIC 以上统计中，全部 Worker 停机任务链未收敛次数之和。 */
-	uint64 ShutdownStalls;
-	uint64 NodeCacheHits;
-	uint64 NodeCacheMisses;
-	size_t PendingCommands;
-	size_t ActiveTimers;
-	size_t NodeCachedBytes;
-	size_t LiveObjects;
-} xnetenginestats;
-
-#endif
-
-
-
-XRT_EXTERN_C_BEGIN
-
-
-
-#if defined(XRT_FEATURE_NET)
-
-/* 初始化一个指定地址族的未指定地址。 */
-XRT_API bool xrtNetAddrAny(xnetaddr* pAddr, xnetfamily Family, uint16 iPort);
-
-
-
-/* 初始化一个指定地址族的回环地址。 */
-XRT_API bool xrtNetAddrLoopback(xnetaddr* pAddr, xnetfamily Family, uint16 iPort);
-
-
-
-/* 严格解析数字 IPv4 或 IPv6；接口模块启用时 IPv6 Scope 也接受接口名称。 */
-XRT_API bool xrtNetAddrParse(xnetaddr* pAddr, cstr sIP, uint16 iPort);
-
-
-
-/* 解析 IPv4:port、[IPv6]:port 或使用默认端口的裸地址。 */
-XRT_API bool xrtNetAddrParseEndpoint(xnetaddr* pAddr, cstr sEndpoint, uint16 iDefaultPort);
-
-
-
-/* 输出规范 IP 文本，返回不含结尾零字节的所需长度。 */
-XRT_API size_t xrtNetAddrText(const xnetaddr* pAddr, char* sText, size_t iCapacity);
-
-
-
-/* 输出带端口的规范端点文本，IPv6 始终使用方括号。 */
-XRT_API size_t xrtNetAddrEndpointText(const xnetaddr* pAddr, char* sText, size_t iCapacity);
-
-
-
-/* 分配并返回规范 IP 文本。 */
-XRT_API str xrtNetAddrString(const xnetaddr* pAddr);
-
-
-
-/* 分配并返回带端口的规范端点文本。 */
-XRT_API str xrtNetAddrEndpointString(const xnetaddr* pAddr);
-
-
-
-/* 比较完整端点，包括地址族、地址、Scope 和端口。 */
-XRT_API bool xrtNetAddrEqual(const xnetaddr* pLeft, const xnetaddr* pRight);
-
-
-
-/* 只比较地址族、地址和 IPv6 Scope，不比较端口。 */
-XRT_API bool xrtNetAddrSameIP(const xnetaddr* pLeft, const xnetaddr* pRight);
-
-
-
-/* 为 Map、排序和稳定去重提供完整端点全序。 */
-XRT_API int xrtNetAddrCompare(const xnetaddr* pLeft, const xnetaddr* pRight);
-
-
-
-/* 判断地址是否为 IPv4 0.0.0.0 或 IPv6 ::。 */
-XRT_API bool xrtNetAddrIsUnspecified(const xnetaddr* pAddr);
-
-
-
-/* 判断地址是否属于 IPv4 127/8 或 IPv6 ::1。 */
-XRT_API bool xrtNetAddrIsLoopback(const xnetaddr* pAddr);
-
-
-
-/* 判断地址是否属于 IPv4 224/4 或 IPv6 ff00::/8。 */
-XRT_API bool xrtNetAddrIsMulticast(const xnetaddr* pAddr);
-
-
-
-/* 判断地址是否属于 IPv4 169.254/16 或 IPv6 fe80::/10。 */
-XRT_API bool xrtNetAddrIsLinkLocal(const xnetaddr* pAddr);
-
-
-
-/* 判断地址是否属于 RFC 1918 IPv4 或 RFC 4193 IPv6 私有范围。 */
-XRT_API bool xrtNetAddrIsPrivate(const xnetaddr* pAddr);
-
-
-
-/* 判断 IPv6 地址是否为 ::ffff:0:0/96 IPv4 映射地址。 */
-XRT_API bool xrtNetAddrIsMapped(const xnetaddr* pAddr);
-
-
-
-/* 把 IPv4 映射 IPv6 地址转换为 IPv4，其他地址原样复制。 */
-XRT_API bool xrtNetAddrUnmap(const xnetaddr* pAddr, xnetaddr* pResult);
-
-
-
-/* 转换为平台 sockaddr；空输出可查询所需大小。 */
-XRT_API bool xrtNetAddrToNative(const xnetaddr* pAddr, void* pNative, size_t* pSize);
-
-
-
-/* 从平台 sockaddr 转换为稳定地址结构。 */
-XRT_API bool xrtNetAddrFromNative(xnetaddr* pAddr, const void* pNative, size_t iSize);
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_NET_DNS)
-
-/* 解析主机的全部地址；保留系统顺序、去除重复项并允许端口为零。 */
-/* 只查询主机地址，返回列表中的端口全部为零。 */
-XRT_API xnetaddrlist* xrtNetLookup(cstr sHost, xnetfamily Family);
-
-
-
-XRT_API xnetaddrlist* xrtNetResolve(
-	cstr sHost,
-	uint16 iPort,
-	xnetfamily Family
-);
-
-
-
-/* 解析并复制系统顺序中的第一个地址，常见单地址场景无需管理列表。 */
-XRT_API bool xrtNetResolveOne(
-	xnetaddr* pAddr,
-	cstr sHost,
-	uint16 iPort,
-	xnetfamily Family
-);
-
-
-
-/* 反向解析一个数字地址；成功返回调用方拥有的主机名。 */
-XRT_API str xrtNetReverse(const xnetaddr* pAddr);
-
-
-
-/* 复制、校验并去重调用方地址，建立一份不可变地址列表。 */
-XRT_API xnetaddrlist* xrtNetAddrListCreate(
-	const xnetaddr* pAddresses,
-	size_t iCount
-);
-
-
-
-/* 复制列表并统一替换端口；端口已经一致时只增加引用。 */
-XRT_API xnetaddrlist* xrtNetAddrListWithPort(
-	xnetaddrlist* pList,
-	uint16 iPort
-);
-
-
-
-/* 增加不可变地址列表引用并返回原指针。 */
-XRT_API xnetaddrlist* xrtNetAddrListRef(xnetaddrlist* pList);
-
-
-
-/* 释放地址列表引用；空指针视为空操作。 */
-XRT_API void xrtNetAddrListDestroy(xnetaddrlist* pList);
-
-
-
-/* 返回地址数量；空列表返回零。 */
-XRT_API size_t xrtNetAddrListCount(const xnetaddrlist* pList);
-
-
-
-/* 返回借用地址；索引越界返回空指针并设置范围错误。 */
-XRT_API const xnetaddr* xrtNetAddrListGet(
-	const xnetaddrlist* pList,
-	size_t iIndex
-);
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_NET_RESOLVER)
-
-/* 写入兼顾桌面与高并发服务的默认配置。 */
-XRT_API void xrtNetResolverConfigInit(xnetresolverconfig* pConfig);
-
-
-
-/* 创建并立即启动独立解析工作池；空配置使用默认值。 */
-XRT_API xnetresolver* xrtNetResolverCreate(
-	const xnetresolverconfig* pConfig
-);
-
-
-
-/* 排空已受理请求并等待全部回调；必须与其他 Resolver 所有者操作串行，返回后指针失效。 */
-XRT_API bool xrtNetResolverDestroy(xnetresolver* pResolver);
-
-
-
-/* 提交主机查询；同一规范化主机与地址族只执行一次底层查询。 */
-XRT_API xnetresolveop* xrtNetResolverResolve(
-	xnetresolver* pResolver,
-	cstr sHost,
-	xnetfamily Family,
-	xnetresolveproc pDone,
-	ptr pData
-);
-
-
-
-/* 清空成功和失败缓存；已经运行或排队的查询不受影响。 */
-XRT_API bool xrtNetResolverClear(xnetresolver* pResolver);
-
-
-
-/* 取得 Resolver 的并发一致统计快照。 */
-XRT_API bool xrtNetResolverStats(
-	const xnetresolver* pResolver,
-	xnetresolverstats* pStats
-);
-
-
-
-/* 增加解析操作引用并返回原指针。 */
-XRT_API xnetresolveop* xrtNetResolveOpRef(xnetresolveop* pOperation);
-
-
-
-/* 释放解析操作引用；空指针视为空操作。 */
-XRT_API void xrtNetResolveOpDestroy(xnetresolveop* pOperation);
-
-
-
-/* 协作取消尚未进入终态的操作；回调仍在 Resolver Worker 上执行一次。 */
-XRT_API bool xrtNetResolveOpCancel(xnetresolveop* pOperation);
-
-
-
-/* 返回解析操作当前状态的原子快照。 */
-XRT_API xnetresolveopstate xrtNetResolveOpState(
-	const xnetresolveop* pOperation
-);
-
-
-
-/* 成功时返回增加引用的完整地址列表，其他状态返回空指针并设置对应错误。 */
-XRT_API xnetaddrlist* xrtNetResolveOpResult(
-	const xnetresolveop* pOperation
-);
-
-
-
-/* 失败或取消时返回借用的结构化错误，其他状态返回空指针。 */
-XRT_API const xerror* xrtNetResolveOpError(
-	const xnetresolveop* pOperation
-);
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_NET_RESOLVER_FUTURE)
-
-/* 把 Resolver 查询包装为 Future；成功值是由 Future 持有的地址列表。 */
-XRT_API xfuture* xrtNetResolveAsync(
-	xnetresolver* pResolver,
-	cstr sHost,
-	xnetfamily Family
-);
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_NET_SOCKET)
-
-/* 打开一个流式或数据报 Socket；成功返回的对象拥有原生句柄。 */
-XRT_API xnetsocket xrtNetSocketOpen(xnetfamily Family,
-	xnetsockettype Type, uint32 iFlags);
-
-
-
-/* 关闭原生句柄并销毁对象；即使系统关闭失败，对象也立即失效。 */
-XRT_API bool xrtNetSocketClose(xnetsocket Socket);
-
-
-
-/* 返回借用的原生句柄，调用方不得自行关闭。 */
-XRT_API intptr_t xrtNetSocketNative(xnetsocket Socket);
-
-
-
-/* 返回 Socket 创建时确定的地址族。 */
-XRT_API xnetfamily xrtNetSocketFamily(xnetsocket Socket);
-
-
-
-/* 返回 Socket 创建时确定的类型。 */
-XRT_API xnetsockettype xrtNetSocketType(xnetsocket Socket);
-
-
-
-/* 查询当前可立即读取的字节数；成功才修改输出。 */
-XRT_API bool xrtNetSocketAvailable(xnetsocket Socket, size_t* pSize);
-
-
-
-/* 设置一个通用 Socket 选项。 */
-XRT_API bool xrtNetSocketSet(xnetsocket Socket,
-	xnetoption Option, int64 iValue);
-
-
-
-/* 查询一个通用 Socket 选项，成功才修改输出。 */
-XRT_API bool xrtNetSocketGet(xnetsocket Socket,
-	xnetoption Option, int64* pValue);
-
-
-
-/* 返回当前平台和地址族可能提供的数据报接收元数据位。 */
-XRT_API uint32 xrtNetSocketDgramMetaAvailable(xnetsocket Socket);
-
-
-
-/* 返回 Socket 当前已经启用的数据报接收元数据位。 */
-XRT_API uint32 xrtNetSocketDgramMetaEnabled(xnetsocket Socket);
-
-
-
-/* 成功后精确设置接收元数据位；失败后可查询平台已经生效的实际状态。 */
-XRT_API bool xrtNetSocketDgramMetaSet(xnetsocket Socket, uint32 iFlags);
-
-
-
-/* 返回当前平台、地址族和 Socket Provider 可用的逐数据报发送控制位。 */
-XRT_API uint32 xrtNetSocketDgramControlAvailable(xnetsocket Socket);
-
-
-
-/* 返回 PMTU、错误队列及后续高级数据报能力；非数据报 Socket 返回零。 */
-XRT_API uint32 xrtNetSocketDgramCapabilities(xnetsocket Socket);
-
-
-
-/* 将数据报 Socket 加入一个同地址族多播组；IPv6 接口使用 Scope 作为接口索引。 */
-XRT_API bool xrtNetSocketMulticastJoin(xnetsocket Socket,
-	const xnetaddr* pGroup, const xnetaddr* pInterface);
-
-
-
-/* 将数据报 Socket 移出一个同地址族多播组。 */
-XRT_API bool xrtNetSocketMulticastLeave(xnetsocket Socket,
-	const xnetaddr* pGroup, const xnetaddr* pInterface);
-
-
-
-/* 设置数据报 Socket 是否接收自己发出的多播报文。 */
-XRT_API bool xrtNetSocketMulticastLoop(xnetsocket Socket, bool bEnabled);
-
-
-
-/* 设置数据报 Socket 的多播跳数，合法范围为 0 到 255。 */
-XRT_API bool xrtNetSocketMulticastHopLimit(xnetsocket Socket, int iHopLimit);
-
-
-
-/* 选择多播发送接口；空接口恢复系统默认，IPv6 使用 Scope 接口索引。 */
-XRT_API bool xrtNetSocketMulticastInterface(xnetsocket Socket,
-	const xnetaddr* pInterface);
-
-
-
-/* 把 Socket 绑定到本地地址，端口为零时由系统分配端口。 */
-XRT_API bool xrtNetSocketBind(xnetsocket Socket, const xnetaddr* pAddress);
-
-
-
-/* 把已绑定的流式 Socket 转为监听状态。 */
-XRT_API bool xrtNetSocketListen(xnetsocket Socket, int iBacklog);
-
-
-
-/* 接受一个连接；非阻塞 Socket 暂无连接时返回 AGAIN。 */
-XRT_API xnetresult xrtNetSocketAccept(xnetsocket Socket,
-	xnetsocket* pClient, xnetaddr* pRemote);
-
-
-
-/* 发起连接；非阻塞连接尚未完成时返回 AGAIN。 */
-XRT_API xnetresult xrtNetSocketConnect(xnetsocket Socket,
-	const xnetaddr* pRemote);
-
-
-
-/* 在可写事件到达后读取 SO_ERROR，完成非阻塞连接判定。 */
-XRT_API xnetresult xrtNetSocketFinishConnect(xnetsocket Socket);
-
-
-
-/* 半关闭指定方向，不销毁 Socket 对象。 */
-XRT_API bool xrtNetSocketShutdown(xnetsocket Socket, xnetshutdown Direction);
-
-
-
-/* 查询实际本地地址，成功才修改输出。 */
-XRT_API bool xrtNetSocketLocal(xnetsocket Socket, xnetaddr* pAddress);
-
-
-
-/* 查询已连接的对端地址，成功才修改输出。 */
-XRT_API bool xrtNetSocketRemote(xnetsocket Socket, xnetaddr* pAddress);
-
-
-
-/* 单次接收；流式 EOF 返回 CLOSED，数据报过长返回 TRUNCATED。 */
-XRT_API xnetresult xrtNetSocketRecv(xnetsocket Socket,
-	void* pData, size_t iSize, size_t* pReceived);
-
-
-
-/* 单次发送；允许成功短写，非阻塞无法推进时返回 AGAIN。 */
-XRT_API xnetresult xrtNetSocketSend(xnetsocket Socket,
-	const void* pData, size_t iSize, size_t* pSent);
-
-
-
-/* 单次分散接收；数据报过长返回 TRUNCATED，Span 数量不能超过 64。 */
-XRT_API xnetresult xrtNetSocketRecvVec(xnetsocket Socket,
-	xnetwspan* pSpans, size_t iCount, size_t* pReceived);
-
-
-
-/* 单次聚集发送，Span 数量不能超过 64。 */
-XRT_API xnetresult xrtNetSocketSendVec(xnetsocket Socket,
-	const xnetspan* pSpans, size_t iCount, size_t* pSent);
-
-
-
-/* 单次接收数据报；零长度返回 OK，缓冲不足返回 TRUNCATED。 */
-XRT_API xnetresult xrtNetSocketRecvFrom(xnetsocket Socket,
-	void* pData, size_t iSize, size_t* pReceived, xnetaddr* pRemote);
-
-
-
-/* 单次发送数据报；允许发送零长度数据报。 */
-XRT_API xnetresult xrtNetSocketSendTo(xnetsocket Socket,
-	const void* pData, size_t iSize, size_t* pSent, const xnetaddr* pRemote);
-
-
-
-/* 单次分散接收数据报；缓冲不足返回 TRUNCATED，Span 数量不能超过 64。 */
-XRT_API xnetresult xrtNetSocketRecvFromVec(xnetsocket Socket,
-	xnetwspan* pSpans, size_t iCount, size_t* pReceived, xnetaddr* pRemote);
-
-
-
-/* 接收数据报及已启用的目标、接口、Hop Limit 和 Traffic Class 元数据。 */
-XRT_API xnetresult xrtNetSocketRecvMsg(xnetsocket Socket,
-	void* pData, size_t iSize, size_t* pReceived,
-	xnetaddr* pRemote, xnetdgrammeta* pMeta);
-
-
-
-/* 分散接收数据报及已启用元数据，Span 数量不能超过 64。 */
-XRT_API xnetresult xrtNetSocketRecvMsgVec(xnetsocket Socket,
-	xnetwspan* pSpans, size_t iCount, size_t* pReceived,
-	xnetaddr* pRemote, xnetdgrammeta* pMeta);
-
-
-
-/* 非阻塞读取一个已启用的异步数据报错误；空队列返回 AGAIN。 */
-XRT_API xnetresult xrtNetSocketDgramRecvError(xnetsocket Socket,
-	void* pData, size_t iSize, size_t* pReceived,
-	xnetdgramerror* pError);
-
-
-
-/* 单次聚集发送数据报，Span 数量不能超过 64。 */
-XRT_API xnetresult xrtNetSocketSendToVec(xnetsocket Socket,
-	const xnetspan* pSpans, size_t iCount, size_t* pSent,
-	const xnetaddr* pRemote);
-
-
-
-/* 发送数据报并覆盖本包源地址、接口、Hop Limit 或 Traffic Class。 */
-XRT_API xnetresult xrtNetSocketSendMsg(xnetsocket Socket,
-	const void* pData, size_t iSize, size_t* pSent,
-	const xnetaddr* pRemote, const xnetdgramcontrol* pControl);
-
-
-
-/* 聚集发送带逐包控制的数据报；Span 数量不能超过 64。 */
-XRT_API xnetresult xrtNetSocketSendMsgVec(xnetsocket Socket,
-	const xnetspan* pSpans, size_t iCount, size_t* pSent,
-	const xnetaddr* pRemote, const xnetdgramcontrol* pControl);
-
-
-
-/* 接收最多 64 个数据报；返回已消费前缀，每项独立记录 OK 或 TRUNCATED。 */
-XRT_API xnetresult xrtNetSocketRecvBatch(xnetsocket Socket,
-	xnetdgramrecv* pItems, size_t iCapacity, size_t* pReceived);
-
-
-
-/* 发送最多 64 个数据报；返回已经完整发送的输入前缀。 */
-XRT_API xnetresult xrtNetSocketSendBatch(xnetsocket Socket,
-	const xnetdgramsend* pItems, size_t iCount, size_t* pSent);
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_NET_PORT)
-
-/*
-	端口由创建线程拥有，Watch、提交、取消、等待和销毁只能由拥有线程执行。
-	查询函数以及 Post、Wake 可跨线程调用；调用方仍须保证端口对象存活。
-*/
-
-/* 初始化网络端口默认配置。 */
-XRT_API void xrtNetPortConfigInit(xnetportconfig* pConfig);
-
-
-
-/* 创建事件端口；AUTO 在当前已编译后端中选择最高能力实现。 */
-XRT_API xnetport* xrtNetPortCreate(const xnetportconfig* pConfig);
-
-
-
-/* 取消并排空在途 IO，再销毁端口、观察、用户事件及唤醒资源。 */
-XRT_API bool xrtNetPortDestroy(xnetport* pPort);
-
-
-
-/* 返回实际启用的后端。 */
-XRT_API xnetportbackend xrtNetPortBackend(const xnetport* pPort);
-
-
-
-/* 返回已经解析 AUTO 容量和实际后端的有效配置。 */
-XRT_API bool xrtNetPortGetConfig(
-	const xnetport* pPort,
-	xnetportconfig* pConfig
-);
-
-
-
-/* 返回静态后端名称。 */
-XRT_API cstr xrtNetPortName(const xnetport* pPort);
-
-
-
-/* 返回实际后端能力位。 */
-XRT_API uint32 xrtNetPortCapabilities(const xnetport* pPort);
-
-
-
-/* 替换一个 Socket 的 readiness 关注位；事件为零等价于 Unwatch。 */
-XRT_API bool xrtNetPortWatch(xnetport* pPort, xnetsocket Socket,
-	uint64 Id, uint32 iEvents, ptr pUser);
-
-
-
-/* 幂等移除观察；失败也会退休用户身份，调用方随后必须关闭 Socket。 */
-XRT_API bool xrtNetPortUnwatch(xnetport* pPort, xnetsocket Socket);
-
-
-
-/* 异步接受一个连接；成功提交后 Accepted 由终态事件转移给调用方。 */
-XRT_API bool xrtNetPortAccept(xnetport* pPort,
-	xnetsocket Socket, uint64 Id, ptr pUser);
-
-
-
-/* 异步连接远端地址；终态事件到达前 Socket 必须保持有效。 */
-XRT_API bool xrtNetPortConnect(xnetport* pPort, xnetsocket Socket,
-	const xnetaddr* pRemote, uint64 Id, ptr pUser);
-
-
-
-/* 异步等待流 Socket 可读；不借用数据缓冲，终态到达后再提交 Recv。 */
-XRT_API bool xrtNetPortReadProbe(xnetport* pPort,
-	xnetsocket Socket, uint64 Id, ptr pUser);
-
-
-
-/* 异步接收到调用方缓冲；支持流和已连接数据报，单次最多 INT_MAX 字节。 */
-XRT_API bool xrtNetPortRecv(xnetport* pPort, xnetsocket Socket,
-	void* pData, size_t iSize, uint64 Id, ptr pUser);
-
-
-
-/* 异步分散接收；支持流和已连接数据报，总长度最多 INT_MAX 字节。 */
-XRT_API bool xrtNetPortRecvVec(xnetport* pPort, xnetsocket Socket,
-	const xnetwspan* pSpans, size_t iCount, uint64 Id, ptr pUser);
-
-
-
-/* 异步发送调用方缓冲；支持流和已连接数据报，单次最多 INT_MAX 字节。 */
-XRT_API bool xrtNetPortSend(xnetport* pPort, xnetsocket Socket,
-	const void* pData, size_t iSize, uint64 Id, ptr pUser);
-
-
-
-/* 异步聚集发送；支持流和已连接数据报，总长度最多 INT_MAX 字节。 */
-XRT_API bool xrtNetPortSendVec(xnetport* pPort, xnetsocket Socket,
-	const xnetspan* pSpans, size_t iCount, uint64 Id, ptr pUser);
-
-
-
-/*
-	从原生文件句柄的绝对偏移异步读取到调用方缓冲。
-	文件必须以 XFILE_ASYNC 打开，句柄和缓冲必须存活到唯一终态事件。
-*/
-/* 原生文件完成提交由 net_file 层绑定文件对象后提供。 */
-
-
-
-/*
-	把调用方缓冲异步写入原生文件句柄的绝对偏移。
-	文件必须以 XFILE_ASYNC 打开，句柄和缓冲必须存活到唯一终态事件。
-*/
-/* 公共端口层不暴露无法表达 owner 的裸文件句柄接口。 */
-
-
-
-/* 异步接收数据报；远端地址由终态事件返回。 */
-XRT_API bool xrtNetPortRecvFrom(xnetport* pPort, xnetsocket Socket,
-	void* pData, size_t iSize, uint64 Id, ptr pUser);
-
-
-
-/* 异步分散接收数据报；缓冲不足由终态事件返回 TRUNCATED。 */
-XRT_API bool xrtNetPortRecvFromVec(xnetport* pPort, xnetsocket Socket,
-	const xnetwspan* pSpans, size_t iCount, uint64 Id, ptr pUser);
-
-
-
-/* 异步接收数据报及 Socket 已启用的元数据。 */
-XRT_API bool xrtNetPortRecvMsg(xnetport* pPort, xnetsocket Socket,
-	void* pData, size_t iSize, uint64 Id, ptr pUser);
-
-
-
-/* 异步分散接收数据报及元数据；终态事件同时返回 Address 和 Meta。 */
-XRT_API bool xrtNetPortRecvMsgVec(xnetport* pPort, xnetsocket Socket,
-	const xnetwspan* pSpans, size_t iCount, uint64 Id, ptr pUser);
-
-
-
-/* 异步等待并读取一个数据报错误；终态同时返回原负载前缀和 DgramError。 */
-XRT_API bool xrtNetPortRecvError(xnetport* pPort, xnetsocket Socket,
-	void* pData, size_t iSize, uint64 Id, ptr pUser);
-
-
-
-/* 异步发送数据报；远端地址在提交时复制。 */
-XRT_API bool xrtNetPortSendTo(xnetport* pPort, xnetsocket Socket,
-	const void* pData, size_t iSize, const xnetaddr* pRemote,
-	uint64 Id, ptr pUser);
-
-
-
-/* 异步聚集发送数据报；远端地址和 Span 描述符在提交时复制。 */
-XRT_API bool xrtNetPortSendToVec(xnetport* pPort, xnetsocket Socket,
-	const xnetspan* pSpans, size_t iCount, const xnetaddr* pRemote,
-	uint64 Id, ptr pUser);
-
-
-
-/*
-	异步发送带逐包控制的数据报；地址和控制值在提交时复制。
-	非零控制 Flags 的终态为 SEND_MSG；空控制或零 Flags 走普通发送路径，
-	有 pRemote 时终态为 SEND_TO，否则为 SEND（Socket 须已连接）。
-*/
-XRT_API bool xrtNetPortSendMsg(xnetport* pPort, xnetsocket Socket,
-	const void* pData, size_t iSize, const xnetaddr* pRemote,
-	const xnetdgramcontrol* pControl, uint64 Id, ptr pUser);
-
-
-
-/*
-	异步聚集发送带逐包控制的数据报；Span 描述符、地址和控制值在提交时复制。
-	终态类型与 SendMsg 相同：非零控制 Flags 为 SEND_MSG；空控制或零 Flags
-	在有 pRemote 时为 SEND_TO，否则为 SEND（Socket 须已连接）。
-*/
-XRT_API bool xrtNetPortSendMsgVec(xnetport* pPort, xnetsocket Socket,
-	const xnetspan* pSpans, size_t iCount, const xnetaddr* pRemote,
-	const xnetdgramcontrol* pControl, uint64 Id, ptr pUser);
-
-
-
-/* 请求取消指定 ID 的在途操作；操作仍以一个终态事件结束。 */
-XRT_API bool xrtNetPortCancel(xnetport* pPort, uint64 Id);
-
-
-
-/* 跨线程投递一个不会合并的用户事件。 */
-XRT_API bool xrtNetPortPost(xnetport* pPort, uint64 Id, ptr pUser);
-
-
-
-/* 跨线程请求一个可合并的 WAKE 事件。 */
-XRT_API bool xrtNetPortWake(xnetport* pPort);
-
-
-
-/* 等待到事件、截止时间或错误；成功和超时都会先清零输出数量。 */
-XRT_API xnetresult xrtNetPortWait(xnetport* pPort,
-	xnetportevent* pEvents, size_t iCapacity,
-	xdeadline iDeadline, size_t* pCount);
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_NET_ENGINE)
-
-/* 初始化兼顾吞吐与内存占用的 Engine 默认配置。 */
-XRT_API void xrtNetEngineConfigInit(xnetengineconfig* pConfig);
-
-
-
-/* 初始化一个借用过程和数据的端口 Completion。 */
-XRT_API void xrtNetCompletionInit(xnetcompletion* pCompletion,
-	xnetcompletionproc pProc, ptr pData);
-
-
-
-/* 创建停止状态的 Engine；Worker 线程和端口在 Start 时建立。 */
-XRT_API xnetengine* xrtNetEngineCreate(const xnetengineconfig* pConfig);
-
-
-
-/* 停止并销毁 Engine；仍有高层对象或外借池块时失败并保留对象。 */
-XRT_API bool xrtNetEngineDestroy(xnetengine* pEngine);
-
-
-
-/* 建立全部 Worker、端口和线程；已经运行时幂等成功。 */
-XRT_API bool xrtNetEngineStart(xnetengine* pEngine);
-
-
-
-/*
-	排空任务并释放运行资源。
-	任务链不收敛或仍有外借池块时返回失败，但 Engine 仍进入可重启的停止状态。
-*/
-XRT_API bool xrtNetEngineStop(xnetengine* pEngine);
-
-
-
-/* 返回当前生命周期状态。 */
-XRT_API xnetenginestate xrtNetEngineState(const xnetengine* pEngine);
-
-
-
-/* 返回 Engine 固定的 Worker 数量。 */
-XRT_API uint32 xrtNetEngineWorkerCount(const xnetengine* pEngine);
-
-
-
-/* 返回借用的指定 Worker；索引越界时返回空指针。 */
-XRT_API xnetworker* xrtNetEngineWorker(xnetengine* pEngine, uint32 iIndex);
-
-
-
-/* 返回当前线程所属的借用 Worker，不属于该 Engine 时返回空指针。 */
-XRT_API xnetworker* xrtNetEngineCurrent(xnetengine* pEngine);
-
-
-
-/* 返回 Worker 所属的借用 Engine。 */
-XRT_API xnetengine* xrtNetWorkerEngine(const xnetworker* pWorker);
-
-
-
-/* 返回 Worker 在所属 Engine 内的稳定索引。 */
-XRT_API uint32 xrtNetWorkerIndex(const xnetworker* pWorker);
-
-
-
-/* 判断调用线程是否正是指定 Worker。 */
-XRT_API bool xrtNetWorkerIsCurrent(const xnetworker* pWorker);
-
-
-
-/* 返回运行期间借用的端口；调用方必须保证借用操作先于 Stop 结束。 */
-XRT_API xnetport* xrtNetWorkerPort(xnetworker* pWorker);
-
-
-
-/* 返回 Worker 独占的自适应缓冲池；只能从该 Worker 的回调中调用。 */
-XRT_API xnetbufpool* xrtNetWorkerBufPool(xnetworker* pWorker);
-
-
-
-/* 从 Worker 的线程安全分级缓存分配并清零一块内存；调用方必须保持 Worker 生命周期有效。 */
-XRT_API ptr xrtNetWorkerAlloc(xnetworker* pWorker, size_t iSize);
-
-
-
-/* 把 Worker 分配的内存归还同一 Worker；空指针可以直接释放。 */
-XRT_API void xrtNetWorkerFree(
-	xnetworker* pWorker,
-	ptr pMemory,
-	size_t iSize
-);
-
-
-
-/* 分配 Engine 内唯一的非零端口操作 ID，可从任意线程调用。 */
-XRT_API uint64 xrtNetWorkerOperationId(xnetworker* pWorker);
-
-
-
-/* 初始化一个尚未投递的嵌入式 Post。 */
-XRT_API bool xrtNetPostInit(xnetpost* pPost);
-
-
-
-/* 判断嵌入式 Post 是否仍在 Worker 队列中等待执行。 */
-XRT_API bool xrtNetPostPending(const xnetpost* pPost);
-
-
-
-/*
-	无分配地投递到指定 Worker；同一 Post 在出队前不能再次投递。
-	调用方必须通过网络对象引用保证 Worker 和 Post 存活到回调返回。
-*/
-XRT_API bool xrtNetPost(
-	xnetworker* pWorker,
-	xnetpost* pPost,
-	xnettaskproc pProc,
-	ptr pData
-);
-
-
-
-/* 有界投递任务；成功受理后必在亲和 Worker 上执行一次。 */
-XRT_API bool xrtNetEnginePost(xnetengine* pEngine,
-	uint64 iAffinity, xnettaskproc pProc, ptr pData);
-
-
-
-/* 按单调时钟截止时间调度 Timer；成功返回非零 ID。 */
-XRT_API uint64 xrtNetEngineSchedule(xnetengine* pEngine,
-	uint64 iAffinity, xdeadline iDeadline,
-	xnettimerproc pProc, ptr pData);
-
-
-
-/* 按相对微秒数调度 Timer；零表示在下一次 Worker 循环到期。 */
-XRT_API uint64 xrtNetEngineAfter(xnetengine* pEngine,
-	uint64 iAffinity, uint64 iTimeout,
-	xnettimerproc pProc, ptr pData);
-
-
-
-/* 异步请求取消 Timer；成功只表示请求已进入目标 Worker。 */
-XRT_API bool xrtNetEngineTimerCancel(xnetengine* pEngine, uint64 Id);
-
-
-
-/*
-	只在 Timer 所属 Worker 上立即取消且不分配内存。
-	不在所属 Worker、Timer 尚未入堆或已经终结时返回 false，且不修改线程错误。
-*/
-XRT_API bool xrtNetEngineTimerCancelCurrent(
-	xnetengine* pEngine,
-	uint64 Id
-);
-
-
-
-/* 读取一个 Worker 的统计快照。 */
-XRT_API bool xrtNetWorkerStats(const xnetworker* pWorker,
-	xnetworkerstats* pStats);
-
-
-
-/* 聚合全部 Worker 的统计快照。 */
-XRT_API bool xrtNetEngineStats(const xnetengine* pEngine,
-	xnetenginestats* pStats);
-
-
-
-/*
-	占用一个正在运行的 Engine 生命周期，供组合网络对象保存借用指针。
-	每次成功占用必须由一次 xrtNetEngineUnpin 配对释放。
-*/
-XRT_API bool xrtNetEnginePin(xnetengine* pEngine);
-
-
-
-/* 释放一次 Engine 生命周期占用；没有匹配占用时返回状态错误。 */
-XRT_API bool xrtNetEngineUnpin(xnetengine* pEngine);
-
-#endif
-
-
-
-XRT_EXTERN_C_END
-
-
-
-#if defined(XRT_FEATURE_NET_BUFFER)
-
-/* 网络缓冲池包含四个可配置尺寸类。 */
-#define XNET_BUFFER_CLASS_COUNT 4u
-
-
-
-/* 外部引用的释放过程在最后一段数据离开缓冲时执行一次。 */
-typedef void (*xnetreleaseproc)(ptr pContext, cbytes pData, size_t iSize);
-
-
-
-/* 引用 Span 在受理后转移释放责任，零长度 Span 不转移所有权。 */
-typedef struct xnetref {
-	cbytes Data;
-	size_t Size;
-	xnetreleaseproc Release;
-	ptr Context;
-} xnetref;
-
-
-
-/* 每个尺寸类独立控制块容量和最大缓存数量，总缓存还受字节上限约束。 */
-struct xnetbufpoolconfig {
-	size_t BlockSize[XNET_BUFFER_CLASS_COUNT];
-	size_t CacheLimit[XNET_BUFFER_CLASS_COUNT];
-	size_t MaxCacheBytes;
-};
-
-
-
-/* 缓冲池统计区分实时、缓存、分配、复用和动态大块。 */
-typedef struct xnetbufpoolinfo {
-	size_t LiveBlocks;
-	size_t LiveBytes;
-	size_t PeakBlocks;
-	size_t PeakBytes;
-	size_t CachedBlocks;
-	size_t CachedBytes;
-	uint64 AllocCount;
-	uint64 ReuseCount;
-	uint64 DynamicCount;
-	uint64 RefCount;
-} xnetbufpoolinfo;
-
-
-
-typedef struct xnetblock xnetblock;
-
-
-
-/* 缓冲链可栈上使用；字段用于零分配查询，调用方不得直接修改。 */
-typedef struct xnetbuf {
-	xnetblock* Head;
-	xnetblock* Tail;
-	xnetblock* Reserved;
-	xnetbufpool* Pool;
-	size_t Size;
-	size_t Blocks;
-	bool ReservedNew;
-} xnetbuf;
-
-
-
-XRT_EXTERN_C_BEGIN
-
-
-
-/* 增加拥有型网络字节结果的引用并返回原指针。 */
-XRT_API xnetbytes* xrtNetBytesRef(xnetbytes* pBytes);
-
-
-
-/* 释放拥有型网络字节结果；空指针视为空操作。 */
-XRT_API void xrtNetBytesDestroy(xnetbytes* pBytes);
-
-
-
-/* 返回拥有型网络字节结果的借用视图。 */
-XRT_API xbytesview xrtNetBytesView(const xnetbytes* pBytes);
-
-
-
-/* 写入默认尺寸类 512、2048、8192、32768 字节及有界缓存策略。 */
-XRT_API void xrtNetBufPoolConfigInit(xnetbufpoolconfig* pConfig);
-
-
-
-/* 创建线程归属的缓冲池；空配置使用默认值。 */
-XRT_API xnetbufpool* xrtNetBufPoolCreate(const xnetbufpoolconfig* pConfig);
-
-
-
-/* 销毁没有实时块的缓冲池；仍有块时失败且保持池有效。 */
-XRT_API bool xrtNetBufPoolDestroy(xnetbufpool* pPool);
-
-
-
-/* 将缓存裁剪到不超过指定字节数，返回真正释放的块数。 */
-XRT_API size_t xrtNetBufPoolTrim(xnetbufpool* pPool, size_t iRetainBytes);
-
-
-
-/* 复制缓冲池当前统计，不分配内存。 */
-XRT_API void xrtNetBufPoolGet(const xnetbufpool* pPool, xnetbufpoolinfo* pInfo);
-
-
-
-/* 初始化空缓冲链；池为空时所有块直接使用全局分配器。 */
-XRT_API bool xrtNetBufInit(xnetbuf* pBuffer, xnetbufpool* pPool);
-
-
-
-/* 释放全部块并取消尚未提交的写入预留。 */
-XRT_API void xrtNetBufClear(xnetbuf* pBuffer);
-
-
-
-/* 返回缓冲链总字节数。 */
-XRT_API size_t xrtNetBufSize(const xnetbuf* pBuffer);
-
-
-
-/* 返回缓冲链是否为空。 */
-XRT_API bool xrtNetBufEmpty(const xnetbuf* pBuffer);
-
-
-
-/* 返回当前非空 Span 数。 */
-XRT_API size_t xrtNetBufSpanCount(const xnetbuf* pBuffer);
-
-
-
-/* 获取文件区间前最多指定数量的只读 Span。 */
-XRT_API size_t xrtNetBufSpans(const xnetbuf* pBuffer, xnetspan* pSpans, size_t iCapacity);
-
-
-
-/* 获取首个内存 Span；缓冲为空或队首为文件区间时清空输出并返回 false。 */
-XRT_API bool xrtNetBufFront(const xnetbuf* pBuffer, xnetspan* pSpan);
-
-
-
-/* 原子追加一份数据副本，失败时缓冲内容保持不变。 */
-XRT_API bool xrtNetBufAppend(xnetbuf* pBuffer, const void* pData, size_t iSize);
-
-
-
-/* 在缓冲链首部复制一段数据；成功后原有块和外部引用保持不动。 */
-XRT_API bool xrtNetBufPrepend(
-	xnetbuf* pBuffer,
-	const void* pData,
-	size_t iSize
-);
-
-
-
-/* 追加借用数据，调用方必须保证数据存活到该段被消费或清除。 */
-XRT_API bool xrtNetBufAppendBorrow(xnetbuf* pBuffer, const void* pData, size_t iSize);
-
-
-
-/* 接管一段由 xrtMalloc 家族分配的数据，成功后由缓冲调用 xrtFree。 */
-XRT_API bool xrtNetBufAppendTake(xnetbuf* pBuffer, ptr pData, size_t iSize);
-
-
-
-/* 接管带自定义释放过程的外部数据；失败时所有权仍归调用方。 */
-XRT_API bool xrtNetBufAppendRef(xnetbuf* pBuffer, const void* pData,
-	size_t iSize, xnetreleaseproc pRelease, ptr pContext);
-
-
-
-/* 预留至少指定大小的连续尾部空间，供 Socket 或编解码器直接写入。 */
-XRT_API bool xrtNetBufReserve(xnetbuf* pBuffer, size_t iMinimum, xnetwspan* pSpan);
-
-
-
-/* 提交预留空间中已经写入的字节数。 */
-XRT_API bool xrtNetBufCommit(xnetbuf* pBuffer, size_t iSize);
-
-
-
-/* 放弃当前预留，缓冲内容保持不变。 */
-XRT_API bool xrtNetBufCancel(xnetbuf* pBuffer);
-
-
-
-/* 把源缓冲的全部块移动到目标尾部，源缓冲恢复为空。 */
-XRT_API bool xrtNetBufMove(xnetbuf* pTarget, xnetbuf* pSource);
-
-
-
-/* 确保指定长度的内存前缀连续；前缀包含文件区间时失败。 */
-XRT_API bool xrtNetBufPullup(xnetbuf* pBuffer, size_t iSize, xnetspan* pSpan);
-
-
-
-/* 从指定偏移复制最多给定字节，遇到文件区间时停止。 */
-XRT_API size_t xrtNetBufPeek(const xnetbuf* pBuffer,
-	size_t iOffset, void* pOutput, size_t iSize);
-
-
-
-/* 复制并消费最多给定字节；遇到文件区间时停止。 */
-XRT_API size_t xrtNetBufRead(xnetbuf* pBuffer, void* pOutput, size_t iSize);
-
-
-
-/* 从指定偏移查找一个字节，遇到文件区间或未找到时返回 XRT_NPOS。 */
-XRT_API size_t xrtNetBufFind(const xnetbuf* pBuffer, uint8 iByte, size_t iOffset);
-
-
-
-/* 消费最多给定字节；不会释放仍被活动写预留借用的尾块。 */
-XRT_API size_t xrtNetBufConsume(xnetbuf* pBuffer, size_t iSize);
-
-
-
-XRT_EXTERN_C_END
-
-#endif
 
 #endif
 
@@ -20369,108 +20963,6 @@ XRT_API xnetstream* xrtNetConnect(
 	xcancel* pCancel
 );
 #endif
-
-
-
-XRT_EXTERN_C_END
-
-#endif
-
-#endif
-
-
-/* ========================================================================== */
-/* public: include/xrt/future_bridge.h */
-/* ========================================================================== */
-
-#ifndef XRT_FUTURE_BRIDGE_H
-#define XRT_FUTURE_BRIDGE_H
-
-
-
-
-#if defined(XRT_FEATURE_FUTURE_BRIDGE) && !defined(XRT_FEATURE_FUTURE)
-	#error "XRT_FEATURE_FUTURE_BRIDGE requires XRT_FEATURE_FUTURE"
-#endif
-
-#if defined(XRT_FEATURE_FUTURE_BRIDGE) && !defined(XRT_FEATURE_THREAD)
-	#error "XRT_FEATURE_FUTURE_BRIDGE requires XRT_FEATURE_THREAD"
-#endif
-
-#if defined(XRT_FEATURE_FUTURE_BRIDGE) && !defined(XRT_FEATURE_ATOMIC)
-	#error "XRT_FEATURE_FUTURE_BRIDGE requires XRT_FEATURE_ATOMIC"
-#endif
-
-
-
-#if defined(XRT_FEATURE_FUTURE_BRIDGE)
-
-/* Future 桥只保存装配状态、借用的 Promise 与一个取消监听。 */
-#define XRT_FUTURE_BRIDGE_STORAGE_SIZE 32u
-
-
-
-/* Future 桥的内部状态保持不透明，可直接嵌入异步操作上下文。 */
-typedef union xfuturebridge {
-	uint64 Alignment;
-	uint8 Storage[XRT_FUTURE_BRIDGE_STORAGE_SIZE];
-} xfuturebridge;
-
-
-
-XRT_EXTERN_C_BEGIN
-
-
-
-/* 使用一个已有 Promise 初始化桥；Promise 的所有权仍由调用方持有。 */
-XRT_API bool xrtFutureBridgeInit(
-	xfuturebridge* pBridge,
-	xpromise* pPromise
-);
-
-
-
-/* 创建 Future/Promise 对并初始化桥；返回的 Future 由调用方持有。 */
-XRT_API xfuture* xrtFutureBridgeCreate(
-	xfuturebridge* pBridge,
-	xcancel* pParent
-);
-
-
-
-/* 返回桥借用的 Promise；调用方负责按原有所有权契约销毁它。 */
-XRT_API xpromise* xrtFutureBridgePromise(
-	const xfuturebridge* pBridge
-);
-
-
-
-/* 把 Future 的协作取消转发给底层异步操作。 */
-XRT_API bool xrtFutureBridgeWatch(
-	xfuturebridge* pBridge,
-	xcancelproc pCancelProc,
-	ptr pCancelData
-);
-
-
-
-/* 发布装配成功，允许底层完成回调向 Promise 写入终态。 */
-XRT_API bool xrtFutureBridgeReady(xfuturebridge* pBridge);
-
-
-
-/* 发布装配失败，要求底层完成回调只回收结果。 */
-XRT_API bool xrtFutureBridgeFail(xfuturebridge* pBridge);
-
-
-
-/* 等待极短的装配窗口，并返回底层结果能否写入 Promise。 */
-XRT_API bool xrtFutureBridgeWait(const xfuturebridge* pBridge);
-
-
-
-/* 注销取消监听，并与正在执行的取消回调汇合。 */
-XRT_API void xrtFutureBridgeUnwatch(xfuturebridge* pBridge);
 
 
 
@@ -22966,6 +23458,8 @@ XRT_API size_t xrtCryptoHashSize(xcryptohash Hash);
 
 #define XRT_RSA_MODULUS_MIN_SIZE 128u
 #define XRT_RSA_MAX_MODULUS_SIZE 1024u
+/* Compatibility spelling retained for source compatibility with xrt <= 5.1. */
+#define XRT_RSA_MODULUS_MAX_SIZE XRT_RSA_MAX_MODULUS_SIZE
 
 /* RSA 公钥是对调用方持有的定宽大端模数和指数的只读视图。 */
 typedef struct xrsa_public_key {
@@ -27903,12 +28397,401 @@ XRT_EXTERN_C_END
 
 
 /* ========================================================================== */
+/* public: include/xrt/proxy.h */
+/* ========================================================================== */
+
+#ifndef XRT_PROXY_H
+#define XRT_PROXY_H
+
+
+#if defined(XRT_FEATURE_NET_PROXY_DIAL)
+#endif
+
+
+
+#if defined(XRT_FEATURE_NET_PROXY) && !defined(XRT_FEATURE_NET)
+	#error "XRT proxy support requires XRT_FEATURE_NET"
+#endif
+
+#if defined(XRT_FEATURE_NET_PROXY_HANDSHAKE) && \
+	(!defined(XRT_FEATURE_NET_PROXY) || !defined(XRT_FEATURE_NET_BUFFER))
+	#error "XRT proxy handshake support requires proxy and network buffer support"
+#endif
+
+#if defined(XRT_FEATURE_NET_PROXY_SOCKS5) && \
+	!defined(XRT_FEATURE_NET_PROXY_HANDSHAKE)
+	#error "XRT SOCKS5 support requires proxy handshake support"
+#endif
+
+#if defined(XRT_FEATURE_NET_PROXY_HTTP_CONNECT) && \
+	(!defined(XRT_FEATURE_NET_PROXY_HANDSHAKE) || \
+	 !defined(XRT_FEATURE_HTTP1_HEAD) || \
+	 !defined(XRT_FEATURE_CODEC_BASE64))
+	#error "XRT HTTP CONNECT requires proxy handshake, HTTP/1 head and Base64 support"
+#endif
+
+#if defined(XRT_FEATURE_NET_PROXY_DIAL) && \
+	(!defined(XRT_FEATURE_NET_PROXY_HANDSHAKE) || \
+	 !defined(XRT_FEATURE_NET_TCP_DIAL))
+	#error "XRT proxy Dial support requires proxy handshake and TCP Dial support"
+#endif
+
+
+
+#if defined(XRT_FEATURE_NET_PROXY)
+
+/* 代理类型只描述协议；TCP、TLS 和上层客户端决定如何承载协议。 */
+typedef enum xnetproxytype {
+	XNET_PROXY_SOCKS5 = 1,
+	XNET_PROXY_HTTP_CONNECT
+} xnetproxytype;
+
+
+
+/* AUTO 在存在凭据时要求认证，否则只允许匿名；OPTIONAL 显式允许降级为匿名。 */
+typedef enum xnetproxyauth {
+	XNET_PROXY_AUTH_AUTO = 0,
+	XNET_PROXY_AUTH_NONE,
+	XNET_PROXY_AUTH_REQUIRED,
+	XNET_PROXY_AUTH_OPTIONAL
+} xnetproxyauth;
+
+
+
+/* 代理对象持有配置深拷贝；主机不要求零结尾，凭据允许任意字节。 */
+typedef struct xnetproxyconfig {
+	xnetproxytype Type;
+	xstrview Host;
+	uint16 Port;
+	xnetproxyauth Auth;
+	xbytesview Username;
+	xbytesview Password;
+} xnetproxyconfig;
+
+
+
+/* 信息视图由代理对象持有，只能在至少一个对象引用存活时借用。 */
+typedef struct xnetproxyinfo {
+	xnetproxytype Type;
+	xstrview Host;
+	uint16 Port;
+	xnetproxyauth Auth;
+	xbytesview Username;
+	xbytesview Password;
+} xnetproxyinfo;
+
+
+
+/* 不可变代理端点可以跨请求和线程共享。 */
+typedef struct xnetproxy xnetproxy;
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_NET_PROXY_HANDSHAKE)
+
+/* 握手状态同时告诉传输层下一步应发送、接收还是发布隧道。 */
+typedef enum xnetproxyhandshakestate {
+	XNET_PROXY_HANDSHAKE_WRITE = 1,
+	XNET_PROXY_HANDSHAKE_READ,
+	XNET_PROXY_HANDSHAKE_READY,
+	XNET_PROXY_HANDSHAKE_ERROR
+} xnetproxyhandshakestate;
+
+
+
+/* 域名端点使用 Host；数字端点使用 Address，端口始终保存在 Address.Port。 */
+typedef struct xnetproxyendpoint {
+	xnetaddr Address;
+	xstrview Host;
+} xnetproxyendpoint;
+
+
+
+/* 输入缓冲池由调用方借用，并且必须比握手对象存活更久。 */
+typedef struct xnetproxyhandshakeconfig {
+	const xnetproxy* Proxy;
+	xstrview TargetHost;
+	uint16 TargetPort;
+	size_t ReceiveLimit;
+	xnetbufpool* Pool;
+} xnetproxyhandshakeconfig;
+
+
+
+/* 单个握手由一个传输执行上下文独占驱动。 */
+typedef struct xnetproxyhandshake xnetproxyhandshake;
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_NET_PROXY_SOCKS5)
+
+/* SOCKS5 CONNECT 回复码保留 RFC 1928 的线路值，便于日志和策略判断。 */
+typedef enum xnetsocks5reply {
+	XNET_SOCKS5_SUCCEEDED = 0,
+	XNET_SOCKS5_GENERAL_FAILURE = 1,
+	XNET_SOCKS5_RULESET_DENIED = 2,
+	XNET_SOCKS5_NETWORK_UNREACHABLE = 3,
+	XNET_SOCKS5_HOST_UNREACHABLE = 4,
+	XNET_SOCKS5_CONNECTION_REFUSED = 5,
+	XNET_SOCKS5_TTL_EXPIRED = 6,
+	XNET_SOCKS5_COMMAND_UNSUPPORTED = 7,
+	XNET_SOCKS5_ADDRESS_UNSUPPORTED = 8
+} xnetsocks5reply;
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_NET_PROXY_DIAL)
+
+/* Proxy Dial 状态区分代理端点解析、TCP 连接和协议握手。 */
+typedef enum xnetproxydialstate {
+	XNET_PROXY_DIAL_RESOLVING = 0,
+	XNET_PROXY_DIAL_CONNECTING,
+	XNET_PROXY_DIAL_HANDSHAKE,
+	XNET_PROXY_DIAL_CONNECTED,
+	XNET_PROXY_DIAL_FAILED,
+	XNET_PROXY_DIAL_CANCELLED
+} xnetproxydialstate;
+
+
+
+/* Timeout 覆盖 DNS、TCP 和代理握手全过程；零值保留各内层超时。 */
+typedef struct xnetproxydialconfig {
+	xnetdialconfig Transport;
+	uint64 Timeout;
+	size_t ReceiveLimit;
+} xnetproxydialconfig;
+
+
+
+/* Proxy Dial 保持底层 TCP Dial 统计，并补充当前协议阶段。 */
+typedef struct xnetproxydialstats {
+	xnetproxydialstate State;
+	xnetdialstats Transport;
+} xnetproxydialstats;
+
+
+
+typedef struct xnetproxydial xnetproxydial;
+
+
+
+/*
+	完成回调在代理传输 Worker 上至多执行一次，不会从提交调用栈重入。
+	pDial 和 Error 只在回调期间借用；成功回调接管隧道 Stream 引用。
+*/
+typedef void (*xnetproxydialproc)(
+	xnetproxydial* pDial,
+	xnetresult Result,
+	xnetstream* pStream,
+	const xerror* pError,
+	ptr pData
+);
+
+#endif
+
+
+
+XRT_EXTERN_C_BEGIN
+
+
+
+#if defined(XRT_FEATURE_NET_PROXY)
+
+/* 初始化 SOCKS5、自动认证且没有固定容量字段的代理配置。 */
+XRT_API void xrtNetProxyConfigInit(xnetproxyconfig* pConfig);
+
+
+
+/* 深拷贝代理端点和凭据，创建可跨线程共享的不可变对象。 */
+XRT_API xnetproxy* xrtNetProxyCreate(const xnetproxyconfig* pConfig);
+
+
+
+/* 增加代理对象引用并返回原指针。 */
+XRT_API xnetproxy* xrtNetProxyRetain(const xnetproxy* pProxy);
+
+
+
+/* 释放代理对象引用；最后一个引用会清零整块配置存储。 */
+XRT_API void xrtNetProxyRelease(xnetproxy* pProxy);
+
+
+
+/* 复制代理对象的只读信息视图。 */
+XRT_API bool xrtNetProxyInfo(
+	const xnetproxy* pProxy,
+	xnetproxyinfo* pInfo
+);
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_NET_PROXY_HANDSHAKE)
+
+/* 初始化握手配置；64 KiB 上限主要约束后续 HTTP CONNECT Header。 */
+XRT_API void xrtNetProxyHandshakeConfigInit(
+	xnetproxyhandshakeconfig* pConfig
+);
+
+
+
+/* 创建握手并立即生成首个协议报文；目标主机会被深拷贝。 */
+XRT_API xnetproxyhandshake* xrtNetProxyHandshakeCreate(
+	const xnetproxyhandshakeconfig* pConfig
+);
+
+
+
+/* 销毁握手，并清零尚未发送的认证报文和内部目标信息。 */
+XRT_API void xrtNetProxyHandshakeDestroy(xnetproxyhandshake* pHandshake);
+
+
+
+/* 返回当前握手状态；空指针返回 ERROR。 */
+XRT_API xnetproxyhandshakestate xrtNetProxyHandshakeState(
+	const xnetproxyhandshake* pHandshake
+);
+
+
+
+/*
+	处理输入链中的完整协议前缀；只消费代理回复，成功后的应用数据保持原位。
+	WRITE 状态必须先发送并确认全部输出，READ 状态才会继续解析输入。
+*/
+XRT_API xnetproxyhandshakestate xrtNetProxyHandshakeStep(
+	xnetproxyhandshake* pHandshake,
+	xnetbuf* pInput
+);
+
+
+
+/* 借用当前待发送的首段连续输出；失败时把非空输出规范化为空 Span。 */
+XRT_API bool xrtNetProxyHandshakeOutput(
+	const xnetproxyhandshake* pHandshake,
+	xnetspan* pOutput
+);
+
+
+
+/* 确认已经发送的输出前缀；支持 Socket 部分写入。 */
+XRT_API size_t xrtNetProxyHandshakeSent(
+	xnetproxyhandshake* pHandshake,
+	size_t iSize
+);
+
+
+
+/* READY 后复制可用的绑定端点；HTTP CONNECT 没有该信息并返回 NOT_FOUND。 */
+XRT_API bool xrtNetProxyHandshakeBound(
+	const xnetproxyhandshake* pHandshake,
+	xnetproxyendpoint* pEndpoint
+);
+
+
+
+/* 返回协议失败时捕获的不可变错误；对象所有权仍属于握手。 */
+XRT_API const xerror* xrtNetProxyHandshakeError(
+	const xnetproxyhandshake* pHandshake
+);
+
+
+
+/* 复制 SOCKS5 线路回复码或 HTTP 状态码；尚未收到回复时返回 false。 */
+XRT_API bool xrtNetProxyHandshakeCode(
+	const xnetproxyhandshake* pHandshake,
+	uint32* pCode
+);
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_NET_PROXY_DIAL)
+
+/* 初始化 TCP 拨号、64 KiB 协议上限和 30 秒全过程超时。 */
+XRT_API void xrtNetProxyDialConfigInit(xnetproxydialconfig* pConfig);
+
+
+
+/*
+	连接代理端点并完成目标 CONNECT；成功 Stream 引用转移给完成回调。
+	非 Worker 提交者可能与完成回调并发，不能依赖返回值已经完成赋值。
+*/
+XRT_API xnetproxydial* xrtNetProxyDial(
+	xnetengine* pEngine,
+	xnetresolver* pResolver,
+	const xnetproxy* pProxy,
+	cstr sTargetHost,
+	uint16 iTargetPort,
+	const xnetproxydialconfig* pConfig,
+	const xnetstreamevents* pStreamEvents,
+	ptr pStreamData,
+	xnetproxydialproc pDone,
+	ptr pDoneData
+);
+
+
+
+/* 增加 Proxy Dial 引用并返回原指针。 */
+XRT_API xnetproxydial* xrtNetProxyDialRef(xnetproxydial* pDial);
+
+
+
+/* 释放 Proxy Dial 引用；空指针视为空操作。 */
+XRT_API void xrtNetProxyDialDestroy(xnetproxydial* pDial);
+
+
+
+/* 协作取消名称解析、TCP 连接或代理握手。 */
+XRT_API bool xrtNetProxyDialCancel(xnetproxydial* pDial);
+
+
+
+/* 返回当前拨号阶段或不可变终态。 */
+XRT_API xnetproxydialstate xrtNetProxyDialState(
+	const xnetproxydial* pDial
+);
+
+
+
+/* 失败或取消后借用完整错误原因链。 */
+XRT_API const xerror* xrtNetProxyDialError(
+	const xnetproxydial* pDial
+);
+
+
+
+/* 复制代理阶段和底层 TCP 地址竞速统计。 */
+XRT_API bool xrtNetProxyDialStats(
+	const xnetproxydial* pDial,
+	xnetproxydialstats* pStats
+);
+
+#endif
+
+
+
+XRT_EXTERN_C_END
+
+#endif
+
+
+/* ========================================================================== */
 /* public: include/xrt/tls_stream.h */
 /* ========================================================================== */
 
 #ifndef XRT_TLS_STREAM_H
 #define XRT_TLS_STREAM_H
 
+#if defined(XRT_FEATURE_TLS_STREAM_DIAL_PROXY)
+#endif
 
 #if defined(XRT_FEATURE_TLS_STREAM_FUTURE) || \
 	defined(XRT_FEATURE_TLS_STREAM_DIAL_FUTURE) || \
@@ -27929,6 +28812,12 @@ XRT_EXTERN_C_END
 	(!defined(XRT_FEATURE_TLS_STREAM) || \
 	 !defined(XRT_FEATURE_NET_TCP_DIAL))
 	#error "XRT_FEATURE_TLS_STREAM_DIAL requires TLS Stream and TCP Dial"
+#endif
+
+#if defined(XRT_FEATURE_TLS_STREAM_DIAL_PROXY) && \
+	(!defined(XRT_FEATURE_TLS_STREAM_DIAL) || \
+	 !defined(XRT_FEATURE_NET_PROXY_DIAL))
+	#error "XRT_FEATURE_TLS_STREAM_DIAL_PROXY requires TLS Stream Dial and Proxy Dial"
 #endif
 
 #if defined(XRT_FEATURE_TLS_STREAM_FUTURE) && \
@@ -28261,6 +29150,25 @@ XRT_API xtlsdial* xrtTlsDial(
 	xtlsdialproc pDone,
 	ptr pDoneData
 );
+
+
+
+#if defined(XRT_FEATURE_TLS_STREAM_DIAL_PROXY)
+/* 经代理 CONNECT 隧道后对真实目标完成端到端 TLS；代理只在调用期间借用。 */
+XRT_API xtlsdial* xrtTlsDialProxy(
+	xnetengine* pEngine,
+	xnetresolver* pResolver,
+	const xnetproxy* pProxy,
+	cstr sHost,
+	uint16 iPort,
+	const xtlsclientconfig* pTls,
+	const xtlsdialconfig* pConfig,
+	const xtlsstreamevents* pStreamEvents,
+	ptr pStreamData,
+	xtlsdialproc pDone,
+	ptr pDoneData
+);
+#endif
 
 
 
@@ -35964,7 +36872,7 @@ XRT_API double xrtMathHypot(double fX, double fY);
 
 
 
-/* 使用显式绝对与相对容差比较两个浮点数。 */
+/* 使用显式绝对与相对容差比较两个浮点数；负值或 NaN 容差报参数错误。 */
 XRT_API bool xrtMathNear(double fLeft, double fRight,
 	double fAbsoluteTolerance, double fRelativeTolerance);
 
@@ -36519,393 +37427,6 @@ XRT_API xnetframestatus xrtNetLengthNext(
 	const xnetlengthframer* pFramer,
 	const xnetbuf* pInput,
 	xnetframe* pFrame
-);
-
-#endif
-
-
-
-XRT_EXTERN_C_END
-
-#endif
-
-
-/* ========================================================================== */
-/* public: include/xrt/proxy.h */
-/* ========================================================================== */
-
-#ifndef XRT_PROXY_H
-#define XRT_PROXY_H
-
-
-#if defined(XRT_FEATURE_NET_PROXY_DIAL)
-#endif
-
-
-
-#if defined(XRT_FEATURE_NET_PROXY) && !defined(XRT_FEATURE_NET)
-	#error "XRT proxy support requires XRT_FEATURE_NET"
-#endif
-
-#if defined(XRT_FEATURE_NET_PROXY_HANDSHAKE) && \
-	(!defined(XRT_FEATURE_NET_PROXY) || !defined(XRT_FEATURE_NET_BUFFER))
-	#error "XRT proxy handshake support requires proxy and network buffer support"
-#endif
-
-#if defined(XRT_FEATURE_NET_PROXY_SOCKS5) && \
-	!defined(XRT_FEATURE_NET_PROXY_HANDSHAKE)
-	#error "XRT SOCKS5 support requires proxy handshake support"
-#endif
-
-#if defined(XRT_FEATURE_NET_PROXY_HTTP_CONNECT) && \
-	(!defined(XRT_FEATURE_NET_PROXY_HANDSHAKE) || \
-	 !defined(XRT_FEATURE_HTTP1_HEAD) || \
-	 !defined(XRT_FEATURE_CODEC_BASE64))
-	#error "XRT HTTP CONNECT requires proxy handshake, HTTP/1 head and Base64 support"
-#endif
-
-#if defined(XRT_FEATURE_NET_PROXY_DIAL) && \
-	(!defined(XRT_FEATURE_NET_PROXY_HANDSHAKE) || \
-	 !defined(XRT_FEATURE_NET_TCP_DIAL))
-	#error "XRT proxy Dial support requires proxy handshake and TCP Dial support"
-#endif
-
-
-
-#if defined(XRT_FEATURE_NET_PROXY)
-
-/* 代理类型只描述协议；TCP、TLS 和上层客户端决定如何承载协议。 */
-typedef enum xnetproxytype {
-	XNET_PROXY_SOCKS5 = 1,
-	XNET_PROXY_HTTP_CONNECT
-} xnetproxytype;
-
-
-
-/* AUTO 在存在凭据时要求认证，否则只允许匿名；OPTIONAL 显式允许降级为匿名。 */
-typedef enum xnetproxyauth {
-	XNET_PROXY_AUTH_AUTO = 0,
-	XNET_PROXY_AUTH_NONE,
-	XNET_PROXY_AUTH_REQUIRED,
-	XNET_PROXY_AUTH_OPTIONAL
-} xnetproxyauth;
-
-
-
-/* 代理对象持有配置深拷贝；主机不要求零结尾，凭据允许任意字节。 */
-typedef struct xnetproxyconfig {
-	xnetproxytype Type;
-	xstrview Host;
-	uint16 Port;
-	xnetproxyauth Auth;
-	xbytesview Username;
-	xbytesview Password;
-} xnetproxyconfig;
-
-
-
-/* 信息视图由代理对象持有，只能在至少一个对象引用存活时借用。 */
-typedef struct xnetproxyinfo {
-	xnetproxytype Type;
-	xstrview Host;
-	uint16 Port;
-	xnetproxyauth Auth;
-	xbytesview Username;
-	xbytesview Password;
-} xnetproxyinfo;
-
-
-
-/* 不可变代理端点可以跨请求和线程共享。 */
-typedef struct xnetproxy xnetproxy;
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_NET_PROXY_HANDSHAKE)
-
-/* 握手状态同时告诉传输层下一步应发送、接收还是发布隧道。 */
-typedef enum xnetproxyhandshakestate {
-	XNET_PROXY_HANDSHAKE_WRITE = 1,
-	XNET_PROXY_HANDSHAKE_READ,
-	XNET_PROXY_HANDSHAKE_READY,
-	XNET_PROXY_HANDSHAKE_ERROR
-} xnetproxyhandshakestate;
-
-
-
-/* 域名端点使用 Host；数字端点使用 Address，端口始终保存在 Address.Port。 */
-typedef struct xnetproxyendpoint {
-	xnetaddr Address;
-	xstrview Host;
-} xnetproxyendpoint;
-
-
-
-/* 输入缓冲池由调用方借用，并且必须比握手对象存活更久。 */
-typedef struct xnetproxyhandshakeconfig {
-	const xnetproxy* Proxy;
-	xstrview TargetHost;
-	uint16 TargetPort;
-	size_t ReceiveLimit;
-	xnetbufpool* Pool;
-} xnetproxyhandshakeconfig;
-
-
-
-/* 单个握手由一个传输执行上下文独占驱动。 */
-typedef struct xnetproxyhandshake xnetproxyhandshake;
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_NET_PROXY_SOCKS5)
-
-/* SOCKS5 CONNECT 回复码保留 RFC 1928 的线路值，便于日志和策略判断。 */
-typedef enum xnetsocks5reply {
-	XNET_SOCKS5_SUCCEEDED = 0,
-	XNET_SOCKS5_GENERAL_FAILURE = 1,
-	XNET_SOCKS5_RULESET_DENIED = 2,
-	XNET_SOCKS5_NETWORK_UNREACHABLE = 3,
-	XNET_SOCKS5_HOST_UNREACHABLE = 4,
-	XNET_SOCKS5_CONNECTION_REFUSED = 5,
-	XNET_SOCKS5_TTL_EXPIRED = 6,
-	XNET_SOCKS5_COMMAND_UNSUPPORTED = 7,
-	XNET_SOCKS5_ADDRESS_UNSUPPORTED = 8
-} xnetsocks5reply;
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_NET_PROXY_DIAL)
-
-/* Proxy Dial 状态区分代理端点解析、TCP 连接和协议握手。 */
-typedef enum xnetproxydialstate {
-	XNET_PROXY_DIAL_RESOLVING = 0,
-	XNET_PROXY_DIAL_CONNECTING,
-	XNET_PROXY_DIAL_HANDSHAKE,
-	XNET_PROXY_DIAL_CONNECTED,
-	XNET_PROXY_DIAL_FAILED,
-	XNET_PROXY_DIAL_CANCELLED
-} xnetproxydialstate;
-
-
-
-/* Timeout 覆盖 DNS、TCP 和代理握手全过程；零值保留各内层超时。 */
-typedef struct xnetproxydialconfig {
-	xnetdialconfig Transport;
-	uint64 Timeout;
-	size_t ReceiveLimit;
-} xnetproxydialconfig;
-
-
-
-/* Proxy Dial 保持底层 TCP Dial 统计，并补充当前协议阶段。 */
-typedef struct xnetproxydialstats {
-	xnetproxydialstate State;
-	xnetdialstats Transport;
-} xnetproxydialstats;
-
-
-
-typedef struct xnetproxydial xnetproxydial;
-
-
-
-/*
-	完成回调在代理传输 Worker 上至多执行一次，不会从提交调用栈重入。
-	pDial 和 Error 只在回调期间借用；成功回调接管隧道 Stream 引用。
-*/
-typedef void (*xnetproxydialproc)(
-	xnetproxydial* pDial,
-	xnetresult Result,
-	xnetstream* pStream,
-	const xerror* pError,
-	ptr pData
-);
-
-#endif
-
-
-
-XRT_EXTERN_C_BEGIN
-
-
-
-#if defined(XRT_FEATURE_NET_PROXY)
-
-/* 初始化 SOCKS5、自动认证且没有固定容量字段的代理配置。 */
-XRT_API void xrtNetProxyConfigInit(xnetproxyconfig* pConfig);
-
-
-
-/* 深拷贝代理端点和凭据，创建可跨线程共享的不可变对象。 */
-XRT_API xnetproxy* xrtNetProxyCreate(const xnetproxyconfig* pConfig);
-
-
-
-/* 增加代理对象引用并返回原指针。 */
-XRT_API xnetproxy* xrtNetProxyRetain(const xnetproxy* pProxy);
-
-
-
-/* 释放代理对象引用；最后一个引用会清零整块配置存储。 */
-XRT_API void xrtNetProxyRelease(xnetproxy* pProxy);
-
-
-
-/* 复制代理对象的只读信息视图。 */
-XRT_API bool xrtNetProxyInfo(
-	const xnetproxy* pProxy,
-	xnetproxyinfo* pInfo
-);
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_NET_PROXY_HANDSHAKE)
-
-/* 初始化握手配置；64 KiB 上限主要约束后续 HTTP CONNECT Header。 */
-XRT_API void xrtNetProxyHandshakeConfigInit(
-	xnetproxyhandshakeconfig* pConfig
-);
-
-
-
-/* 创建握手并立即生成首个协议报文；目标主机会被深拷贝。 */
-XRT_API xnetproxyhandshake* xrtNetProxyHandshakeCreate(
-	const xnetproxyhandshakeconfig* pConfig
-);
-
-
-
-/* 销毁握手，并清零尚未发送的认证报文和内部目标信息。 */
-XRT_API void xrtNetProxyHandshakeDestroy(xnetproxyhandshake* pHandshake);
-
-
-
-/* 返回当前握手状态；空指针返回 ERROR。 */
-XRT_API xnetproxyhandshakestate xrtNetProxyHandshakeState(
-	const xnetproxyhandshake* pHandshake
-);
-
-
-
-/*
-	处理输入链中的完整协议前缀；只消费代理回复，成功后的应用数据保持原位。
-	WRITE 状态必须先发送并确认全部输出，READ 状态才会继续解析输入。
-*/
-XRT_API xnetproxyhandshakestate xrtNetProxyHandshakeStep(
-	xnetproxyhandshake* pHandshake,
-	xnetbuf* pInput
-);
-
-
-
-/* 借用当前待发送的首段连续输出；失败时把非空输出规范化为空 Span。 */
-XRT_API bool xrtNetProxyHandshakeOutput(
-	const xnetproxyhandshake* pHandshake,
-	xnetspan* pOutput
-);
-
-
-
-/* 确认已经发送的输出前缀；支持 Socket 部分写入。 */
-XRT_API size_t xrtNetProxyHandshakeSent(
-	xnetproxyhandshake* pHandshake,
-	size_t iSize
-);
-
-
-
-/* READY 后复制可用的绑定端点；HTTP CONNECT 没有该信息并返回 NOT_FOUND。 */
-XRT_API bool xrtNetProxyHandshakeBound(
-	const xnetproxyhandshake* pHandshake,
-	xnetproxyendpoint* pEndpoint
-);
-
-
-
-/* 返回协议失败时捕获的不可变错误；对象所有权仍属于握手。 */
-XRT_API const xerror* xrtNetProxyHandshakeError(
-	const xnetproxyhandshake* pHandshake
-);
-
-
-
-/* 复制 SOCKS5 线路回复码或 HTTP 状态码；尚未收到回复时返回 false。 */
-XRT_API bool xrtNetProxyHandshakeCode(
-	const xnetproxyhandshake* pHandshake,
-	uint32* pCode
-);
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_NET_PROXY_DIAL)
-
-/* 初始化 TCP 拨号、64 KiB 协议上限和 30 秒全过程超时。 */
-XRT_API void xrtNetProxyDialConfigInit(xnetproxydialconfig* pConfig);
-
-
-
-/*
-	连接代理端点并完成目标 CONNECT；成功 Stream 引用转移给完成回调。
-	非 Worker 提交者可能与完成回调并发，不能依赖返回值已经完成赋值。
-*/
-XRT_API xnetproxydial* xrtNetProxyDial(
-	xnetengine* pEngine,
-	xnetresolver* pResolver,
-	const xnetproxy* pProxy,
-	cstr sTargetHost,
-	uint16 iTargetPort,
-	const xnetproxydialconfig* pConfig,
-	const xnetstreamevents* pStreamEvents,
-	ptr pStreamData,
-	xnetproxydialproc pDone,
-	ptr pDoneData
-);
-
-
-
-/* 增加 Proxy Dial 引用并返回原指针。 */
-XRT_API xnetproxydial* xrtNetProxyDialRef(xnetproxydial* pDial);
-
-
-
-/* 释放 Proxy Dial 引用；空指针视为空操作。 */
-XRT_API void xrtNetProxyDialDestroy(xnetproxydial* pDial);
-
-
-
-/* 协作取消名称解析、TCP 连接或代理握手。 */
-XRT_API bool xrtNetProxyDialCancel(xnetproxydial* pDial);
-
-
-
-/* 返回当前拨号阶段或不可变终态。 */
-XRT_API xnetproxydialstate xrtNetProxyDialState(
-	const xnetproxydial* pDial
-);
-
-
-
-/* 失败或取消后借用完整错误原因链。 */
-XRT_API const xerror* xrtNetProxyDialError(
-	const xnetproxydial* pDial
-);
-
-
-
-/* 复制代理阶段和底层 TCP 地址竞速统计。 */
-XRT_API bool xrtNetProxyDialStats(
-	const xnetproxydial* pDial,
-	xnetproxydialstats* pStats
 );
 
 #endif
@@ -38050,6 +38571,387 @@ XRT_EXTERN_C_END
 
 
 /* ========================================================================== */
+/* public: include/xrt/vfs.h */
+/* ========================================================================== */
+
+#ifndef XRT_VFS_H
+#define XRT_VFS_H
+
+
+
+
+#if defined(XRT_FEATURE_VFS) && \
+	(!defined(XRT_FEATURE_DIR) || !defined(XRT_FEATURE_MUTEX) || \
+	 !defined(XRT_FEATURE_UNICODE))
+	#error "XRT VFS requires directory, mutex, and Unicode support"
+#endif
+
+#if defined(XRT_FEATURE_VFS_MEMORY) && !defined(XRT_FEATURE_VFS)
+	#error "XRT memory VFS provider requires VFS support"
+#endif
+
+#if defined(XRT_FEATURE_VFS_DISK) && \
+	(!defined(XRT_FEATURE_VFS) || !defined(XRT_FEATURE_FILE_ROOT))
+	#error "XRT disk VFS provider requires VFS and file-root support"
+#endif
+
+#if defined(XRT_FEATURE_VFS_PACK) && \
+	(!defined(XRT_FEATURE_VFS) || !defined(XRT_FEATURE_COND))
+	#error "XRT pack VFS provider requires VFS and condition-variable support"
+#endif
+
+
+
+#define XRT_VFS_PATH_MAX 32768u
+#define XRT_VFS_PROVIDER_VERSION 1u
+#define XRT_VFS_FILE_OPS_VERSION 1u
+#define XRT_VFS_DIR_OPS_VERSION 1u
+#define XRT_VFS_PACK_OPTIONS_VERSION 1u
+
+#define XRT_VFS_PACK_MAX_ENTRIES_DEFAULT 100000u
+#define XRT_VFS_PACK_MAX_INDEX_BYTES_DEFAULT UINT64_C(67108864)
+#define XRT_VFS_PACK_MAX_ENTRY_BYTES_DEFAULT UINT64_C(1073741824)
+#define XRT_VFS_PACK_MAX_DECODED_BYTES_DEFAULT UINT64_C(8589934592)
+#define XRT_VFS_PACK_CACHE_BYTES_DEFAULT UINT64_C(67108864)
+
+
+
+#if defined(XRT_FEATURE_VFS)
+
+typedef struct xvfs_impl* xvfs;
+typedef struct xvfs_mount_impl* xvfsmount;
+
+#if defined(XRT_FEATURE_VFS_MEMORY)
+typedef struct xvfs_memory_impl* xvfsmemory;
+#endif
+
+#if defined(XRT_FEATURE_VFS_DISK)
+typedef struct xvfs_disk_impl* xvfsdisk;
+#endif
+
+#if defined(XRT_FEATURE_VFS_PACK)
+typedef struct xvfs_pack_impl* xvfspack;
+#endif
+
+
+
+/* Provider lookup 明确区分资源不存在和不可回退的访问失败。 */
+typedef enum xvfslookup {
+	XVFS_LOOKUP_ERROR = -1,
+	XVFS_LOOKUP_MISS = 0,
+	XVFS_LOOKUP_OPENED = 1
+} xvfslookup;
+
+
+
+/* 每个 mount 显式声明大小写策略；v1 只折叠 ASCII A-Z。 */
+typedef enum xvfscase {
+	XVFS_CASE_SENSITIVE = 0,
+	XVFS_CASE_ASCII_INSENSITIVE = 1
+} xvfscase;
+
+
+
+#if defined(XRT_FEATURE_VFS_DISK)
+
+/* Disk provider 权限在 context 创建时冻结。 */
+typedef enum xvfsdiskaccess {
+	XVFS_DISK_READ = 0x01,
+	XVFS_DISK_WRITE = 0x02
+} xvfsdiskaccess;
+
+#define XVFS_DISK_ACCESS 0x03u
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_VFS_PACK)
+
+/* AUTO 只按完整 header magic 选择格式，不把解析失败降级到另一格式。 */
+typedef enum xvfspackformat {
+	XVFS_PACK_AUTO = 0,
+	XVFS_PACK_XRT_V1 = 1,
+	XVFS_PACK_XSVPACK_V1 = 2
+} xvfspackformat;
+
+
+
+/* 新格式和旧 XSVPACK v1 使用相同的逐条 codec 编号。 */
+typedef enum xvfspackcodec {
+	XVFS_PACK_STORE = 0,
+	XVFS_PACK_LZMA1 = 1
+} xvfspackcodec;
+
+
+
+/* 非零解析限制是硬上限；CacheBytes 为零表示验证后不保留 cache 引用。 */
+typedef struct xvfspackoptions {
+	uint32 Size;
+	uint32 Version;
+	xvfspackformat Format;
+	uint32 MaxEntries;
+	uint64 MaxIndexBytes;
+	uint64 MaxEntryBytes;
+	uint64 MaxDecodedBytes;
+	uint64 CacheBytes;
+} xvfspackoptions;
+
+
+
+/* 计数单调递增；ResidentBytes 是取样时 cache 持有的解压字节。 */
+typedef struct xvfspackstats {
+	uint64 Hits;
+	uint64 Misses;
+	uint64 Loads;
+	uint64 Failures;
+	uint64 ResidentBytes;
+	uint64 Evictions;
+} xvfspackstats;
+
+#endif
+
+
+
+/* xrt.vfs 错误域中的稳定错误代码。 */
+typedef enum xvfserror {
+	XVFS_ERROR_CREATE = 1,
+	XVFS_ERROR_PATH,
+	XVFS_ERROR_MOUNT,
+	XVFS_ERROR_UNMOUNT,
+	XVFS_ERROR_NOT_FOUND,
+	XVFS_ERROR_PROVIDER,
+	XVFS_ERROR_OPEN,
+	XVFS_ERROR_STAT,
+	XVFS_ERROR_DIRECTORY,
+	XVFS_ERROR_UNSUPPORTED,
+	XVFS_ERROR_LIMIT,
+	XVFS_ERROR_CORRUPT,
+	XVFS_ERROR_CHECKSUM
+} xvfserror;
+
+
+
+/* 文件能力位必须与对应回调严格一致。 */
+typedef enum xvfsfilecapability {
+	XVFS_FILE_READ = UINT64_C(0x00000001),
+	XVFS_FILE_WRITE = UINT64_C(0x00000002),
+	XVFS_FILE_READ_AT = UINT64_C(0x00000004),
+	XVFS_FILE_WRITE_AT = UINT64_C(0x00000008),
+	XVFS_FILE_SEEK = UINT64_C(0x00000010),
+	XVFS_FILE_STAT = UINT64_C(0x00000020),
+	XVFS_FILE_RESIZE = UINT64_C(0x00000040),
+	XVFS_FILE_FLUSH = UINT64_C(0x00000080)
+} xvfsfilecapability;
+
+#define XVFS_FILE_CAPABILITIES UINT64_C(0x000000ff)
+
+
+
+typedef struct xvfsfileops_v1 {
+	uint32 Size;
+	uint32 Version;
+	uint64 Capabilities;
+	bool (*Read)(void* pState, void* pBuffer,
+		size_t iRequest, size_t* pRead);
+	bool (*Write)(void* pState, const void* pBuffer,
+		size_t iRequest, size_t* pWritten);
+	bool (*ReadAt)(void* pState, uint64 iOffset, void* pBuffer,
+		size_t iRequest, size_t* pRead);
+	bool (*WriteAt)(void* pState, uint64 iOffset, const void* pBuffer,
+		size_t iRequest, size_t* pWritten);
+	bool (*Seek)(void* pState, int64 iOffset,
+		xseek Origin, uint64* pPosition);
+	bool (*Stat)(void* pState, xfileinfo* pInfo);
+	bool (*Resize)(void* pState, uint64 iSize);
+	bool (*Flush)(void* pState);
+	void (*Close)(void* pState);
+} xvfsfileops_v1;
+
+
+
+/* OPENED 把 State 所有权转移给 VFS；MISS 和 ERROR 必须保持全零。 */
+typedef struct xvfsfile_v1 {
+	const xvfsfileops_v1* Ops;
+	void* State;
+	uint32 Flags;
+	uint32 Reserved;
+} xvfsfile_v1;
+
+
+
+typedef struct xvfsdirops_v1 {
+	uint32 Size;
+	uint32 Version;
+	bool (*Next)(void* pState, xdirentry* pEntry, bool* pEnd);
+	void (*Close)(void* pState);
+} xvfsdirops_v1;
+
+
+
+/* OPENED 把 State 所有权转移给 VFS；MISS 和 ERROR 必须保持全零。 */
+typedef struct xvfsdir_v1 {
+	const xvfsdirops_v1* Ops;
+	void* State;
+} xvfsdir_v1;
+
+
+
+typedef enum xvfsprovidercapability {
+	XVFS_PROVIDER_STAT = UINT64_C(0x00000001),
+	XVFS_PROVIDER_DIRECTORY = UINT64_C(0x00000002),
+	XVFS_PROVIDER_NATIVE_OPEN = UINT64_C(0x00000004)
+} xvfsprovidercapability;
+
+#define XVFS_PROVIDER_CAPABILITIES UINT64_C(0x00000007)
+
+
+
+typedef struct xvfsprovider_v1 {
+	uint32 Size;
+	uint32 Version;
+	uint64 Capabilities;
+	void (*ContextRetain)(void* pContext);
+	void (*ContextRelease)(void* pContext);
+	xvfslookup (*Open)(void* pContext, xvfscase CaseMode,
+		xstrview RelativePath,
+		const xfileoptions* pOptions, xvfsfile_v1* pFile);
+	xvfslookup (*Stat)(void* pContext, xvfscase CaseMode,
+		xstrview RelativePath,
+		bool bFollowLink, xfileinfo* pInfo);
+	xvfslookup (*DirOpen)(void* pContext, xvfscase CaseMode,
+		xstrview RelativePath,
+		uint32 iFlags, xvfsdir_v1* pDir);
+	/* 可选尾字段；仅在声明 NATIVE_OPEN 时使用并直接转移 xfile 所有权。 */
+	xvfslookup (*OpenNative)(void* pContext, xvfscase CaseMode,
+		xstrview RelativePath,
+		const xfileoptions* pOptions, xfile* pFile);
+} xvfsprovider_v1;
+
+
+
+XRT_EXTERN_C_BEGIN
+
+/* 创建一个初始 mount snapshot 为空的隔离命名空间。 */
+XRT_API xvfs xrtVfsCreate(void);
+
+/* 增加一个命名空间 owned reference。 */
+XRT_API void xrtVfsRef(xvfs Vfs);
+
+/* 释放一个命名空间 reference。 */
+XRT_API void xrtVfsDestroy(xvfs Vfs);
+
+/* 在规范虚拟 prefix 上发布一个 provider generation。 */
+XRT_API xvfsmount xrtVfsMount(xvfs Vfs, cstr sVirtualPrefix,
+	int32 iPriority, xvfscase CaseMode,
+	const xvfsprovider_v1* pProvider, void* pProviderContext,
+	uint32 iFlags);
+
+/* 增加或释放一个 mount 控制句柄 reference。 */
+XRT_API void xrtVfsMountRef(xvfsmount Mount);
+XRT_API void xrtVfsMountDestroy(xvfsmount Mount);
+
+/* 幂等地阻止新 lookup 选择这个 generation。 */
+XRT_API bool xrtVfsUnmount(xvfsmount Mount);
+
+/* 返回稳定、单调分配的 mount 标识。 */
+XRT_API uint64 xrtVfsMountId(xvfsmount Mount);
+
+/* 把一个规范绝对虚拟路径打开为普通 xfile。 */
+XRT_API xfile xrtVfsOpen(xvfs Vfs, cstr sVirtualPath,
+	const xfileoptions* pOptions);
+
+/* 查询一个规范绝对虚拟路径且不打开文件。 */
+XRT_API bool xrtVfsStat(xvfs Vfs, cstr sVirtualPath,
+	bool bFollowLink, xfileinfo* pInfo);
+
+/* 读取完整虚拟文件，并在 pSize 之外追加一个零字节。 */
+XRT_API bytes xrtVfsReadAll(xvfs Vfs, cstr sVirtualPath,
+	size_t* pSize);
+XRT_API bytes xrtVfsReadAllLimit(xvfs Vfs, cstr sVirtualPath,
+	size_t iLimit, size_t* pSize);
+
+/* 物化并合并所有可见 provider 条目，返回普通 xdir。 */
+XRT_API xdir xrtVfsDirOpen(xvfs Vfs, cstr sVirtualPath,
+	uint32 iFlags);
+
+#if defined(XRT_FEATURE_VFS_MEMORY)
+
+/* 创建可变的 memory provider 构建器。 */
+XRT_API xvfsmemory xrtVfsMemoryCreate(void);
+
+/* 增加或释放一个 memory provider reference。 */
+XRT_API void xrtVfsMemoryRef(xvfsmemory Memory);
+XRT_API void xrtVfsMemoryDestroy(xvfsmemory Memory);
+
+/* 复制文件数据；相对路径必须规范且不能为空。 */
+XRT_API bool xrtVfsMemoryPutCopy(xvfsmemory Memory,
+	cstr sRelativePath, const void* pData, size_t iSize);
+
+/* 成功时接管由 xrt 分配的缓冲，失败时调用方仍持有它。 */
+XRT_API bool xrtVfsMemoryPutOwned(xvfsmemory Memory,
+	cstr sRelativePath, bytes pData, size_t iSize);
+
+/* 原子构建不可变目录索引；重复调用成功，分配失败可直接重试。 */
+XRT_API bool xrtVfsMemorySeal(xvfsmemory Memory);
+
+/* 只允许挂载已经 seal 的 memory provider。 */
+XRT_API xvfsmount xrtVfsMemoryMount(xvfs Vfs,
+	cstr sVirtualPrefix, int32 iPriority, xvfscase CaseMode,
+	xvfsmemory Memory, uint32 iFlags);
+
+#endif
+
+#if defined(XRT_FEATURE_VFS_DISK)
+
+/* 打开并锚定物理目录；Access 至少包含一个已知权限位。 */
+XRT_API xvfsdisk xrtVfsDiskCreate(cstr sPhysicalRoot, uint32 iAccess);
+
+/* 增加或释放一个 disk provider reference。 */
+XRT_API void xrtVfsDiskRef(xvfsdisk Disk);
+XRT_API void xrtVfsDiskDestroy(xvfsdisk Disk);
+
+/* 挂载锚定目录；首版始终拒绝符号链接和 reparse point。 */
+XRT_API xvfsmount xrtVfsDiskMount(xvfs Vfs,
+	cstr sVirtualPrefix, int32 iPriority, xvfscase CaseMode,
+	xvfsdisk Disk, uint32 iFlags);
+
+#endif
+
+#if defined(XRT_FEATURE_VFS_PACK)
+
+/* 写入生产默认限制和 AUTO 格式。 */
+XRT_API void xrtVfsPackOptionsInit(xvfspackoptions* pOptions);
+
+/* 成功时接管 Source，失败时调用方仍持有；范围必须包含完整归档。 */
+XRT_API xvfspack xrtVfsPackCreate(xfile Source,
+	uint64 iOffset, uint64 iLength, const xvfspackoptions* pOptions);
+
+/* 增加或释放 pack provider reference；最后一个引用关闭 Source。 */
+XRT_API void xrtVfsPackRef(xvfspack Pack);
+XRT_API void xrtVfsPackDestroy(xvfspack Pack);
+
+/* 返回 Create 最终选择的明确格式。 */
+XRT_API xvfspackformat xrtVfsPackFormat(xvfspack Pack);
+
+/* 取得线程安全的缓存统计快照。 */
+XRT_API bool xrtVfsPackStats(xvfspack Pack, xvfspackstats* pStats);
+
+/* 挂载已经完整解析并验证索引的只读 pack。 */
+XRT_API xvfsmount xrtVfsPackMount(xvfs Vfs,
+	cstr sVirtualPrefix, int32 iPriority, xvfscase CaseMode,
+	xvfspack Pack, uint32 iFlags);
+
+#endif
+
+XRT_EXTERN_C_END
+
+#endif
+
+#endif
+
+
+/* ========================================================================== */
 /* public: include/xrt/list.h */
 /* ========================================================================== */
 
@@ -38266,6 +39168,10 @@ XRT_EXTERN_C_END
 	#error "XRT line readers require IO and buffer support"
 #endif
 
+#if defined(XRT_FEATURE_IO_STANDARD) && !defined(XRT_FEATURE_IO)
+	#error "XRT standard streams require IO support"
+#endif
+
 
 
 #if defined(XRT_FEATURE_IO)
@@ -38457,7 +39363,17 @@ XRT_API bool xrtReaderCopyN(
 
 
 
-/* 在硬上限内复制到 EOF；超限时消费一个探测字节并返回范围错误。 */
+/* 复制至多指定字节数；提前 EOF 成功，达到上限后不探测下一字节。 */
+XRT_API bool xrtReaderCopyUpTo(
+	xreader* pReader,
+	xwriter* pWriter,
+	uint64 iLimit,
+	uint64* pCopied
+);
+
+
+
+/* 在硬上限内复制到 EOF；超限时返回范围错误，探测字节由 Reader 留待下次读取。 */
 XRT_API bool xrtReaderCopyLimit(
 	xreader* pReader,
 	xwriter* pWriter,
@@ -38615,7 +39531,7 @@ XRT_API xwriter* xrtWriterFromBuffer(xbuffer* pBuffer);
 
 
 
-/* 在硬上限内读取到新 Buffer；超限时消费一个探测字节。 */
+/* 在硬上限内读取到新 Buffer；超限时探测字节由 Reader 留待下次读取。 */
 XRT_API xbuffer* xrtReaderReadAll(xreader* pReader, size_t iLimit);
 
 
@@ -38666,6 +39582,19 @@ XRT_API xwriter* xrtWriterOpen(cstr sPath);
 XRT_API xwriter* xrtWriterOpenAppend(cstr sPath);
 
 
+
+XRT_EXTERN_C_END
+
+#endif
+
+#if defined(XRT_FEATURE_IO_STANDARD)
+
+XRT_EXTERN_C_BEGIN
+
+/* 标准流适配器借用进程标准句柄；销毁适配器不会关闭标准句柄。 */
+XRT_API xreader* xrtReaderStdin(void);
+XRT_API xwriter* xrtWriterStdout(void);
+XRT_API xwriter* xrtWriterStderr(void);
 
 XRT_EXTERN_C_END
 
@@ -38814,128 +39743,128 @@ XRT_EXTERN_C_END
 
 
 /* ========================================================================== */
-/* public: include/xrt/xson.h */
+/* public: include/xrt/xlon.h */
 /* ========================================================================== */
 
-#ifndef XRT_XSON_H
-#define XRT_XSON_H
+#ifndef XRT_XLON_H
+#define XRT_XLON_H
 
 
 
 
-#if defined(XRT_FEATURE_XSON) && !defined(XRT_FEATURE_XSON_FILE)
-	#error "XRT_FEATURE_XSON requires XRT_FEATURE_XSON_FILE"
+#if defined(XRT_FEATURE_XLON) && !defined(XRT_FEATURE_XLON_FILE)
+	#error "XRT_FEATURE_XLON requires XRT_FEATURE_XLON_FILE"
 #endif
 
-#if (defined(XRT_FEATURE_XSON_READ) || defined(XRT_FEATURE_XSON_WRITE)) && \
-	!defined(XRT_FEATURE_XSON_CORE)
-	#error "XSON read and write features require XRT_FEATURE_XSON_CORE"
+#if (defined(XRT_FEATURE_XLON_READ) || defined(XRT_FEATURE_XLON_WRITE)) && \
+	!defined(XRT_FEATURE_XLON_CORE)
+	#error "XLON read and write features require XRT_FEATURE_XLON_CORE"
 #endif
 
-#if defined(XRT_FEATURE_XSON_READ) && !defined(XRT_FEATURE_VALUE_CONTAINER)
-	#error "XRT_FEATURE_XSON_READ requires XRT_FEATURE_VALUE_CONTAINER"
+#if defined(XRT_FEATURE_XLON_READ) && !defined(XRT_FEATURE_VALUE_CONTAINER)
+	#error "XRT_FEATURE_XLON_READ requires XRT_FEATURE_VALUE_CONTAINER"
 #endif
 
-#if defined(XRT_FEATURE_XSON_READ) && !defined(XRT_FEATURE_BUFFER)
-	#error "XRT_FEATURE_XSON_READ requires XRT_FEATURE_BUFFER"
+#if defined(XRT_FEATURE_XLON_READ) && !defined(XRT_FEATURE_BUFFER)
+	#error "XRT_FEATURE_XLON_READ requires XRT_FEATURE_BUFFER"
 #endif
 
-#if defined(XRT_FEATURE_XSON_READ) && !defined(XRT_FEATURE_CODEC_BASE64)
-	#error "XRT_FEATURE_XSON_READ requires XRT_FEATURE_CODEC_BASE64"
+#if defined(XRT_FEATURE_XLON_READ) && !defined(XRT_FEATURE_CODEC_BASE64)
+	#error "XRT_FEATURE_XLON_READ requires XRT_FEATURE_CODEC_BASE64"
 #endif
 
-#if defined(XRT_FEATURE_XSON_READ) && !defined(XRT_FEATURE_TIME_TEXT)
-	#error "XRT_FEATURE_XSON_READ requires XRT_FEATURE_TIME_TEXT"
+#if defined(XRT_FEATURE_XLON_READ) && !defined(XRT_FEATURE_TIME_TEXT)
+	#error "XRT_FEATURE_XLON_READ requires XRT_FEATURE_TIME_TEXT"
 #endif
 
-#if defined(XRT_FEATURE_XSON_READ) && !defined(XRT_FEATURE_NUMBER_INTEGER)
-	#error "XRT_FEATURE_XSON_READ requires XRT_FEATURE_NUMBER_INTEGER"
+#if defined(XRT_FEATURE_XLON_READ) && !defined(XRT_FEATURE_NUMBER_INTEGER)
+	#error "XRT_FEATURE_XLON_READ requires XRT_FEATURE_NUMBER_INTEGER"
 #endif
 
-#if defined(XRT_FEATURE_XSON_READ) && !defined(XRT_FEATURE_NUMBER_FLOAT)
-	#error "XRT_FEATURE_XSON_READ requires XRT_FEATURE_NUMBER_FLOAT"
+#if defined(XRT_FEATURE_XLON_READ) && !defined(XRT_FEATURE_NUMBER_FLOAT)
+	#error "XRT_FEATURE_XLON_READ requires XRT_FEATURE_NUMBER_FLOAT"
 #endif
 
-#if defined(XRT_FEATURE_XSON_READ) && !defined(XRT_FEATURE_UNICODE)
-	#error "XRT_FEATURE_XSON_READ requires XRT_FEATURE_UNICODE"
+#if defined(XRT_FEATURE_XLON_READ) && !defined(XRT_FEATURE_UNICODE)
+	#error "XRT_FEATURE_XLON_READ requires XRT_FEATURE_UNICODE"
 #endif
 
-#if defined(XRT_FEATURE_XSON_WRITE) && !defined(XRT_FEATURE_VALUE_CONTAINER)
-	#error "XRT_FEATURE_XSON_WRITE requires XRT_FEATURE_VALUE_CONTAINER"
+#if defined(XRT_FEATURE_XLON_WRITE) && !defined(XRT_FEATURE_VALUE_CONTAINER)
+	#error "XRT_FEATURE_XLON_WRITE requires XRT_FEATURE_VALUE_CONTAINER"
 #endif
 
-#if defined(XRT_FEATURE_XSON_WRITE) && !defined(XRT_FEATURE_BUFFER)
-	#error "XRT_FEATURE_XSON_WRITE requires XRT_FEATURE_BUFFER"
+#if defined(XRT_FEATURE_XLON_WRITE) && !defined(XRT_FEATURE_BUFFER)
+	#error "XRT_FEATURE_XLON_WRITE requires XRT_FEATURE_BUFFER"
 #endif
 
-#if defined(XRT_FEATURE_XSON_WRITE) && !defined(XRT_FEATURE_CODEC_BASE64)
-	#error "XRT_FEATURE_XSON_WRITE requires XRT_FEATURE_CODEC_BASE64"
+#if defined(XRT_FEATURE_XLON_WRITE) && !defined(XRT_FEATURE_CODEC_BASE64)
+	#error "XRT_FEATURE_XLON_WRITE requires XRT_FEATURE_CODEC_BASE64"
 #endif
 
-#if defined(XRT_FEATURE_XSON_WRITE) && !defined(XRT_FEATURE_TIME_TEXT)
-	#error "XRT_FEATURE_XSON_WRITE requires XRT_FEATURE_TIME_TEXT"
+#if defined(XRT_FEATURE_XLON_WRITE) && !defined(XRT_FEATURE_TIME_TEXT)
+	#error "XRT_FEATURE_XLON_WRITE requires XRT_FEATURE_TIME_TEXT"
 #endif
 
-#if defined(XRT_FEATURE_XSON_WRITE) && !defined(XRT_FEATURE_NUMBER_INTEGER)
-	#error "XRT_FEATURE_XSON_WRITE requires XRT_FEATURE_NUMBER_INTEGER"
+#if defined(XRT_FEATURE_XLON_WRITE) && !defined(XRT_FEATURE_NUMBER_INTEGER)
+	#error "XRT_FEATURE_XLON_WRITE requires XRT_FEATURE_NUMBER_INTEGER"
 #endif
 
-#if defined(XRT_FEATURE_XSON_WRITE) && !defined(XRT_FEATURE_NUMBER_FLOAT)
-	#error "XRT_FEATURE_XSON_WRITE requires XRT_FEATURE_NUMBER_FLOAT"
+#if defined(XRT_FEATURE_XLON_WRITE) && !defined(XRT_FEATURE_NUMBER_FLOAT)
+	#error "XRT_FEATURE_XLON_WRITE requires XRT_FEATURE_NUMBER_FLOAT"
 #endif
 
-#if defined(XRT_FEATURE_XSON_WRITE) && !defined(XRT_FEATURE_UNICODE)
-	#error "XRT_FEATURE_XSON_WRITE requires XRT_FEATURE_UNICODE"
+#if defined(XRT_FEATURE_XLON_WRITE) && !defined(XRT_FEATURE_UNICODE)
+	#error "XRT_FEATURE_XLON_WRITE requires XRT_FEATURE_UNICODE"
 #endif
 
-#if defined(XRT_FEATURE_XSON_WRITE) && !defined(XRT_FEATURE_JSON_ESCAPE)
-	#error "XRT_FEATURE_XSON_WRITE requires XRT_FEATURE_JSON_ESCAPE"
+#if defined(XRT_FEATURE_XLON_WRITE) && !defined(XRT_FEATURE_JSON_ESCAPE)
+	#error "XRT_FEATURE_XLON_WRITE requires XRT_FEATURE_JSON_ESCAPE"
 #endif
 
-#if defined(XRT_FEATURE_XSON_FILE) && !defined(XRT_FEATURE_FILE_WHOLE)
-	#error "XRT_FEATURE_XSON_FILE requires XRT_FEATURE_FILE_WHOLE"
+#if defined(XRT_FEATURE_XLON_FILE) && !defined(XRT_FEATURE_FILE_WHOLE)
+	#error "XRT_FEATURE_XLON_FILE requires XRT_FEATURE_FILE_WHOLE"
 #endif
 
-#if defined(XRT_FEATURE_XSON_FILE) && \
-	(!defined(XRT_FEATURE_XSON_READ) || !defined(XRT_FEATURE_XSON_WRITE))
-	#error "XRT_FEATURE_XSON_FILE requires XSON read and write features"
+#if defined(XRT_FEATURE_XLON_FILE) && \
+	(!defined(XRT_FEATURE_XLON_READ) || !defined(XRT_FEATURE_XLON_WRITE))
+	#error "XRT_FEATURE_XLON_FILE requires XLON read and write features"
 #endif
 
 
 
-#if defined(XRT_FEATURE_XSON_READ) || defined(XRT_FEATURE_XSON_WRITE)
+#if defined(XRT_FEATURE_XLON_READ) || defined(XRT_FEATURE_XLON_WRITE)
 
-#define XXSON_DEPTH_DEFAULT 256u
-#define XXSON_INPUT_DEFAULT (64u * 1024u * 1024u)
-#define XXSON_STRING_DEFAULT (16u * 1024u * 1024u)
-#define XXSON_VALUES_DEFAULT 1000000u
-#define XXSON_CONTAINER_DEFAULT 1000000u
-#define XXSON_DECODED_DEFAULT (64u * 1024u * 1024u)
+#define XXLON_DEPTH_DEFAULT 256u
+#define XXLON_INPUT_DEFAULT (64u * 1024u * 1024u)
+#define XXLON_STRING_DEFAULT (16u * 1024u * 1024u)
+#define XXLON_VALUES_DEFAULT 1000000u
+#define XXLON_CONTAINER_DEFAULT 1000000u
+#define XXLON_DECODED_DEFAULT (64u * 1024u * 1024u)
 
 
 
-/* XSON 模块错误码在 xrt.xson 域内保持稳定。 */
-typedef enum xxsonerror {
-	XXSON_ERROR_CONFIG = 1401,
-	XXSON_ERROR_SYNTAX,
-	XXSON_ERROR_LIMIT,
-	XXSON_ERROR_DUPLICATE,
-	XXSON_ERROR_NUMBER,
-	XXSON_ERROR_TAG,
-	XXSON_ERROR_STATE,
-	XXSON_ERROR_UNSUPPORTED,
-	XXSON_ERROR_OUTPUT,
-	XXSON_ERROR_IO
-} xxsonerror;
+/* XLON 模块错误码在 xrt.xlon 域内保持稳定。 */
+typedef enum xxlonerror {
+	XXLON_ERROR_CONFIG = 1401,
+	XXLON_ERROR_SYNTAX,
+	XXLON_ERROR_LIMIT,
+	XXLON_ERROR_DUPLICATE,
+	XXLON_ERROR_NUMBER,
+	XXLON_ERROR_TAG,
+	XXLON_ERROR_STATE,
+	XXLON_ERROR_UNSUPPORTED,
+	XXLON_ERROR_OUTPUT,
+	XXLON_ERROR_IO
+} xxlonerror;
 
 
 
 /* 文本位置使用零基字节偏移和一基行列。 */
-typedef struct xxsonlocation {
+typedef struct xxlonlocation {
 	size_t Offset;
 	size_t Line;
 	size_t Column;
-} xxsonlocation;
+} xxlonlocation;
 
 
 
@@ -38943,10 +39872,10 @@ XRT_EXTERN_C_BEGIN
 
 
 
-/* 从 xrt.xson 错误的机器数据中读取文本位置。 */
-XRT_API bool xrtXsonErrorLocation(
+/* 从 xrt.xlon 错误的机器数据中读取文本位置。 */
+XRT_API bool xrtXlonErrorLocation(
 	const xerror* pError,
-	xxsonlocation* pLocation
+	xxlonlocation* pLocation
 );
 
 
@@ -38957,36 +39886,36 @@ XRT_EXTERN_C_END
 
 
 
-#if defined(XRT_FEATURE_XSON_READ)
+#if defined(XRT_FEATURE_XLON_READ)
 
 /* 非标准空白扩展和自定义标签默认全部关闭。 */
-typedef enum xxsonreadflag {
-	XXSON_READ_COMMENTS = UINT32_C(0x00000001),
-	XXSON_READ_TRAILING_COMMA = UINT32_C(0x00000002),
-	XXSON_READ_CUSTOM = UINT32_C(0x00000004)
-} xxsonreadflag;
+typedef enum xxlonreadflag {
+	XXLON_READ_COMMENTS = UINT32_C(0x00000001),
+	XXLON_READ_TRAILING_COMMA = UINT32_C(0x00000002),
+	XXLON_READ_CUSTOM = UINT32_C(0x00000004)
+} xxlonreadflag;
 
 
 
 /* 对象和整数映射使用同一套明确的重复键策略。 */
-typedef enum xxsonduplicate {
-	XXSON_DUPLICATE_REJECT = 0,
-	XXSON_DUPLICATE_KEEP,
-	XXSON_DUPLICATE_REPLACE
-} xxsonduplicate;
+typedef enum xxlonduplicate {
+	XXLON_DUPLICATE_REJECT = 0,
+	XXLON_DUPLICATE_KEEP,
+	XXLON_DUPLICATE_REPLACE
+} xxlonduplicate;
 
 
 
 /* 超出 int64/uint64 的整数默认失败，可显式按 double 接收。 */
-typedef enum xxsonbigint {
-	XXSON_BIGINT_REJECT = 0,
-	XXSON_BIGINT_FLOAT
-} xxsonbigint;
+typedef enum xxlonbigint {
+	XXLON_BIGINT_REJECT = 0,
+	XXLON_BIGINT_FLOAT
+} xxlonbigint;
 
 
 
 /* 自定义标签解码器返回一个拥有引用；失败时应设置具体错误。 */
-typedef xvalue* (*xxsondecodeproc)(
+typedef xvalue* (*xxlondecodeproc)(
 	xstrview Tag,
 	xstrview Payload,
 	ptr pUserData
@@ -38994,77 +39923,79 @@ typedef xvalue* (*xxsondecodeproc)(
 
 
 
-/* XSON 读取配置同时约束语法、资源预算和自定义类型入口。 */
-typedef struct xxsonreadconfig {
+/* XLON 读取配置同时约束语法、资源预算和自定义类型入口。 */
+typedef struct xxlonreadconfig {
 	uint32 Flags;
-	xxsonduplicate Duplicate;
-	xxsonbigint BigInteger;
+	xxlonduplicate Duplicate;
+	xxlonbigint BigInteger;
 	uint32 MaxDepth;
 	size_t MaxInputBytes;
 	size_t MaxStringBytes;
 	size_t MaxValues;
 	size_t MaxContainerItems;
 	size_t MaxDecodedBytes;
-	xxsondecodeproc Decode;
+	xxlondecodeproc Decode;
 	ptr DecodeData;
 	uint32 Reserved[4];
-} xxsonreadconfig;
+} xxlonreadconfig;
 
 
 
-/* 访问事件直接表达全部可移植 XSON 类型。 */
-typedef enum xxsoneventtype {
-	XXSON_EVENT_NULL = 0,
-	XXSON_EVENT_BOOL,
-	XXSON_EVENT_INT,
-	XXSON_EVENT_FLOAT,
-	XXSON_EVENT_STRING,
-	XXSON_EVENT_BYTES,
-	XXSON_EVENT_TIME,
-	XXSON_EVENT_CUSTOM,
-	XXSON_EVENT_ARRAY_BEGIN,
-	XXSON_EVENT_ARRAY_END,
-	XXSON_EVENT_INT_MAP_BEGIN,
-	XXSON_EVENT_INT_MAP_END,
-	XXSON_EVENT_SET_BEGIN,
-	XXSON_EVENT_SET_END,
-	XXSON_EVENT_OBJECT_BEGIN,
-	XXSON_EVENT_OBJECT_END,
-	XXSON_EVENT_UINT
-} xxsoneventtype;
+/* 访问事件直接表达全部可移植 XLON 类型。 */
+typedef enum xxloneventtype {
+	XXLON_EVENT_NULL = 0,
+	XXLON_EVENT_BOOL,
+	XXLON_EVENT_INT,
+	XXLON_EVENT_FLOAT,
+	XXLON_EVENT_STRING,
+	XXLON_EVENT_BYTES,
+	XXLON_EVENT_TIME,
+	XXLON_EVENT_CUSTOM,
+	XXLON_EVENT_ARRAY_BEGIN,
+	XXLON_EVENT_ARRAY_END,
+	XXLON_EVENT_INT_MAP_BEGIN,
+	XXLON_EVENT_INT_MAP_END,
+	XXLON_EVENT_SET_BEGIN,
+	XXLON_EVENT_SET_END,
+	XXLON_EVENT_OBJECT_BEGIN,
+	XXLON_EVENT_OBJECT_END,
+	XXLON_EVENT_UINT,
+	/* Appended to preserve the numeric identity of published event kinds. */
+	XXLON_EVENT_CHAR
+} xxloneventtype;
 
 
 
 /* 回调可继续、正常提前停止或报告失败。 */
-typedef enum xxsonvisitaction {
-	XXSON_VISIT_NEXT = 0,
-	XXSON_VISIT_STOP,
-	XXSON_VISIT_FAIL
-} xxsonvisitaction;
+typedef enum xxlonvisitaction {
+	XXLON_VISIT_NEXT = 0,
+	XXLON_VISIT_STOP,
+	XXLON_VISIT_FAIL
+} xxlonvisitaction;
 
 
 
 /* 访问结果明确区分完成、调用方停止和失败。 */
-typedef enum xxsonvisitresult {
-	XXSON_VISIT_ERROR = -1,
-	XXSON_VISIT_DONE = 0,
-	XXSON_VISIT_STOPPED = 1
-} xxsonvisitresult;
+typedef enum xxlonvisitresult {
+	XXLON_VISIT_ERROR = -1,
+	XXLON_VISIT_DONE = 0,
+	XXLON_VISIT_STOPPED = 1
+} xxlonvisitresult;
 
 
 
 /* 自定义标签保留名称和已经完成 JSON 反转义的字符串载荷。 */
-typedef struct xxsontag {
+typedef struct xxlontag {
 	xstrview Name;
 	xstrview Payload;
-} xxsontag;
+} xxlontag;
 
 
 
 /* 键按父容器类型明确区分，事件视图只在回调期间有效。 */
-typedef struct xxsonevent {
-	xxsoneventtype Type;
-	xxsonlocation Location;
+typedef struct xxlonevent {
+	xxloneventtype Type;
+	xxlonlocation Location;
 	size_t Depth;
 	xvaluekey Key;
 	xstrview Raw;
@@ -39072,19 +40003,20 @@ typedef struct xxsonevent {
 		bool Boolean;
 		int64 Integer;
 		uint64 Unsigned;
+		uint32 Character;
 		double Float;
 		xstrview String;
 		xbytesview Bytes;
 		xtime Time;
-		xxsontag Tag;
+		xxlontag Tag;
 	} Value;
-} xxsonevent;
+} xxlonevent;
 
 
 
-/* XSON 访问器不得保存事件中的借用视图。 */
-typedef xxsonvisitaction (*xxsonvisitproc)(
-	const xxsonevent* pEvent,
+/* XLON 访问器不得保存事件中的借用视图。 */
+typedef xxlonvisitaction (*xxlonvisitproc)(
+	const xxlonevent* pEvent,
 	ptr pUserData
 );
 
@@ -39095,33 +40027,33 @@ XRT_EXTERN_C_BEGIN
 
 
 /* 初始化严格语法、拒绝重复键和有限资源预算。 */
-XRT_API void xrtXsonReadConfigInit(xxsonreadconfig* pConfig);
+XRT_API void xrtXlonReadConfigInit(xxlonreadconfig* pConfig);
 
 
 
-/* 使用默认严格配置解析一个完整 XSON 文本。 */
-XRT_API xvalue* xrtXsonParse(xstrview Text);
+/* 使用默认严格配置解析一个完整 XLON 文本。 */
+XRT_API xvalue* xrtXlonParse(xstrview Text);
 
 
 
-/* 使用高级配置解析一个完整 XSON 文本。 */
-XRT_API xvalue* xrtXsonRead(
+/* 使用高级配置解析一个完整 XLON 文本。 */
+XRT_API xvalue* xrtXlonRead(
 	xstrview Text,
-	const xxsonreadconfig* pConfig
+	const xxlonreadconfig* pConfig
 );
 
 
 
-/* 验证默认 XSON 语法和内建标签，不构造 Value DOM。 */
-XRT_API bool xrtXsonValid(xstrview Text);
+/* 验证默认 XLON 语法和内建标签，不构造 Value DOM。 */
+XRT_API bool xrtXlonValid(xstrview Text);
 
 
 
 /* 直接访问解析事件，不构造中间 DOM。 */
-XRT_API xxsonvisitresult xrtXsonVisit(
+XRT_API xxlonvisitresult xrtXlonVisit(
 	xstrview Text,
-	const xxsonreadconfig* pConfig,
-	xxsonvisitproc pVisitor,
+	const xxlonreadconfig* pConfig,
+	xxlonvisitproc pVisitor,
 	ptr pUserData
 );
 
@@ -39133,37 +40065,37 @@ XRT_EXTERN_C_END
 
 
 
-#if defined(XRT_FEATURE_XSON_WRITE)
+#if defined(XRT_FEATURE_XLON_WRITE)
 
 /* 输出标志只改变文本布局和字符串转义。 */
-typedef enum xxsonwriteflag {
-	XXSON_WRITE_PRETTY = UINT32_C(0x00000001),
-	XXSON_WRITE_ESCAPE_SLASH = UINT32_C(0x00000002),
-	XXSON_WRITE_ESCAPE_HTML = UINT32_C(0x00000004),
-	XXSON_WRITE_ESCAPE_NON_ASCII = UINT32_C(0x00000008)
-} xxsonwriteflag;
+typedef enum xxlonwriteflag {
+	XXLON_WRITE_PRETTY = UINT32_C(0x00000001),
+	XXLON_WRITE_ESCAPE_SLASH = UINT32_C(0x00000002),
+	XXLON_WRITE_ESCAPE_HTML = UINT32_C(0x00000004),
+	XXLON_WRITE_ESCAPE_NON_ASCII = UINT32_C(0x00000008)
+} xxlonwriteflag;
 
 
 
 /* 不可直接表示的值默认失败，也可显式跳过容器成员。 */
-typedef enum xxsonunsupported {
-	XXSON_UNSUPPORTED_REJECT = 0,
-	XXSON_UNSUPPORTED_SKIP
-} xxsonunsupported;
+typedef enum xxlonunsupported {
+	XXLON_UNSUPPORTED_REJECT = 0,
+	XXLON_UNSUPPORTED_SKIP
+} xxlonunsupported;
 
 
 
 /* 自定义编码回调明确区分不处理、成功和失败。 */
-typedef enum xxsoncoderesult {
-	XXSON_CODE_ERROR = -1,
-	XXSON_CODE_UNSUPPORTED = 0,
-	XXSON_CODE_OK = 1
-} xxsoncoderesult;
+typedef enum xxloncoderesult {
+	XXLON_CODE_ERROR = -1,
+	XXLON_CODE_UNSUPPORTED = 0,
+	XXLON_CODE_OK = 1
+} xxloncoderesult;
 
 
 
 /* 编码器接收仅在回调期间有效的只读快照；返回视图保持到本次调用返回。 */
-typedef xxsoncoderesult (*xxsonencodeproc)(
+typedef xxloncoderesult (*xxlonencodeproc)(
 	const xvalue* pValue,
 	xstrview* pTag,
 	xstrview* pPayload,
@@ -39172,27 +40104,27 @@ typedef xxsoncoderesult (*xxsonencodeproc)(
 
 
 
-/* XSON 写出配置提供固定上限和唯一自定义类型入口。 */
-typedef struct xxsonwriteconfig {
+/* XLON 写出配置提供固定上限和唯一自定义类型入口。 */
+typedef struct xxlonwriteconfig {
 	uint32 Flags;
-	xxsonunsupported Unsupported;
+	xxlonunsupported Unsupported;
 	uint32 MaxDepth;
 	uint32 Indent;
 	size_t MaxOutputBytes;
-	xxsonencodeproc Encode;
+	xxlonencodeproc Encode;
 	ptr EncodeData;
 	uint32 Reserved[4];
-} xxsonwriteconfig;
+} xxlonwriteconfig;
 
 
 
 /* 输出回调必须在返回前消费借用字节。 */
-typedef bool (*xxsonwriteproc)(xbytesview Data, ptr pUserData);
+typedef bool (*xxlonwriteproc)(xbytesview Data, ptr pUserData);
 
 
 
 /* 增量写入器保持不透明，所有方法都拒绝回调重入。 */
-typedef struct xxsonwriter xxsonwriter;
+typedef struct xxlonwriter xxlonwriter;
 
 
 
@@ -39201,12 +40133,12 @@ XRT_EXTERN_C_BEGIN
 
 
 /* 初始化紧凑输出、严格类型和有限输出预算。 */
-XRT_API void xrtXsonWriteConfigInit(xxsonwriteconfig* pConfig);
+XRT_API void xrtXlonWriteConfigInit(xxlonwriteconfig* pConfig);
 
 
 
 /* 紧凑或美化地序列化 Value，并返回由 xrtFree 释放的文本。 */
-XRT_API str xrtXsonStringify(
+XRT_API str xrtXlonStringify(
 	const xvalue* pValue,
 	bool bPretty,
 	size_t* pSize
@@ -39215,109 +40147,114 @@ XRT_API str xrtXsonStringify(
 
 
 /* 使用高级配置把 Value 同步写入调用方输出回调。 */
-XRT_API bool xrtXsonWrite(
+XRT_API bool xrtXlonWrite(
 	const xvalue* pValue,
-	const xxsonwriteconfig* pConfig,
-	xxsonwriteproc pWrite,
+	const xxlonwriteconfig* pConfig,
+	xxlonwriteproc pWrite,
 	ptr pUserData
 );
 
 
 
-/* 创建把增量结果保存在内存中的 XSON 写入器。 */
-XRT_API xxsonwriter* xrtXsonWriterCreate(
-	const xxsonwriteconfig* pConfig
+/* 创建把增量结果保存在内存中的 XLON 写入器。 */
+XRT_API xxlonwriter* xrtXlonWriterCreate(
+	const xxlonwriteconfig* pConfig
 );
 
 
 
-/* 创建把增量结果同步提交给回调的 XSON 写入器。 */
-XRT_API xxsonwriter* xrtXsonWriterCreateSink(
-	const xxsonwriteconfig* pConfig,
-	xxsonwriteproc pWrite,
+/* 创建把增量结果同步提交给回调的 XLON 写入器。 */
+XRT_API xxlonwriter* xrtXlonWriterCreateSink(
+	const xxlonwriteconfig* pConfig,
+	xxlonwriteproc pWrite,
 	ptr pUserData
 );
 
 
 
 /* 在当前位置开始对象。 */
-XRT_API bool xrtXsonWriterObject(xxsonwriter* pWriter);
+XRT_API bool xrtXlonWriterObject(xxlonwriter* pWriter);
 
 
 
 /* 在当前位置开始数组。 */
-XRT_API bool xrtXsonWriterArray(xxsonwriter* pWriter);
+XRT_API bool xrtXlonWriterArray(xxlonwriter* pWriter);
 
 
 
 /* 在当前位置开始整数键映射。 */
-XRT_API bool xrtXsonWriterIntMap(xxsonwriter* pWriter);
+XRT_API bool xrtXlonWriterIntMap(xxlonwriter* pWriter);
 
 
 
 /* 在当前位置开始集合。 */
-XRT_API bool xrtXsonWriterSet(xxsonwriter* pWriter);
+XRT_API bool xrtXlonWriterSet(xxlonwriter* pWriter);
 
 
 
 /* 结束最近开始的容器。 */
-XRT_API bool xrtXsonWriterEnd(xxsonwriter* pWriter);
+XRT_API bool xrtXlonWriterEnd(xxlonwriter* pWriter);
 
 
 
 /* 为对象中的下一个值写入字符串名称。 */
-XRT_API bool xrtXsonWriterName(xxsonwriter* pWriter, xstrview Name);
+XRT_API bool xrtXlonWriterName(xxlonwriter* pWriter, xstrview Name);
 
 
 
 /* 为整数映射中的下一个值写入 int64 键。 */
-XRT_API bool xrtXsonWriterKey(xxsonwriter* pWriter, int64 iKey);
+XRT_API bool xrtXlonWriterKey(xxlonwriter* pWriter, int64 iKey);
 
 
 
 /* 写入 null。 */
-XRT_API bool xrtXsonWriterNull(xxsonwriter* pWriter);
+XRT_API bool xrtXlonWriterNull(xxlonwriter* pWriter);
 
 
 
 /* 写入布尔值。 */
-XRT_API bool xrtXsonWriterBool(xxsonwriter* pWriter, bool bValue);
+XRT_API bool xrtXlonWriterBool(xxlonwriter* pWriter, bool bValue);
 
 
 
 /* 写入 int64。 */
-XRT_API bool xrtXsonWriterInt(xxsonwriter* pWriter, int64 iValue);
+XRT_API bool xrtXlonWriterInt(xxlonwriter* pWriter, int64 iValue);
 
 
 
 /* 写入 uint64。 */
-XRT_API bool xrtXsonWriterUInt(xxsonwriter* pWriter, uint64 iValue);
+XRT_API bool xrtXlonWriterUInt(xxlonwriter* pWriter, uint64 iValue);
+
+
+
+/* 写入保留字符身份的 Unicode 标量标签。 */
+XRT_API bool xrtXlonWriterChar(xxlonwriter* pWriter, uint32 iValue);
 
 
 
 /* 写入 double，非有限值使用显式 float 标签。 */
-XRT_API bool xrtXsonWriterFloat(xxsonwriter* pWriter, double fValue);
+XRT_API bool xrtXlonWriterFloat(xxlonwriter* pWriter, double fValue);
 
 
 
 /* 写入严格 UTF-8 字符串。 */
-XRT_API bool xrtXsonWriterString(xxsonwriter* pWriter, xstrview Text);
+XRT_API bool xrtXlonWriterString(xxlonwriter* pWriter, xstrview Text);
 
 
 
 /* 写入规范 Base64 二进制标签。 */
-XRT_API bool xrtXsonWriterBytes(xxsonwriter* pWriter, xbytesview Data);
+XRT_API bool xrtXlonWriterBytes(xxlonwriter* pWriter, xbytesview Data);
 
 
 
 /* 写入 UTC RFC 3339 时间标签。 */
-XRT_API bool xrtXsonWriterTime(xxsonwriter* pWriter, xtime Time);
+XRT_API bool xrtXlonWriterTime(xxlonwriter* pWriter, xtime Time);
 
 
 
 /* 写入已经验证名称和载荷的自定义标签。 */
-XRT_API bool xrtXsonWriterTag(
-	xxsonwriter* pWriter,
+XRT_API bool xrtXlonWriterTag(
+	xxlonwriter* pWriter,
 	xstrview Tag,
 	xstrview Payload
 );
@@ -39325,25 +40262,25 @@ XRT_API bool xrtXsonWriterTag(
 
 
 /* 在当前位置写入完整 Value 子树。 */
-XRT_API bool xrtXsonWriterValue(
-	xxsonwriter* pWriter,
+XRT_API bool xrtXlonWriterValue(
+	xxlonwriter* pWriter,
 	const xvalue* pValue
 );
 
 
 
 /* 验证根值和容器已完整结束，并关闭写入器。 */
-XRT_API bool xrtXsonWriterFinish(xxsonwriter* pWriter);
+XRT_API bool xrtXlonWriterFinish(xxlonwriter* pWriter);
 
 
 
 /* 从已完成的内存写入器移交文本。 */
-XRT_API str xrtXsonWriterTake(xxsonwriter* pWriter, size_t* pSize);
+XRT_API str xrtXlonWriterTake(xxlonwriter* pWriter, size_t* pSize);
 
 
 
 /* 销毁写入器和未移交的内存结果。 */
-XRT_API void xrtXsonWriterFree(xxsonwriter* pWriter);
+XRT_API void xrtXlonWriterFree(xxlonwriter* pWriter);
 
 
 
@@ -39353,36 +40290,36 @@ XRT_EXTERN_C_END
 
 
 
-#if defined(XRT_FEATURE_XSON_FILE)
+#if defined(XRT_FEATURE_XLON_FILE)
 
 XRT_EXTERN_C_BEGIN
 
 
 
-/* 使用默认严格配置读取并解析 XSON 文件。 */
-XRT_API xvalue* xrtXsonParseFile(cstr sPath);
+/* 使用默认严格配置读取并解析 XLON 文件。 */
+XRT_API xvalue* xrtXlonParseFile(cstr sPath);
 
 
 
-/* 使用读取配置及其输入上限解析 XSON 文件。 */
-XRT_API xvalue* xrtXsonReadFile(
+/* 使用读取配置及其输入上限解析 XLON 文件。 */
+XRT_API xvalue* xrtXlonReadFile(
 	cstr sPath,
-	const xxsonreadconfig* pConfig
+	const xxlonreadconfig* pConfig
 );
 
 
 
-/* 使用高级配置序列化并原子替换 XSON 文件。 */
-XRT_API bool xrtXsonWriteFile(
+/* 使用高级配置序列化并原子替换 XLON 文件。 */
+XRT_API bool xrtXlonWriteFile(
 	cstr sPath,
 	const xvalue* pValue,
-	const xxsonwriteconfig* pConfig
+	const xxlonwriteconfig* pConfig
 );
 
 
 
-/* 紧凑或美化地序列化并原子替换 XSON 文件。 */
-XRT_API bool xrtXsonStringifyFile(
+/* 紧凑或美化地序列化并原子替换 XLON 文件。 */
+XRT_API bool xrtXlonStringifyFile(
 	cstr sPath,
 	const xvalue* pValue,
 	bool bPretty
@@ -39583,183 +40520,183 @@ XRT_EXTERN_C_END
 
 
 /* ========================================================================== */
-/* public: include/xrt/xsonl.h */
+/* public: include/xrt/xlonl.h */
 /* ========================================================================== */
 
-#ifndef XRT_XSONL_H
-#define XRT_XSONL_H
+#ifndef XRT_XLONL_H
+#define XRT_XLONL_H
 
 
-#if defined(XRT_FEATURE_XSONL) && (!defined(XRT_FEATURE_XSONL_FILE))
-	#error "XRT_FEATURE_XSONL requires XSONL_FILE"
+#if defined(XRT_FEATURE_XLONL) && (!defined(XRT_FEATURE_XLONL_FILE))
+	#error "XRT_FEATURE_XLONL requires XLONL_FILE"
 #endif
 
-#if defined(XRT_FEATURE_XSONL_READ) && (!defined(XRT_FEATURE_XSONL_CORE))
-	#error "XRT_FEATURE_XSONL_READ requires XSONL_CORE"
+#if defined(XRT_FEATURE_XLONL_READ) && (!defined(XRT_FEATURE_XLONL_CORE))
+	#error "XRT_FEATURE_XLONL_READ requires XLONL_CORE"
 #endif
 
-#if defined(XRT_FEATURE_XSONL_WRITE) && (!defined(XRT_FEATURE_XSONL_CORE))
-	#error "XRT_FEATURE_XSONL_WRITE requires XSONL_CORE"
+#if defined(XRT_FEATURE_XLONL_WRITE) && (!defined(XRT_FEATURE_XLONL_CORE))
+	#error "XRT_FEATURE_XLONL_WRITE requires XLONL_CORE"
 #endif
 
-#if defined(XRT_FEATURE_XSONL_FILE) && (!defined(XRT_FEATURE_XSONL_READ) || !defined(XRT_FEATURE_XSONL_WRITE))
-	#error "XRT_FEATURE_XSONL_FILE requires XSONL_READ and XSONL_WRITE"
+#if defined(XRT_FEATURE_XLONL_FILE) && (!defined(XRT_FEATURE_XLONL_READ) || !defined(XRT_FEATURE_XLONL_WRITE))
+	#error "XRT_FEATURE_XLONL_FILE requires XLONL_READ and XLONL_WRITE"
 #endif
 
-#if defined(XRT_FEATURE_XSONL_READ) && !defined(XRT_FEATURE_XSON_READ)
-	#error "XSONL read requires XSON read"
+#if defined(XRT_FEATURE_XLONL_READ) && !defined(XRT_FEATURE_XLON_READ)
+	#error "XLONL read requires XLON read"
 #endif
-#if defined(XRT_FEATURE_XSONL_WRITE) && !defined(XRT_FEATURE_XSON_WRITE)
-	#error "XSONL write requires XSON write"
+#if defined(XRT_FEATURE_XLONL_WRITE) && !defined(XRT_FEATURE_XLON_WRITE)
+	#error "XLONL write requires XLON write"
 #endif
-#if defined(XRT_FEATURE_XSONL_FILE) && !defined(XRT_FEATURE_FILE_WHOLE)
-	#error "XSONL file requires FILE_WHOLE"
+#if defined(XRT_FEATURE_XLONL_FILE) && !defined(XRT_FEATURE_FILE_WHOLE)
+	#error "XLONL file requires FILE_WHOLE"
 #endif
 
-#if defined(XRT_FEATURE_XSONL_CORE)
+#if defined(XRT_FEATURE_XLONL_CORE)
 
-/* XSONL 的稳定错误域为 xrt.xsonl；RECORD 保留单条编解码错误原因链。 */
-typedef enum xxsonlerror {
-	XXSONL_ERROR_CONFIG = 1801,
-	XXSONL_ERROR_SYNTAX,
-	XXSONL_ERROR_LIMIT,
-	XXSONL_ERROR_RECORD,
-	XXSONL_ERROR_TYPE,
-	XXSONL_ERROR_OUTPUT,
-	XXSONL_ERROR_IO,
-	XXSONL_ERROR_STATE
-} xxsonlerror;
+/* XLONL 的稳定错误域为 xrt.xlonl；RECORD 保留单条编解码错误原因链。 */
+typedef enum xxlonlerror {
+	XXLONL_ERROR_CONFIG = 1801,
+	XXLONL_ERROR_SYNTAX,
+	XXLONL_ERROR_LIMIT,
+	XXLONL_ERROR_RECORD,
+	XXLONL_ERROR_TYPE,
+	XXLONL_ERROR_OUTPUT,
+	XXLONL_ERROR_IO,
+	XXLONL_ERROR_STATE
+} xxlonlerror;
 
 /* 列按 UTF-8 字节计数；空白行计入 Line，不计入 RecordIndex。 */
-typedef struct xxsonllocation {
+typedef struct xxlonllocation {
 	size_t Offset;
 	size_t Line;
 	size_t Column;
 	size_t RecordIndex;
-} xxsonllocation;
+} xxlonllocation;
 
 XRT_EXTERN_C_BEGIN
 
 /* 读取全局字节偏移、一基物理行列及零基记录下标；无位置时保持输出不变。 */
-XRT_API bool xrtXsonlErrorLocation(
+XRT_API bool xrtXlonlErrorLocation(
 	const xerror* pError,
-	xxsonllocation* pLocation
+	xxlonllocation* pLocation
 );
 
 XRT_EXTERN_C_END
 #endif
 
-#if defined(XRT_FEATURE_XSONL_READ)
+#if defined(XRT_FEATURE_XLONL_READ)
 
 /* 默认跳过空白行；此标志使空白行报告语法错误。 */
-typedef enum xxsonlreadflag {
-	XXSONL_READ_REJECT_EMPTY_LINES = UINT32_C(0x00000001)
-} xxsonlreadflag;
+typedef enum xxlonlreadflag {
+	XXLONL_READ_REJECT_EMPTY_LINES = UINT32_C(0x00000001)
+} xxlonlreadflag;
 
 /* Record 限制单条；外层限制累计消耗，合成的汇总 Array 不计入值数或深度。 */
-typedef struct xxsonlreadconfig {
-	xxsonreadconfig Record;
+typedef struct xxlonlreadconfig {
+	xxlonreadconfig Record;
 	uint32 Flags;
 	size_t MaxInputBytes;
 	size_t MaxRecords;
 	size_t MaxTotalValues;
 	size_t MaxTotalDecodedBytes;
 	uint32 Reserved[4];
-} xxsonlreadconfig;
+} xxlonlreadconfig;
 
 XRT_EXTERN_C_BEGIN
 
 /* 初始化默认忽略空白行、严格单条语法和有限累计预算。 */
-XRT_API void xrtXsonlReadConfigInit(
-	xxsonlreadconfig* pConfig
+XRT_API void xrtXlonlReadConfigInit(
+	xxlonlreadconfig* pConfig
 );
 
 
 /* 使用默认配置解析记录序列；成功返回拥有的 Array，空输入返回空 Array。 */
-XRT_API xvalue* xrtXsonlParse(
+XRT_API xvalue* xrtXlonlParse(
 	xstrview Text
 );
 
 
 /* 按配置解析全部记录；失败释放部分结果并返回 NULL，结果由 xrtValueRelease 释放。 */
-XRT_API xvalue* xrtXsonlRead(
+XRT_API xvalue* xrtXlonlRead(
 	xstrview Text,
-	const xxsonlreadconfig* pConfig
+	const xxlonlreadconfig* pConfig
 );
 
 
 /* 默认忽略空白行，验证逐行语法和累计预算，不构造 Value DOM；重复键策略不参与验证。 */
-XRT_API bool xrtXsonlValid(
+XRT_API bool xrtXlonlValid(
 	xstrview Text
 );
 
 XRT_EXTERN_C_END
 #endif
 
-#if defined(XRT_FEATURE_XSONL_WRITE)
+#if defined(XRT_FEATURE_XLONL_WRITE)
 
 /* Record.MaxOutputBytes 不含分隔符；外层 MaxOutputBytes 包含每条 LF，不含末尾 NUL。 */
-typedef struct xxsonlwriteconfig {
-	xxsonwriteconfig Record;
+typedef struct xxlonlwriteconfig {
+	xxlonwriteconfig Record;
 	size_t MaxOutputBytes;
 	size_t MaxRecords;
 	uint32 Reserved[4];
-} xxsonlwriteconfig;
+} xxlonlwriteconfig;
 
 XRT_EXTERN_C_BEGIN
 
 /* 初始化紧凑单行输出、LF 分隔及有限累计预算；PRETTY 配置非法。 */
-XRT_API void xrtXsonlWriteConfigInit(
-	xxsonlwriteconfig* pConfig
+XRT_API void xrtXlonlWriteConfigInit(
+	xxlonlwriteconfig* pConfig
 );
 
 
 /* 每个 Array 元素写成一行；返回 xrtFree 释放的 NUL 结尾文本，失败不修改可空的 pSize。 */
-XRT_API str xrtXsonlStringify(
+XRT_API str xrtXlonlStringify(
 	const xvalue* pArray,
 	size_t* pSize
 );
 
 
 /* 同步分块输出各条记录及 LF；回调借用字节仅在调用期间有效，失败不能撤回已提交字节。 */
-XRT_API bool xrtXsonlWrite(
+XRT_API bool xrtXlonlWrite(
 	const xvalue* pArray,
-	const xxsonlwriteconfig* pConfig,
-	xxsonwriteproc pWrite,
+	const xxlonlwriteconfig* pConfig,
+	xxlonwriteproc pWrite,
 	ptr pUserData
 );
 
 XRT_EXTERN_C_END
 #endif
 
-#if defined(XRT_FEATURE_XSONL_FILE)
+#if defined(XRT_FEATURE_XLONL_FILE)
 XRT_EXTERN_C_BEGIN
 
 /* 按默认配置限额读取文件并返回拥有的 Array。 */
-XRT_API xvalue* xrtXsonlParseFile(
+XRT_API xvalue* xrtXlonlParseFile(
 	cstr sPath
 );
 
 
 /* 按整体输入上限读取文件，逐行解析；失败不返回部分 Array。 */
-XRT_API xvalue* xrtXsonlReadFile(
+XRT_API xvalue* xrtXlonlReadFile(
 	cstr sPath,
-	const xxsonlreadconfig* pConfig
+	const xxlonlreadconfig* pConfig
 );
 
 
 /* 按默认配置完整序列化 Array 后原子替换文件。 */
-XRT_API bool xrtXsonlStringifyFile(
+XRT_API bool xrtXlonlStringifyFile(
 	cstr sPath,
 	const xvalue* pArray
 );
 
 
 /* 按高级配置完整序列化后原子替换文件；序列化失败保留原文件。 */
-XRT_API bool xrtXsonlWriteFile(
+XRT_API bool xrtXlonlWriteFile(
 	cstr sPath,
 	const xvalue* pArray,
-	const xxsonlwriteconfig* pConfig
+	const xxlonlwriteconfig* pConfig
 );
 
 XRT_EXTERN_C_END
@@ -40349,6 +41286,19 @@ XRT_EXTERN_C_END
 #ifndef XRT_CONSOLE_H
 #define XRT_CONSOLE_H
 
+#if defined(XRT_FEATURE_CONSOLE_INPUT) || defined(XRT_FEATURE_CONSOLE_TERMINAL)
+#endif
+
+#if defined(XRT_FEATURE_CONSOLE_INPUT) && (!defined(XRT_FEATURE_CONSOLE) || !defined(XRT_FEATURE_BUFFER) || !defined(XRT_FEATURE_IO_STANDARD))
+#error "Console input requires console, buffer and standard IO"
+#endif
+
+#if defined(XRT_FEATURE_CONSOLE_SCREEN) && !defined(XRT_FEATURE_CONSOLE)
+#error "Console screen requires console"
+#endif
+#if defined(XRT_FEATURE_CONSOLE_TERMINAL) && (!defined(XRT_FEATURE_CONSOLE_SCREEN) || !defined(XRT_FEATURE_BUFFER) || !defined(XRT_FEATURE_IO_STANDARD) || !defined(XRT_FEATURE_THREAD))
+#error "Console terminal requires console screen, buffer, standard IO and thread"
+#endif
 
 
 
@@ -40367,7 +41317,11 @@ typedef enum xconsoleerror {
 	XCONSOLE_ERROR_STREAM = 1,
 	XCONSOLE_ERROR_UTF8,
 	XCONSOLE_ERROR_WRITE,
-	XCONSOLE_ERROR_FLUSH
+	XCONSOLE_ERROR_FLUSH,
+	XCONSOLE_ERROR_READ,
+	XCONSOLE_ERROR_LIMIT,
+	XCONSOLE_ERROR_STATE,
+	XCONSOLE_ERROR_TERMINAL
 } xconsoleerror;
 
 
@@ -40393,6 +41347,60 @@ XRT_API bool xrtConsoleFlush(xconsolestream Stream);
 
 /* 判断指定标准输出流当前是否连接交互终端；非终端是正常结果，不设置错误。 */
 XRT_API bool xrtConsoleIsTerminal(xconsolestream Stream);
+
+#if defined(XRT_FEATURE_CONSOLE_INPUT)
+/* Strict Unicode scalar input: 1 value, 0 EOF, -1 error. No read-ahead. */
+XRT_API int xrtConsoleReadChar(uint32* pCodepoint);
+/* EOF before a character is a normal NULL result; an empty line owns an empty buffer. */
+XRT_API xbuffer* xrtConsoleReadLine(size_t iMaxBytes);
+#endif
+
+#if defined(XRT_FEATURE_CONSOLE_TERMINAL)
+typedef struct xconsolesession xconsolesession;
+typedef enum xconsoleeventkind {
+    XCONSOLE_EVENT_TEXT = 1, XCONSOLE_EVENT_KEY, XCONSOLE_EVENT_RESIZE,
+    XCONSOLE_EVENT_PASTE, XCONSOLE_EVENT_MOUSE, XCONSOLE_EVENT_CLOSED
+} xconsoleeventkind;
+typedef enum xconsolekey {
+    XCONSOLE_KEY_ESCAPE = 0x110000, XCONSOLE_KEY_ENTER, XCONSOLE_KEY_TAB,
+    XCONSOLE_KEY_BACKSPACE, XCONSOLE_KEY_UP, XCONSOLE_KEY_DOWN,
+    XCONSOLE_KEY_LEFT, XCONSOLE_KEY_RIGHT, XCONSOLE_KEY_HOME,
+    XCONSOLE_KEY_END, XCONSOLE_KEY_INSERT, XCONSOLE_KEY_DELETE,
+    XCONSOLE_KEY_PAGE_UP, XCONSOLE_KEY_PAGE_DOWN, XCONSOLE_KEY_F1
+} xconsolekey;
+typedef struct xconsoleevent {
+    xconsoleeventkind Kind;
+    uint32 Key, Modifiers, Repeat;
+    int32 X, Y, Wheel;
+    uint32 Columns, Rows;
+    bool Down;
+    xbuffer* Text; /* owned UTF-8; may contain NUL */
+} xconsoleevent;
+
+/* flags: raw=1, mouse=2, bracketed-paste=4, alternate-screen=8. Thread-affine, exclusive stdin. */
+XRT_API xconsolesession* xrtConsoleSessionOpen(uint32 Flags);
+XRT_API bool xrtConsoleSessionClose(xconsolesession* pSession);
+XRT_API void xrtConsoleSessionDestroy(xconsolesession* pSession);
+XRT_API bool xrtConsoleSessionClosed(const xconsolesession* pSession);
+XRT_API bool xrtConsoleSessionPasteSupported(const xconsolesession* pSession);
+XRT_API bool xrtConsoleSessionWrite(xconsolesession* pSession, xstrview Text);
+XRT_API bool xrtConsoleSessionFlush(xconsolesession* pSession);
+XRT_API bool xrtConsoleSessionMove(xconsolesession* pSession, uint32 X, uint32 Y);
+XRT_API bool xrtConsoleSessionClear(xconsolesession* pSession, int Mode);
+XRT_API bool xrtConsoleSessionCursor(xconsolesession* pSession, bool Visible);
+XRT_API bool xrtConsoleSessionStyle(xconsolesession* pSession, int32 Foreground, int32 Background, uint32 Attributes);
+/* NULL without error is timeout; CLOSED is emitted once. Returned event is owned. */
+XRT_API xconsoleevent* xrtConsoleSessionRead(xconsolesession* pSession, int TimeoutMs);
+XRT_API void xrtConsoleEventDestroy(xconsoleevent* pEvent);
+#endif
+
+#if defined(XRT_FEATURE_CONSOLE_SCREEN)
+/* Queries never change terminal modes. Nonterminal size is 0,0. */
+XRT_API bool xrtConsoleSize(xconsolestream Stream, uint32* pColumns, uint32* pRows);
+XRT_API int xrtConsoleColorMode(xconsolestream Stream);
+/* -1 default, 0..255 palette, 0x1000000|RGB true color; attributes bits 1,2,4,8,16. */
+XRT_API bool xrtConsoleWriteStyled(xconsolestream Stream, xstrview Text, int32 Foreground, int32 Background, uint32 Attributes);
+#endif
 
 
 
@@ -40866,6 +41874,12 @@ XRT_API xlogger* xrtLogDefault(void);
 /* 原子替换进程默认 Logger；空指针用于清除。 */
 XRT_API bool xrtLogSetDefault(xlogger* pLogger);
 
+/* Atomically remove and transfer the default's owning reference if it equals
+ * pExpected. NULL expected unconditionally takes the current default. A NULL
+ * result means no match, not failure. The caller owns the returned reference;
+ * no user callback is invoked while the default lock is held. */
+XRT_API xlogger* xrtLogTakeDefaultIf(xlogger* pExpected);
+
 
 
 XRT_EXTERN_C_END
@@ -41215,6 +42229,9 @@ XRT_API bool xrtLogFileRotate(xlogsink* pSink);
 /* 重新打开当前路径，供外部 logrotate 或路径替换后切换句柄。 */
 XRT_API bool xrtLogFileReopen(xlogsink* pSink);
 
+/* Checked, idempotent close. Reopen is the only operation that re-enables writes. */
+XRT_API bool xrtLogFileClose(xlogsink* pSink);
+
 
 
 XRT_EXTERN_C_END
@@ -41380,6 +42397,10 @@ XRT_API bool xrtLogAsyncStats(
 /* 返回后台最近一次错误的新引用；尚无错误时返回空且不设置错误。 */
 XRT_API xerror* xrtLogAsyncLastError(const xlogsink* pSink);
 
+/* Close admission, apply Shutdown policy, wait for final target flush. Does not
+ * release the caller's sink reference. Rejects calls from its own worker. */
+XRT_API bool xrtLogAsyncStop(xlogsink* pSink);
+
 
 
 XRT_EXTERN_C_END
@@ -41471,6 +42492,9 @@ XRT_API bool xrtLogRingStats(
 
 /* 返回后台最近一次错误的新引用；尚无错误时返回空且不设置错误。 */
 XRT_API xerror* xrtLogRingLastError(const xlogsink* pSink);
+
+/* Close admission and drain accepted records through the final target flush. */
+XRT_API bool xrtLogRingStop(xlogsink* pSink);
 
 
 
@@ -43031,7 +44055,10 @@ XRT_EXTERN_C_END
 
 
 
-/* 零值永远不是有效的 Builder 条目句柄。 */
+/*
+	零值永远不是有效的 Builder 条目句柄。ID 只在创建它的 Builder 内有效；
+	不同 Builder 的数字 ID 可以相同，跨实例使用须另外携带实例身份。
+*/
 typedef uint64 xpatternid;
 
 #define XPATTERN_ID_INVALID ((xpatternid)0)
@@ -43106,6 +44133,11 @@ typedef struct xpattern xpattern;
 
 /* Builder 可变且不保证并发安全；成功编译不会清空其中的模式。 */
 typedef struct xpatternbuilder xpatternbuilder;
+
+
+
+/* 尚未提交的独占编辑；准备阶段拥有解析结果，提交阶段不分配内存。 */
+typedef struct xpatternedit xpatternedit;
 
 
 
@@ -43385,6 +44417,69 @@ XRT_API bool xrtPatternBuilderRemove(
 	也不会撤销 Builder 中等待修正的修改。
 */
 XRT_API xpattern* xrtPatternBuilderCompile(xpatternbuilder* pBuilder);
+
+
+
+/* 判断 ID 是否仍为此 Builder 的活动条目；陈旧 ID 返回 false，不设置错误。 */
+XRT_API bool xrtPatternBuilderContains(const xpatternbuilder* pBuilder, xpatternid Id);
+
+
+
+/*
+	准备原子追加。复制/解析、预留槽和 ID 均在此阶段完成；失败不改变条目、
+	版本、Dirty 或缓存（物理容量可增长）。成功后其他结构修改被拒绝，
+	直至 Commit/Free。调用方可先准备关联元数据，再无分配提交。
+*/
+XRT_API xpatternedit* xrtPatternBuilderPrepareAdd(
+	xpatternbuilder* pBuilder, const xpatternspec* arrSpec, size_t iCount
+);
+
+
+
+/* 准备保留 ID/注册顺序的替换；无效或陈旧 ID 报 StateError。 */
+XRT_API xpatternedit* xrtPatternBuilderPrepareSet(
+	xpatternbuilder* pBuilder, xpatternid Id, const xpatternspec* pSpec
+);
+
+
+
+/* 准备删除；无效/陈旧 ID 或代际耗尽报 StateError，保持原状态不变。 */
+XRT_API xpatternedit* xrtPatternBuilderPrepareRemove(xpatternbuilder* pBuilder, xpatternid Id);
+
+
+
+/* 准备清空；版本或代际耗尽报 StateError，空 Builder 的提交不增加版本。 */
+XRT_API xpatternedit* xrtPatternBuilderPrepareClear(xpatternbuilder* pBuilder);
+
+
+
+/* 取消未提交的编辑并释放资源；已提交编辑仅释放元数据；NULL 安全。 */
+XRT_API void xrtPatternEditFree(xpatternedit* pEdit);
+
+
+
+/* 是否仍可提交；NULL、已提交或所属 Builder 已释放均返回 false，不设置错误。 */
+XRT_API bool xrtPatternEditReady(const xpatternedit* pEdit);
+
+
+
+/* 返回编辑的 ID 个数：Add 为批量长度，Set/Remove 为 1，Clear 为 0。 */
+XRT_API size_t xrtPatternEditCount(const xpatternedit* pEdit);
+
+
+
+/* 返回准备时确定的 ID，提交后仍可查询；越界报 RangeError。 */
+XRT_API xpatternid xrtPatternEditId(const xpatternedit* pEdit, size_t iIndex);
+
+
+
+/*
+	有效且串行使用的编辑提交不分配、不失败；提交后不可重复提交。
+	已提交或所属 Builder 已释放时报 StateError。释放 Builder 自动使编辑
+	失效，但不释放调用方拥有的编辑，仍须 EditFree。整个 Builder/edit 家族
+	须由调用方串行使用；这里不提供跨线程事务或回滚外部副作用。
+*/
+XRT_API bool xrtPatternEditCommit(xpatternedit* pEdit);
 
 
 
@@ -44097,6 +45192,18 @@ XRT_EXTERN_C_END
 #undef XRT_FEATURE_CONSOLE
 #undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_CONSOLE
 #endif
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_CONSOLE_INPUT)
+#undef XRT_FEATURE_CONSOLE_INPUT
+#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_CONSOLE_INPUT
+#endif
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_CONSOLE_SCREEN)
+#undef XRT_FEATURE_CONSOLE_SCREEN
+#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_CONSOLE_SCREEN
+#endif
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_CONSOLE_TERMINAL)
+#undef XRT_FEATURE_CONSOLE_TERMINAL
+#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_CONSOLE_TERMINAL
+#endif
 #if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_COROUTINE)
 #undef XRT_FEATURE_COROUTINE
 #undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_COROUTINE
@@ -44560,6 +45667,10 @@ XRT_EXTERN_C_END
 #if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_IO_LINE)
 #undef XRT_FEATURE_IO_LINE
 #undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_IO_LINE
+#endif
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_IO_STANDARD)
+#undef XRT_FEATURE_IO_STANDARD
+#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_IO_STANDARD
 #endif
 #if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_JSON)
 #undef XRT_FEATURE_JSON
@@ -45273,6 +46384,10 @@ XRT_EXTERN_C_END
 #undef XRT_FEATURE_TLS_STREAM_DIAL_FUTURE
 #undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_TLS_STREAM_DIAL_FUTURE
 #endif
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_TLS_STREAM_DIAL_PROXY)
+#undef XRT_FEATURE_TLS_STREAM_DIAL_PROXY
+#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_TLS_STREAM_DIAL_PROXY
+#endif
 #if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_TLS_STREAM_FUTURE)
 #undef XRT_FEATURE_TLS_STREAM_FUTURE
 #undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_TLS_STREAM_FUTURE
@@ -45320,6 +46435,22 @@ XRT_EXTERN_C_END
 #if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_VALUE_GRAPH)
 #undef XRT_FEATURE_VALUE_GRAPH
 #undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_VALUE_GRAPH
+#endif
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_VFS)
+#undef XRT_FEATURE_VFS
+#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_VFS
+#endif
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_VFS_DISK)
+#undef XRT_FEATURE_VFS_DISK
+#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_VFS_DISK
+#endif
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_VFS_MEMORY)
+#undef XRT_FEATURE_VFS_MEMORY
+#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_VFS_MEMORY
+#endif
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_VFS_PACK)
+#undef XRT_FEATURE_VFS_PACK
+#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_VFS_PACK
 #endif
 #if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_WAIT)
 #undef XRT_FEATURE_WAIT
@@ -45477,45 +46608,45 @@ XRT_EXTERN_C_END
 #undef XRT_FEATURE_XID
 #undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XID
 #endif
-#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSON)
-#undef XRT_FEATURE_XSON
-#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSON
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLON)
+#undef XRT_FEATURE_XLON
+#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLON
 #endif
-#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSONL)
-#undef XRT_FEATURE_XSONL
-#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSONL
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLONL)
+#undef XRT_FEATURE_XLONL
+#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLONL
 #endif
-#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSONL_CORE)
-#undef XRT_FEATURE_XSONL_CORE
-#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSONL_CORE
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLONL_CORE)
+#undef XRT_FEATURE_XLONL_CORE
+#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLONL_CORE
 #endif
-#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSONL_FILE)
-#undef XRT_FEATURE_XSONL_FILE
-#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSONL_FILE
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLONL_FILE)
+#undef XRT_FEATURE_XLONL_FILE
+#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLONL_FILE
 #endif
-#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSONL_READ)
-#undef XRT_FEATURE_XSONL_READ
-#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSONL_READ
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLONL_READ)
+#undef XRT_FEATURE_XLONL_READ
+#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLONL_READ
 #endif
-#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSONL_WRITE)
-#undef XRT_FEATURE_XSONL_WRITE
-#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSONL_WRITE
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLONL_WRITE)
+#undef XRT_FEATURE_XLONL_WRITE
+#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLONL_WRITE
 #endif
-#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSON_CORE)
-#undef XRT_FEATURE_XSON_CORE
-#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSON_CORE
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLON_CORE)
+#undef XRT_FEATURE_XLON_CORE
+#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLON_CORE
 #endif
-#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSON_FILE)
-#undef XRT_FEATURE_XSON_FILE
-#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSON_FILE
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLON_FILE)
+#undef XRT_FEATURE_XLON_FILE
+#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLON_FILE
 #endif
-#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSON_READ)
-#undef XRT_FEATURE_XSON_READ
-#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSON_READ
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLON_READ)
+#undef XRT_FEATURE_XLON_READ
+#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLON_READ
 #endif
-#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSON_WRITE)
-#undef XRT_FEATURE_XSON_WRITE
-#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XSON_WRITE
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLON_WRITE)
+#undef XRT_FEATURE_XLON_WRITE
+#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_XLON_WRITE
 #endif
 #if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_ALL)
 #undef XRT_MODULE_ALL
@@ -45608,6 +46739,18 @@ XRT_EXTERN_C_END
 #if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_CONSOLE)
 #undef XRT_MODULE_CONSOLE
 #undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_CONSOLE
+#endif
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_CONSOLE_INPUT)
+#undef XRT_MODULE_CONSOLE_INPUT
+#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_CONSOLE_INPUT
+#endif
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_CONSOLE_SCREEN)
+#undef XRT_MODULE_CONSOLE_SCREEN
+#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_CONSOLE_SCREEN
+#endif
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_CONSOLE_TERMINAL)
+#undef XRT_MODULE_CONSOLE_TERMINAL
+#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_CONSOLE_TERMINAL
 #endif
 #if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_COROUTINE)
 #undef XRT_MODULE_COROUTINE
@@ -46072,6 +47215,10 @@ XRT_EXTERN_C_END
 #if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_IO_LINE)
 #undef XRT_MODULE_IO_LINE
 #undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_IO_LINE
+#endif
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_IO_STANDARD)
+#undef XRT_MODULE_IO_STANDARD
+#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_IO_STANDARD
 #endif
 #if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_JSON)
 #undef XRT_MODULE_JSON
@@ -46785,6 +47932,10 @@ XRT_EXTERN_C_END
 #undef XRT_MODULE_TLS_STREAM_DIAL_FUTURE
 #undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_TLS_STREAM_DIAL_FUTURE
 #endif
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_TLS_STREAM_DIAL_PROXY)
+#undef XRT_MODULE_TLS_STREAM_DIAL_PROXY
+#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_TLS_STREAM_DIAL_PROXY
+#endif
 #if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_TLS_STREAM_FUTURE)
 #undef XRT_MODULE_TLS_STREAM_FUTURE
 #undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_TLS_STREAM_FUTURE
@@ -46832,6 +47983,22 @@ XRT_EXTERN_C_END
 #if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_VALUE_GRAPH)
 #undef XRT_MODULE_VALUE_GRAPH
 #undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_VALUE_GRAPH
+#endif
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_VFS)
+#undef XRT_MODULE_VFS
+#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_VFS
+#endif
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_VFS_DISK)
+#undef XRT_MODULE_VFS_DISK
+#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_VFS_DISK
+#endif
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_VFS_MEMORY)
+#undef XRT_MODULE_VFS_MEMORY
+#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_VFS_MEMORY
+#endif
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_VFS_PACK)
+#undef XRT_MODULE_VFS_PACK
+#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_VFS_PACK
 #endif
 #if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_WAIT)
 #undef XRT_MODULE_WAIT
@@ -46989,49 +48156,4839 @@ XRT_EXTERN_C_END
 #undef XRT_MODULE_XID
 #undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_XID
 #endif
-#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSON)
-#undef XRT_MODULE_XSON
-#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSON
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLON)
+#undef XRT_MODULE_XLON
+#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLON
 #endif
-#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSONL)
-#undef XRT_MODULE_XSONL
-#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSONL
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLONL)
+#undef XRT_MODULE_XLONL
+#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLONL
 #endif
-#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSONL_CORE)
-#undef XRT_MODULE_XSONL_CORE
-#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSONL_CORE
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLONL_CORE)
+#undef XRT_MODULE_XLONL_CORE
+#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLONL_CORE
 #endif
-#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSONL_FILE)
-#undef XRT_MODULE_XSONL_FILE
-#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSONL_FILE
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLONL_FILE)
+#undef XRT_MODULE_XLONL_FILE
+#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLONL_FILE
 #endif
-#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSONL_READ)
-#undef XRT_MODULE_XSONL_READ
-#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSONL_READ
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLONL_READ)
+#undef XRT_MODULE_XLONL_READ
+#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLONL_READ
 #endif
-#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSONL_WRITE)
-#undef XRT_MODULE_XSONL_WRITE
-#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSONL_WRITE
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLONL_WRITE)
+#undef XRT_MODULE_XLONL_WRITE
+#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLONL_WRITE
 #endif
-#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSON_CORE)
-#undef XRT_MODULE_XSON_CORE
-#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSON_CORE
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLON_CORE)
+#undef XRT_MODULE_XLON_CORE
+#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLON_CORE
 #endif
-#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSON_FILE)
-#undef XRT_MODULE_XSON_FILE
-#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSON_FILE
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLON_FILE)
+#undef XRT_MODULE_XLON_FILE
+#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLON_FILE
 #endif
-#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSON_READ)
-#undef XRT_MODULE_XSON_READ
-#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSON_READ
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLON_READ)
+#undef XRT_MODULE_XLON_READ
+#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLON_READ
 #endif
-#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSON_WRITE)
-#undef XRT_MODULE_XSON_WRITE
-#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_XSON_WRITE
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLON_WRITE)
+#undef XRT_MODULE_XLON_WRITE
+#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_XLON_WRITE
 #endif
 #if defined(XRT_DECLARATIONS_RESTORE_XRT_EXCLUDE_MEMORY_DEBUG)
 #define XRT_EXCLUDE_MEMORY_DEBUG 1
 #undef XRT_DECLARATIONS_RESTORE_XRT_EXCLUDE_MEMORY_DEBUG
+#endif
+
+#endif
+
+/* 按当前模块选择展开依赖，不把完整声明误当作全部功能已启用。 */
+#undef XRT_FEATURES_H
+
+
+/* ========================================================================== */
+/* requested feature selection: include/xrt/features.h */
+/* ========================================================================== */
+
+/* 此文件由 tools/generate_features.py 生成，请勿直接修改。 */
+#ifndef XRT_FEATURES_H
+#define XRT_FEATURES_H
+
+/* regex 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_REGEX)
+#ifndef XRT_FEATURE_REGEX
+#define XRT_FEATURE_REGEX
+#endif
+#ifndef XRT_MODULE_REGEX_REPLACE
+#define XRT_MODULE_REGEX_REPLACE
+#endif
+#ifndef XRT_MODULE_REGEX_SPLIT
+#define XRT_MODULE_REGEX_SPLIT
+#endif
+#ifndef XRT_MODULE_REGEX_SET
+#define XRT_MODULE_REGEX_SET
+#endif
+#endif
+
+/* regex_set 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_REGEX_SET)
+#ifndef XRT_FEATURE_REGEX_SET
+#define XRT_FEATURE_REGEX_SET
+#endif
+#ifndef XRT_MODULE_REGEX_CORE
+#define XRT_MODULE_REGEX_CORE
+#endif
+#endif
+
+/* regex_split 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_REGEX_SPLIT)
+#ifndef XRT_FEATURE_REGEX_SPLIT
+#define XRT_FEATURE_REGEX_SPLIT
+#endif
+#ifndef XRT_MODULE_REGEX_MATCH
+#define XRT_MODULE_REGEX_MATCH
+#endif
+#ifndef XRT_MODULE_STRING_SPLIT
+#define XRT_MODULE_STRING_SPLIT
+#endif
+#endif
+
+/* regex_replace 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_REGEX_REPLACE)
+#ifndef XRT_FEATURE_REGEX_REPLACE
+#define XRT_FEATURE_REGEX_REPLACE
+#endif
+#ifndef XRT_MODULE_REGEX_MATCH
+#define XRT_MODULE_REGEX_MATCH
+#endif
+#ifndef XRT_MODULE_STRING
+#define XRT_MODULE_STRING
+#endif
+#endif
+
+/* regex_match 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_REGEX_MATCH)
+#ifndef XRT_FEATURE_REGEX_MATCH
+#define XRT_FEATURE_REGEX_MATCH
+#endif
+#ifndef XRT_MODULE_REGEX_CORE
+#define XRT_MODULE_REGEX_CORE
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
+#endif
+#endif
+
+/* regex_core 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_REGEX_CORE)
+#ifndef XRT_FEATURE_REGEX_CORE
+#define XRT_FEATURE_REGEX_CORE
+#endif
+#endif
+
+/* pattern 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PATTERN)
+#ifndef XRT_FEATURE_PATTERN
+#define XRT_FEATURE_PATTERN
+#endif
+#endif
+
+/* ptr_stack 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PTR_STACK)
+#ifndef XRT_FEATURE_PTR_STACK
+#define XRT_FEATURE_PTR_STACK
+#endif
+#ifndef XRT_MODULE_STACK
+#define XRT_MODULE_STACK
+#endif
+#endif
+
+/* block_stack 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_BLOCK_STACK)
+#ifndef XRT_FEATURE_BLOCK_STACK
+#define XRT_FEATURE_BLOCK_STACK
+#endif
+#ifndef XRT_MODULE_ARRAY
+#define XRT_MODULE_ARRAY
+#endif
+#endif
+
+/* stack 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_STACK)
+#ifndef XRT_FEATURE_STACK
+#define XRT_FEATURE_STACK
+#endif
+#ifndef XRT_MODULE_ARRAY
+#define XRT_MODULE_ARRAY
+#endif
+#endif
+
+/* ptr_fixed_stack 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PTR_FIXED_STACK)
+#ifndef XRT_FEATURE_PTR_FIXED_STACK
+#define XRT_FEATURE_PTR_FIXED_STACK
+#endif
+#ifndef XRT_MODULE_FIXED_STACK
+#define XRT_MODULE_FIXED_STACK
+#endif
+#endif
+
+/* fixed_stack 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FIXED_STACK)
+#ifndef XRT_FEATURE_FIXED_STACK
+#define XRT_FEATURE_FIXED_STACK
+#endif
+#endif
+
+/* process_terminal 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PROCESS_TERMINAL)
+#ifndef XRT_FEATURE_PROCESS_TERMINAL
+#define XRT_FEATURE_PROCESS_TERMINAL
+#endif
+#ifndef XRT_MODULE_PROCESS
+#define XRT_MODULE_PROCESS
+#endif
+#endif
+
+/* process_file 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PROCESS_FILE)
+#ifndef XRT_FEATURE_PROCESS_FILE
+#define XRT_FEATURE_PROCESS_FILE
+#endif
+#ifndef XRT_MODULE_PROCESS
+#define XRT_MODULE_PROCESS
+#endif
+#ifndef XRT_MODULE_FILE
+#define XRT_MODULE_FILE
+#endif
+#endif
+
+/* process_future 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PROCESS_FUTURE)
+#ifndef XRT_FEATURE_PROCESS_FUTURE
+#define XRT_FEATURE_PROCESS_FUTURE
+#endif
+#ifndef XRT_MODULE_PROCESS
+#define XRT_MODULE_PROCESS
+#endif
+#ifndef XRT_MODULE_FUTURE
+#define XRT_MODULE_FUTURE
+#endif
+#endif
+
+/* process_pipeline 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PROCESS_PIPELINE)
+#ifndef XRT_FEATURE_PROCESS_PIPELINE
+#define XRT_FEATURE_PROCESS_PIPELINE
+#endif
+#ifndef XRT_MODULE_PROCESS_RUN
+#define XRT_MODULE_PROCESS_RUN
+#endif
+#endif
+
+/* process_open 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PROCESS_OPEN)
+#ifndef XRT_FEATURE_PROCESS_OPEN
+#define XRT_FEATURE_PROCESS_OPEN
+#endif
+#ifndef XRT_MODULE_PROCESS
+#define XRT_MODULE_PROCESS
+#endif
+#endif
+
+/* process_run 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PROCESS_RUN)
+#ifndef XRT_FEATURE_PROCESS_RUN
+#define XRT_FEATURE_PROCESS_RUN
+#endif
+#ifndef XRT_MODULE_PROCESS
+#define XRT_MODULE_PROCESS
+#endif
+#ifndef XRT_MODULE_BUFFER
+#define XRT_MODULE_BUFFER
+#endif
+#ifndef XRT_MODULE_CANCEL
+#define XRT_MODULE_CANCEL
+#endif
+#endif
+
+/* process 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PROCESS)
+#ifndef XRT_FEATURE_PROCESS
+#define XRT_FEATURE_PROCESS
+#endif
+#ifndef XRT_MODULE_THREAD
+#define XRT_MODULE_THREAD
+#endif
+#ifndef XRT_MODULE_COND
+#define XRT_MODULE_COND
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
+#endif
+#endif
+
+/* signal 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_SIGNAL)
+#ifndef XRT_FEATURE_SIGNAL
+#define XRT_FEATURE_SIGNAL
+#endif
+#ifndef XRT_MODULE_ATOMIC
+#define XRT_MODULE_ATOMIC
+#endif
+#ifndef XRT_MODULE_ONCE
+#define XRT_MODULE_ONCE
+#endif
+#ifndef XRT_MODULE_COND
+#define XRT_MODULE_COND
+#endif
+#ifndef XRT_MODULE_THREAD
+#define XRT_MODULE_THREAD
+#endif
+#endif
+
+/* environment 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_ENVIRONMENT)
+#ifndef XRT_FEATURE_ENVIRONMENT
+#define XRT_FEATURE_ENVIRONMENT
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
+#endif
+#endif
+
+/* logger_ring 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LOGGER_RING)
+#ifndef XRT_FEATURE_LOGGER_RING
+#define XRT_FEATURE_LOGGER_RING
+#endif
+#ifndef XRT_MODULE_LOGGER_CORE
+#define XRT_MODULE_LOGGER_CORE
+#endif
+#ifndef XRT_MODULE_QUEUE_MPSC
+#define XRT_MODULE_QUEUE_MPSC
+#endif
+#ifndef XRT_MODULE_QUEUE_MPMC
+#define XRT_MODULE_QUEUE_MPMC
+#endif
+#ifndef XRT_MODULE_THREAD
+#define XRT_MODULE_THREAD
+#endif
+#endif
+
+/* logger_async 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LOGGER_ASYNC)
+#ifndef XRT_FEATURE_LOGGER_ASYNC
+#define XRT_FEATURE_LOGGER_ASYNC
+#endif
+#ifndef XRT_MODULE_LOGGER_CORE
+#define XRT_MODULE_LOGGER_CORE
+#endif
+#ifndef XRT_MODULE_COND
+#define XRT_MODULE_COND
+#endif
+#ifndef XRT_MODULE_EVENT
+#define XRT_MODULE_EVENT
+#endif
+#ifndef XRT_MODULE_THREAD
+#define XRT_MODULE_THREAD
+#endif
+#endif
+
+/* logger_file_json 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LOGGER_FILE_JSON)
+#ifndef XRT_FEATURE_LOGGER_FILE_JSON
+#define XRT_FEATURE_LOGGER_FILE_JSON
+#endif
+#ifndef XRT_MODULE_LOGGER_FILE
+#define XRT_MODULE_LOGGER_FILE
+#endif
+#ifndef XRT_MODULE_LOGGER_FORMAT_JSON
+#define XRT_MODULE_LOGGER_FORMAT_JSON
+#endif
+#endif
+
+/* logger_file_text 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LOGGER_FILE_TEXT)
+#ifndef XRT_FEATURE_LOGGER_FILE_TEXT
+#define XRT_FEATURE_LOGGER_FILE_TEXT
+#endif
+#ifndef XRT_MODULE_LOGGER_FILE
+#define XRT_MODULE_LOGGER_FILE
+#endif
+#ifndef XRT_MODULE_LOGGER_FORMAT_TEXT
+#define XRT_MODULE_LOGGER_FORMAT_TEXT
+#endif
+#endif
+
+/* logger_file 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LOGGER_FILE)
+#ifndef XRT_FEATURE_LOGGER_FILE
+#define XRT_FEATURE_LOGGER_FILE
+#endif
+#ifndef XRT_MODULE_LOGGER_CORE
+#define XRT_MODULE_LOGGER_CORE
+#endif
+#ifndef XRT_MODULE_BUFFER
+#define XRT_MODULE_BUFFER
+#endif
+#ifndef XRT_MODULE_FILE
+#define XRT_MODULE_FILE
+#endif
+#endif
+
+/* logger_format_json_buffer 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LOGGER_FORMAT_JSON_BUFFER)
+#ifndef XRT_FEATURE_LOGGER_FORMAT_JSON_BUFFER
+#define XRT_FEATURE_LOGGER_FORMAT_JSON_BUFFER
+#endif
+#ifndef XRT_MODULE_LOGGER_FORMAT_JSON
+#define XRT_MODULE_LOGGER_FORMAT_JSON
+#endif
+#ifndef XRT_MODULE_BUFFER
+#define XRT_MODULE_BUFFER
+#endif
+#endif
+
+/* logger_console 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LOGGER_CONSOLE)
+#ifndef XRT_FEATURE_LOGGER_CONSOLE
+#define XRT_FEATURE_LOGGER_CONSOLE
+#endif
+#ifndef XRT_MODULE_LOGGER_CORE
+#define XRT_MODULE_LOGGER_CORE
+#endif
+#ifndef XRT_MODULE_LOGGER_FORMAT_TEXT
+#define XRT_MODULE_LOGGER_FORMAT_TEXT
+#endif
+#ifndef XRT_MODULE_CONSOLE
+#define XRT_MODULE_CONSOLE
+#endif
+#endif
+
+/* logger_format_json 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LOGGER_FORMAT_JSON)
+#ifndef XRT_FEATURE_LOGGER_FORMAT_JSON
+#define XRT_FEATURE_LOGGER_FORMAT_JSON
+#endif
+#ifndef XRT_MODULE_LOGGER_CORE
+#define XRT_MODULE_LOGGER_CORE
+#endif
+#ifndef XRT_MODULE_JSON_ESCAPE
+#define XRT_MODULE_JSON_ESCAPE
+#endif
+#ifndef XRT_MODULE_NUMBER_INTEGER
+#define XRT_MODULE_NUMBER_INTEGER
+#endif
+#ifndef XRT_MODULE_NUMBER_FLOAT
+#define XRT_MODULE_NUMBER_FLOAT
+#endif
+#endif
+
+/* logger_format_text_buffer 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LOGGER_FORMAT_TEXT_BUFFER)
+#ifndef XRT_FEATURE_LOGGER_FORMAT_TEXT_BUFFER
+#define XRT_FEATURE_LOGGER_FORMAT_TEXT_BUFFER
+#endif
+#ifndef XRT_MODULE_LOGGER_FORMAT_TEXT
+#define XRT_MODULE_LOGGER_FORMAT_TEXT
+#endif
+#ifndef XRT_MODULE_BUFFER
+#define XRT_MODULE_BUFFER
+#endif
+#endif
+
+/* logger_format_text 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LOGGER_FORMAT_TEXT)
+#ifndef XRT_FEATURE_LOGGER_FORMAT_TEXT
+#define XRT_FEATURE_LOGGER_FORMAT_TEXT
+#endif
+#ifndef XRT_MODULE_LOGGER_CORE
+#define XRT_MODULE_LOGGER_CORE
+#endif
+#ifndef XRT_MODULE_NUMBER_INTEGER
+#define XRT_MODULE_NUMBER_INTEGER
+#endif
+#ifndef XRT_MODULE_NUMBER_FLOAT
+#define XRT_MODULE_NUMBER_FLOAT
+#endif
+#endif
+
+/* logger_printf 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LOGGER_PRINTF)
+#ifndef XRT_FEATURE_LOGGER_PRINTF
+#define XRT_FEATURE_LOGGER_PRINTF
+#endif
+#ifndef XRT_MODULE_LOGGER_CORE
+#define XRT_MODULE_LOGGER_CORE
+#endif
+#ifndef XRT_MODULE_STRING_FORMAT
+#define XRT_MODULE_STRING_FORMAT
+#endif
+#endif
+
+/* logger_core 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LOGGER_CORE)
+#ifndef XRT_FEATURE_LOGGER_CORE
+#define XRT_FEATURE_LOGGER_CORE
+#endif
+#ifndef XRT_MODULE_ATOMIC
+#define XRT_MODULE_ATOMIC
+#endif
+#ifndef XRT_MODULE_MUTEX
+#define XRT_MODULE_MUTEX
+#endif
+#ifndef XRT_MODULE_TIME
+#define XRT_MODULE_TIME
+#endif
+#endif
+
+/* console_terminal 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CONSOLE_TERMINAL)
+#ifndef XRT_FEATURE_CONSOLE_TERMINAL
+#define XRT_FEATURE_CONSOLE_TERMINAL
+#endif
+#ifndef XRT_MODULE_CONSOLE_SCREEN
+#define XRT_MODULE_CONSOLE_SCREEN
+#endif
+#ifndef XRT_MODULE_IO_STANDARD
+#define XRT_MODULE_IO_STANDARD
+#endif
+#ifndef XRT_MODULE_BUFFER
+#define XRT_MODULE_BUFFER
+#endif
+#ifndef XRT_MODULE_THREAD
+#define XRT_MODULE_THREAD
+#endif
+#endif
+
+/* console_screen 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CONSOLE_SCREEN)
+#ifndef XRT_FEATURE_CONSOLE_SCREEN
+#define XRT_FEATURE_CONSOLE_SCREEN
+#endif
+#ifndef XRT_MODULE_CONSOLE
+#define XRT_MODULE_CONSOLE
+#endif
+#endif
+
+/* console_input 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CONSOLE_INPUT)
+#ifndef XRT_FEATURE_CONSOLE_INPUT
+#define XRT_FEATURE_CONSOLE_INPUT
+#endif
+#ifndef XRT_MODULE_CONSOLE
+#define XRT_MODULE_CONSOLE
+#endif
+#ifndef XRT_MODULE_IO_STANDARD
+#define XRT_MODULE_IO_STANDARD
+#endif
+#ifndef XRT_MODULE_BUFFER
+#define XRT_MODULE_BUFFER
+#endif
+#endif
+
+/* console 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CONSOLE)
+#ifndef XRT_FEATURE_CONSOLE
+#define XRT_FEATURE_CONSOLE
+#endif
+#endif
+
+/* xid 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XID)
+#ifndef XRT_FEATURE_XID
+#define XRT_FEATURE_XID
+#endif
+#ifndef XRT_MODULE_TIME
+#define XRT_MODULE_TIME
+#endif
+#ifndef XRT_MODULE_RANDOM_SECURE
+#define XRT_MODULE_RANDOM_SECURE
+#endif
+#ifndef XRT_MODULE_CODEC_BASE64
+#define XRT_MODULE_CODEC_BASE64
+#endif
+#endif
+
+/* template_file 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TEMPLATE_FILE)
+#ifndef XRT_FEATURE_TEMPLATE_FILE
+#define XRT_FEATURE_TEMPLATE_FILE
+#endif
+#ifndef XRT_MODULE_TEMPLATE_CORE
+#define XRT_MODULE_TEMPLATE_CORE
+#endif
+#ifndef XRT_MODULE_FILE_WHOLE
+#define XRT_MODULE_FILE_WHOLE
+#endif
+#endif
+
+/* template_extension 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TEMPLATE_EXTENSION)
+#ifndef XRT_FEATURE_TEMPLATE_EXTENSION
+#define XRT_FEATURE_TEMPLATE_EXTENSION
+#endif
+#ifndef XRT_MODULE_TEMPLATE_COMPOSE
+#define XRT_MODULE_TEMPLATE_COMPOSE
+#endif
+#ifndef XRT_MODULE_MAP
+#define XRT_MODULE_MAP
+#endif
+#endif
+
+/* template_compose 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TEMPLATE_COMPOSE)
+#ifndef XRT_FEATURE_TEMPLATE_COMPOSE
+#define XRT_FEATURE_TEMPLATE_COMPOSE
+#endif
+#ifndef XRT_MODULE_TEMPLATE_CONTROL
+#define XRT_MODULE_TEMPLATE_CONTROL
+#endif
+#ifndef XRT_MODULE_MAP
+#define XRT_MODULE_MAP
+#endif
+#endif
+
+/* template_control 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TEMPLATE_CONTROL)
+#ifndef XRT_FEATURE_TEMPLATE_CONTROL
+#define XRT_FEATURE_TEMPLATE_CONTROL
+#endif
+#ifndef XRT_MODULE_TEMPLATE_CORE
+#define XRT_MODULE_TEMPLATE_CORE
+#endif
+#endif
+
+/* template_core 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TEMPLATE_CORE)
+#ifndef XRT_FEATURE_TEMPLATE_CORE
+#define XRT_FEATURE_TEMPLATE_CORE
+#endif
+#ifndef XRT_MODULE_STRING
+#define XRT_MODULE_STRING
+#endif
+#ifndef XRT_MODULE_ARRAY
+#define XRT_MODULE_ARRAY
+#endif
+#ifndef XRT_MODULE_VALUE_CONTAINER
+#define XRT_MODULE_VALUE_CONTAINER
+#endif
+#ifndef XRT_MODULE_NUMBER_FORMAT
+#define XRT_MODULE_NUMBER_FORMAT
+#endif
+#ifndef XRT_MODULE_TIME_TEXT
+#define XRT_MODULE_TIME_TEXT
+#endif
+#endif
+
+/* xlonl 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XLONL)
+#ifndef XRT_FEATURE_XLONL
+#define XRT_FEATURE_XLONL
+#endif
+#ifndef XRT_MODULE_XLONL_FILE
+#define XRT_MODULE_XLONL_FILE
+#endif
+#endif
+
+/* xlonl_file 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XLONL_FILE)
+#ifndef XRT_FEATURE_XLONL_FILE
+#define XRT_FEATURE_XLONL_FILE
+#endif
+#ifndef XRT_MODULE_XLONL_READ
+#define XRT_MODULE_XLONL_READ
+#endif
+#ifndef XRT_MODULE_XLONL_WRITE
+#define XRT_MODULE_XLONL_WRITE
+#endif
+#ifndef XRT_MODULE_FILE_WHOLE
+#define XRT_MODULE_FILE_WHOLE
+#endif
+#endif
+
+/* xlonl_write 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XLONL_WRITE)
+#ifndef XRT_FEATURE_XLONL_WRITE
+#define XRT_FEATURE_XLONL_WRITE
+#endif
+#ifndef XRT_MODULE_XLONL_CORE
+#define XRT_MODULE_XLONL_CORE
+#endif
+#ifndef XRT_MODULE_XLON_WRITE
+#define XRT_MODULE_XLON_WRITE
+#endif
+#endif
+
+/* xlonl_read 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XLONL_READ)
+#ifndef XRT_FEATURE_XLONL_READ
+#define XRT_FEATURE_XLONL_READ
+#endif
+#ifndef XRT_MODULE_XLONL_CORE
+#define XRT_MODULE_XLONL_CORE
+#endif
+#ifndef XRT_MODULE_XLON_READ
+#define XRT_MODULE_XLON_READ
+#endif
+#endif
+
+/* xlonl_core 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XLONL_CORE)
+#ifndef XRT_FEATURE_XLONL_CORE
+#define XRT_FEATURE_XLONL_CORE
+#endif
+#endif
+
+/* jsonl 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSONL)
+#ifndef XRT_FEATURE_JSONL
+#define XRT_FEATURE_JSONL
+#endif
+#ifndef XRT_MODULE_JSONL_FILE
+#define XRT_MODULE_JSONL_FILE
+#endif
+#endif
+
+/* jsonl_file 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSONL_FILE)
+#ifndef XRT_FEATURE_JSONL_FILE
+#define XRT_FEATURE_JSONL_FILE
+#endif
+#ifndef XRT_MODULE_JSONL_READ
+#define XRT_MODULE_JSONL_READ
+#endif
+#ifndef XRT_MODULE_JSONL_WRITE
+#define XRT_MODULE_JSONL_WRITE
+#endif
+#ifndef XRT_MODULE_FILE_WHOLE
+#define XRT_MODULE_FILE_WHOLE
+#endif
+#endif
+
+/* jsonl_write 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSONL_WRITE)
+#ifndef XRT_FEATURE_JSONL_WRITE
+#define XRT_FEATURE_JSONL_WRITE
+#endif
+#ifndef XRT_MODULE_JSONL_CORE
+#define XRT_MODULE_JSONL_CORE
+#endif
+#ifndef XRT_MODULE_JSON_WRITE
+#define XRT_MODULE_JSON_WRITE
+#endif
+#endif
+
+/* jsonl_read 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSONL_READ)
+#ifndef XRT_FEATURE_JSONL_READ
+#define XRT_FEATURE_JSONL_READ
+#endif
+#ifndef XRT_MODULE_JSONL_CORE
+#define XRT_MODULE_JSONL_CORE
+#endif
+#ifndef XRT_MODULE_JSON_READ
+#define XRT_MODULE_JSON_READ
+#endif
+#endif
+
+/* jsonl_core 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSONL_CORE)
+#ifndef XRT_FEATURE_JSONL_CORE
+#define XRT_FEATURE_JSONL_CORE
+#endif
+#endif
+
+/* xlon 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XLON)
+#ifndef XRT_FEATURE_XLON
+#define XRT_FEATURE_XLON
+#endif
+#ifndef XRT_MODULE_XLON_FILE
+#define XRT_MODULE_XLON_FILE
+#endif
+#endif
+
+/* xlon_file 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XLON_FILE)
+#ifndef XRT_FEATURE_XLON_FILE
+#define XRT_FEATURE_XLON_FILE
+#endif
+#ifndef XRT_MODULE_XLON_READ
+#define XRT_MODULE_XLON_READ
+#endif
+#ifndef XRT_MODULE_XLON_WRITE
+#define XRT_MODULE_XLON_WRITE
+#endif
+#ifndef XRT_MODULE_FILE_WHOLE
+#define XRT_MODULE_FILE_WHOLE
+#endif
+#endif
+
+/* xlon_write 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XLON_WRITE)
+#ifndef XRT_FEATURE_XLON_WRITE
+#define XRT_FEATURE_XLON_WRITE
+#endif
+#ifndef XRT_MODULE_XLON_CORE
+#define XRT_MODULE_XLON_CORE
+#endif
+#ifndef XRT_MODULE_JSON_ESCAPE
+#define XRT_MODULE_JSON_ESCAPE
+#endif
+#ifndef XRT_MODULE_BUFFER
+#define XRT_MODULE_BUFFER
+#endif
+#ifndef XRT_MODULE_CODEC_BASE64
+#define XRT_MODULE_CODEC_BASE64
+#endif
+#ifndef XRT_MODULE_TIME_TEXT
+#define XRT_MODULE_TIME_TEXT
+#endif
+#ifndef XRT_MODULE_NUMBER_INTEGER
+#define XRT_MODULE_NUMBER_INTEGER
+#endif
+#ifndef XRT_MODULE_NUMBER_FLOAT
+#define XRT_MODULE_NUMBER_FLOAT
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
+#endif
+#ifndef XRT_MODULE_VALUE_CONTAINER
+#define XRT_MODULE_VALUE_CONTAINER
+#endif
+#endif
+
+/* xlon_read 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XLON_READ)
+#ifndef XRT_FEATURE_XLON_READ
+#define XRT_FEATURE_XLON_READ
+#endif
+#ifndef XRT_MODULE_XLON_CORE
+#define XRT_MODULE_XLON_CORE
+#endif
+#ifndef XRT_MODULE_BUFFER
+#define XRT_MODULE_BUFFER
+#endif
+#ifndef XRT_MODULE_CODEC_BASE64
+#define XRT_MODULE_CODEC_BASE64
+#endif
+#ifndef XRT_MODULE_TIME_TEXT
+#define XRT_MODULE_TIME_TEXT
+#endif
+#ifndef XRT_MODULE_NUMBER_INTEGER
+#define XRT_MODULE_NUMBER_INTEGER
+#endif
+#ifndef XRT_MODULE_NUMBER_FLOAT
+#define XRT_MODULE_NUMBER_FLOAT
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
+#endif
+#ifndef XRT_MODULE_VALUE_CONTAINER
+#define XRT_MODULE_VALUE_CONTAINER
+#endif
+#endif
+
+/* xlon_core 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_XLON_CORE)
+#ifndef XRT_FEATURE_XLON_CORE
+#define XRT_FEATURE_XLON_CORE
+#endif
+#endif
+
+/* json 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSON)
+#ifndef XRT_FEATURE_JSON
+#define XRT_FEATURE_JSON
+#endif
+#ifndef XRT_MODULE_JSON_FILE
+#define XRT_MODULE_JSON_FILE
+#endif
+#endif
+
+/* json_file 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSON_FILE)
+#ifndef XRT_FEATURE_JSON_FILE
+#define XRT_FEATURE_JSON_FILE
+#endif
+#ifndef XRT_MODULE_JSON_READ
+#define XRT_MODULE_JSON_READ
+#endif
+#ifndef XRT_MODULE_JSON_WRITE
+#define XRT_MODULE_JSON_WRITE
+#endif
+#ifndef XRT_MODULE_FILE_WHOLE
+#define XRT_MODULE_FILE_WHOLE
+#endif
+#endif
+
+/* json_write 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSON_WRITE)
+#ifndef XRT_FEATURE_JSON_WRITE
+#define XRT_FEATURE_JSON_WRITE
+#endif
+#ifndef XRT_MODULE_JSON_ESCAPE
+#define XRT_MODULE_JSON_ESCAPE
+#endif
+#ifndef XRT_MODULE_BUFFER
+#define XRT_MODULE_BUFFER
+#endif
+#ifndef XRT_MODULE_NUMBER_INTEGER
+#define XRT_MODULE_NUMBER_INTEGER
+#endif
+#ifndef XRT_MODULE_NUMBER_FLOAT
+#define XRT_MODULE_NUMBER_FLOAT
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
+#endif
+#ifndef XRT_MODULE_VALUE_CONTAINER
+#define XRT_MODULE_VALUE_CONTAINER
+#endif
+#endif
+
+/* json_escape 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSON_ESCAPE)
+#ifndef XRT_FEATURE_JSON_ESCAPE
+#define XRT_FEATURE_JSON_ESCAPE
+#endif
+#ifndef XRT_MODULE_JSON_CORE
+#define XRT_MODULE_JSON_CORE
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
+#endif
+#endif
+
+/* slot_map 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_SLOT_MAP)
+#ifndef XRT_FEATURE_SLOT_MAP
+#define XRT_FEATURE_SLOT_MAP
+#endif
+#ifndef XRT_MODULE_ARRAY
+#define XRT_MODULE_ARRAY
+#endif
+#endif
+
+/* buffer_base64 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_BUFFER_BASE64)
+#ifndef XRT_FEATURE_BUFFER_BASE64
+#define XRT_FEATURE_BUFFER_BASE64
+#endif
+#ifndef XRT_MODULE_BUFFER
+#define XRT_MODULE_BUFFER
+#endif
+#ifndef XRT_MODULE_CODEC_BASE64
+#define XRT_MODULE_CODEC_BASE64
+#endif
+#endif
+
+/* buffer_hex 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_BUFFER_HEX)
+#ifndef XRT_FEATURE_BUFFER_HEX
+#define XRT_FEATURE_BUFFER_HEX
+#endif
+#ifndef XRT_MODULE_BUFFER
+#define XRT_MODULE_BUFFER
+#endif
+#ifndef XRT_MODULE_CODEC_HEX
+#define XRT_MODULE_CODEC_HEX
+#endif
+#endif
+
+/* io_standard 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_IO_STANDARD)
+#ifndef XRT_FEATURE_IO_STANDARD
+#define XRT_FEATURE_IO_STANDARD
+#endif
+#ifndef XRT_MODULE_IO
+#define XRT_MODULE_IO
+#endif
+#ifndef XRT_MODULE_ATOMIC
+#define XRT_MODULE_ATOMIC
+#endif
+#endif
+
+/* io_line 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_IO_LINE)
+#ifndef XRT_FEATURE_IO_LINE
+#define XRT_FEATURE_IO_LINE
+#endif
+#ifndef XRT_MODULE_IO
+#define XRT_MODULE_IO
+#endif
+#ifndef XRT_MODULE_BUFFER
+#define XRT_MODULE_BUFFER
+#endif
+#endif
+
+/* io_file 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_IO_FILE)
+#ifndef XRT_FEATURE_IO_FILE
+#define XRT_FEATURE_IO_FILE
+#endif
+#ifndef XRT_MODULE_IO
+#define XRT_MODULE_IO
+#endif
+#ifndef XRT_MODULE_FILE
+#define XRT_MODULE_FILE
+#endif
+#endif
+
+/* io_buffer 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_IO_BUFFER)
+#ifndef XRT_FEATURE_IO_BUFFER
+#define XRT_FEATURE_IO_BUFFER
+#endif
+#ifndef XRT_MODULE_IO
+#define XRT_MODULE_IO
+#endif
+#ifndef XRT_MODULE_BUFFER
+#define XRT_MODULE_BUFFER
+#endif
+#endif
+
+/* io 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_IO)
+#ifndef XRT_FEATURE_IO
+#define XRT_FEATURE_IO
+#endif
+#endif
+
+/* list 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_LIST)
+#ifndef XRT_FEATURE_LIST
+#define XRT_FEATURE_LIST
+#endif
+#endif
+
+/* memory_pool 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_MEMORY_POOL)
+#ifndef XRT_FEATURE_MEMORY_POOL
+#define XRT_FEATURE_MEMORY_POOL
+#endif
+#ifndef XRT_MODULE_POOL
+#define XRT_MODULE_POOL
+#endif
+#endif
+
+/* file_fifo 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_FIFO)
+#ifndef XRT_FEATURE_FILE_FIFO
+#define XRT_FEATURE_FILE_FIFO
+#endif
+#ifndef XRT_MODULE_FILE
+#define XRT_MODULE_FILE
+#endif
+#endif
+
+/* vfs_pack 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_VFS_PACK)
+#ifndef XRT_FEATURE_VFS_PACK
+#define XRT_FEATURE_VFS_PACK
+#endif
+#ifndef XRT_MODULE_VFS
+#define XRT_MODULE_VFS
+#endif
+#ifndef XRT_MODULE_COND
+#define XRT_MODULE_COND
+#endif
+#endif
+
+/* vfs_disk 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_VFS_DISK)
+#ifndef XRT_FEATURE_VFS_DISK
+#define XRT_FEATURE_VFS_DISK
+#endif
+#ifndef XRT_MODULE_VFS
+#define XRT_MODULE_VFS
+#endif
+#ifndef XRT_MODULE_FILE_ROOT
+#define XRT_MODULE_FILE_ROOT
+#endif
+#endif
+
+/* file_root 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_ROOT)
+#ifndef XRT_FEATURE_FILE_ROOT
+#define XRT_FEATURE_FILE_ROOT
+#endif
+#ifndef XRT_MODULE_FILE_LINK
+#define XRT_MODULE_FILE_LINK
+#endif
+#ifndef XRT_MODULE_DIR
+#define XRT_MODULE_DIR
+#endif
+#endif
+
+/* vfs_memory 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_VFS_MEMORY)
+#ifndef XRT_FEATURE_VFS_MEMORY
+#define XRT_FEATURE_VFS_MEMORY
+#endif
+#ifndef XRT_MODULE_VFS
+#define XRT_MODULE_VFS
+#endif
+#endif
+
+/* vfs 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_VFS)
+#ifndef XRT_FEATURE_VFS
+#define XRT_FEATURE_VFS
+#endif
+#ifndef XRT_MODULE_DIR
+#define XRT_MODULE_DIR
+#endif
+#ifndef XRT_MODULE_MUTEX
+#define XRT_MODULE_MUTEX
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
+#endif
+#endif
+
+/* file_text 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_TEXT)
+#ifndef XRT_FEATURE_FILE_TEXT
+#define XRT_FEATURE_FILE_TEXT
+#endif
+#ifndef XRT_MODULE_FILE_WHOLE
+#define XRT_MODULE_FILE_WHOLE
+#endif
+#ifndef XRT_MODULE_CHARSET_DETECT
+#define XRT_MODULE_CHARSET_DETECT
+#endif
+#endif
+
+/* file_tree_async 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_TREE_ASYNC)
+#ifndef XRT_FEATURE_FILE_TREE_ASYNC
+#define XRT_FEATURE_FILE_TREE_ASYNC
+#endif
+#ifndef XRT_MODULE_FILE_TREE
+#define XRT_MODULE_FILE_TREE
+#endif
+#ifndef XRT_MODULE_FILE_ASYNC_COMMON
+#define XRT_MODULE_FILE_ASYNC_COMMON
+#endif
+#endif
+
+/* file_tree 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_TREE)
+#ifndef XRT_FEATURE_FILE_TREE
+#define XRT_FEATURE_FILE_TREE
+#endif
+#ifndef XRT_MODULE_FILE_WALK
+#define XRT_MODULE_FILE_WALK
+#endif
+#ifndef XRT_MODULE_FILE_WHOLE
+#define XRT_MODULE_FILE_WHOLE
+#endif
+#ifndef XRT_MODULE_FILE_LINK
+#define XRT_MODULE_FILE_LINK
+#endif
+#endif
+
+/* file_link 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_LINK)
+#ifndef XRT_FEATURE_FILE_LINK
+#define XRT_FEATURE_FILE_LINK
+#endif
+#ifndef XRT_MODULE_FILE
+#define XRT_MODULE_FILE
+#endif
+#endif
+
+/* file_walk 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_WALK)
+#ifndef XRT_FEATURE_FILE_WALK
+#define XRT_FEATURE_FILE_WALK
+#endif
+#ifndef XRT_MODULE_DIR
+#define XRT_MODULE_DIR
+#endif
+#endif
+
+/* dir_async 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_DIR_ASYNC)
+#ifndef XRT_FEATURE_DIR_ASYNC
+#define XRT_FEATURE_DIR_ASYNC
+#endif
+#ifndef XRT_MODULE_DIR
+#define XRT_MODULE_DIR
+#endif
+#ifndef XRT_MODULE_FILE_ASYNC_COMMON
+#define XRT_MODULE_FILE_ASYNC_COMMON
+#endif
+#endif
+
+/* file_async_manage 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_ASYNC_MANAGE)
+#ifndef XRT_FEATURE_FILE_ASYNC_MANAGE
+#define XRT_FEATURE_FILE_ASYNC_MANAGE
+#endif
+#ifndef XRT_MODULE_FILE_WHOLE
+#define XRT_MODULE_FILE_WHOLE
+#endif
+#ifndef XRT_MODULE_FILE_ASYNC_COMMON
+#define XRT_MODULE_FILE_ASYNC_COMMON
+#endif
+#endif
+
+/* file_async_whole 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_ASYNC_WHOLE)
+#ifndef XRT_FEATURE_FILE_ASYNC_WHOLE
+#define XRT_FEATURE_FILE_ASYNC_WHOLE
+#endif
+#ifndef XRT_MODULE_FILE_WHOLE
+#define XRT_MODULE_FILE_WHOLE
+#endif
+#ifndef XRT_MODULE_FILE_ASYNC_COMMON
+#define XRT_MODULE_FILE_ASYNC_COMMON
+#endif
+#endif
+
+/* dir_temp 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_DIR_TEMP)
+#ifndef XRT_FEATURE_DIR_TEMP
+#define XRT_FEATURE_DIR_TEMP
+#endif
+#ifndef XRT_MODULE_DIR
+#define XRT_MODULE_DIR
+#endif
+#ifndef XRT_MODULE_FILE_TEMP
+#define XRT_MODULE_FILE_TEMP
+#endif
+#endif
+
+/* file_map 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_MAP)
+#ifndef XRT_FEATURE_FILE_MAP
+#define XRT_FEATURE_FILE_MAP
+#endif
+#ifndef XRT_MODULE_FILE
+#define XRT_MODULE_FILE
+#endif
+#endif
+
+/* file_lock 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_LOCK)
+#ifndef XRT_FEATURE_FILE_LOCK
+#define XRT_FEATURE_FILE_LOCK
+#endif
+#ifndef XRT_MODULE_FILE
+#define XRT_MODULE_FILE
+#endif
+#endif
+
+/* path_safe 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PATH_SAFE)
+#ifndef XRT_FEATURE_PATH_SAFE
+#define XRT_FEATURE_PATH_SAFE
+#endif
+#ifndef XRT_MODULE_PATH
+#define XRT_MODULE_PATH
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
+#endif
+#endif
+
+/* time_text 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TIME_TEXT)
+#ifndef XRT_FEATURE_TIME_TEXT
+#define XRT_FEATURE_TIME_TEXT
+#endif
+#ifndef XRT_MODULE_TIME
+#define XRT_MODULE_TIME
+#endif
+#endif
+
+/* time_local 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TIME_LOCAL)
+#ifndef XRT_FEATURE_TIME_LOCAL
+#define XRT_FEATURE_TIME_LOCAL
+#endif
+#ifndef XRT_MODULE_TIME
+#define XRT_MODULE_TIME
+#endif
+#endif
+
+/* rwlock 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_RWLOCK)
+#ifndef XRT_FEATURE_RWLOCK
+#define XRT_FEATURE_RWLOCK
+#endif
+#ifndef XRT_MODULE_SYNC
+#define XRT_MODULE_SYNC
+#endif
+#endif
+
+/* sem 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_SEM)
+#ifndef XRT_FEATURE_SEM
+#define XRT_FEATURE_SEM
+#endif
+#ifndef XRT_MODULE_SYNC
+#define XRT_MODULE_SYNC
+#endif
+#ifndef XRT_MODULE_WAIT
+#define XRT_MODULE_WAIT
+#endif
+#endif
+
+/* net_udp_sync 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_UDP_SYNC)
+#ifndef XRT_FEATURE_NET_UDP_SYNC
+#define XRT_FEATURE_NET_UDP_SYNC
+#endif
+#ifndef XRT_MODULE_NET_UDP_FUTURE
+#define XRT_MODULE_NET_UDP_FUTURE
+#endif
+#ifndef XRT_MODULE_NET_SYNC
+#define XRT_MODULE_NET_SYNC
+#endif
+#endif
+
+/* net_udp_future 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_UDP_FUTURE)
+#ifndef XRT_FEATURE_NET_UDP_FUTURE
+#define XRT_FEATURE_NET_UDP_FUTURE
+#endif
+#ifndef XRT_MODULE_NET_UDP
+#define XRT_MODULE_NET_UDP
+#endif
+#ifndef XRT_MODULE_FUTURE
+#define XRT_MODULE_FUTURE
+#endif
+#endif
+
+/* net_udp 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_UDP)
+#ifndef XRT_FEATURE_NET_UDP
+#define XRT_FEATURE_NET_UDP
+#endif
+#ifndef XRT_MODULE_NET_ENGINE
+#define XRT_MODULE_NET_ENGINE
+#endif
+#endif
+
+/* tls_stream_dial_proxy 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_STREAM_DIAL_PROXY)
+#ifndef XRT_FEATURE_TLS_STREAM_DIAL_PROXY
+#define XRT_FEATURE_TLS_STREAM_DIAL_PROXY
+#endif
+#ifndef XRT_MODULE_TLS_STREAM_DIAL
+#define XRT_MODULE_TLS_STREAM_DIAL
+#endif
+#ifndef XRT_MODULE_NET_PROXY_DIAL
+#define XRT_MODULE_NET_PROXY_DIAL
+#endif
+#endif
+
+/* net_tcp_server_sync 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP_SERVER_SYNC)
+#ifndef XRT_FEATURE_NET_TCP_SERVER_SYNC
+#define XRT_FEATURE_NET_TCP_SERVER_SYNC
+#endif
+#ifndef XRT_MODULE_NET_TCP_SERVER_FUTURE
+#define XRT_MODULE_NET_TCP_SERVER_FUTURE
+#endif
+#ifndef XRT_MODULE_NET_SYNC
+#define XRT_MODULE_NET_SYNC
+#endif
+#endif
+
+/* net_tcp_server_future 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP_SERVER_FUTURE)
+#ifndef XRT_FEATURE_NET_TCP_SERVER_FUTURE
+#define XRT_FEATURE_NET_TCP_SERVER_FUTURE
+#endif
+#ifndef XRT_MODULE_NET_TCP_SERVER
+#define XRT_MODULE_NET_TCP_SERVER
+#endif
+#ifndef XRT_MODULE_FUTURE
+#define XRT_MODULE_FUTURE
+#endif
+#endif
+
+/* net_tcp_server 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP_SERVER)
+#ifndef XRT_FEATURE_NET_TCP_SERVER
+#define XRT_FEATURE_NET_TCP_SERVER
+#endif
+#ifndef XRT_MODULE_NET_TCP
+#define XRT_MODULE_NET_TCP
+#endif
+#endif
+
+/* net_tcp_file 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP_FILE)
+#ifndef XRT_FEATURE_NET_TCP_FILE
+#define XRT_FEATURE_NET_TCP_FILE
+#endif
+#ifndef XRT_MODULE_NET_TCP
+#define XRT_MODULE_NET_TCP
+#endif
+#ifndef XRT_MODULE_FILE
+#define XRT_MODULE_FILE
+#endif
+#endif
+
+/* task_group_net 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TASK_GROUP_NET)
+#ifndef XRT_FEATURE_TASK_GROUP_NET
+#define XRT_FEATURE_TASK_GROUP_NET
+#endif
+#ifndef XRT_MODULE_TASK_GROUP
+#define XRT_MODULE_TASK_GROUP
+#endif
+#ifndef XRT_MODULE_TASK_NET
+#define XRT_MODULE_TASK_NET
+#endif
+#endif
+
+/* task_net 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TASK_NET)
+#ifndef XRT_FEATURE_TASK_NET
+#define XRT_FEATURE_TASK_NET
+#endif
+#ifndef XRT_MODULE_TASK
+#define XRT_MODULE_TASK
+#endif
+#ifndef XRT_MODULE_NET_ENGINE
+#define XRT_MODULE_NET_ENGINE
+#endif
+#ifndef XRT_MODULE_FUTURE_BRIDGE
+#define XRT_MODULE_FUTURE_BRIDGE
+#endif
+#endif
+
+/* net_file 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_FILE)
+#ifndef XRT_FEATURE_NET_FILE
+#define XRT_FEATURE_NET_FILE
+#endif
+#ifndef XRT_MODULE_FILE
+#define XRT_MODULE_FILE
+#endif
+#ifndef XRT_MODULE_NET_ENGINE
+#define XRT_MODULE_NET_ENGINE
+#endif
+#if defined(__linux__) && !defined(__ANDROID__)
+#ifndef XRT_MODULE_NET_PORT_URING
+#define XRT_MODULE_NET_PORT_URING
+#endif
+#endif
+#endif
+
+/* tls_identity_ed25519 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_IDENTITY_ED25519)
+#ifndef XRT_FEATURE_TLS_IDENTITY_ED25519
+#define XRT_FEATURE_TLS_IDENTITY_ED25519
+#endif
+#ifndef XRT_MODULE_TLS_IDENTITY
+#define XRT_MODULE_TLS_IDENTITY
+#endif
+#ifndef XRT_MODULE_CRYPTO_ED25519_SIGN
+#define XRT_MODULE_CRYPTO_ED25519_SIGN
+#endif
+#endif
+
+/* tls_identity_p384 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_IDENTITY_P384)
+#ifndef XRT_FEATURE_TLS_IDENTITY_P384
+#define XRT_FEATURE_TLS_IDENTITY_P384
+#endif
+#ifndef XRT_MODULE_TLS_IDENTITY_EC
+#define XRT_MODULE_TLS_IDENTITY_EC
+#endif
+#ifndef XRT_MODULE_CRYPTO_P384
+#define XRT_MODULE_CRYPTO_P384
+#endif
+#ifndef XRT_MODULE_CRYPTO_ECDSA_P384_SIGN_DER
+#define XRT_MODULE_CRYPTO_ECDSA_P384_SIGN_DER
+#endif
+#ifndef XRT_MODULE_CRYPTO_HMAC_SHA256
+#define XRT_MODULE_CRYPTO_HMAC_SHA256
+#endif
+#endif
+
+/* tls_identity_p256 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_IDENTITY_P256)
+#ifndef XRT_FEATURE_TLS_IDENTITY_P256
+#define XRT_FEATURE_TLS_IDENTITY_P256
+#endif
+#ifndef XRT_MODULE_TLS_IDENTITY_EC
+#define XRT_MODULE_TLS_IDENTITY_EC
+#endif
+#ifndef XRT_MODULE_CRYPTO_P256
+#define XRT_MODULE_CRYPTO_P256
+#endif
+#ifndef XRT_MODULE_CRYPTO_ECDSA_P256_SIGN_DER
+#define XRT_MODULE_CRYPTO_ECDSA_P256_SIGN_DER
+#endif
+#ifndef XRT_MODULE_CRYPTO_HMAC_SHA512
+#define XRT_MODULE_CRYPTO_HMAC_SHA512
+#endif
+#endif
+
+/* tls_identity_ec 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_IDENTITY_EC)
+#ifndef XRT_FEATURE_TLS_IDENTITY_EC
+#define XRT_FEATURE_TLS_IDENTITY_EC
+#endif
+#ifndef XRT_MODULE_TLS_IDENTITY
+#define XRT_MODULE_TLS_IDENTITY
+#endif
+#endif
+
+/* net_port_uring 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_PORT_URING)
+#ifndef XRT_FEATURE_NET_PORT_URING
+#define XRT_FEATURE_NET_PORT_URING
+#endif
+#ifndef XRT_MODULE_NET_PORT
+#define XRT_MODULE_NET_PORT
+#endif
+#endif
+
+/* net_proxy_dial 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_PROXY_DIAL)
+#ifndef XRT_FEATURE_NET_PROXY_DIAL
+#define XRT_FEATURE_NET_PROXY_DIAL
+#endif
+#ifndef XRT_MODULE_NET_PROXY_HANDSHAKE
+#define XRT_MODULE_NET_PROXY_HANDSHAKE
+#endif
+#ifndef XRT_MODULE_NET_TCP_DIAL
+#define XRT_MODULE_NET_TCP_DIAL
+#endif
+#endif
+
+/* net_proxy_http_connect 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_PROXY_HTTP_CONNECT)
+#ifndef XRT_FEATURE_NET_PROXY_HTTP_CONNECT
+#define XRT_FEATURE_NET_PROXY_HTTP_CONNECT
+#endif
+#ifndef XRT_MODULE_NET_PROXY_HANDSHAKE
+#define XRT_MODULE_NET_PROXY_HANDSHAKE
+#endif
+#ifndef XRT_MODULE_HTTP1_HEAD
+#define XRT_MODULE_HTTP1_HEAD
+#endif
+#ifndef XRT_MODULE_CODEC_BASE64
+#define XRT_MODULE_CODEC_BASE64
+#endif
+#endif
+
+/* net_proxy_socks5 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_PROXY_SOCKS5)
+#ifndef XRT_FEATURE_NET_PROXY_SOCKS5
+#define XRT_FEATURE_NET_PROXY_SOCKS5
+#endif
+#ifndef XRT_MODULE_NET_PROXY_HANDSHAKE
+#define XRT_MODULE_NET_PROXY_HANDSHAKE
+#endif
+#endif
+
+/* net_proxy_handshake 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_PROXY_HANDSHAKE)
+#ifndef XRT_FEATURE_NET_PROXY_HANDSHAKE
+#define XRT_FEATURE_NET_PROXY_HANDSHAKE
+#endif
+#ifndef XRT_MODULE_NET_PROXY
+#define XRT_MODULE_NET_PROXY
+#endif
+#ifndef XRT_MODULE_NET_BUFFER
+#define XRT_MODULE_NET_BUFFER
+#endif
+#endif
+
+/* net_proxy 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_PROXY)
+#ifndef XRT_FEATURE_NET_PROXY
+#define XRT_FEATURE_NET_PROXY
+#endif
+#ifndef XRT_MODULE_NET
+#define XRT_MODULE_NET
+#endif
+#endif
+
+/* net_frame_length 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_FRAME_LENGTH)
+#ifndef XRT_FEATURE_NET_FRAME_LENGTH
+#define XRT_FEATURE_NET_FRAME_LENGTH
+#endif
+#ifndef XRT_MODULE_NET_FRAME
+#define XRT_MODULE_NET_FRAME
+#endif
+#endif
+
+/* net_frame_line 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_FRAME_LINE)
+#ifndef XRT_FEATURE_NET_FRAME_LINE
+#define XRT_FEATURE_NET_FRAME_LINE
+#endif
+#ifndef XRT_MODULE_NET_FRAME
+#define XRT_MODULE_NET_FRAME
+#endif
+#endif
+
+/* net_frame 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_FRAME)
+#ifndef XRT_FEATURE_NET_FRAME
+#define XRT_FEATURE_NET_FRAME
+#endif
+#ifndef XRT_MODULE_NET_BUFFER
+#define XRT_MODULE_NET_BUFFER
+#endif
+#endif
+
+/* net_interface_text 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_INTERFACE_TEXT)
+#ifndef XRT_FEATURE_NET_INTERFACE_TEXT
+#define XRT_FEATURE_NET_INTERFACE_TEXT
+#endif
+#ifndef XRT_MODULE_NET_INTERFACE
+#define XRT_MODULE_NET_INTERFACE
+#endif
+#ifndef XRT_MODULE_CODEC_HEX
+#define XRT_MODULE_CODEC_HEX
+#endif
+#endif
+
+/* net_interface 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_INTERFACE)
+#ifndef XRT_FEATURE_NET_INTERFACE
+#define XRT_FEATURE_NET_INTERFACE
+#endif
+#ifndef XRT_MODULE_NET
+#define XRT_MODULE_NET
+#endif
+#endif
+
+/* task_group_coroutine 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TASK_GROUP_COROUTINE)
+#ifndef XRT_FEATURE_TASK_GROUP_COROUTINE
+#define XRT_FEATURE_TASK_GROUP_COROUTINE
+#endif
+#ifndef XRT_MODULE_TASK_GROUP
+#define XRT_MODULE_TASK_GROUP
+#endif
+#ifndef XRT_MODULE_TASK_COROUTINE
+#define XRT_MODULE_TASK_COROUTINE
+#endif
+#endif
+
+/* task_coroutine 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TASK_COROUTINE)
+#ifndef XRT_FEATURE_TASK_COROUTINE
+#define XRT_FEATURE_TASK_COROUTINE
+#endif
+#ifndef XRT_MODULE_TASK
+#define XRT_MODULE_TASK
+#endif
+#ifndef XRT_MODULE_COROUTINE_SCHEDULER
+#define XRT_MODULE_COROUTINE_SCHEDULER
+#endif
+#endif
+
+/* future_coroutine 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FUTURE_COROUTINE)
+#ifndef XRT_FEATURE_FUTURE_COROUTINE
+#define XRT_FEATURE_FUTURE_COROUTINE
+#endif
+#ifndef XRT_MODULE_FUTURE
+#define XRT_MODULE_FUTURE
+#endif
+#ifndef XRT_MODULE_COROUTINE_SCHEDULER
+#define XRT_MODULE_COROUTINE_SCHEDULER
+#endif
+#endif
+
+/* coroutine_event 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_COROUTINE_EVENT)
+#ifndef XRT_FEATURE_COROUTINE_EVENT
+#define XRT_FEATURE_COROUTINE_EVENT
+#endif
+#ifndef XRT_MODULE_COROUTINE_SCHEDULER
+#define XRT_MODULE_COROUTINE_SCHEDULER
+#endif
+#endif
+
+/* task_group_pool 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TASK_GROUP_POOL)
+#ifndef XRT_FEATURE_TASK_GROUP_POOL
+#define XRT_FEATURE_TASK_GROUP_POOL
+#endif
+#ifndef XRT_MODULE_TASK_GROUP
+#define XRT_MODULE_TASK_GROUP
+#endif
+#ifndef XRT_MODULE_TASK_POOL
+#define XRT_MODULE_TASK_POOL
+#endif
+#endif
+
+/* executor 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_EXECUTOR)
+#ifndef XRT_FEATURE_EXECUTOR
+#define XRT_FEATURE_EXECUTOR
+#endif
+#ifndef XRT_MODULE_ATOMIC
+#define XRT_MODULE_ATOMIC
+#endif
+#ifndef XRT_MODULE_TEMP_MEMORY
+#define XRT_MODULE_TEMP_MEMORY
+#endif
+#ifndef XRT_MODULE_THREAD
+#define XRT_MODULE_THREAD
+#endif
+#ifndef XRT_MODULE_COND
+#define XRT_MODULE_COND
+#endif
+#endif
+
+/* task_group 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TASK_GROUP)
+#ifndef XRT_FEATURE_TASK_GROUP
+#define XRT_FEATURE_TASK_GROUP
+#endif
+#ifndef XRT_MODULE_FUTURE
+#define XRT_MODULE_FUTURE
+#endif
+#endif
+
+/* once 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_ONCE)
+#ifndef XRT_FEATURE_ONCE
+#define XRT_FEATURE_ONCE
+#endif
+#endif
+
+/* tls_record_chacha 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_RECORD_CHACHA)
+#ifndef XRT_FEATURE_TLS_RECORD_CHACHA
+#define XRT_FEATURE_TLS_RECORD_CHACHA
+#endif
+#ifndef XRT_MODULE_TLS_RECORD
+#define XRT_MODULE_TLS_RECORD
+#endif
+#ifndef XRT_MODULE_CRYPTO_CHACHA20_POLY1305
+#define XRT_MODULE_CRYPTO_CHACHA20_POLY1305
+#endif
+#endif
+
+/* tls_key_exchange_p384 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_KEY_EXCHANGE_P384)
+#ifndef XRT_FEATURE_TLS_KEY_EXCHANGE_P384
+#define XRT_FEATURE_TLS_KEY_EXCHANGE_P384
+#endif
+#ifndef XRT_MODULE_TLS_KEY_EXCHANGE
+#define XRT_MODULE_TLS_KEY_EXCHANGE
+#endif
+#ifndef XRT_MODULE_CRYPTO_P384_KEYPAIR
+#define XRT_MODULE_CRYPTO_P384_KEYPAIR
+#endif
+#endif
+
+/* tls_key_exchange_x448 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_KEY_EXCHANGE_X448)
+#ifndef XRT_FEATURE_TLS_KEY_EXCHANGE_X448
+#define XRT_FEATURE_TLS_KEY_EXCHANGE_X448
+#endif
+#ifndef XRT_MODULE_TLS_KEY_EXCHANGE
+#define XRT_MODULE_TLS_KEY_EXCHANGE
+#endif
+#ifndef XRT_MODULE_CRYPTO_X448_KEYPAIR
+#define XRT_MODULE_CRYPTO_X448_KEYPAIR
+#endif
+#endif
+
+/* x509_crl_policy 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_CRL_POLICY)
+#ifndef XRT_FEATURE_X509_CRL_POLICY
+#define XRT_FEATURE_X509_CRL_POLICY
+#endif
+#ifndef XRT_MODULE_X509_CRL_PROFILE
+#define XRT_MODULE_X509_CRL_PROFILE
+#endif
+#ifndef XRT_MODULE_X509_CRL_VERIFY
+#define XRT_MODULE_X509_CRL_VERIFY
+#endif
+#ifndef XRT_MODULE_X509_NAME
+#define XRT_MODULE_X509_NAME
+#endif
+#endif
+
+/* x509_crl_profile 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_CRL_PROFILE)
+#ifndef XRT_FEATURE_X509_CRL_PROFILE
+#define XRT_FEATURE_X509_CRL_PROFILE
+#endif
+#ifndef XRT_MODULE_X509_CRL
+#define XRT_MODULE_X509_CRL
+#endif
+#ifndef XRT_MODULE_X509_DISTRIBUTION
+#define XRT_MODULE_X509_DISTRIBUTION
+#endif
+#endif
+
+/* x509_distribution 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_DISTRIBUTION)
+#ifndef XRT_FEATURE_X509_DISTRIBUTION
+#define XRT_FEATURE_X509_DISTRIBUTION
+#endif
+#ifndef XRT_MODULE_X509_PROFILE
+#define XRT_MODULE_X509_PROFILE
+#endif
+#endif
+
+/* x509_crl_verify 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_CRL_VERIFY)
+#ifndef XRT_FEATURE_X509_CRL_VERIFY
+#define XRT_FEATURE_X509_CRL_VERIFY
+#endif
+#ifndef XRT_MODULE_X509_CRL
+#define XRT_MODULE_X509_CRL
+#endif
+#ifndef XRT_MODULE_X509_VERIFY
+#define XRT_MODULE_X509_VERIFY
+#endif
+#endif
+
+/* x509_crl 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_CRL)
+#ifndef XRT_FEATURE_X509_CRL
+#define XRT_FEATURE_X509_CRL
+#endif
+#ifndef XRT_MODULE_X509_PARSE
+#define XRT_MODULE_X509_PARSE
+#endif
+#endif
+
+/* math 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_MATH)
+#ifndef XRT_FEATURE_MATH
+#define XRT_FEATURE_MATH
+#endif
+#endif
+
+/* crypto_x448_keypair 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_X448_KEYPAIR)
+#ifndef XRT_FEATURE_CRYPTO_X448_KEYPAIR
+#define XRT_FEATURE_CRYPTO_X448_KEYPAIR
+#endif
+#ifndef XRT_MODULE_CRYPTO_X448
+#define XRT_MODULE_CRYPTO_X448
+#endif
+#ifndef XRT_MODULE_RANDOM_SECURE
+#define XRT_MODULE_RANDOM_SECURE
+#endif
+#endif
+
+/* crypto_x448 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_X448)
+#ifndef XRT_FEATURE_CRYPTO_X448
+#define XRT_FEATURE_CRYPTO_X448
+#endif
+#ifndef XRT_MODULE_CRYPTO_CORE
+#define XRT_MODULE_CRYPTO_CORE
+#endif
+#endif
+
+/* crypto_ed25519_keypair 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ED25519_KEYPAIR)
+#ifndef XRT_FEATURE_CRYPTO_ED25519_KEYPAIR
+#define XRT_FEATURE_CRYPTO_ED25519_KEYPAIR
+#endif
+#ifndef XRT_MODULE_CRYPTO_ED25519
+#define XRT_MODULE_CRYPTO_ED25519
+#endif
+#ifndef XRT_MODULE_RANDOM_SECURE
+#define XRT_MODULE_RANDOM_SECURE
+#endif
+#endif
+
+/* crypto_ed25519_sign 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ED25519_SIGN)
+#ifndef XRT_FEATURE_CRYPTO_ED25519_SIGN
+#define XRT_FEATURE_CRYPTO_ED25519_SIGN
+#endif
+#ifndef XRT_MODULE_CRYPTO_ED25519
+#define XRT_MODULE_CRYPTO_ED25519
+#endif
+#endif
+
+/* crypto_chacha20_poly1305 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_CHACHA20_POLY1305)
+#ifndef XRT_FEATURE_CRYPTO_CHACHA20_POLY1305
+#define XRT_FEATURE_CRYPTO_CHACHA20_POLY1305
+#endif
+#ifndef XRT_MODULE_CRYPTO_CHACHA20
+#define XRT_MODULE_CRYPTO_CHACHA20
+#endif
+#ifndef XRT_MODULE_CRYPTO_POLY1305
+#define XRT_MODULE_CRYPTO_POLY1305
+#endif
+#endif
+
+/* crypto_poly1305 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_POLY1305)
+#ifndef XRT_FEATURE_CRYPTO_POLY1305
+#define XRT_FEATURE_CRYPTO_POLY1305
+#endif
+#ifndef XRT_MODULE_CRYPTO_CORE
+#define XRT_MODULE_CRYPTO_CORE
+#endif
+#endif
+
+/* crypto_chacha20 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_CHACHA20)
+#ifndef XRT_FEATURE_CRYPTO_CHACHA20
+#define XRT_FEATURE_CRYPTO_CHACHA20
+#endif
+#ifndef XRT_MODULE_CRYPTO_CORE
+#define XRT_MODULE_CRYPTO_CORE
+#endif
+#endif
+
+/* crypto_pbkdf2_sha512 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_PBKDF2_SHA512)
+#ifndef XRT_FEATURE_CRYPTO_PBKDF2_SHA512
+#define XRT_FEATURE_CRYPTO_PBKDF2_SHA512
+#endif
+#ifndef XRT_MODULE_CRYPTO_HMAC_SHA512
+#define XRT_MODULE_CRYPTO_HMAC_SHA512
+#endif
+#endif
+
+/* crypto_pbkdf2_sha256 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_PBKDF2_SHA256)
+#ifndef XRT_FEATURE_CRYPTO_PBKDF2_SHA256
+#define XRT_FEATURE_CRYPTO_PBKDF2_SHA256
+#endif
+#ifndef XRT_MODULE_CRYPTO_HMAC_SHA256
+#define XRT_MODULE_CRYPTO_HMAC_SHA256
+#endif
+#endif
+
+/* crypto_md5 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_MD5)
+#ifndef XRT_FEATURE_CRYPTO_MD5
+#define XRT_FEATURE_CRYPTO_MD5
+#endif
+#ifndef XRT_MODULE_CRYPTO_CORE
+#define XRT_MODULE_CRYPTO_CORE
+#endif
+#endif
+
+/* crypto_sha512_256 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_SHA512_256)
+#ifndef XRT_FEATURE_CRYPTO_SHA512_256
+#define XRT_FEATURE_CRYPTO_SHA512_256
+#endif
+#ifndef XRT_MODULE_CRYPTO_SHA512
+#define XRT_MODULE_CRYPTO_SHA512
+#endif
+#endif
+
+/* crypto_ecdsa_p384_sign_der 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_P384_SIGN_DER)
+#ifndef XRT_FEATURE_CRYPTO_ECDSA_P384_SIGN_DER
+#define XRT_FEATURE_CRYPTO_ECDSA_P384_SIGN_DER
+#endif
+#ifndef XRT_MODULE_CRYPTO_ECDSA_P384_SIGN
+#define XRT_MODULE_CRYPTO_ECDSA_P384_SIGN
+#endif
+#ifndef XRT_MODULE_CRYPTO_ECDSA_SIGN_DER
+#define XRT_MODULE_CRYPTO_ECDSA_SIGN_DER
+#endif
+#endif
+
+/* crypto_ecdsa_p256_sign_der 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_P256_SIGN_DER)
+#ifndef XRT_FEATURE_CRYPTO_ECDSA_P256_SIGN_DER
+#define XRT_FEATURE_CRYPTO_ECDSA_P256_SIGN_DER
+#endif
+#ifndef XRT_MODULE_CRYPTO_ECDSA_P256_SIGN
+#define XRT_MODULE_CRYPTO_ECDSA_P256_SIGN
+#endif
+#ifndef XRT_MODULE_CRYPTO_ECDSA_SIGN_DER
+#define XRT_MODULE_CRYPTO_ECDSA_SIGN_DER
+#endif
+#endif
+
+/* crypto_ecdsa_sign_der 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_SIGN_DER)
+#ifndef XRT_FEATURE_CRYPTO_ECDSA_SIGN_DER
+#define XRT_FEATURE_CRYPTO_ECDSA_SIGN_DER
+#endif
+#ifndef XRT_MODULE_CRYPTO_ECDSA_SIGN
+#define XRT_MODULE_CRYPTO_ECDSA_SIGN
+#endif
+#ifndef XRT_MODULE_CRYPTO_ECDSA_DER
+#define XRT_MODULE_CRYPTO_ECDSA_DER
+#endif
+#endif
+
+/* crypto_ecdsa_p384_sign 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_P384_SIGN)
+#ifndef XRT_FEATURE_CRYPTO_ECDSA_P384_SIGN
+#define XRT_FEATURE_CRYPTO_ECDSA_P384_SIGN
+#endif
+#ifndef XRT_MODULE_CRYPTO_ECDSA_SIGN
+#define XRT_MODULE_CRYPTO_ECDSA_SIGN
+#endif
+#ifndef XRT_MODULE_CRYPTO_P384
+#define XRT_MODULE_CRYPTO_P384
+#endif
+#ifndef XRT_MODULE_CRYPTO_HMAC_SHA512
+#define XRT_MODULE_CRYPTO_HMAC_SHA512
+#endif
+#endif
+
+/* crypto_ecdsa_p256_sign 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_P256_SIGN)
+#ifndef XRT_FEATURE_CRYPTO_ECDSA_P256_SIGN
+#define XRT_FEATURE_CRYPTO_ECDSA_P256_SIGN
+#endif
+#ifndef XRT_MODULE_CRYPTO_ECDSA_SIGN
+#define XRT_MODULE_CRYPTO_ECDSA_SIGN
+#endif
+#ifndef XRT_MODULE_CRYPTO_P256
+#define XRT_MODULE_CRYPTO_P256
+#endif
+#ifndef XRT_MODULE_CRYPTO_HMAC_SHA256
+#define XRT_MODULE_CRYPTO_HMAC_SHA256
+#endif
+#endif
+
+/* crypto_ecdsa_sign 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_SIGN)
+#ifndef XRT_FEATURE_CRYPTO_ECDSA_SIGN
+#define XRT_FEATURE_CRYPTO_ECDSA_SIGN
+#endif
+#ifndef XRT_MODULE_CRYPTO_ECDSA_MATH
+#define XRT_MODULE_CRYPTO_ECDSA_MATH
+#endif
+#endif
+
+/* crypto_p384_keypair 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_P384_KEYPAIR)
+#ifndef XRT_FEATURE_CRYPTO_P384_KEYPAIR
+#define XRT_FEATURE_CRYPTO_P384_KEYPAIR
+#endif
+#ifndef XRT_MODULE_CRYPTO_P384
+#define XRT_MODULE_CRYPTO_P384
+#endif
+#ifndef XRT_MODULE_CRYPTO_NIST_KEYPAIR
+#define XRT_MODULE_CRYPTO_NIST_KEYPAIR
+#endif
+#endif
+
+/* random_text_default 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_RANDOM_TEXT_DEFAULT)
+#ifndef XRT_FEATURE_RANDOM_TEXT_DEFAULT
+#define XRT_FEATURE_RANDOM_TEXT_DEFAULT
+#endif
+#ifndef XRT_MODULE_RANDOM_TEXT
+#define XRT_MODULE_RANDOM_TEXT
+#endif
+#ifndef XRT_MODULE_RANDOM_DEFAULT
+#define XRT_MODULE_RANDOM_DEFAULT
+#endif
+#endif
+
+/* random_text 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_RANDOM_TEXT)
+#ifndef XRT_FEATURE_RANDOM_TEXT
+#define XRT_FEATURE_RANDOM_TEXT
+#endif
+#ifndef XRT_MODULE_RANDOM
+#define XRT_MODULE_RANDOM
+#endif
+#endif
+
+/* random_secure_text 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_RANDOM_SECURE_TEXT)
+#ifndef XRT_FEATURE_RANDOM_SECURE_TEXT
+#define XRT_FEATURE_RANDOM_SECURE_TEXT
+#endif
+#ifndef XRT_MODULE_RANDOM_SECURE
+#define XRT_MODULE_RANDOM_SECURE
+#endif
+#endif
+
+/* random_default 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_RANDOM_DEFAULT)
+#ifndef XRT_FEATURE_RANDOM_DEFAULT
+#define XRT_FEATURE_RANDOM_DEFAULT
+#endif
+#ifndef XRT_MODULE_RANDOM
+#define XRT_MODULE_RANDOM
+#endif
+#endif
+
+/* random 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_RANDOM)
+#ifndef XRT_FEATURE_RANDOM
+#define XRT_FEATURE_RANDOM
+#endif
+#endif
+
+/* hash_keyed 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HASH_KEYED)
+#ifndef XRT_FEATURE_HASH_KEYED
+#define XRT_FEATURE_HASH_KEYED
+#endif
+#endif
+
+/* hash32 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HASH32)
+#ifndef XRT_FEATURE_HASH32
+#define XRT_FEATURE_HASH32
+#endif
+#endif
+
+/* charset_detect 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CHARSET_DETECT)
+#ifndef XRT_FEATURE_CHARSET_DETECT
+#define XRT_FEATURE_CHARSET_DETECT
+#endif
+#ifndef XRT_MODULE_CHARSET
+#define XRT_MODULE_CHARSET
+#endif
+#endif
+
+/* charset 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CHARSET)
+#ifndef XRT_FEATURE_CHARSET
+#define XRT_FEATURE_CHARSET
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
+#endif
+#endif
+
+/* unicode_text 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_UNICODE_TEXT)
+#ifndef XRT_FEATURE_UNICODE_TEXT
+#define XRT_FEATURE_UNICODE_TEXT
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
+#endif
+#ifndef XRT_MODULE_STRING
+#define XRT_MODULE_STRING
+#endif
+#endif
+
+/* http1_message 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP1_MESSAGE)
+#ifndef XRT_FEATURE_HTTP1_MESSAGE
+#define XRT_FEATURE_HTTP1_MESSAGE
+#endif
+#ifndef XRT_MODULE_HTTP1_BODY
+#define XRT_MODULE_HTTP1_BODY
+#endif
+#endif
+
+/* http_target 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP_TARGET)
+#ifndef XRT_FEATURE_HTTP_TARGET
+#define XRT_FEATURE_HTTP_TARGET
+#endif
+#ifndef XRT_MODULE_HTTP_HOST
+#define XRT_MODULE_HTTP_HOST
+#endif
+#endif
+
+/* http_param_host 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP_PARAM_HOST)
+#ifndef XRT_FEATURE_HTTP_PARAM_HOST
+#define XRT_FEATURE_HTTP_PARAM_HOST
+#endif
+#ifndef XRT_MODULE_HTTP_PARAM
+#define XRT_MODULE_HTTP_PARAM
+#endif
+#ifndef XRT_MODULE_HTTP_HOST
+#define XRT_MODULE_HTTP_HOST
+#endif
+#endif
+
+/* http_connection 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP_CONNECTION)
+#ifndef XRT_FEATURE_HTTP_CONNECTION
+#define XRT_FEATURE_HTTP_CONNECTION
+#endif
+#ifndef XRT_MODULE_HTTP
+#define XRT_MODULE_HTTP
+#endif
+#endif
+
+/* http_decode 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP_DECODE)
+#ifndef XRT_FEATURE_HTTP_DECODE
+#define XRT_FEATURE_HTTP_DECODE
+#endif
+#ifndef XRT_MODULE_HTTP_ENCODING
+#define XRT_MODULE_HTTP_ENCODING
+#endif
+#ifndef XRT_MODULE_INFLATE
+#define XRT_MODULE_INFLATE
+#endif
+#endif
+
+/* http_encoding 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP_ENCODING)
+#ifndef XRT_FEATURE_HTTP_ENCODING
+#define XRT_FEATURE_HTTP_ENCODING
+#endif
+#ifndef XRT_MODULE_HTTP
+#define XRT_MODULE_HTTP
+#endif
+#endif
+
+/* http_upgrade_write 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP_UPGRADE_WRITE)
+#ifndef XRT_FEATURE_HTTP_UPGRADE_WRITE
+#define XRT_FEATURE_HTTP_UPGRADE_WRITE
+#endif
+#ifndef XRT_MODULE_HTTP_UPGRADE
+#define XRT_MODULE_HTTP_UPGRADE
+#endif
+#endif
+
+/* http_te 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP_TE)
+#ifndef XRT_FEATURE_HTTP_TE
+#define XRT_FEATURE_HTTP_TE
+#endif
+#ifndef XRT_MODULE_HTTP_PARAM
+#define XRT_MODULE_HTTP_PARAM
+#endif
+#endif
+
+/* http_expect 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP_EXPECT)
+#ifndef XRT_FEATURE_HTTP_EXPECT
+#define XRT_FEATURE_HTTP_EXPECT
+#endif
+#ifndef XRT_MODULE_HTTP
+#define XRT_MODULE_HTTP
+#endif
+#endif
+
+/* http1_tls 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP1_TLS)
+#ifndef XRT_FEATURE_HTTP1_TLS
+#define XRT_FEATURE_HTTP1_TLS
+#endif
+#ifndef XRT_MODULE_HTTP1_NET
+#define XRT_MODULE_HTTP1_NET
+#endif
+#ifndef XRT_MODULE_TLS_STREAM
+#define XRT_MODULE_TLS_STREAM
+#endif
+#endif
+
+/* websocket_upgrade_stream 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_UPGRADE_STREAM)
+#ifndef XRT_FEATURE_WEBSOCKET_UPGRADE_STREAM
+#define XRT_FEATURE_WEBSOCKET_UPGRADE_STREAM
+#endif
+#ifndef XRT_MODULE_WEBSOCKET_UPGRADE
+#define XRT_MODULE_WEBSOCKET_UPGRADE
+#endif
+#ifndef XRT_MODULE_WEBSOCKET_STREAM
+#define XRT_MODULE_WEBSOCKET_STREAM
+#endif
+#ifndef XRT_MODULE_HTTP1_NET
+#define XRT_MODULE_HTTP1_NET
+#endif
+#endif
+
+/* http1_net 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP1_NET)
+#ifndef XRT_FEATURE_HTTP1_NET
+#define XRT_FEATURE_HTTP1_NET
+#endif
+#ifndef XRT_MODULE_HTTP1_HEAD
+#define XRT_MODULE_HTTP1_HEAD
+#endif
+#ifndef XRT_MODULE_NET_BUFFER
+#define XRT_MODULE_NET_BUFFER
+#endif
+#endif
+
+/* websocket_upgrade_deflate 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_UPGRADE_DEFLATE)
+#ifndef XRT_FEATURE_WEBSOCKET_UPGRADE_DEFLATE
+#define XRT_FEATURE_WEBSOCKET_UPGRADE_DEFLATE
+#endif
+#ifndef XRT_MODULE_WEBSOCKET_UPGRADE
+#define XRT_MODULE_WEBSOCKET_UPGRADE
+#endif
+#ifndef XRT_MODULE_WEBSOCKET_DEFLATE
+#define XRT_MODULE_WEBSOCKET_DEFLATE
+#endif
+#endif
+
+/* websocket_upgrade 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_UPGRADE)
+#ifndef XRT_FEATURE_WEBSOCKET_UPGRADE
+#define XRT_FEATURE_WEBSOCKET_UPGRADE
+#endif
+#ifndef XRT_MODULE_WEBSOCKET_KEYGEN
+#define XRT_MODULE_WEBSOCKET_KEYGEN
+#endif
+#ifndef XRT_MODULE_HTTP1_HEAD
+#define XRT_MODULE_HTTP1_HEAD
+#endif
+#ifndef XRT_MODULE_HTTP_HOST
+#define XRT_MODULE_HTTP_HOST
+#endif
+#endif
+
+/* http_host 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP_HOST)
+#ifndef XRT_FEATURE_HTTP_HOST
+#define XRT_FEATURE_HTTP_HOST
+#endif
+#ifndef XRT_MODULE_HTTP
+#define XRT_MODULE_HTTP
+#endif
+#endif
+
+/* websocket_stream_deflate 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_STREAM_DEFLATE)
+#ifndef XRT_FEATURE_WEBSOCKET_STREAM_DEFLATE
+#define XRT_FEATURE_WEBSOCKET_STREAM_DEFLATE
+#endif
+#ifndef XRT_MODULE_WEBSOCKET_STREAM
+#define XRT_MODULE_WEBSOCKET_STREAM
+#endif
+#ifndef XRT_MODULE_WEBSOCKET_INFLATER
+#define XRT_MODULE_WEBSOCKET_INFLATER
+#endif
+#ifndef XRT_MODULE_WEBSOCKET_DEFLATER
+#define XRT_MODULE_WEBSOCKET_DEFLATER
+#endif
+#endif
+
+/* tls_server_resume 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_SERVER_RESUME)
+#ifndef XRT_FEATURE_TLS_SERVER_RESUME
+#define XRT_FEATURE_TLS_SERVER_RESUME
+#endif
+#ifndef XRT_MODULE_TLS_SERVER
+#define XRT_MODULE_TLS_SERVER
+#endif
+#ifndef XRT_MODULE_TLS_RESUME
+#define XRT_MODULE_TLS_RESUME
+#endif
+#ifndef XRT_MODULE_TLS_PSK_WRITE
+#define XRT_MODULE_TLS_PSK_WRITE
+#endif
+#endif
+
+/* tls_client_resume 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_CLIENT_RESUME)
+#ifndef XRT_FEATURE_TLS_CLIENT_RESUME
+#define XRT_FEATURE_TLS_CLIENT_RESUME
+#endif
+#ifndef XRT_MODULE_TLS_CLIENT_VERIFY
+#define XRT_MODULE_TLS_CLIENT_VERIFY
+#endif
+#ifndef XRT_MODULE_TLS_RESUME
+#define XRT_MODULE_TLS_RESUME
+#endif
+#ifndef XRT_MODULE_TLS_PSK_WRITE
+#define XRT_MODULE_TLS_PSK_WRITE
+#endif
+#ifndef XRT_MODULE_CRYPTO_SHA256
+#define XRT_MODULE_CRYPTO_SHA256
+#endif
+#endif
+
+/* tls_psk_write 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_PSK_WRITE)
+#ifndef XRT_FEATURE_TLS_PSK_WRITE
+#define XRT_FEATURE_TLS_PSK_WRITE
+#endif
+#ifndef XRT_MODULE_TLS_PSK
+#define XRT_MODULE_TLS_PSK
+#endif
+#ifndef XRT_MODULE_TLS_HELLO_WRITE
+#define XRT_MODULE_TLS_HELLO_WRITE
+#endif
+#endif
+
+/* tls_psk 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_PSK)
+#ifndef XRT_FEATURE_TLS_PSK
+#define XRT_FEATURE_TLS_PSK
+#endif
+#ifndef XRT_MODULE_TLS_HELLO
+#define XRT_MODULE_TLS_HELLO
+#endif
+#endif
+
+/* tls_resume 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_RESUME)
+#ifndef XRT_FEATURE_TLS_RESUME
+#define XRT_FEATURE_TLS_RESUME
+#endif
+#ifndef XRT_MODULE_TLS
+#define XRT_MODULE_TLS
+#endif
+#ifndef XRT_MODULE_TIME
+#define XRT_MODULE_TIME
+#endif
+#ifndef XRT_MODULE_CRYPTO_CORE
+#define XRT_MODULE_CRYPTO_CORE
+#endif
+#endif
+
+/* websocket_stream_tls 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_STREAM_TLS)
+#ifndef XRT_FEATURE_WEBSOCKET_STREAM_TLS
+#define XRT_FEATURE_WEBSOCKET_STREAM_TLS
+#endif
+#ifndef XRT_MODULE_WEBSOCKET_STREAM
+#define XRT_MODULE_WEBSOCKET_STREAM
+#endif
+#ifndef XRT_MODULE_TLS_STREAM
+#define XRT_MODULE_TLS_STREAM
+#endif
+#endif
+
+/* websocket_stream_ref 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_STREAM_REF)
+#ifndef XRT_FEATURE_WEBSOCKET_STREAM_REF
+#define XRT_FEATURE_WEBSOCKET_STREAM_REF
+#endif
+#ifndef XRT_MODULE_WEBSOCKET_STREAM
+#define XRT_MODULE_WEBSOCKET_STREAM
+#endif
+#endif
+
+/* websocket_stream 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_STREAM)
+#ifndef XRT_FEATURE_WEBSOCKET_STREAM
+#define XRT_FEATURE_WEBSOCKET_STREAM
+#endif
+#ifndef XRT_MODULE_WEBSOCKET_MESSAGE
+#define XRT_MODULE_WEBSOCKET_MESSAGE
+#endif
+#ifndef XRT_MODULE_RANDOM_SECURE
+#define XRT_MODULE_RANDOM_SECURE
+#endif
+#ifndef XRT_MODULE_NET_TCP
+#define XRT_MODULE_NET_TCP
+#endif
+#endif
+
+/* websocket_deflater 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_DEFLATER)
+#ifndef XRT_FEATURE_WEBSOCKET_DEFLATER
+#define XRT_FEATURE_WEBSOCKET_DEFLATER
+#endif
+#ifndef XRT_MODULE_WEBSOCKET_DEFLATE
+#define XRT_MODULE_WEBSOCKET_DEFLATE
+#endif
+#ifndef XRT_MODULE_DEFLATE
+#define XRT_MODULE_DEFLATE
+#endif
+#endif
+
+/* deflate 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_DEFLATE)
+#ifndef XRT_FEATURE_DEFLATE
+#define XRT_FEATURE_DEFLATE
+#endif
+#endif
+
+/* websocket_inflater 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_INFLATER)
+#ifndef XRT_FEATURE_WEBSOCKET_INFLATER
+#define XRT_FEATURE_WEBSOCKET_INFLATER
+#endif
+#ifndef XRT_MODULE_WEBSOCKET_DEFLATE
+#define XRT_MODULE_WEBSOCKET_DEFLATE
+#endif
+#ifndef XRT_MODULE_INFLATE
+#define XRT_MODULE_INFLATE
+#endif
+#endif
+
+/* inflate 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_INFLATE)
+#ifndef XRT_FEATURE_INFLATE
+#define XRT_FEATURE_INFLATE
+#endif
+#endif
+
+/* websocket_deflate 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_DEFLATE)
+#ifndef XRT_FEATURE_WEBSOCKET_DEFLATE
+#define XRT_FEATURE_WEBSOCKET_DEFLATE
+#endif
+#ifndef XRT_MODULE_WEBSOCKET_EXTENSION
+#define XRT_MODULE_WEBSOCKET_EXTENSION
+#endif
+#endif
+
+/* websocket_extension 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_EXTENSION)
+#ifndef XRT_FEATURE_WEBSOCKET_EXTENSION
+#define XRT_FEATURE_WEBSOCKET_EXTENSION
+#endif
+#ifndef XRT_MODULE_WEBSOCKET_HANDSHAKE
+#define XRT_MODULE_WEBSOCKET_HANDSHAKE
+#endif
+#ifndef XRT_MODULE_HTTP_PARAM
+#define XRT_MODULE_HTTP_PARAM
+#endif
+#endif
+
+/* http_param 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP_PARAM)
+#ifndef XRT_FEATURE_HTTP_PARAM
+#define XRT_FEATURE_HTTP_PARAM
+#endif
+#ifndef XRT_MODULE_HTTP
+#define XRT_MODULE_HTTP
+#endif
+#endif
+
+/* websocket_keygen 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_KEYGEN)
+#ifndef XRT_FEATURE_WEBSOCKET_KEYGEN
+#define XRT_FEATURE_WEBSOCKET_KEYGEN
+#endif
+#ifndef XRT_MODULE_WEBSOCKET_HANDSHAKE
+#define XRT_MODULE_WEBSOCKET_HANDSHAKE
+#endif
+#ifndef XRT_MODULE_RANDOM_SECURE
+#define XRT_MODULE_RANDOM_SECURE
+#endif
+#endif
+
+/* websocket_handshake 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_HANDSHAKE)
+#ifndef XRT_FEATURE_WEBSOCKET_HANDSHAKE
+#define XRT_FEATURE_WEBSOCKET_HANDSHAKE
+#endif
+#ifndef XRT_MODULE_HTTP
+#define XRT_MODULE_HTTP
+#endif
+#ifndef XRT_MODULE_CODEC_BASE64
+#define XRT_MODULE_CODEC_BASE64
+#endif
+#ifndef XRT_MODULE_CRYPTO_SHA1
+#define XRT_MODULE_CRYPTO_SHA1
+#endif
+#endif
+
+/* websocket_message 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_MESSAGE)
+#ifndef XRT_FEATURE_WEBSOCKET_MESSAGE
+#define XRT_FEATURE_WEBSOCKET_MESSAGE
+#endif
+#ifndef XRT_MODULE_WEBSOCKET_FRAME
+#define XRT_MODULE_WEBSOCKET_FRAME
+#endif
+#ifndef XRT_MODULE_WEBSOCKET_CLOSE
+#define XRT_MODULE_WEBSOCKET_CLOSE
+#endif
+#endif
+
+/* websocket_close 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_CLOSE)
+#ifndef XRT_FEATURE_WEBSOCKET_CLOSE
+#define XRT_FEATURE_WEBSOCKET_CLOSE
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
+#endif
+#endif
+
+/* websocket_frame 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_FRAME)
+#ifndef XRT_FEATURE_WEBSOCKET_FRAME
+#define XRT_FEATURE_WEBSOCKET_FRAME
+#endif
+#endif
+
+/* html_escape 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTML_ESCAPE)
+#ifndef XRT_FEATURE_HTML_ESCAPE
+#define XRT_FEATURE_HTML_ESCAPE
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
+#endif
+#endif
+
+/* codec_percent 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CODEC_PERCENT)
+#ifndef XRT_FEATURE_CODEC_PERCENT
+#define XRT_FEATURE_CODEC_PERCENT
+#endif
+#endif
+
+/* codec_hex 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CODEC_HEX)
+#ifndef XRT_FEATURE_CODEC_HEX
+#define XRT_FEATURE_CODEC_HEX
+#endif
+#endif
+
+/* unicode_distance 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_UNICODE_DISTANCE)
+#ifndef XRT_FEATURE_UNICODE_DISTANCE
+#define XRT_FEATURE_UNICODE_DISTANCE
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
+#endif
+#endif
+
+/* string_glob 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_STRING_GLOB)
+#ifndef XRT_FEATURE_STRING_GLOB
+#define XRT_FEATURE_STRING_GLOB
+#endif
+#ifndef XRT_MODULE_STRING
+#define XRT_MODULE_STRING
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
+#endif
+#endif
+
+/* string_format 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_STRING_FORMAT)
+#ifndef XRT_FEATURE_STRING_FORMAT
+#define XRT_FEATURE_STRING_FORMAT
+#endif
+#ifndef XRT_MODULE_STRING
+#define XRT_MODULE_STRING
+#endif
+#endif
+
+/* string_split 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_STRING_SPLIT)
+#ifndef XRT_FEATURE_STRING_SPLIT
+#define XRT_FEATURE_STRING_SPLIT
+#endif
+#ifndef XRT_MODULE_STRING
+#define XRT_MODULE_STRING
+#endif
+#endif
+
+/* number_format 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NUMBER_FORMAT)
+#ifndef XRT_FEATURE_NUMBER_FORMAT
+#define XRT_FEATURE_NUMBER_FORMAT
+#endif
+#ifndef XRT_MODULE_NUMBER_INTEGER
+#define XRT_MODULE_NUMBER_INTEGER
+#endif
+#ifndef XRT_MODULE_NUMBER_FLOAT
+#define XRT_MODULE_NUMBER_FLOAT
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
+#endif
+#endif
+
+/* memory_stats 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_MEMORY_STATS)
+#ifndef XRT_FEATURE_MEMORY_STATS
+#define XRT_FEATURE_MEMORY_STATS
+#endif
+#endif
+
+/* memory_debug_report 及其直接依赖。 */
+#if (defined(XRT_MODULE_ALL) && !defined(XRT_EXCLUDE_MEMORY_DEBUG)) || \
+	defined(XRT_MODULE_MEMORY_DEBUG_REPORT)
+#ifndef XRT_FEATURE_MEMORY_DEBUG_REPORT
+#define XRT_FEATURE_MEMORY_DEBUG_REPORT
+#endif
+#ifndef XRT_MODULE_MEMORY_DEBUG
+#define XRT_MODULE_MEMORY_DEBUG
+#endif
+#endif
+
+/* channel_coroutine 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CHANNEL_COROUTINE)
+#ifndef XRT_FEATURE_CHANNEL_COROUTINE
+#define XRT_FEATURE_CHANNEL_COROUTINE
+#endif
+#ifndef XRT_MODULE_CHANNEL
+#define XRT_MODULE_CHANNEL
+#endif
+#ifndef XRT_MODULE_ATOMIC
+#define XRT_MODULE_ATOMIC
+#endif
+#ifndef XRT_MODULE_COROUTINE_SCHEDULER
+#define XRT_MODULE_COROUTINE_SCHEDULER
+#endif
+#endif
+
+/* coroutine_scheduler 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_COROUTINE_SCHEDULER)
+#ifndef XRT_FEATURE_COROUTINE_SCHEDULER
+#define XRT_FEATURE_COROUTINE_SCHEDULER
+#endif
+#ifndef XRT_MODULE_COROUTINE
+#define XRT_MODULE_COROUTINE
+#endif
+#endif
+
+/* coroutine 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_COROUTINE)
+#ifndef XRT_FEATURE_COROUTINE
+#define XRT_FEATURE_COROUTINE
+#endif
+#ifndef XRT_MODULE_THREAD
+#define XRT_MODULE_THREAD
+#endif
+#ifndef XRT_MODULE_CANCEL
+#define XRT_MODULE_CANCEL
+#endif
+#ifndef XRT_MODULE_TEMP_MEMORY
+#define XRT_MODULE_TEMP_MEMORY
+#endif
+#endif
+
+/* channel_select_cancel 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CHANNEL_SELECT_CANCEL)
+#ifndef XRT_FEATURE_CHANNEL_SELECT_CANCEL
+#define XRT_FEATURE_CHANNEL_SELECT_CANCEL
+#endif
+#ifndef XRT_MODULE_CHANNEL_SELECT
+#define XRT_MODULE_CHANNEL_SELECT
+#endif
+#ifndef XRT_MODULE_CANCEL
+#define XRT_MODULE_CANCEL
+#endif
+#endif
+
+/* channel_select 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CHANNEL_SELECT)
+#ifndef XRT_FEATURE_CHANNEL_SELECT
+#define XRT_FEATURE_CHANNEL_SELECT
+#endif
+#ifndef XRT_MODULE_CHANNEL
+#define XRT_MODULE_CHANNEL
+#endif
+#ifndef XRT_MODULE_ATOMIC
+#define XRT_MODULE_ATOMIC
+#endif
+#ifndef XRT_MODULE_EVENT
+#define XRT_MODULE_EVENT
+#endif
+#endif
+
+/* event 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_EVENT)
+#ifndef XRT_FEATURE_EVENT
+#define XRT_FEATURE_EVENT
+#endif
+#ifndef XRT_MODULE_SYNC
+#define XRT_MODULE_SYNC
+#endif
+#ifndef XRT_MODULE_WAIT
+#define XRT_MODULE_WAIT
+#endif
+#endif
+
+/* channel_cancel 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CHANNEL_CANCEL)
+#ifndef XRT_FEATURE_CHANNEL_CANCEL
+#define XRT_FEATURE_CHANNEL_CANCEL
+#endif
+#ifndef XRT_MODULE_CHANNEL
+#define XRT_MODULE_CHANNEL
+#endif
+#ifndef XRT_MODULE_CANCEL
+#define XRT_MODULE_CANCEL
+#endif
+#endif
+
+/* channel 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CHANNEL)
+#ifndef XRT_FEATURE_CHANNEL
+#define XRT_FEATURE_CHANNEL
+#endif
+#ifndef XRT_MODULE_COND
+#define XRT_MODULE_COND
+#endif
+#endif
+
+/* queue_mpmc 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_QUEUE_MPMC)
+#ifndef XRT_FEATURE_QUEUE_MPMC
+#define XRT_FEATURE_QUEUE_MPMC
+#endif
+#ifndef XRT_MODULE_QUEUE
+#define XRT_MODULE_QUEUE
+#endif
+#endif
+
+/* queue_spsc 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_QUEUE_SPSC)
+#ifndef XRT_FEATURE_QUEUE_SPSC
+#define XRT_FEATURE_QUEUE_SPSC
+#endif
+#ifndef XRT_MODULE_QUEUE
+#define XRT_MODULE_QUEUE
+#endif
+#endif
+
+/* spin 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_SPIN)
+#ifndef XRT_FEATURE_SPIN
+#define XRT_FEATURE_SPIN
+#endif
+#ifndef XRT_MODULE_ATOMIC
+#define XRT_MODULE_ATOMIC
+#endif
+#endif
+
+/* error_format 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_ERROR_FORMAT)
+#ifndef XRT_FEATURE_ERROR_FORMAT
+#define XRT_FEATURE_ERROR_FORMAT
+#endif
+#endif
+
+/* file_async 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_ASYNC)
+#ifndef XRT_FEATURE_FILE_ASYNC
+#define XRT_FEATURE_FILE_ASYNC
+#endif
+#ifndef XRT_MODULE_FILE
+#define XRT_MODULE_FILE
+#endif
+#ifndef XRT_MODULE_FILE_ASYNC_COMMON
+#define XRT_MODULE_FILE_ASYNC_COMMON
+#endif
+#endif
+
+/* file_async_common 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_ASYNC_COMMON)
+#ifndef XRT_FEATURE_FILE_ASYNC_COMMON
+#define XRT_FEATURE_FILE_ASYNC_COMMON
+#endif
+#ifndef XRT_MODULE_TASK_POOL
+#define XRT_MODULE_TASK_POOL
+#endif
+#endif
+
+/* value_collection 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_VALUE_COLLECTION)
+#ifndef XRT_FEATURE_VALUE_COLLECTION
+#define XRT_FEATURE_VALUE_COLLECTION
+#endif
+#ifndef XRT_MODULE_VALUE_CONTAINER
+#define XRT_MODULE_VALUE_CONTAINER
+#endif
+#endif
+
+/* future_continue 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FUTURE_CONTINUE)
+#ifndef XRT_FEATURE_FUTURE_CONTINUE
+#define XRT_FEATURE_FUTURE_CONTINUE
+#endif
+#ifndef XRT_MODULE_FUTURE
+#define XRT_MODULE_FUTURE
+#endif
+#endif
+
+/* task_pool 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TASK_POOL)
+#ifndef XRT_FEATURE_TASK_POOL
+#define XRT_FEATURE_TASK_POOL
+#endif
+#ifndef XRT_MODULE_TASK
+#define XRT_MODULE_TASK
+#endif
+#ifndef XRT_MODULE_THREAD
+#define XRT_MODULE_THREAD
+#endif
+#endif
+
+/* task 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TASK)
+#ifndef XRT_FEATURE_TASK
+#define XRT_FEATURE_TASK
+#endif
+#ifndef XRT_MODULE_FUTURE
+#define XRT_MODULE_FUTURE
+#endif
+#ifndef XRT_MODULE_TEMP_MEMORY
+#define XRT_MODULE_TEMP_MEMORY
+#endif
+#endif
+
+/* http1_body 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP1_BODY)
+#ifndef XRT_FEATURE_HTTP1_BODY
+#define XRT_FEATURE_HTTP1_BODY
+#endif
+#ifndef XRT_MODULE_HTTP1_HEAD
+#define XRT_MODULE_HTTP1_HEAD
+#endif
+#ifndef XRT_MODULE_HTTP_TRAILER
+#define XRT_MODULE_HTTP_TRAILER
+#endif
+#endif
+
+/* http_trailer 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP_TRAILER)
+#ifndef XRT_FEATURE_HTTP_TRAILER
+#define XRT_FEATURE_HTTP_TRAILER
+#endif
+#ifndef XRT_MODULE_HTTP
+#define XRT_MODULE_HTTP
+#endif
+#endif
+
+/* http1_head 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP1_HEAD)
+#ifndef XRT_FEATURE_HTTP1_HEAD
+#define XRT_FEATURE_HTTP1_HEAD
+#endif
+#ifndef XRT_MODULE_HTTP_UPGRADE
+#define XRT_MODULE_HTTP_UPGRADE
+#endif
+#endif
+
+/* http_upgrade 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP_UPGRADE)
+#ifndef XRT_FEATURE_HTTP_UPGRADE
+#define XRT_FEATURE_HTTP_UPGRADE
+#endif
+#ifndef XRT_MODULE_HTTP
+#define XRT_MODULE_HTTP
+#endif
+#endif
+
+/* http 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HTTP)
+#ifndef XRT_FEATURE_HTTP
+#define XRT_FEATURE_HTTP
+#endif
+#endif
+
+/* x509_store_system 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_STORE_SYSTEM)
+#ifndef XRT_FEATURE_X509_STORE_SYSTEM
+#define XRT_FEATURE_X509_STORE_SYSTEM
+#endif
+#ifndef XRT_MODULE_X509_STORE
+#define XRT_MODULE_X509_STORE
+#endif
+#if defined(_WIN32)
+#endif
+#if defined(__APPLE__) && defined(__MACH__)
+#endif
+#if (defined(__linux__) && !defined(__ANDROID__)) || \
+	(defined(__ANDROID__)) || \
+	(defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__)) || \
+	(!defined(_WIN32) && !defined(__linux__) && !defined(__ANDROID__) && !(defined(__APPLE__) && defined(__MACH__)) && !defined(__FreeBSD__) && !defined(__OpenBSD__) && !defined(__NetBSD__) && !defined(__DragonFly__))
+#ifndef XRT_MODULE_X509_STORE_FILE
+#define XRT_MODULE_X509_STORE_FILE
+#endif
+#ifndef XRT_MODULE_DIR
+#define XRT_MODULE_DIR
+#endif
+#endif
+#endif
+
+/* x509_store_file 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_STORE_FILE)
+#ifndef XRT_FEATURE_X509_STORE_FILE
+#define XRT_FEATURE_X509_STORE_FILE
+#endif
+#ifndef XRT_MODULE_X509_STORE
+#define XRT_MODULE_X509_STORE
+#endif
+#ifndef XRT_MODULE_FILE_WHOLE
+#define XRT_MODULE_FILE_WHOLE
+#endif
+#endif
+
+/* tls_identity_rsa 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_IDENTITY_RSA)
+#ifndef XRT_FEATURE_TLS_IDENTITY_RSA
+#define XRT_FEATURE_TLS_IDENTITY_RSA
+#endif
+#ifndef XRT_MODULE_TLS_IDENTITY
+#define XRT_MODULE_TLS_IDENTITY
+#endif
+#ifndef XRT_MODULE_X509_SIGNATURE
+#define XRT_MODULE_X509_SIGNATURE
+#endif
+#ifndef XRT_MODULE_CRYPTO_RSA_PRIVATE
+#define XRT_MODULE_CRYPTO_RSA_PRIVATE
+#endif
+#ifndef XRT_MODULE_CRYPTO_RSA_PSS_SIGN
+#define XRT_MODULE_CRYPTO_RSA_PSS_SIGN
+#endif
+#ifndef XRT_MODULE_CRYPTO_RSA_PKCS1_SIGN
+#define XRT_MODULE_CRYPTO_RSA_PKCS1_SIGN
+#endif
+#ifndef XRT_MODULE_CRYPTO_SHA256
+#define XRT_MODULE_CRYPTO_SHA256
+#endif
+#ifndef XRT_MODULE_CRYPTO_SHA512
+#define XRT_MODULE_CRYPTO_SHA512
+#endif
+#endif
+
+/* crypto_rsa_pkcs1_sign 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_RSA_PKCS1_SIGN)
+#ifndef XRT_FEATURE_CRYPTO_RSA_PKCS1_SIGN
+#define XRT_FEATURE_CRYPTO_RSA_PKCS1_SIGN
+#endif
+#ifndef XRT_MODULE_CRYPTO_RSA_PKCS1
+#define XRT_MODULE_CRYPTO_RSA_PKCS1
+#endif
+#ifndef XRT_MODULE_CRYPTO_RSA_PRIVATE
+#define XRT_MODULE_CRYPTO_RSA_PRIVATE
+#endif
+#endif
+
+/* crypto_rsa_pss_sign 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_RSA_PSS_SIGN)
+#ifndef XRT_FEATURE_CRYPTO_RSA_PSS_SIGN
+#define XRT_FEATURE_CRYPTO_RSA_PSS_SIGN
+#endif
+#ifndef XRT_MODULE_CRYPTO_RSA_PSS
+#define XRT_MODULE_CRYPTO_RSA_PSS
+#endif
+#ifndef XRT_MODULE_CRYPTO_RSA_PRIVATE
+#define XRT_MODULE_CRYPTO_RSA_PRIVATE
+#endif
+#ifndef XRT_MODULE_RANDOM_SECURE
+#define XRT_MODULE_RANDOM_SECURE
+#endif
+#endif
+
+/* crypto_rsa_private 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_RSA_PRIVATE)
+#ifndef XRT_FEATURE_CRYPTO_RSA_PRIVATE
+#define XRT_FEATURE_CRYPTO_RSA_PRIVATE
+#endif
+#ifndef XRT_MODULE_CRYPTO_RSA
+#define XRT_MODULE_CRYPTO_RSA
+#endif
+#ifndef XRT_MODULE_RANDOM_SECURE
+#define XRT_MODULE_RANDOM_SECURE
+#endif
+#endif
+
+/* tls_key_exchange_p256 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_KEY_EXCHANGE_P256)
+#ifndef XRT_FEATURE_TLS_KEY_EXCHANGE_P256
+#define XRT_FEATURE_TLS_KEY_EXCHANGE_P256
+#endif
+#ifndef XRT_MODULE_TLS_KEY_EXCHANGE
+#define XRT_MODULE_TLS_KEY_EXCHANGE
+#endif
+#ifndef XRT_MODULE_CRYPTO_P256_KEYPAIR
+#define XRT_MODULE_CRYPTO_P256_KEYPAIR
+#endif
+#endif
+
+/* crypto_p256_keypair 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_P256_KEYPAIR)
+#ifndef XRT_FEATURE_CRYPTO_P256_KEYPAIR
+#define XRT_FEATURE_CRYPTO_P256_KEYPAIR
+#endif
+#ifndef XRT_MODULE_CRYPTO_P256
+#define XRT_MODULE_CRYPTO_P256
+#endif
+#ifndef XRT_MODULE_CRYPTO_NIST_KEYPAIR
+#define XRT_MODULE_CRYPTO_NIST_KEYPAIR
+#endif
+#endif
+
+/* crypto_nist_keypair 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_NIST_KEYPAIR)
+#ifndef XRT_FEATURE_CRYPTO_NIST_KEYPAIR
+#define XRT_FEATURE_CRYPTO_NIST_KEYPAIR
+#endif
+#ifndef XRT_MODULE_CRYPTO_NIST
+#define XRT_MODULE_CRYPTO_NIST
+#endif
+#ifndef XRT_MODULE_RANDOM_SECURE
+#define XRT_MODULE_RANDOM_SECURE
+#endif
+#endif
+
+/* tls_key_exchange_x25519 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_KEY_EXCHANGE_X25519)
+#ifndef XRT_FEATURE_TLS_KEY_EXCHANGE_X25519
+#define XRT_FEATURE_TLS_KEY_EXCHANGE_X25519
+#endif
+#ifndef XRT_MODULE_TLS_KEY_EXCHANGE
+#define XRT_MODULE_TLS_KEY_EXCHANGE
+#endif
+#ifndef XRT_MODULE_CRYPTO_X25519_KEYPAIR
+#define XRT_MODULE_CRYPTO_X25519_KEYPAIR
+#endif
+#endif
+
+/* crypto_x25519_keypair 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_X25519_KEYPAIR)
+#ifndef XRT_FEATURE_CRYPTO_X25519_KEYPAIR
+#define XRT_FEATURE_CRYPTO_X25519_KEYPAIR
+#endif
+#ifndef XRT_MODULE_CRYPTO_X25519
+#define XRT_MODULE_CRYPTO_X25519
+#endif
+#ifndef XRT_MODULE_RANDOM_SECURE
+#define XRT_MODULE_RANDOM_SECURE
+#endif
+#endif
+
+/* crypto_x25519 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_X25519)
+#ifndef XRT_FEATURE_CRYPTO_X25519
+#define XRT_FEATURE_CRYPTO_X25519
+#endif
+#ifndef XRT_MODULE_CRYPTO_CURVE25519
+#define XRT_MODULE_CRYPTO_CURVE25519
+#endif
+#endif
+
+/* tls_schedule_sha384 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_SCHEDULE_SHA384)
+#ifndef XRT_FEATURE_TLS_SCHEDULE_SHA384
+#define XRT_FEATURE_TLS_SCHEDULE_SHA384
+#endif
+#ifndef XRT_MODULE_TLS_SCHEDULE
+#define XRT_MODULE_TLS_SCHEDULE
+#endif
+#ifndef XRT_MODULE_CRYPTO_HKDF_SHA512
+#define XRT_MODULE_CRYPTO_HKDF_SHA512
+#endif
+#endif
+
+/* crypto_hkdf_sha512 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_HKDF_SHA512)
+#ifndef XRT_FEATURE_CRYPTO_HKDF_SHA512
+#define XRT_FEATURE_CRYPTO_HKDF_SHA512
+#endif
+#ifndef XRT_MODULE_CRYPTO_HMAC_SHA512
+#define XRT_MODULE_CRYPTO_HMAC_SHA512
+#endif
+#endif
+
+/* crypto_hmac_sha512 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_HMAC_SHA512)
+#ifndef XRT_FEATURE_CRYPTO_HMAC_SHA512
+#define XRT_FEATURE_CRYPTO_HMAC_SHA512
+#endif
+#ifndef XRT_MODULE_CRYPTO_SHA512
+#define XRT_MODULE_CRYPTO_SHA512
+#endif
+#endif
+
+/* tls_schedule_sha256 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_SCHEDULE_SHA256)
+#ifndef XRT_FEATURE_TLS_SCHEDULE_SHA256
+#define XRT_FEATURE_TLS_SCHEDULE_SHA256
+#endif
+#ifndef XRT_MODULE_TLS_SCHEDULE
+#define XRT_MODULE_TLS_SCHEDULE
+#endif
+#ifndef XRT_MODULE_CRYPTO_HKDF_SHA256
+#define XRT_MODULE_CRYPTO_HKDF_SHA256
+#endif
+#endif
+
+/* crypto_hkdf_sha256 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_HKDF_SHA256)
+#ifndef XRT_FEATURE_CRYPTO_HKDF_SHA256
+#define XRT_FEATURE_CRYPTO_HKDF_SHA256
+#endif
+#ifndef XRT_MODULE_CRYPTO_HMAC_SHA256
+#define XRT_MODULE_CRYPTO_HMAC_SHA256
+#endif
+#endif
+
+/* crypto_hmac_sha256 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_HMAC_SHA256)
+#ifndef XRT_FEATURE_CRYPTO_HMAC_SHA256
+#define XRT_FEATURE_CRYPTO_HMAC_SHA256
+#endif
+#ifndef XRT_MODULE_CRYPTO_SHA256
+#define XRT_MODULE_CRYPTO_SHA256
+#endif
+#endif
+
+/* tls_record_aes 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_RECORD_AES)
+#ifndef XRT_FEATURE_TLS_RECORD_AES
+#define XRT_FEATURE_TLS_RECORD_AES
+#endif
+#ifndef XRT_MODULE_TLS_RECORD
+#define XRT_MODULE_TLS_RECORD
+#endif
+#ifndef XRT_MODULE_CRYPTO_AES_GCM
+#define XRT_MODULE_CRYPTO_AES_GCM
+#endif
+#endif
+
+/* crypto_aes_gcm 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_AES_GCM)
+#ifndef XRT_FEATURE_CRYPTO_AES_GCM
+#define XRT_FEATURE_CRYPTO_AES_GCM
+#endif
+#ifndef XRT_MODULE_CRYPTO_AES
+#define XRT_MODULE_CRYPTO_AES
+#endif
+#endif
+
+/* crypto_aes 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_AES)
+#ifndef XRT_FEATURE_CRYPTO_AES
+#define XRT_FEATURE_CRYPTO_AES
+#endif
+#ifndef XRT_MODULE_CRYPTO_CORE
+#define XRT_MODULE_CRYPTO_CORE
+#endif
+#endif
+
+/* tls_client_verify 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_CLIENT_VERIFY)
+#ifndef XRT_FEATURE_TLS_CLIENT_VERIFY
+#define XRT_FEATURE_TLS_CLIENT_VERIFY
+#endif
+#ifndef XRT_MODULE_TLS_CLIENT
+#define XRT_MODULE_TLS_CLIENT
+#endif
+#ifndef XRT_MODULE_TLS_VERIFY
+#define XRT_MODULE_TLS_VERIFY
+#endif
+#ifndef XRT_MODULE_TLS_AUTH_MESSAGES_WRITE
+#define XRT_MODULE_TLS_AUTH_MESSAGES_WRITE
+#endif
+#ifndef XRT_MODULE_X509_VERIFY_RSA
+#define XRT_MODULE_X509_VERIFY_RSA
+#endif
+#ifndef XRT_MODULE_X509_VERIFY_ECDSA
+#define XRT_MODULE_X509_VERIFY_ECDSA
+#endif
+#ifndef XRT_MODULE_X509_VERIFY_ED25519
+#define XRT_MODULE_X509_VERIFY_ED25519
+#endif
+#endif
+
+/* x509_verify_ed25519 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_VERIFY_ED25519)
+#ifndef XRT_FEATURE_X509_VERIFY_ED25519
+#define XRT_FEATURE_X509_VERIFY_ED25519
+#endif
+#ifndef XRT_MODULE_X509_VERIFY
+#define XRT_MODULE_X509_VERIFY
+#endif
+#ifndef XRT_MODULE_CRYPTO_ED25519_VERIFY
+#define XRT_MODULE_CRYPTO_ED25519_VERIFY
+#endif
+#endif
+
+/* crypto_ed25519_verify 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ED25519_VERIFY)
+#ifndef XRT_FEATURE_CRYPTO_ED25519_VERIFY
+#define XRT_FEATURE_CRYPTO_ED25519_VERIFY
+#endif
+#ifndef XRT_MODULE_CRYPTO_ED25519
+#define XRT_MODULE_CRYPTO_ED25519
+#endif
+#endif
+
+/* crypto_ed25519 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ED25519)
+#ifndef XRT_FEATURE_CRYPTO_ED25519
+#define XRT_FEATURE_CRYPTO_ED25519
+#endif
+#ifndef XRT_MODULE_CRYPTO_CURVE25519
+#define XRT_MODULE_CRYPTO_CURVE25519
+#endif
+#ifndef XRT_MODULE_CRYPTO_SHA512
+#define XRT_MODULE_CRYPTO_SHA512
+#endif
+#endif
+
+/* crypto_curve25519 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_CURVE25519)
+#ifndef XRT_FEATURE_CRYPTO_CURVE25519
+#define XRT_FEATURE_CRYPTO_CURVE25519
+#endif
+#ifndef XRT_MODULE_CRYPTO_CORE
+#define XRT_MODULE_CRYPTO_CORE
+#endif
+#endif
+
+/* x509_verify_ecdsa 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_VERIFY_ECDSA)
+#ifndef XRT_FEATURE_X509_VERIFY_ECDSA
+#define XRT_FEATURE_X509_VERIFY_ECDSA
+#endif
+#ifndef XRT_MODULE_X509_VERIFY
+#define XRT_MODULE_X509_VERIFY
+#endif
+#ifndef XRT_MODULE_X509_DIGEST
+#define XRT_MODULE_X509_DIGEST
+#endif
+#ifndef XRT_MODULE_CRYPTO_ECDSA_P256_DER
+#define XRT_MODULE_CRYPTO_ECDSA_P256_DER
+#endif
+#ifndef XRT_MODULE_CRYPTO_ECDSA_P384_DER
+#define XRT_MODULE_CRYPTO_ECDSA_P384_DER
+#endif
+#endif
+
+/* crypto_ecdsa_p384_der 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_P384_DER)
+#ifndef XRT_FEATURE_CRYPTO_ECDSA_P384_DER
+#define XRT_FEATURE_CRYPTO_ECDSA_P384_DER
+#endif
+#ifndef XRT_MODULE_CRYPTO_ECDSA_P384
+#define XRT_MODULE_CRYPTO_ECDSA_P384
+#endif
+#ifndef XRT_MODULE_CRYPTO_ECDSA_VERIFY_DER
+#define XRT_MODULE_CRYPTO_ECDSA_VERIFY_DER
+#endif
+#endif
+
+/* crypto_ecdsa_p384 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_P384)
+#ifndef XRT_FEATURE_CRYPTO_ECDSA_P384
+#define XRT_FEATURE_CRYPTO_ECDSA_P384
+#endif
+#ifndef XRT_MODULE_CRYPTO_ECDSA_VERIFY
+#define XRT_MODULE_CRYPTO_ECDSA_VERIFY
+#endif
+#ifndef XRT_MODULE_CRYPTO_P384
+#define XRT_MODULE_CRYPTO_P384
+#endif
+#endif
+
+/* crypto_p384 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_P384)
+#ifndef XRT_FEATURE_CRYPTO_P384
+#define XRT_FEATURE_CRYPTO_P384
+#endif
+#ifndef XRT_MODULE_CRYPTO_NIST
+#define XRT_MODULE_CRYPTO_NIST
+#endif
+#endif
+
+/* crypto_ecdsa_p256_der 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_P256_DER)
+#ifndef XRT_FEATURE_CRYPTO_ECDSA_P256_DER
+#define XRT_FEATURE_CRYPTO_ECDSA_P256_DER
+#endif
+#ifndef XRT_MODULE_CRYPTO_ECDSA_P256
+#define XRT_MODULE_CRYPTO_ECDSA_P256
+#endif
+#ifndef XRT_MODULE_CRYPTO_ECDSA_VERIFY_DER
+#define XRT_MODULE_CRYPTO_ECDSA_VERIFY_DER
+#endif
+#endif
+
+/* crypto_ecdsa_verify_der 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_VERIFY_DER)
+#ifndef XRT_FEATURE_CRYPTO_ECDSA_VERIFY_DER
+#define XRT_FEATURE_CRYPTO_ECDSA_VERIFY_DER
+#endif
+#ifndef XRT_MODULE_CRYPTO_ECDSA_VERIFY
+#define XRT_MODULE_CRYPTO_ECDSA_VERIFY
+#endif
+#ifndef XRT_MODULE_CRYPTO_ECDSA_DER
+#define XRT_MODULE_CRYPTO_ECDSA_DER
+#endif
+#endif
+
+/* crypto_ecdsa_der 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_DER)
+#ifndef XRT_FEATURE_CRYPTO_ECDSA_DER
+#define XRT_FEATURE_CRYPTO_ECDSA_DER
+#endif
+#ifndef XRT_MODULE_CRYPTO_ECDSA_CORE
+#define XRT_MODULE_CRYPTO_ECDSA_CORE
+#endif
+#endif
+
+/* crypto_ecdsa_p256 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_P256)
+#ifndef XRT_FEATURE_CRYPTO_ECDSA_P256
+#define XRT_FEATURE_CRYPTO_ECDSA_P256
+#endif
+#ifndef XRT_MODULE_CRYPTO_ECDSA_VERIFY
+#define XRT_MODULE_CRYPTO_ECDSA_VERIFY
+#endif
+#ifndef XRT_MODULE_CRYPTO_P256
+#define XRT_MODULE_CRYPTO_P256
+#endif
+#endif
+
+/* crypto_p256 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_P256)
+#ifndef XRT_FEATURE_CRYPTO_P256
+#define XRT_FEATURE_CRYPTO_P256
+#endif
+#ifndef XRT_MODULE_CRYPTO_NIST
+#define XRT_MODULE_CRYPTO_NIST
+#endif
+#endif
+
+/* crypto_ecdsa_verify 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_VERIFY)
+#ifndef XRT_FEATURE_CRYPTO_ECDSA_VERIFY
+#define XRT_FEATURE_CRYPTO_ECDSA_VERIFY
+#endif
+#ifndef XRT_MODULE_CRYPTO_ECDSA_MATH
+#define XRT_MODULE_CRYPTO_ECDSA_MATH
+#endif
+#endif
+
+/* crypto_ecdsa_math 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_MATH)
+#ifndef XRT_FEATURE_CRYPTO_ECDSA_MATH
+#define XRT_FEATURE_CRYPTO_ECDSA_MATH
+#endif
+#ifndef XRT_MODULE_CRYPTO_ECDSA_CORE
+#define XRT_MODULE_CRYPTO_ECDSA_CORE
+#endif
+#ifndef XRT_MODULE_CRYPTO_NIST
+#define XRT_MODULE_CRYPTO_NIST
+#endif
+#endif
+
+/* crypto_nist 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_NIST)
+#ifndef XRT_FEATURE_CRYPTO_NIST
+#define XRT_FEATURE_CRYPTO_NIST
+#endif
+#ifndef XRT_MODULE_CRYPTO_INT31
+#define XRT_MODULE_CRYPTO_INT31
+#endif
+#endif
+
+/* crypto_ecdsa_core 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_ECDSA_CORE)
+#ifndef XRT_FEATURE_CRYPTO_ECDSA_CORE
+#define XRT_FEATURE_CRYPTO_ECDSA_CORE
+#endif
+#ifndef XRT_MODULE_CRYPTO_CORE
+#define XRT_MODULE_CRYPTO_CORE
+#endif
+#endif
+
+/* x509_verify_rsa 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_VERIFY_RSA)
+#ifndef XRT_FEATURE_X509_VERIFY_RSA
+#define XRT_FEATURE_X509_VERIFY_RSA
+#endif
+#ifndef XRT_MODULE_X509_VERIFY
+#define XRT_MODULE_X509_VERIFY
+#endif
+#ifndef XRT_MODULE_X509_DIGEST
+#define XRT_MODULE_X509_DIGEST
+#endif
+#ifndef XRT_MODULE_CRYPTO_RSA_PSS
+#define XRT_MODULE_CRYPTO_RSA_PSS
+#endif
+#ifndef XRT_MODULE_CRYPTO_RSA_PKCS1
+#define XRT_MODULE_CRYPTO_RSA_PKCS1
+#endif
+#endif
+
+/* crypto_rsa_pkcs1 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_RSA_PKCS1)
+#ifndef XRT_FEATURE_CRYPTO_RSA_PKCS1
+#define XRT_FEATURE_CRYPTO_RSA_PKCS1
+#endif
+#ifndef XRT_MODULE_CRYPTO_RSA
+#define XRT_MODULE_CRYPTO_RSA
+#endif
+#endif
+
+/* crypto_rsa_pss 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_RSA_PSS)
+#ifndef XRT_FEATURE_CRYPTO_RSA_PSS
+#define XRT_FEATURE_CRYPTO_RSA_PSS
+#endif
+#ifndef XRT_MODULE_CRYPTO_RSA
+#define XRT_MODULE_CRYPTO_RSA
+#endif
+#ifndef XRT_MODULE_CRYPTO_SHA1
+#define XRT_MODULE_CRYPTO_SHA1
+#endif
+#ifndef XRT_MODULE_CRYPTO_SHA224
+#define XRT_MODULE_CRYPTO_SHA224
+#endif
+#ifndef XRT_MODULE_CRYPTO_SHA256
+#define XRT_MODULE_CRYPTO_SHA256
+#endif
+#ifndef XRT_MODULE_CRYPTO_SHA512
+#define XRT_MODULE_CRYPTO_SHA512
+#endif
+#endif
+
+/* crypto_rsa 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_RSA)
+#ifndef XRT_FEATURE_CRYPTO_RSA
+#define XRT_FEATURE_CRYPTO_RSA
+#endif
+#ifndef XRT_MODULE_CRYPTO_INT31
+#define XRT_MODULE_CRYPTO_INT31
+#endif
+#endif
+
+/* crypto_int31 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_INT31)
+#ifndef XRT_FEATURE_CRYPTO_INT31
+#define XRT_FEATURE_CRYPTO_INT31
+#endif
+#ifndef XRT_MODULE_CRYPTO_CORE
+#define XRT_MODULE_CRYPTO_CORE
+#endif
+#endif
+
+/* x509_digest 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_DIGEST)
+#ifndef XRT_FEATURE_X509_DIGEST
+#define XRT_FEATURE_X509_DIGEST
+#endif
+#ifndef XRT_MODULE_X509_SIGNATURE
+#define XRT_MODULE_X509_SIGNATURE
+#endif
+#ifndef XRT_MODULE_CRYPTO_SHA1
+#define XRT_MODULE_CRYPTO_SHA1
+#endif
+#ifndef XRT_MODULE_CRYPTO_SHA224
+#define XRT_MODULE_CRYPTO_SHA224
+#endif
+#ifndef XRT_MODULE_CRYPTO_SHA256
+#define XRT_MODULE_CRYPTO_SHA256
+#endif
+#ifndef XRT_MODULE_CRYPTO_SHA512
+#define XRT_MODULE_CRYPTO_SHA512
+#endif
+#endif
+
+/* crypto_sha512 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_SHA512)
+#ifndef XRT_FEATURE_CRYPTO_SHA512
+#define XRT_FEATURE_CRYPTO_SHA512
+#endif
+#ifndef XRT_MODULE_CRYPTO_CORE
+#define XRT_MODULE_CRYPTO_CORE
+#endif
+#endif
+
+/* crypto_sha224 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_SHA224)
+#ifndef XRT_FEATURE_CRYPTO_SHA224
+#define XRT_FEATURE_CRYPTO_SHA224
+#endif
+#ifndef XRT_MODULE_CRYPTO_SHA256
+#define XRT_MODULE_CRYPTO_SHA256
+#endif
+#endif
+
+/* crypto_sha256 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_SHA256)
+#ifndef XRT_FEATURE_CRYPTO_SHA256
+#define XRT_FEATURE_CRYPTO_SHA256
+#endif
+#ifndef XRT_MODULE_CRYPTO_CORE
+#define XRT_MODULE_CRYPTO_CORE
+#endif
+#endif
+
+/* crypto_sha1 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_SHA1)
+#ifndef XRT_FEATURE_CRYPTO_SHA1
+#define XRT_FEATURE_CRYPTO_SHA1
+#endif
+#ifndef XRT_MODULE_CRYPTO_CORE
+#define XRT_MODULE_CRYPTO_CORE
+#endif
+#endif
+
+/* tls_verify 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_VERIFY)
+#ifndef XRT_FEATURE_TLS_VERIFY
+#define XRT_FEATURE_TLS_VERIFY
+#endif
+#ifndef XRT_MODULE_TLS_NEGOTIATE
+#define XRT_MODULE_TLS_NEGOTIATE
+#endif
+#ifndef XRT_MODULE_X509_STORE
+#define XRT_MODULE_X509_STORE
+#endif
+#ifndef XRT_MODULE_X509_IDENTITY
+#define XRT_MODULE_X509_IDENTITY
+#endif
+#ifndef XRT_MODULE_ATOMIC
+#define XRT_MODULE_ATOMIC
+#endif
+#ifndef XRT_MODULE_CRYPTO_CORE
+#define XRT_MODULE_CRYPTO_CORE
+#endif
+#endif
+
+/* x509_identity 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_IDENTITY)
+#ifndef XRT_FEATURE_X509_IDENTITY
+#define XRT_FEATURE_X509_IDENTITY
+#endif
+#ifndef XRT_MODULE_X509_PROFILE
+#define XRT_MODULE_X509_PROFILE
+#endif
+#ifndef XRT_MODULE_NET
+#define XRT_MODULE_NET
+#endif
+#endif
+
+/* x509_store 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_STORE)
+#ifndef XRT_FEATURE_X509_STORE
+#define XRT_FEATURE_X509_STORE
+#endif
+#ifndef XRT_MODULE_X509_PATH_BUILD
+#define XRT_MODULE_X509_PATH_BUILD
+#endif
+#ifndef XRT_MODULE_PEM
+#define XRT_MODULE_PEM
+#endif
+#endif
+
+/* pem 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PEM)
+#ifndef XRT_FEATURE_PEM
+#define XRT_FEATURE_PEM
+#endif
+#ifndef XRT_MODULE_CODEC_BASE64
+#define XRT_MODULE_CODEC_BASE64
+#endif
+#endif
+
+/* x509_path_build 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_PATH_BUILD)
+#ifndef XRT_FEATURE_X509_PATH_BUILD
+#define XRT_FEATURE_X509_PATH_BUILD
+#endif
+#ifndef XRT_MODULE_X509_PATH
+#define XRT_MODULE_X509_PATH
+#endif
+#endif
+
+/* x509_path 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_PATH)
+#ifndef XRT_FEATURE_X509_PATH
+#define XRT_FEATURE_X509_PATH
+#endif
+#ifndef XRT_MODULE_X509_NAME_CONSTRAINTS
+#define XRT_MODULE_X509_NAME_CONSTRAINTS
+#endif
+#ifndef XRT_MODULE_X509_VERIFY
+#define XRT_MODULE_X509_VERIFY
+#endif
+#endif
+
+/* x509_verify 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_VERIFY)
+#ifndef XRT_FEATURE_X509_VERIFY
+#define XRT_FEATURE_X509_VERIFY
+#endif
+#ifndef XRT_MODULE_X509_SIGNATURE
+#define XRT_MODULE_X509_SIGNATURE
+#endif
+#endif
+
+/* x509_signature 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_SIGNATURE)
+#ifndef XRT_FEATURE_X509_SIGNATURE
+#define XRT_FEATURE_X509_SIGNATURE
+#endif
+#ifndef XRT_MODULE_X509_PARSE
+#define XRT_MODULE_X509_PARSE
+#endif
+#endif
+
+/* x509_name_constraints 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_NAME_CONSTRAINTS)
+#ifndef XRT_FEATURE_X509_NAME_CONSTRAINTS
+#define XRT_FEATURE_X509_NAME_CONSTRAINTS
+#endif
+#ifndef XRT_MODULE_X509_PROFILE
+#define XRT_MODULE_X509_PROFILE
+#endif
+#ifndef XRT_MODULE_X509_NAME
+#define XRT_MODULE_X509_NAME
+#endif
+#endif
+
+/* x509_name 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_NAME)
+#ifndef XRT_FEATURE_X509_NAME
+#define XRT_FEATURE_X509_NAME
+#endif
+#ifndef XRT_MODULE_X509_PARSE
+#define XRT_MODULE_X509_PARSE
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
+#endif
+#endif
+
+/* x509_profile 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_PROFILE)
+#ifndef XRT_FEATURE_X509_PROFILE
+#define XRT_FEATURE_X509_PROFILE
+#endif
+#ifndef XRT_MODULE_X509_PARSE
+#define XRT_MODULE_X509_PARSE
+#endif
+#endif
+
+/* tls_stream_listener_sync 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_STREAM_LISTENER_SYNC)
+#ifndef XRT_FEATURE_TLS_STREAM_LISTENER_SYNC
+#define XRT_FEATURE_TLS_STREAM_LISTENER_SYNC
+#endif
+#ifndef XRT_MODULE_TLS_STREAM_LISTENER_FUTURE
+#define XRT_MODULE_TLS_STREAM_LISTENER_FUTURE
+#endif
+#endif
+
+/* tls_stream_listener_future 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_STREAM_LISTENER_FUTURE)
+#ifndef XRT_FEATURE_TLS_STREAM_LISTENER_FUTURE
+#define XRT_FEATURE_TLS_STREAM_LISTENER_FUTURE
+#endif
+#ifndef XRT_MODULE_TLS_STREAM_LISTENER
+#define XRT_MODULE_TLS_STREAM_LISTENER
+#endif
+#ifndef XRT_MODULE_FUTURE
+#define XRT_MODULE_FUTURE
+#endif
+#endif
+
+/* tls_stream_listener 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_STREAM_LISTENER)
+#ifndef XRT_FEATURE_TLS_STREAM_LISTENER
+#define XRT_FEATURE_TLS_STREAM_LISTENER
+#endif
+#ifndef XRT_MODULE_TLS_STREAM
+#define XRT_MODULE_TLS_STREAM
+#endif
+#ifndef XRT_MODULE_NET_TCP
+#define XRT_MODULE_NET_TCP
+#endif
+#endif
+
+/* tls_stream_future 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_STREAM_FUTURE)
+#ifndef XRT_FEATURE_TLS_STREAM_FUTURE
+#define XRT_FEATURE_TLS_STREAM_FUTURE
+#endif
+#ifndef XRT_MODULE_TLS_STREAM
+#define XRT_MODULE_TLS_STREAM
+#endif
+#ifndef XRT_MODULE_FUTURE
+#define XRT_MODULE_FUTURE
+#endif
+#ifndef XRT_MODULE_NET_BUFFER
+#define XRT_MODULE_NET_BUFFER
+#endif
+#endif
+
+/* tls_stream_dial_future 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_STREAM_DIAL_FUTURE)
+#ifndef XRT_FEATURE_TLS_STREAM_DIAL_FUTURE
+#define XRT_FEATURE_TLS_STREAM_DIAL_FUTURE
+#endif
+#ifndef XRT_MODULE_TLS_STREAM_DIAL
+#define XRT_MODULE_TLS_STREAM_DIAL
+#endif
+#ifndef XRT_MODULE_FUTURE
+#define XRT_MODULE_FUTURE
+#endif
+#ifndef XRT_MODULE_FUTURE_BRIDGE
+#define XRT_MODULE_FUTURE_BRIDGE
+#endif
+#endif
+
+/* tls_stream_dial 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_STREAM_DIAL)
+#ifndef XRT_FEATURE_TLS_STREAM_DIAL
+#define XRT_FEATURE_TLS_STREAM_DIAL
+#endif
+#ifndef XRT_MODULE_TLS_STREAM
+#define XRT_MODULE_TLS_STREAM
+#endif
+#ifndef XRT_MODULE_NET_TCP_DIAL
+#define XRT_MODULE_NET_TCP_DIAL
+#endif
+#endif
+
+/* tls_stream 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_STREAM)
+#ifndef XRT_FEATURE_TLS_STREAM
+#define XRT_FEATURE_TLS_STREAM
+#endif
+#ifndef XRT_MODULE_NET_TCP
+#define XRT_MODULE_NET_TCP
+#endif
+#ifndef XRT_MODULE_TLS_CLIENT
+#define XRT_MODULE_TLS_CLIENT
+#endif
+#ifndef XRT_MODULE_TLS_SERVER
+#define XRT_MODULE_TLS_SERVER
+#endif
+#endif
+
+/* tls_server 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_SERVER)
+#ifndef XRT_FEATURE_TLS_SERVER
+#define XRT_FEATURE_TLS_SERVER
+#endif
+#ifndef XRT_MODULE_TLS_SESSION
+#define XRT_MODULE_TLS_SESSION
+#endif
+#ifndef XRT_MODULE_TLS_HELLO_WRITE
+#define XRT_MODULE_TLS_HELLO_WRITE
+#endif
+#ifndef XRT_MODULE_TLS_HANDSHAKE_READER
+#define XRT_MODULE_TLS_HANDSHAKE_READER
+#endif
+#ifndef XRT_MODULE_TLS_MESSAGES_WRITE
+#define XRT_MODULE_TLS_MESSAGES_WRITE
+#endif
+#ifndef XRT_MODULE_TLS_AUTH_MESSAGES_WRITE
+#define XRT_MODULE_TLS_AUTH_MESSAGES_WRITE
+#endif
+#ifndef XRT_MODULE_TLS_SCHEDULE
+#define XRT_MODULE_TLS_SCHEDULE
+#endif
+#ifndef XRT_MODULE_TLS_KEY_EXCHANGE
+#define XRT_MODULE_TLS_KEY_EXCHANGE
+#endif
+#ifndef XRT_MODULE_TLS_IDENTITY
+#define XRT_MODULE_TLS_IDENTITY
+#endif
+#ifndef XRT_MODULE_RANDOM_SECURE
+#define XRT_MODULE_RANDOM_SECURE
+#endif
+#ifndef XRT_MODULE_TEMP_MEMORY
+#define XRT_MODULE_TEMP_MEMORY
+#endif
+#endif
+
+/* temp_memory 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TEMP_MEMORY)
+#ifndef XRT_FEATURE_TEMP_MEMORY
+#define XRT_FEATURE_TEMP_MEMORY
+#endif
+#endif
+
+/* tls_identity 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_IDENTITY)
+#ifndef XRT_FEATURE_TLS_IDENTITY
+#define XRT_FEATURE_TLS_IDENTITY
+#endif
+#ifndef XRT_MODULE_TLS_NEGOTIATE
+#define XRT_MODULE_TLS_NEGOTIATE
+#endif
+#ifndef XRT_MODULE_X509_PARSE
+#define XRT_MODULE_X509_PARSE
+#endif
+#ifndef XRT_MODULE_CRYPTO_CORE
+#define XRT_MODULE_CRYPTO_CORE
+#endif
+#endif
+
+/* x509_parse 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_X509_PARSE)
+#ifndef XRT_FEATURE_X509_PARSE
+#define XRT_FEATURE_X509_PARSE
+#endif
+#ifndef XRT_MODULE_ASN1_DER
+#define XRT_MODULE_ASN1_DER
+#endif
+#ifndef XRT_MODULE_TIME
+#define XRT_MODULE_TIME
+#endif
+#endif
+
+/* asn1_der 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_ASN1_DER)
+#ifndef XRT_FEATURE_ASN1_DER
+#define XRT_FEATURE_ASN1_DER
+#endif
+#ifndef XRT_MODULE_BUFFER
+#define XRT_MODULE_BUFFER
+#endif
+#endif
+
+/* tls_auth_messages_write 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_AUTH_MESSAGES_WRITE)
+#ifndef XRT_FEATURE_TLS_AUTH_MESSAGES_WRITE
+#define XRT_FEATURE_TLS_AUTH_MESSAGES_WRITE
+#endif
+#ifndef XRT_MODULE_TLS_AUTH_MESSAGES
+#define XRT_MODULE_TLS_AUTH_MESSAGES
+#endif
+#endif
+
+/* tls_auth_messages 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_AUTH_MESSAGES)
+#ifndef XRT_FEATURE_TLS_AUTH_MESSAGES
+#define XRT_FEATURE_TLS_AUTH_MESSAGES
+#endif
+#ifndef XRT_MODULE_TLS_MESSAGES
+#define XRT_MODULE_TLS_MESSAGES
+#endif
+#endif
+
+/* tls_messages_write 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_MESSAGES_WRITE)
+#ifndef XRT_FEATURE_TLS_MESSAGES_WRITE
+#define XRT_FEATURE_TLS_MESSAGES_WRITE
+#endif
+#ifndef XRT_MODULE_TLS_MESSAGES
+#define XRT_MODULE_TLS_MESSAGES
+#endif
+#endif
+
+/* tls_client 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_CLIENT)
+#ifndef XRT_FEATURE_TLS_CLIENT
+#define XRT_FEATURE_TLS_CLIENT
+#endif
+#ifndef XRT_MODULE_TLS_SESSION
+#define XRT_MODULE_TLS_SESSION
+#endif
+#ifndef XRT_MODULE_TLS_HELLO_WRITE
+#define XRT_MODULE_TLS_HELLO_WRITE
+#endif
+#ifndef XRT_MODULE_TLS_HANDSHAKE_READER
+#define XRT_MODULE_TLS_HANDSHAKE_READER
+#endif
+#ifndef XRT_MODULE_TLS_MESSAGES
+#define XRT_MODULE_TLS_MESSAGES
+#endif
+#ifndef XRT_MODULE_TLS_SCHEDULE
+#define XRT_MODULE_TLS_SCHEDULE
+#endif
+#ifndef XRT_MODULE_TLS_KEY_EXCHANGE
+#define XRT_MODULE_TLS_KEY_EXCHANGE
+#endif
+#ifndef XRT_MODULE_RANDOM_SECURE
+#define XRT_MODULE_RANDOM_SECURE
+#endif
+#endif
+
+/* tls_handshake_reader 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_HANDSHAKE_READER)
+#ifndef XRT_FEATURE_TLS_HANDSHAKE_READER
+#define XRT_FEATURE_TLS_HANDSHAKE_READER
+#endif
+#ifndef XRT_MODULE_TLS_HANDSHAKE
+#define XRT_MODULE_TLS_HANDSHAKE
+#endif
+#endif
+
+/* tls_hello_write 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_HELLO_WRITE)
+#ifndef XRT_FEATURE_TLS_HELLO_WRITE
+#define XRT_FEATURE_TLS_HELLO_WRITE
+#endif
+#ifndef XRT_MODULE_TLS_HELLO
+#define XRT_MODULE_TLS_HELLO
+#endif
+#endif
+
+/* tls_session 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_SESSION)
+#ifndef XRT_FEATURE_TLS_SESSION
+#define XRT_FEATURE_TLS_SESSION
+#endif
+#ifndef XRT_MODULE_TLS_CONTEXT
+#define XRT_MODULE_TLS_CONTEXT
+#endif
+#ifndef XRT_MODULE_TLS_RECORD
+#define XRT_MODULE_TLS_RECORD
+#endif
+#ifndef XRT_MODULE_TLS_MESSAGES
+#define XRT_MODULE_TLS_MESSAGES
+#endif
+#ifndef XRT_MODULE_TLS_SCHEDULE
+#define XRT_MODULE_TLS_SCHEDULE
+#endif
+#ifndef XRT_MODULE_NET_BUFFER
+#define XRT_MODULE_NET_BUFFER
+#endif
+#ifndef XRT_MODULE_CRYPTO_CORE
+#define XRT_MODULE_CRYPTO_CORE
+#endif
+#endif
+
+/* tls_schedule 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_SCHEDULE)
+#ifndef XRT_FEATURE_TLS_SCHEDULE
+#define XRT_FEATURE_TLS_SCHEDULE
+#endif
+#ifndef XRT_MODULE_TLS
+#define XRT_MODULE_TLS
+#endif
+#ifndef XRT_MODULE_CRYPTO_CORE
+#define XRT_MODULE_CRYPTO_CORE
+#endif
+#endif
+
+/* tls_messages 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_MESSAGES)
+#ifndef XRT_FEATURE_TLS_MESSAGES
+#define XRT_FEATURE_TLS_MESSAGES
+#endif
+#ifndef XRT_MODULE_TLS_HELLO
+#define XRT_MODULE_TLS_HELLO
+#endif
+#endif
+
+/* tls_record 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_RECORD)
+#ifndef XRT_FEATURE_TLS_RECORD
+#define XRT_FEATURE_TLS_RECORD
+#endif
+#ifndef XRT_MODULE_TLS
+#define XRT_MODULE_TLS
+#endif
+#ifndef XRT_MODULE_CRYPTO_CORE
+#define XRT_MODULE_CRYPTO_CORE
+#endif
+#endif
+
+/* crypto_core 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRYPTO_CORE)
+#ifndef XRT_FEATURE_CRYPTO_CORE
+#define XRT_FEATURE_CRYPTO_CORE
+#endif
+#endif
+
+/* tls_context 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_CONTEXT)
+#ifndef XRT_FEATURE_TLS_CONTEXT
+#define XRT_FEATURE_TLS_CONTEXT
+#endif
+#ifndef XRT_MODULE_TLS_POLICY
+#define XRT_MODULE_TLS_POLICY
+#endif
+#endif
+
+/* tls_policy 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_POLICY)
+#ifndef XRT_FEATURE_TLS_POLICY
+#define XRT_FEATURE_TLS_POLICY
+#endif
+#ifndef XRT_MODULE_TLS_NEGOTIATE
+#define XRT_MODULE_TLS_NEGOTIATE
+#endif
+#ifndef XRT_MODULE_TLS_KEY_EXCHANGE
+#define XRT_MODULE_TLS_KEY_EXCHANGE
+#endif
+#endif
+
+/* tls_key_exchange 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_KEY_EXCHANGE)
+#ifndef XRT_FEATURE_TLS_KEY_EXCHANGE
+#define XRT_FEATURE_TLS_KEY_EXCHANGE
+#endif
+#ifndef XRT_MODULE_TLS
+#define XRT_MODULE_TLS
+#endif
+#endif
+
+/* tls_negotiate 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_NEGOTIATE)
+#ifndef XRT_FEATURE_TLS_NEGOTIATE
+#define XRT_FEATURE_TLS_NEGOTIATE
+#endif
+#ifndef XRT_MODULE_TLS_HELLO
+#define XRT_MODULE_TLS_HELLO
+#endif
+#endif
+
+/* tls_hello 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_HELLO)
+#ifndef XRT_FEATURE_TLS_HELLO
+#define XRT_FEATURE_TLS_HELLO
+#endif
+#ifndef XRT_MODULE_TLS_HANDSHAKE
+#define XRT_MODULE_TLS_HANDSHAKE
+#endif
+#endif
+
+/* tls_handshake 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_HANDSHAKE)
+#ifndef XRT_FEATURE_TLS_HANDSHAKE
+#define XRT_FEATURE_TLS_HANDSHAKE
+#endif
+#ifndef XRT_MODULE_TLS
+#define XRT_MODULE_TLS
+#endif
+#endif
+
+/* tls 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS)
+#ifndef XRT_FEATURE_TLS
+#define XRT_FEATURE_TLS
+#endif
+#endif
+
+/* net_tcp_dial_sync 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP_DIAL_SYNC)
+#ifndef XRT_FEATURE_NET_TCP_DIAL_SYNC
+#define XRT_FEATURE_NET_TCP_DIAL_SYNC
+#endif
+#ifndef XRT_MODULE_NET_TCP_DIAL_FUTURE
+#define XRT_MODULE_NET_TCP_DIAL_FUTURE
+#endif
+#ifndef XRT_MODULE_NET_TCP_SYNC
+#define XRT_MODULE_NET_TCP_SYNC
+#endif
+#endif
+
+/* net_tcp_sync 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP_SYNC)
+#ifndef XRT_FEATURE_NET_TCP_SYNC
+#define XRT_FEATURE_NET_TCP_SYNC
+#endif
+#ifndef XRT_MODULE_NET_TCP_FUTURE
+#define XRT_MODULE_NET_TCP_FUTURE
+#endif
+#ifndef XRT_MODULE_NET_SYNC
+#define XRT_MODULE_NET_SYNC
+#endif
+#endif
+
+/* net_sync 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_SYNC)
+#ifndef XRT_FEATURE_NET_SYNC
+#define XRT_FEATURE_NET_SYNC
+#endif
+#ifndef XRT_MODULE_NET_ENGINE
+#define XRT_MODULE_NET_ENGINE
+#endif
+#ifndef XRT_MODULE_FUTURE
+#define XRT_MODULE_FUTURE
+#endif
+#endif
+
+/* net_tcp_future 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP_FUTURE)
+#ifndef XRT_FEATURE_NET_TCP_FUTURE
+#define XRT_FEATURE_NET_TCP_FUTURE
+#endif
+#ifndef XRT_MODULE_NET_TCP
+#define XRT_MODULE_NET_TCP
+#endif
+#ifndef XRT_MODULE_FUTURE
+#define XRT_MODULE_FUTURE
+#endif
+#ifndef XRT_MODULE_NET_BUFFER
+#define XRT_MODULE_NET_BUFFER
+#endif
+#endif
+
+/* net_tcp_dial_future 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP_DIAL_FUTURE)
+#ifndef XRT_FEATURE_NET_TCP_DIAL_FUTURE
+#define XRT_FEATURE_NET_TCP_DIAL_FUTURE
+#endif
+#ifndef XRT_MODULE_NET_TCP_DIAL
+#define XRT_MODULE_NET_TCP_DIAL
+#endif
+#ifndef XRT_MODULE_FUTURE
+#define XRT_MODULE_FUTURE
+#endif
+#ifndef XRT_MODULE_FUTURE_BRIDGE
+#define XRT_MODULE_FUTURE_BRIDGE
+#endif
+#endif
+
+/* net_tcp_dial 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP_DIAL)
+#ifndef XRT_FEATURE_NET_TCP_DIAL
+#define XRT_FEATURE_NET_TCP_DIAL
+#endif
+#ifndef XRT_MODULE_NET_TCP
+#define XRT_MODULE_NET_TCP
+#endif
+#ifndef XRT_MODULE_NET_RESOLVER
+#define XRT_MODULE_NET_RESOLVER
+#endif
+#endif
+
+/* net_tcp 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP)
+#ifndef XRT_FEATURE_NET_TCP
+#define XRT_FEATURE_NET_TCP
+#endif
+#ifndef XRT_MODULE_NET_ENGINE
+#define XRT_MODULE_NET_ENGINE
+#endif
+#endif
+
+/* codec_base64 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CODEC_BASE64)
+#ifndef XRT_FEATURE_CODEC_BASE64
+#define XRT_FEATURE_CODEC_BASE64
+#endif
+#endif
+
+/* dir 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_DIR)
+#ifndef XRT_FEATURE_DIR
+#define XRT_FEATURE_DIR
+#endif
+#ifndef XRT_MODULE_FILE
+#define XRT_MODULE_FILE
+#endif
+#endif
+
+/* file_whole 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_WHOLE)
+#ifndef XRT_FEATURE_FILE_WHOLE
+#define XRT_FEATURE_FILE_WHOLE
+#endif
+#ifndef XRT_MODULE_FILE_TEMP
+#define XRT_MODULE_FILE_TEMP
+#endif
+#endif
+
+/* file_temp 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE_TEMP)
+#ifndef XRT_FEATURE_FILE_TEMP
+#define XRT_FEATURE_FILE_TEMP
+#endif
+#ifndef XRT_MODULE_FILE
+#define XRT_MODULE_FILE
+#endif
+#ifndef XRT_MODULE_RANDOM_SECURE
+#define XRT_MODULE_RANDOM_SECURE
+#endif
+#endif
+
+/* random_secure 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_RANDOM_SECURE)
+#ifndef XRT_FEATURE_RANDOM_SECURE
+#define XRT_FEATURE_RANDOM_SECURE
+#endif
+#endif
+
+/* file 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FILE)
+#ifndef XRT_FEATURE_FILE
+#define XRT_FEATURE_FILE
+#endif
+#ifndef XRT_MODULE_PATH_SYSTEM
+#define XRT_MODULE_PATH_SYSTEM
+#endif
+#ifndef XRT_MODULE_TIME
+#define XRT_MODULE_TIME
+#endif
+#endif
+
+/* path_system 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PATH_SYSTEM)
+#ifndef XRT_FEATURE_PATH_SYSTEM
+#define XRT_FEATURE_PATH_SYSTEM
+#endif
+#ifndef XRT_MODULE_PATH
+#define XRT_MODULE_PATH
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
+#endif
+#endif
+
+/* path 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PATH)
+#ifndef XRT_FEATURE_PATH
+#define XRT_FEATURE_PATH
+#endif
+#ifndef XRT_MODULE_STRING
+#define XRT_MODULE_STRING
+#endif
+#endif
+
+/* string 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_STRING)
+#ifndef XRT_FEATURE_STRING
+#define XRT_FEATURE_STRING
+#endif
+#endif
+
+/* json_read 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSON_READ)
+#ifndef XRT_FEATURE_JSON_READ
+#define XRT_FEATURE_JSON_READ
+#endif
+#ifndef XRT_MODULE_JSON_CORE
+#define XRT_MODULE_JSON_CORE
+#endif
+#ifndef XRT_MODULE_BUFFER
+#define XRT_MODULE_BUFFER
+#endif
+#ifndef XRT_MODULE_NUMBER_INTEGER
+#define XRT_MODULE_NUMBER_INTEGER
+#endif
+#ifndef XRT_MODULE_NUMBER_FLOAT
+#define XRT_MODULE_NUMBER_FLOAT
+#endif
+#ifndef XRT_MODULE_UNICODE
+#define XRT_MODULE_UNICODE
+#endif
+#ifndef XRT_MODULE_VALUE_CONTAINER
+#define XRT_MODULE_VALUE_CONTAINER
+#endif
+#endif
+
+/* unicode 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_UNICODE)
+#ifndef XRT_FEATURE_UNICODE
+#define XRT_FEATURE_UNICODE
+#endif
+#endif
+
+/* number_float 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NUMBER_FLOAT)
+#ifndef XRT_FEATURE_NUMBER_FLOAT
+#define XRT_FEATURE_NUMBER_FLOAT
+#endif
+#endif
+
+/* number_integer 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NUMBER_INTEGER)
+#ifndef XRT_FEATURE_NUMBER_INTEGER
+#define XRT_FEATURE_NUMBER_INTEGER
+#endif
+#endif
+
+/* buffer 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_BUFFER)
+#ifndef XRT_FEATURE_BUFFER
+#define XRT_FEATURE_BUFFER
+#endif
+#ifndef XRT_MODULE_ARRAY
+#define XRT_MODULE_ARRAY
+#endif
+#endif
+
+/* json_core 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_JSON_CORE)
+#ifndef XRT_FEATURE_JSON_CORE
+#define XRT_FEATURE_JSON_CORE
+#endif
+#endif
+
+/* value_graph 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_VALUE_GRAPH)
+#ifndef XRT_FEATURE_VALUE_GRAPH
+#define XRT_FEATURE_VALUE_GRAPH
+#endif
+#ifndef XRT_MODULE_VALUE_CONTAINER
+#define XRT_MODULE_VALUE_CONTAINER
+#endif
+#endif
+
+/* value_container 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_VALUE_CONTAINER)
+#ifndef XRT_FEATURE_VALUE_CONTAINER
+#define XRT_FEATURE_VALUE_CONTAINER
+#endif
+#ifndef XRT_MODULE_VALUE
+#define XRT_MODULE_VALUE
+#endif
+#ifndef XRT_MODULE_PTR_ARRAY
+#define XRT_MODULE_PTR_ARRAY
+#endif
+#ifndef XRT_MODULE_INT_MAP
+#define XRT_MODULE_INT_MAP
+#endif
+#ifndef XRT_MODULE_MAP
+#define XRT_MODULE_MAP
+#endif
+#ifndef XRT_MODULE_SET
+#define XRT_MODULE_SET
+#endif
+#endif
+
+/* set 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_SET)
+#ifndef XRT_FEATURE_SET
+#define XRT_FEATURE_SET
+#endif
+#ifndef XRT_MODULE_HASH64
+#define XRT_MODULE_HASH64
+#endif
+#endif
+
+/* map 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_MAP)
+#ifndef XRT_FEATURE_MAP
+#define XRT_FEATURE_MAP
+#endif
+#ifndef XRT_MODULE_HASH64
+#define XRT_MODULE_HASH64
+#endif
+#endif
+
+/* int_map 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_INT_MAP)
+#ifndef XRT_FEATURE_INT_MAP
+#define XRT_FEATURE_INT_MAP
+#endif
+#ifndef XRT_MODULE_AVL_TREE
+#define XRT_MODULE_AVL_TREE
+#endif
+#endif
+
+/* avl_tree 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_AVL_TREE)
+#ifndef XRT_FEATURE_AVL_TREE
+#define XRT_FEATURE_AVL_TREE
+#endif
+#ifndef XRT_MODULE_AVL
+#define XRT_MODULE_AVL
+#endif
+#ifndef XRT_MODULE_POOL
+#define XRT_MODULE_POOL
+#endif
+#endif
+
+/* pool 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_POOL)
+#ifndef XRT_FEATURE_POOL
+#define XRT_FEATURE_POOL
+#endif
+#ifndef XRT_MODULE_POOL_PAGE
+#define XRT_MODULE_POOL_PAGE
+#endif
+#endif
+
+/* pool_page 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_POOL_PAGE)
+#ifndef XRT_FEATURE_POOL_PAGE
+#define XRT_FEATURE_POOL_PAGE
+#endif
+#endif
+
+/* avl 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_AVL)
+#ifndef XRT_FEATURE_AVL
+#define XRT_FEATURE_AVL
+#endif
+#endif
+
+/* ptr_array 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_PTR_ARRAY)
+#ifndef XRT_FEATURE_PTR_ARRAY
+#define XRT_FEATURE_PTR_ARRAY
+#endif
+#ifndef XRT_MODULE_ARRAY
+#define XRT_MODULE_ARRAY
+#endif
+#endif
+
+/* array 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_ARRAY)
+#ifndef XRT_FEATURE_ARRAY
+#define XRT_FEATURE_ARRAY
+#endif
+#endif
+
+/* value 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_VALUE)
+#ifndef XRT_FEATURE_VALUE
+#define XRT_FEATURE_VALUE
+#endif
+#ifndef XRT_MODULE_HASH64
+#define XRT_MODULE_HASH64
+#endif
+#endif
+
+/* future_combine 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FUTURE_COMBINE)
+#ifndef XRT_FEATURE_FUTURE_COMBINE
+#define XRT_FEATURE_FUTURE_COMBINE
+#endif
+#ifndef XRT_MODULE_FUTURE
+#define XRT_MODULE_FUTURE
+#endif
+#endif
+
+/* net_resolver_future 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_RESOLVER_FUTURE)
+#ifndef XRT_FEATURE_NET_RESOLVER_FUTURE
+#define XRT_FEATURE_NET_RESOLVER_FUTURE
+#endif
+#ifndef XRT_MODULE_NET_RESOLVER
+#define XRT_MODULE_NET_RESOLVER
+#endif
+#ifndef XRT_MODULE_FUTURE
+#define XRT_MODULE_FUTURE
+#endif
+#ifndef XRT_MODULE_FUTURE_BRIDGE
+#define XRT_MODULE_FUTURE_BRIDGE
+#endif
+#endif
+
+/* future_bridge 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FUTURE_BRIDGE)
+#ifndef XRT_FEATURE_FUTURE_BRIDGE
+#define XRT_FEATURE_FUTURE_BRIDGE
+#endif
+#ifndef XRT_MODULE_FUTURE
+#define XRT_MODULE_FUTURE
+#endif
+#ifndef XRT_MODULE_THREAD
+#define XRT_MODULE_THREAD
+#endif
+#ifndef XRT_MODULE_ATOMIC
+#define XRT_MODULE_ATOMIC
+#endif
+#endif
+
+/* future 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_FUTURE)
+#ifndef XRT_FEATURE_FUTURE
+#define XRT_FEATURE_FUTURE
+#endif
+#ifndef XRT_MODULE_CANCEL
+#define XRT_MODULE_CANCEL
+#endif
+#endif
+
+/* cancel 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CANCEL)
+#ifndef XRT_FEATURE_CANCEL
+#define XRT_FEATURE_CANCEL
+#endif
+#ifndef XRT_MODULE_MUTEX
+#define XRT_MODULE_MUTEX
+#endif
+#ifndef XRT_MODULE_COND
+#define XRT_MODULE_COND
+#endif
+#endif
+
+/* net_resolver 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_RESOLVER)
+#ifndef XRT_FEATURE_NET_RESOLVER
+#define XRT_FEATURE_NET_RESOLVER
+#endif
+#ifndef XRT_MODULE_NET_DNS
+#define XRT_MODULE_NET_DNS
+#endif
+#ifndef XRT_MODULE_ATOMIC
+#define XRT_MODULE_ATOMIC
+#endif
+#ifndef XRT_MODULE_HASH64
+#define XRT_MODULE_HASH64
+#endif
+#ifndef XRT_MODULE_THREAD
+#define XRT_MODULE_THREAD
+#endif
+#ifndef XRT_MODULE_COND
+#define XRT_MODULE_COND
+#endif
+#endif
+
+/* cond 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_COND)
+#ifndef XRT_FEATURE_COND
+#define XRT_FEATURE_COND
+#endif
+#ifndef XRT_MODULE_MUTEX
+#define XRT_MODULE_MUTEX
+#endif
+#ifndef XRT_MODULE_WAIT
+#define XRT_MODULE_WAIT
+#endif
+#endif
+
+/* hash64 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_HASH64)
+#ifndef XRT_FEATURE_HASH64
+#define XRT_FEATURE_HASH64
+#endif
+#endif
+
+/* net_dns 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_DNS)
+#ifndef XRT_FEATURE_NET_DNS
+#define XRT_FEATURE_NET_DNS
+#endif
+#ifndef XRT_MODULE_NET
+#define XRT_MODULE_NET
+#endif
+#endif
+
+/* memory_debug 及其直接依赖。 */
+#if (defined(XRT_MODULE_ALL) && !defined(XRT_EXCLUDE_MEMORY_DEBUG)) || \
+	defined(XRT_MODULE_MEMORY_DEBUG)
+#ifndef XRT_FEATURE_MEMORY_DEBUG
+#define XRT_FEATURE_MEMORY_DEBUG
+#endif
+#endif
+
+/* thread_key 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_THREAD_KEY)
+#ifndef XRT_FEATURE_THREAD_KEY
+#define XRT_FEATURE_THREAD_KEY
+#endif
+#endif
+
+/* net_engine 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_ENGINE)
+#ifndef XRT_FEATURE_NET_ENGINE
+#define XRT_FEATURE_NET_ENGINE
+#endif
+#ifndef XRT_MODULE_NET_PORT
+#define XRT_MODULE_NET_PORT
+#endif
+#ifndef XRT_MODULE_NET_BUFFER
+#define XRT_MODULE_NET_BUFFER
+#endif
+#ifndef XRT_MODULE_THREAD
+#define XRT_MODULE_THREAD
+#endif
+#ifndef XRT_MODULE_QUEUE_MPSC
+#define XRT_MODULE_QUEUE_MPSC
+#endif
+#if defined(_WIN32)
+#ifndef XRT_MODULE_NET_PORT_IOCP
+#define XRT_MODULE_NET_PORT_IOCP
+#endif
+#ifndef XRT_MODULE_NET_PORT_SELECT
+#define XRT_MODULE_NET_PORT_SELECT
+#endif
+#endif
+#if defined(__linux__) && !defined(__ANDROID__)
+#ifndef XRT_MODULE_NET_PORT_EPOLL
+#define XRT_MODULE_NET_PORT_EPOLL
+#endif
+#ifndef XRT_MODULE_NET_PORT_SELECT
+#define XRT_MODULE_NET_PORT_SELECT
+#endif
+#endif
+#if defined(__ANDROID__)
+#ifndef XRT_MODULE_NET_PORT_EPOLL
+#define XRT_MODULE_NET_PORT_EPOLL
+#endif
+#ifndef XRT_MODULE_NET_PORT_SELECT
+#define XRT_MODULE_NET_PORT_SELECT
+#endif
+#endif
+#if defined(__APPLE__) && defined(__MACH__)
+#ifndef XRT_MODULE_NET_PORT_KQUEUE
+#define XRT_MODULE_NET_PORT_KQUEUE
+#endif
+#ifndef XRT_MODULE_NET_PORT_SELECT
+#define XRT_MODULE_NET_PORT_SELECT
+#endif
+#endif
+#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__)
+#ifndef XRT_MODULE_NET_PORT_KQUEUE
+#define XRT_MODULE_NET_PORT_KQUEUE
+#endif
+#ifndef XRT_MODULE_NET_PORT_SELECT
+#define XRT_MODULE_NET_PORT_SELECT
+#endif
+#endif
+#if (!defined(_WIN32) && !defined(__linux__) && !defined(__ANDROID__) && !(defined(__APPLE__) && defined(__MACH__)) && !defined(__FreeBSD__) && !defined(__OpenBSD__) && !defined(__NetBSD__) && !defined(__DragonFly__))
+#ifndef XRT_MODULE_NET_PORT_SELECT
+#define XRT_MODULE_NET_PORT_SELECT
+#endif
+#endif
+#endif
+
+/* net_port_kqueue 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_PORT_KQUEUE)
+#ifndef XRT_FEATURE_NET_PORT_KQUEUE
+#define XRT_FEATURE_NET_PORT_KQUEUE
+#endif
+#ifndef XRT_MODULE_NET_PORT
+#define XRT_MODULE_NET_PORT
+#endif
+#endif
+
+/* net_port_epoll 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_PORT_EPOLL)
+#ifndef XRT_FEATURE_NET_PORT_EPOLL
+#define XRT_FEATURE_NET_PORT_EPOLL
+#endif
+#ifndef XRT_MODULE_NET_PORT
+#define XRT_MODULE_NET_PORT
+#endif
+#endif
+
+/* net_port_select 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_PORT_SELECT)
+#ifndef XRT_FEATURE_NET_PORT_SELECT
+#define XRT_FEATURE_NET_PORT_SELECT
+#endif
+#ifndef XRT_MODULE_NET_PORT
+#define XRT_MODULE_NET_PORT
+#endif
+#endif
+
+/* net_port_iocp 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_PORT_IOCP)
+#ifndef XRT_FEATURE_NET_PORT_IOCP
+#define XRT_FEATURE_NET_PORT_IOCP
+#endif
+#ifndef XRT_MODULE_NET_PORT
+#define XRT_MODULE_NET_PORT
+#endif
+#endif
+
+/* queue_mpsc 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_QUEUE_MPSC)
+#ifndef XRT_FEATURE_QUEUE_MPSC
+#define XRT_FEATURE_QUEUE_MPSC
+#endif
+#ifndef XRT_MODULE_QUEUE
+#define XRT_MODULE_QUEUE
+#endif
+#endif
+
+/* queue 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_QUEUE)
+#ifndef XRT_FEATURE_QUEUE
+#define XRT_FEATURE_QUEUE
+#endif
+#ifndef XRT_MODULE_ATOMIC
+#define XRT_MODULE_ATOMIC
+#endif
+#endif
+
+/* thread 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_THREAD)
+#ifndef XRT_FEATURE_THREAD
+#define XRT_FEATURE_THREAD
+#endif
+#ifndef XRT_MODULE_WAIT
+#define XRT_MODULE_WAIT
+#endif
+#endif
+
+/* net_buffer 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_BUFFER)
+#ifndef XRT_FEATURE_NET_BUFFER
+#define XRT_FEATURE_NET_BUFFER
+#endif
+#ifndef XRT_MODULE_NET
+#define XRT_MODULE_NET
+#endif
+#endif
+
+/* net_port 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_PORT)
+#ifndef XRT_FEATURE_NET_PORT
+#define XRT_FEATURE_NET_PORT
+#endif
+#ifndef XRT_MODULE_NET_SOCKET
+#define XRT_MODULE_NET_SOCKET
+#endif
+#ifndef XRT_MODULE_ATOMIC
+#define XRT_MODULE_ATOMIC
+#endif
+#ifndef XRT_MODULE_WAIT
+#define XRT_MODULE_WAIT
+#endif
+#ifndef XRT_MODULE_MUTEX
+#define XRT_MODULE_MUTEX
+#endif
+#endif
+
+/* mutex 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_MUTEX)
+#ifndef XRT_FEATURE_MUTEX
+#define XRT_FEATURE_MUTEX
+#endif
+#ifndef XRT_MODULE_SYNC
+#define XRT_MODULE_SYNC
+#endif
+#endif
+
+/* sync 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_SYNC)
+#ifndef XRT_FEATURE_SYNC
+#define XRT_FEATURE_SYNC
+#endif
+#endif
+
+/* wait 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WAIT)
+#ifndef XRT_FEATURE_WAIT
+#define XRT_FEATURE_WAIT
+#endif
+#ifndef XRT_MODULE_TIME
+#define XRT_MODULE_TIME
+#endif
+#endif
+
+/* time 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TIME)
+#ifndef XRT_FEATURE_TIME
+#define XRT_FEATURE_TIME
+#endif
+#endif
+
+/* atomic 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_ATOMIC)
+#ifndef XRT_FEATURE_ATOMIC
+#define XRT_FEATURE_ATOMIC
+#endif
+#endif
+
+/* net_socket 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_SOCKET)
+#ifndef XRT_FEATURE_NET_SOCKET
+#define XRT_FEATURE_NET_SOCKET
+#endif
+#ifndef XRT_MODULE_NET
+#define XRT_MODULE_NET
+#endif
+#endif
+
+/* net 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET)
+#ifndef XRT_FEATURE_NET
+#define XRT_FEATURE_NET
+#endif
 #endif
 
 #endif

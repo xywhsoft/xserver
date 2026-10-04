@@ -1,20 +1,5 @@
-UPSTREAM
-
-xllm-session v3（Pi compaction 会话治理层）
-来源: D:/GIT/xrt 仓库 extlibs/xllm-session（基线 xrt@31cde60e）
-
-本目录为 xserver 的 vendored 副本，仅收录库本体：
-  xllm-session.h        公开 API 头（进 VFS: /xs/xllm-session.h）
-  xllm-session.c        unity TU（include src/ 下实现分片）
-  xllm-session-xrt.h    xrt 模块声明绑定（仅供本库 TU 使用，不进 VFS）
-  src/                  实现分片与内部头
-
-有意未收录: tests/、build.*、docs/。
-
-零分叉声明: 全部文件与上游字节等同（含桥接头）。
-注意: 头 include 按 __TINYC__ 分流（TCC VFS 扁平布局 / 本机磁盘相对
-路径）——该写法在上游源头，非本地改写。
-依赖: xllm 核心（链接层+VFS 头层，extensions.json 已声明 requires）。
-
-同步上游后需重新生成 src/script/import_xllm_session.inc 并跑
-tools/test_extensions.py 覆盖率测试（注意 xllmEstimate* 归属核心符号表）。
+Source: xrt extlibs/xllm-session
+Snapshot: ad3da544b198660c26a9b99b575a494fcba4794f-working-tree
+Upstream source bytes and SHA256 are recorded in ../xrt_sources.lock.json.
+Native sources, public headers and module configuration are vendored.
+xs-owned unity wrappers remain integration code; single-header implementations are not used.

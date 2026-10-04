@@ -6,8 +6,9 @@
 
 #include <xrt/acme.h>
 #include <xrt/acme_dns.h>
+#include <xrt/acme_http.h>
 
-#if defined(XACME_FEATURE_ACME_OBTAIN) && \
+#if defined(XACME_FEATURE_ACME_OBTAIN) && (\
 	!defined(XACME_FEATURE_ACME_FLOW) || \
 	!defined(XACME_FEATURE_ACME_STORE) || \
 	!defined(XACME_FEATURE_ACME_CORE) || \
@@ -24,7 +25,7 @@
 	!defined(XRT_FEATURE_CODEC_BASE64) || \
 	!defined(XRT_FEATURE_TIME) || \
 	!defined(XRT_FEATURE_BUFFER) || \
-	!defined(XRT_FEATURE_DIR)
+	!defined(XRT_FEATURE_DIR))
 	#error "XACME_FEATURE_ACME_OBTAIN requires flow and store closures"
 #endif
 
@@ -67,10 +68,13 @@ XRT_API void xrtAcmeObtainConfigInit(xacmeobtainconfig* pConfig);
 	  1. store 无账户则注册并持久化（accounts/<ca16>/account.pem），
 	     有则复用（同一 CA 稳定账户，不反复开户）；
 	  2. 本地证书剩余寿命充足时直接返回（*pbRenewed=false）；
-	  3. 不足则完整 dns-01 签发并落盘
-	     （certs/<主域名>/{key.pem,fullchain.pem,meta_txt}）。
+	  3. 不足则完整 dns-01 签发并以 current 原子发布新版本
+	     （certs/<主域名>/.grant-<16hex>/{key.pem,fullchain.pem,meta.txt}）。
 	pOut 两段文本均 xrtFree（或 xrtAcmeGrantUnit 统一释放）。
 	失败返回 false 并设置线程错误。
+	返回值只表示证书操作结果。临时客户端清理独立留出至少 30 秒
+	回滚预算；仍未退休时转移至待清理队列，宿主用
+	xrtAcmeCleanupPending 重试并在退出/卸载前确认全部释放。
 */
 XRT_API bool xrtAcmeObtain(
 	const xacmeobtainconfig* pConfig,

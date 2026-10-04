@@ -86,6 +86,9 @@
 #ifndef XRT_MODULE_BUFFER
 #define XRT_MODULE_BUFFER
 #endif
+#ifndef XRT_MODULE_MUTEX
+#define XRT_MODULE_MUTEX
+#endif
 #endif
 
 /* dns_aws 及其直接依赖。 */
@@ -110,6 +113,9 @@
 #endif
 #ifndef XRT_MODULE_BUFFER
 #define XRT_MODULE_BUFFER
+#endif
+#ifndef XRT_MODULE_MUTEX
+#define XRT_MODULE_MUTEX
 #endif
 #endif
 
@@ -139,6 +145,9 @@
 #ifndef XRT_MODULE_BUFFER
 #define XRT_MODULE_BUFFER
 #endif
+#ifndef XRT_MODULE_MUTEX
+#define XRT_MODULE_MUTEX
+#endif
 #endif
 
 /* dns_cf 及其直接依赖。 */
@@ -157,6 +166,9 @@
 #endif
 #ifndef XRT_MODULE_BUFFER
 #define XRT_MODULE_BUFFER
+#endif
+#ifndef XRT_MODULE_MUTEX
+#define XRT_MODULE_MUTEX
 #endif
 #endif
 
@@ -179,6 +191,21 @@
 #endif
 #ifndef XRT_MODULE_JSON
 #define XRT_MODULE_JSON
+#endif
+#ifndef XRT_MODULE_HTTP_TARGET
+#define XRT_MODULE_HTTP_TARGET
+#endif
+#ifndef XRT_MODULE_X509_PARSE
+#define XRT_MODULE_X509_PARSE
+#endif
+#ifndef XRT_MODULE_X509_PROFILE
+#define XRT_MODULE_X509_PROFILE
+#endif
+#ifndef XRT_MODULE_X509_NAME
+#define XRT_MODULE_X509_NAME
+#endif
+#ifndef XRT_MODULE_X509_VERIFY
+#define XRT_MODULE_X509_VERIFY
 #endif
 #ifndef XACME_MODULE_DNS_ALI
 #define XACME_MODULE_DNS_ALI
@@ -204,6 +231,12 @@
 #endif
 #ifndef XRT_MODULE_FILE_WHOLE
 #define XRT_MODULE_FILE_WHOLE
+#endif
+#ifndef XRT_MODULE_FILE_LOCK
+#define XRT_MODULE_FILE_LOCK
+#endif
+#ifndef XRT_MODULE_DIR_TEMP
+#define XRT_MODULE_DIR_TEMP
 #endif
 #ifndef XRT_MODULE_X509_PARSE
 #define XRT_MODULE_X509_PARSE
@@ -261,11 +294,17 @@
 #ifndef XRT_MODULE_CRYPTO_HMAC_SHA256
 #define XRT_MODULE_CRYPTO_HMAC_SHA256
 #endif
+#ifndef XRT_MODULE_RANDOM_SECURE
+#define XRT_MODULE_RANDOM_SECURE
+#endif
 #ifndef XRT_MODULE_TIME
 #define XRT_MODULE_TIME
 #endif
 #ifndef XRT_MODULE_BUFFER
 #define XRT_MODULE_BUFFER
+#endif
+#ifndef XRT_MODULE_MUTEX
+#define XRT_MODULE_MUTEX
 #endif
 #endif
 
@@ -283,11 +322,17 @@
 #ifndef XRT_MODULE_NET_UDP_SYNC
 #define XRT_MODULE_NET_UDP_SYNC
 #endif
+#ifndef XRT_MODULE_THREAD
+#define XRT_MODULE_THREAD
+#endif
 #ifndef XRT_MODULE_RANDOM
 #define XRT_MODULE_RANDOM
 #endif
 #ifndef XRT_MODULE_RANDOM_DEFAULT
 #define XRT_MODULE_RANDOM_DEFAULT
+#endif
+#ifndef XRT_MODULE_RANDOM_SECURE
+#define XRT_MODULE_RANDOM_SECURE
 #endif
 #ifndef XRT_MODULE_TIME
 #define XRT_MODULE_TIME
@@ -360,6 +405,9 @@
 #if defined(XACME_MODULE_ALL) || defined(XACME_MODULE_ACME_HTTP)
 #ifndef XACME_FEATURE_ACME_HTTP
 #define XACME_FEATURE_ACME_HTTP
+#endif
+#ifndef XRT_MODULE_ATOMIC
+#define XRT_MODULE_ATOMIC
 #endif
 #ifndef XRT_MODULE_BUFFER
 #define XRT_MODULE_BUFFER

@@ -39,6 +39,11 @@ def publish(source: Path, output: Path) -> None:
 
 
 def build(args: argparse.Namespace, selected: dict) -> Path:
+    # A build must not mix SDK declarations with a locally patched vendor TU.
+    # Older checkouts without a lock still retain their original build contract.
+    if (ROOT / "lib/xrt_sources.lock.json").is_file():
+        from sync_xrt import check_lock
+        check_lock()
     platform = "windows" if os.name == "nt" else "linux"
     suffix = ".exe" if platform == "windows" else ""
     variant = "+".join(selected) or "default"
@@ -92,6 +97,9 @@ def build(args: argparse.Namespace, selected: dict) -> Path:
             commit = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"],
                                              text=True, cwd=ROOT,
                                              stderr=subprocess.DEVNULL).strip()
+            if subprocess.run(["git", "diff", "--quiet", "HEAD", "--"],
+                              cwd=ROOT, stderr=subprocess.DEVNULL).returncode:
+                commit += "-dirty"
         except (OSError, subprocess.CalledProcessError):
             commit = "unknown"
         flags.append(f'-DXS_BUILD_COMMIT="{commit}"')

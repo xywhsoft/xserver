@@ -27,11 +27,6 @@ extern "C" {
 typedef struct xwork_agent xwork_agent;
 typedef struct xwork_mcp_client xwork_mcp_client;
 
-typedef enum xwork_explore_mode {
-    XWORK_EXPLORE_INTERNAL = 0,   /* harness implementations (no external deps) */
-    XWORK_EXPLORE_EXTERNAL        /* delegate to rg/fd/ls; fallback to internal */
-} xwork_explore_mode;
-
 typedef enum xwork_result {
     XWORK_RESULT_OK = 0,
     XWORK_RESULT_ERROR = -1,
@@ -310,20 +305,6 @@ typedef struct xwork_agent_config {
      * default (see xllmSessionSetSystemPrompt); only loop-style hosts that
      * want xwork's default persona enable this. */
     bool bInjectSystemPrompt;
-    /* Explore tools (ls/glob/grep): in-process, zero external dependency,
-     * structured locale-free output. INTERNAL runs harness implementations;
-     * EXTERNAL delegates to the named programs (rg/fd/ls conventions) and
-     * silently falls back to INTERNAL when the program is missing. */
-    bool bRegisterExploreTools;
-    xwork_explore_mode eExploreMode;
-    const char* sLsProgram;                   /* default "ls" */
-    const char* sGlobProgram;                 /* default "fd" */
-    const char* sGrepProgram;                 /* default "rg" */
-    /* python tool: three-state (sync REPL / reset / background task). Off by
-     * default; hosts enable it and pin the interpreter path or version. The
-     * background state rides the standard process task table. */
-    bool bRegisterPythonTool;
-    const char* sPythonPath;                  /* default "python" */
 } xwork_agent_config;
 
 typedef struct xwork_run_result {

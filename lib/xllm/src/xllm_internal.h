@@ -101,8 +101,6 @@ struct xllm_client {
     char* sProfileId;
     bool bHasModelProfile;
     bool bTls;
-    xnetproxy* pProxy;             /* 拨号代理（可空）；bypass 命中时不使用 */
-    char* sProxyBypass;
     char* sHost;
     char* sTarget;
     char* sHostHeader;
@@ -391,6 +389,3 @@ static inline void xllm__atomic_store(volatile long* pValue, long iValue)
 }
 
 #endif
-
-/* bypass 列表匹配：逗号/分号分隔，'*' 前后通配，大小写不敏感 */
-bool xllm__proxy_bypassed(const char* sBypass, const char* sHost);

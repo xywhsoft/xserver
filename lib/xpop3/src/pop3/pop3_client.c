@@ -35,6 +35,7 @@ bool __xrtPop3ClientFail(xpop3client* pClient)
 {
 	if ( pClient != NULL ) {
 		pClient->State = XPOP3_CLIENT_FAILED;
+		__xrtMailTransportAbortPreserveError(&pClient->Transport);
 	}
 	return false;
 }
@@ -50,18 +51,22 @@ bool __xrtPop3ClientReplySave(
 {
 	xpop3replyview Parsed;
 	xstrview Stable;
+	size_t iTextOffset;
 
+	/* 畸形状态行不能覆盖上一条有效回复。 */
+	if ( !xrtPop3ReplyParse(Line, &Parsed) ) {
+		return false;
+	}
+	iTextOffset = (size_t)(Parsed.Text.Data - Line.Data);
 	if ( !__xrtMailTextSet(&pClient->Reply, Line) ) {
 		return false;
 	}
 	Stable.Data = pClient->Reply.Data;
 	Stable.Size = pClient->Reply.Size;
-	if ( !xrtPop3ReplyParse(Stable, &Parsed) ) {
-		return false;
-	}
 	pReply->Ok = Parsed.Ok;
-	pReply->Source = Parsed.Source;
-	pReply->Text = Parsed.Text;
+	pReply->Source = Stable;
+	pReply->Text.Data = Stable.Data + iTextOffset;
+	pReply->Text.Size = Parsed.Text.Size;
 	return true;
 }
 
@@ -753,8 +758,13 @@ XRT_API bool xrtPop3ClientStat(
 		) ) {
 		return false;
 	}
-	return Reply.Ok ? xrtPop3StatParse(Reply.Source, pStat) :
-		__xrtPop3ClientRejected();
+	if ( !Reply.Ok ) {
+		return __xrtPop3ClientRejected();
+	}
+	if ( !xrtPop3StatParse(Reply.Source, pStat) ) {
+		return __xrtPop3ClientFail(pClient);
+	}
+	return true;
 }
 
 
@@ -788,8 +798,13 @@ XRT_API bool xrtPop3ClientList(
 		) ) {
 		return false;
 	}
-	return Reply.Ok ? xrtPop3ListParse(Reply.Text, pItem) :
-		__xrtPop3ClientRejected();
+	if ( !Reply.Ok ) {
+		return __xrtPop3ClientRejected();
+	}
+	if ( !xrtPop3ListParse(Reply.Text, pItem) ) {
+		return __xrtPop3ClientFail(pClient);
+	}
+	return true;
 }
 
 
@@ -841,8 +856,13 @@ XRT_API bool xrtPop3ClientUidl(
 		) ) {
 		return false;
 	}
-	return Reply.Ok ? xrtPop3UidlParse(Reply.Text, pItem) :
-		__xrtPop3ClientRejected();
+	if ( !Reply.Ok ) {
+		return __xrtPop3ClientRejected();
+	}
+	if ( !xrtPop3UidlParse(Reply.Text, pItem) ) {
+		return __xrtPop3ClientFail(pClient);
+	}
+	return true;
 }
 
 

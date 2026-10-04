@@ -1,0 +1,17 @@
+# Upstream snapshots are byte-for-byte copies. Preserve their source line endings.
+/lib/xrt.h -text
+/lib/xrt_decl.h -text
+/lib/xjwt/** -text
+/lib/xoauth2/** -text
+/lib/xmail/** -text
+/lib/xsmtp/** -text
+/lib/xpop3/** -text
+/lib/ximap/** -text
+/lib/xacme/** -text
+/lib/xllm/** -text
+/lib/xllm-session/** -text
+/lib/xwork/** -text
+/lib/xrtshim/** text eol=lf
+/lib/xrt_sources.lock.json text eol=lf
+/lib/xrt_version.txt text eol=lf
+/src/script/import_*.inc text eol=lf
