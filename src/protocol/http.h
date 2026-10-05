@@ -1241,6 +1241,9 @@ static bool XS_HttpDispatch(XS_HttpRecord* pRec)
 			XS_HttpFinishRequest(pRec, true);
 			return false;
 		}
+		/* Application I/O runs outside the HTTP driver. Its own timeout policy
+		 * applies; the retained registry entry still fences host teardown. */
+		xrtAtomic32Store(&pRec->tReg.tApplicationIdle, 1, XMEMORY_RELEASE);
 		return false;
 	}
 	XS_ScriptRelease(pScript);
