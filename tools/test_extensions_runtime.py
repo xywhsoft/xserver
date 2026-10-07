@@ -184,7 +184,6 @@ static void probe_qrcodegen(void)
 
 #ifdef XS_USE_XACME
 #include <xacme.h>
-#include <xacme/xacme_flow.h>
 #include <xrt/acme_client.h>
 static void probe_xacme(void)
 {
