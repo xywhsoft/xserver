@@ -9,14 +9,13 @@ static xthread* Worker;
 static xnetstream* Tcp;
 static xtlsstream* Tls;
 static bool Send(xnetstream* tcp,xtlsstream* tls,const char* text) {
-    xdeadline until=xrtDeadlineAfter(2000000u);
     if(tls) {
         xfuture* sent=xrtTlsStreamSendAsync(tls,text,strlen(text));
-        bool ok=sent&&xrtFutureWaitUntil(sent,until)==XWAIT_OK&&xrtFutureState(sent)==XFUTURE_RESOLVED;
+        bool ok=sent&&xrtFutureWaitFor(sent,2000)==XWAIT_OK&&xrtFutureState(sent)==XFUTURE_RESOLVED;
         xrtFutureDestroy(sent);return ok;
     }
     return xrtNetStreamSend(tcp,text,strlen(text))==XNET_RESULT_OK&&
-        xrtNetStreamWait(tcp,XNET_STREAM_WAIT_DRAIN,until,NULL);
+        xrtNetStreamWait(tcp,XNET_STREAM_WAIT_DRAIN,2000,NULL);
 }
 static int32 Quiet(void* unused) {
     (void)unused;
