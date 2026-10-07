@@ -34,16 +34,60 @@
  "xllm": {
   "macro": "XS_USE_XLLM",
   "headers": {
-   "xllm.h": "lib/xllm/xllm.h",
-   "xllm-executor.h": "lib/xllm/xllm-executor.h"
+   "xllm/api.h": "lib/xllm/include/xllm/api.h",
+   "xllm/executor.h": "lib/xllm/include/xllm/executor.h",
+   "xllm/features.h": "lib/xllm/include/xllm/features.h",
+   "xllm.h": "lib/xllm/include/xllm.h",
+   "xllm-executor.h": "lib/xllm/include/xllm/executor.h"
   },
   "sources": [
    {
-    "path": "lib/xllm/xllm.c"
+    "path": "lib/xllm/src/llm/dialect_anthropic.c"
+   },
+   {
+    "path": "lib/xllm/src/llm/dialect_completions.c"
+   },
+   {
+    "path": "lib/xllm/src/llm/dialect_responses.c"
+   },
+   {
+    "path": "lib/xllm/src/llm/xllm_assemble.c"
+   },
+   {
+    "path": "lib/xllm/src/llm/xllm_client.c"
+   },
+   {
+    "path": "lib/xllm/src/llm/xllm_core.c"
+   },
+   {
+    "path": "lib/xllm/src/llm/xllm_dialect.c"
+   },
+   {
+    "path": "lib/xllm/src/llm/xllm_history.c"
+   },
+   {
+    "path": "lib/xllm/src/llm/xllm_parts.c"
+   },
+   {
+    "path": "lib/xllm/src/llm/xllm_profile.c"
+   },
+   {
+    "path": "lib/xllm/src/llm/xllm_sse.c"
+   },
+   {
+    "path": "lib/xllm/src/llm/xllm_transport.c"
    }
   ],
   "symbols": "src/script/import_xllm.inc",
-  "symbol_macro": "XS_XLLM_SYMBOL"
+  "symbol_macro": "XS_XLLM_SYMBOL",
+  "feature_macro": [
+   "XRT_MODULE_ALL",
+   "XLLM_MODULE_ALL"
+  ],
+  "host_includes": [
+   "lib/xllm/include",
+   "lib/xrtshim"
+  ]
  },
  "xllm-session": {
   "macro": "XS_USE_XLLM_SESSION",
@@ -51,15 +95,46 @@
    "xllm"
   ],
   "headers": {
-   "xllm-session.h": "lib/xllm-session/xllm-session.h"
+   "xllm-session/api.h": "lib/xllm-session/include/xllm-session/api.h",
+   "xllm-session/features.h": "lib/xllm-session/include/xllm-session/features.h",
+   "xllm-session.h": "lib/xllm-session/include/xllm-session.h"
   },
   "sources": [
    {
-    "path": "lib/xllm-session/xllm-session.c"
+    "path": "lib/xllm-session/src/session/xllm_session_compact.c"
+   },
+   {
+    "path": "lib/xllm-session/src/session/xllm_session_core.c"
+   },
+   {
+    "path": "lib/xllm-session/src/session/xllm_session_easy.c"
+   },
+   {
+    "path": "lib/xllm-session/src/session/xllm_session_govern.c"
+   },
+   {
+    "path": "lib/xllm-session/src/session/xllm_session_journal.c"
+   },
+   {
+    "path": "lib/xllm-session/src/session/xllm_session_persist.c"
+   },
+   {
+    "path": "lib/xllm-session/src/session/xllm_session_render.c"
+   },
+   {
+    "path": "lib/xllm-session/src/session/xllm_session_run.c"
    }
   ],
   "symbols": "src/script/import_xllm_session.inc",
-  "symbol_macro": "XS_XLLM_SESSION_SYMBOL"
+  "symbol_macro": "XS_XLLM_SESSION_SYMBOL",
+  "feature_macro": [
+   "XRT_MODULE_ALL",
+   "XLLM_SESSION_MODULE_ALL"
+  ],
+  "host_includes": [
+   "lib/xllm-session/include",
+   "lib/xrtshim"
+  ]
  },
  "xwork": {
   "macro": "XS_USE_XWORK",
@@ -68,23 +143,46 @@
    "xllm-session"
   ],
   "host_includes": [
-   "lib/xllm",
-   "lib/xllm-session"
+   "lib/xwork/include",
+   "lib/xrtshim"
   ],
   "headers": {
-   "xwork.h": "lib/xwork/xwork.h"
+   "xwork/api.h": "lib/xwork/include/xwork/api.h",
+   "xwork/features.h": "lib/xwork/include/xwork/features.h",
+   "xwork.h": "lib/xwork/include/xwork.h"
   },
   "sources": [
    {
-    "path": "lib/xwork/xwork.c",
-    "flags": [
-     "-Ilib/xllm",
-     "-Ilib/xllm-session"
-    ]
+    "path": "lib/xwork/src/work/xwork_agent.c"
+   },
+   {
+    "path": "lib/xwork/src/work/xwork_core.c"
+   },
+   {
+    "path": "lib/xwork/src/work/xwork_executor.c"
+   },
+   {
+    "path": "lib/xwork/src/work/xwork_explore.c"
+   },
+   {
+    "path": "lib/xwork/src/work/xwork_mcp.c"
+   },
+   {
+    "path": "lib/xwork/src/work/xwork_python.c"
+   },
+   {
+    "path": "lib/xwork/src/work/xwork_subagent.c"
+   },
+   {
+    "path": "lib/xwork/src/work/xwork_tools.c"
    }
   ],
   "symbols": "src/script/import_xwork.inc",
-  "symbol_macro": "XS_XWORK_SYMBOL"
+  "symbol_macro": "XS_XWORK_SYMBOL",
+  "feature_macro": [
+   "XRT_MODULE_ALL",
+   "XWORK_MODULE_ALL"
+  ]
  },
  "xmail": {
   "macro": "XS_USE_XMAIL",
@@ -110,14 +208,61 @@
   },
   "sources": [
    {
-    "path": "lib/xmail/xmail.c",
-    "flags": [
-     "-Ilib/xmail/include",
-     "-Ilib/xrtshim"
-    ],
-    "defines": [
-     "XMAIL_MODULE_ALL"
-    ]
+    "path": "lib/xmail/src/mail/mail_address.c"
+   },
+   {
+    "path": "lib/xmail/src/mail/mail_build.c"
+   },
+   {
+    "path": "lib/xmail/src/mail/mail_charset.c"
+   },
+   {
+    "path": "lib/xmail/src/mail/mail_codec.c"
+   },
+   {
+    "path": "lib/xmail/src/mail/mail_compose.c"
+   },
+   {
+    "path": "lib/xmail/src/mail/mail_core.c"
+   },
+   {
+    "path": "lib/xmail/src/mail/mail_date.c"
+   },
+   {
+    "path": "lib/xmail/src/mail/mail_header.c"
+   },
+   {
+    "path": "lib/xmail/src/mail/mail_id.c"
+   },
+   {
+    "path": "lib/xmail/src/mail/mail_message.c"
+   },
+   {
+    "path": "lib/xmail/src/mail/mail_multipart.c"
+   },
+   {
+    "path": "lib/xmail/src/mail/mail_param.c"
+   },
+   {
+    "path": "lib/xmail/src/mail/mail_tree.c"
+   },
+   {
+    "path": "lib/xmail/src/mail/mail_word.c"
+   },
+   {
+    "path": "lib/xmail/src/transport/mail_auth.c"
+   },
+   {
+    "path": "lib/xmail/src/transport/mail_net.c"
+   },
+   {
+    "path": "lib/xmail/src/transport/mail_net_deflate.c"
+   },
+   {
+    "path": "lib/xmail/src/transport/mail_net_tls.c"
+   },
+   {
+    "path": "lib/xmail/src/transport/mail_wire.c"
    }
   ],
   "symbols": "src/script/import_xmail.inc",
@@ -126,48 +271,56 @@
    "lib/xmail/include",
    "lib/xrtshim"
   ],
-  "feature_macro": "XMAIL_MODULE_ALL"
+  "feature_macro": [
+   "XRT_MODULE_ALL",
+   "XMAIL_MODULE_ALL"
+  ]
  },
  "xsmtp": {
   "macro": "XS_USE_XSMTP",
   "headers": {
-   "xsmtp/features.h": "lib/xsmtp/include/xsmtp/features.h",
-   "xsmtp.h": "lib/xsmtp/include/xsmtp.h",
+   "xrt/detail/xsmtp_wait.h": "lib/xsmtp/include/xrt/detail/xsmtp_wait.h",
    "xrt/smtp.h": "lib/xsmtp/include/xrt/smtp.h",
    "xrt/smtp_auth.h": "lib/xsmtp/include/xrt/smtp_auth.h",
    "xrt/smtp_client.h": "lib/xsmtp/include/xrt/smtp_client.h",
-   "xrt/smtp_submit.h": "lib/xsmtp/include/xrt/smtp_submit.h"
+   "xrt/smtp_submit.h": "lib/xsmtp/include/xrt/smtp_submit.h",
+   "xsmtp/features.h": "lib/xsmtp/include/xsmtp/features.h",
+   "xsmtp.h": "lib/xsmtp/include/xsmtp.h"
   },
   "sources": [
    {
-    "path": "lib/xsmtp/xsmtp.c",
-    "flags": [
-     "-Ilib/xmail/include",
-     "-Ilib/xrtshim",
-     "-Ilib/xsmtp/include"
-    ],
-    "defines": [
-     "XSMTP_MODULE_ALL"
-    ]
+    "path": "lib/xsmtp/src/smtp/smtp.c"
+   },
+   {
+    "path": "lib/xsmtp/src/smtp/smtp_auth.c"
+   },
+   {
+    "path": "lib/xsmtp/src/smtp/smtp_client.c"
+   },
+   {
+    "path": "lib/xsmtp/src/smtp/smtp_submit.c"
    }
   ],
   "symbols": "src/script/import_xsmtp.inc",
   "symbol_macro": "XS_XSMTP_SYMBOL",
   "host_includes": [
-   "lib/xmail/include",
-   "lib/xrtshim",
-   "lib/xsmtp/include"
+   "lib/xsmtp/include",
+   "lib/xrtshim"
   ],
   "requires": [
    "xmail"
   ],
-  "feature_macro": "XSMTP_MODULE_ALL"
+  "feature_macro": [
+   "XRT_MODULE_ALL",
+   "XSMTP_MODULE_ALL"
+  ]
  },
  "xpop3": {
   "macro": "XS_USE_XPOP3",
   "headers": {
    "xpop3/features.h": "lib/xpop3/include/xpop3/features.h",
    "xpop3.h": "lib/xpop3/include/xpop3.h",
+   "xrt/detail/xpop3_wait.h": "lib/xpop3/include/xrt/detail/xpop3_wait.h",
    "xrt/pop3.h": "lib/xpop3/include/xrt/pop3.h",
    "xrt/pop3_auth.h": "lib/xpop3/include/xrt/pop3_auth.h",
    "xrt/pop3_client.h": "lib/xpop3/include/xrt/pop3_client.h",
@@ -175,34 +328,38 @@
   },
   "sources": [
    {
-    "path": "lib/xpop3/xpop3.c",
-    "flags": [
-     "-Ilib/xmail/include",
-     "-Ilib/xrtshim",
-     "-Ilib/xpop3/include"
-    ],
-    "defines": [
-     "XPOP3_MODULE_ALL"
-    ]
+    "path": "lib/xpop3/src/pop3/pop3.c"
+   },
+   {
+    "path": "lib/xpop3/src/pop3/pop3_auth.c"
+   },
+   {
+    "path": "lib/xpop3/src/pop3/pop3_client.c"
+   },
+   {
+    "path": "lib/xpop3/src/pop3/pop3_message.c"
    }
   ],
   "symbols": "src/script/import_xpop3.inc",
   "symbol_macro": "XS_XPOP3_SYMBOL",
   "host_includes": [
-   "lib/xmail/include",
-   "lib/xrtshim",
-   "lib/xpop3/include"
+   "lib/xpop3/include",
+   "lib/xrtshim"
   ],
   "requires": [
    "xmail"
   ],
-  "feature_macro": "XPOP3_MODULE_ALL"
+  "feature_macro": [
+   "XRT_MODULE_ALL",
+   "XPOP3_MODULE_ALL"
+  ]
  },
  "ximap": {
   "macro": "XS_USE_XIMAP",
   "headers": {
    "ximap/features.h": "lib/ximap/include/ximap/features.h",
    "ximap.h": "lib/ximap/include/ximap.h",
+   "xrt/detail/ximap_wait.h": "lib/ximap/include/xrt/detail/ximap_wait.h",
    "xrt/imap.h": "lib/ximap/include/xrt/imap.h",
    "xrt/imap_append.h": "lib/ximap/include/xrt/imap_append.h",
    "xrt/imap_auth.h": "lib/ximap/include/xrt/imap_auth.h",
@@ -215,28 +372,46 @@
   },
   "sources": [
    {
-    "path": "lib/ximap/ximap.c",
-    "flags": [
-     "-Ilib/xmail/include",
-     "-Ilib/xrtshim",
-     "-Ilib/ximap/include"
-    ],
-    "defines": [
-     "XIMAP_MODULE_ALL"
-    ]
+    "path": "lib/ximap/src/imap/imap.c"
+   },
+   {
+    "path": "lib/ximap/src/imap/imap_append.c"
+   },
+   {
+    "path": "lib/ximap/src/imap/imap_auth.c"
+   },
+   {
+    "path": "lib/ximap/src/imap/imap_body.c"
+   },
+   {
+    "path": "lib/ximap/src/imap/imap_client.c"
+   },
+   {
+    "path": "lib/ximap/src/imap/imap_command.c"
+   },
+   {
+    "path": "lib/ximap/src/imap/imap_compress.c"
+   },
+   {
+    "path": "lib/ximap/src/imap/imap_data.c"
+   },
+   {
+    "path": "lib/ximap/src/imap/imap_message.c"
    }
   ],
   "symbols": "src/script/import_ximap.inc",
   "symbol_macro": "XS_XIMAP_SYMBOL",
   "host_includes": [
-   "lib/xmail/include",
-   "lib/xrtshim",
-   "lib/ximap/include"
+   "lib/ximap/include",
+   "lib/xrtshim"
   ],
   "requires": [
    "xmail"
   ],
-  "feature_macro": "XIMAP_MODULE_ALL"
+  "feature_macro": [
+   "XRT_MODULE_ALL",
+   "XIMAP_MODULE_ALL"
+  ]
  },
  "md4c": {
   "macro": "XS_USE_MD4C",
@@ -261,8 +436,8 @@
  "xacme": {
   "macro": "XS_USE_XACME",
   "headers": {
-   "xacme.h": "lib/xacme/include/xacme.h",
    "xacme/features.h": "lib/xacme/include/xacme/features.h",
+   "xacme.h": "lib/xacme/include/xacme.h",
    "xrt/acme.h": "lib/xacme/include/xrt/acme.h",
    "xrt/acme_client.h": "lib/xacme/include/xrt/acme_client.h",
    "xrt/acme_csr.h": "lib/xacme/include/xrt/acme_csr.h",
@@ -275,478 +450,56 @@
    "xrt/acme_http.h": "lib/xacme/include/xrt/acme_http.h",
    "xrt/acme_jose.h": "lib/xacme/include/xrt/acme_jose.h",
    "xrt/acme_obtain.h": "lib/xacme/include/xrt/acme_obtain.h",
-   "xrt/acme_store.h": "lib/xacme/include/xrt/acme_store.h",
-   "xacme/xacme_flow.h": "lib/xacme/src/internal/xacme_flow.h",
-   "xacme/xacme_csr.h": "lib/xacme/src/internal/xacme_csr.h",
-   "xacme/xacme_http.h": "lib/xacme/src/internal/xacme_http.h",
-   "xacme/xacme_jose.h": "lib/xacme/src/internal/xacme_jose.h",
-   "xacme/xacme_dnscommon.h": "lib/xacme/src/internal/xacme_dnscommon.h",
-   "xacme/xacme_sigv4.h": "lib/xacme/src/internal/xacme_sigv4.h"
+   "xrt/acme_store.h": "lib/xacme/include/xrt/acme_store.h"
   },
   "sources": [
    {
-    "path": "lib/xacme/src/acme/xacme_core.c",
-    "defines": [
-     "XRT_MODULE_ALL",
-     "XACME_MODULE_ALL",
-     "XACME_MODULE_ACME_CORE",
-     "XACME_MODULE_ACME_FLOW",
-     "XACME_MODULE_ACME_STORE",
-     "XACME_MODULE_DNS_TXT",
-     "XACME_FEATURE_ACME_DNS",
-     "XACME_FEATURE_ACME_CORE",
-     "XACME_FEATURE_ACME_STORE",
-     "XACME_FEATURE_DNS_TXT",
-     "XACME_FEATURE_ACME_FLOW",
-     "XACME_FEATURE_ACME_HTTP",
-     "XACME_FEATURE_ACME_CSR",
-     "XACME_FEATURE_ACME_JOSE",
-     "XACME_FEATURE_DNS_ALI",
-     "XACME_FEATURE_DNS_CF",
-     "XACME_FEATURE_DNS_TENCENT",
-     "XACME_FEATURE_DNS_AWS",
-     "XACME_FEATURE_DNS_HUAWEI",
-     "XACME_FEATURE_ACME_OBTAIN"
-    ],
-    "flags": [
-     "-Ilib/xacme/include",
-     "-Ilib/xrtshim"
-    ]
+    "path": "lib/xacme/src/acme/xacme_core.c"
    },
    {
-    "path": "lib/xacme/src/acme/xacme_csr.c",
-    "defines": [
-     "XRT_MODULE_ALL",
-     "XACME_MODULE_ALL",
-     "XACME_MODULE_ACME_CORE",
-     "XACME_MODULE_ACME_FLOW",
-     "XACME_MODULE_ACME_STORE",
-     "XACME_MODULE_DNS_TXT",
-     "XACME_FEATURE_ACME_DNS",
-     "XACME_FEATURE_ACME_CORE",
-     "XACME_FEATURE_ACME_STORE",
-     "XACME_FEATURE_DNS_TXT",
-     "XACME_FEATURE_ACME_FLOW",
-     "XACME_FEATURE_ACME_HTTP",
-     "XACME_FEATURE_ACME_CSR",
-     "XACME_FEATURE_ACME_JOSE",
-     "XACME_FEATURE_DNS_ALI",
-     "XACME_FEATURE_DNS_CF",
-     "XACME_FEATURE_DNS_TENCENT",
-     "XACME_FEATURE_DNS_AWS",
-     "XACME_FEATURE_DNS_HUAWEI",
-     "XACME_FEATURE_ACME_OBTAIN"
-    ],
-    "flags": [
-     "-Ilib/xacme/include",
-     "-Ilib/xrtshim"
-    ]
+    "path": "lib/xacme/src/acme/xacme_csr.c"
    },
    {
-    "path": "lib/xacme/src/acme/xacme_dns.c",
-    "defines": [
-     "XRT_MODULE_ALL",
-     "XACME_MODULE_ALL",
-     "XACME_MODULE_ACME_CORE",
-     "XACME_MODULE_ACME_FLOW",
-     "XACME_MODULE_ACME_STORE",
-     "XACME_MODULE_DNS_TXT",
-     "XACME_FEATURE_ACME_DNS",
-     "XACME_FEATURE_ACME_CORE",
-     "XACME_FEATURE_ACME_STORE",
-     "XACME_FEATURE_DNS_TXT",
-     "XACME_FEATURE_ACME_FLOW",
-     "XACME_FEATURE_ACME_HTTP",
-     "XACME_FEATURE_ACME_CSR",
-     "XACME_FEATURE_ACME_JOSE",
-     "XACME_FEATURE_DNS_ALI",
-     "XACME_FEATURE_DNS_CF",
-     "XACME_FEATURE_DNS_TENCENT",
-     "XACME_FEATURE_DNS_AWS",
-     "XACME_FEATURE_DNS_HUAWEI",
-     "XACME_FEATURE_ACME_OBTAIN"
-    ],
-    "flags": [
-     "-Ilib/xacme/include",
-     "-Ilib/xrtshim"
-    ]
+    "path": "lib/xacme/src/acme/xacme_dns.c"
    },
    {
-    "path": "lib/xacme/src/acme/xacme_flow.c",
-    "defines": [
-     "XRT_MODULE_ALL",
-     "XACME_MODULE_ALL",
-     "XACME_MODULE_ACME_CORE",
-     "XACME_MODULE_ACME_FLOW",
-     "XACME_MODULE_ACME_STORE",
-     "XACME_MODULE_DNS_TXT",
-     "XACME_FEATURE_ACME_DNS",
-     "XACME_FEATURE_ACME_CORE",
-     "XACME_FEATURE_ACME_STORE",
-     "XACME_FEATURE_DNS_TXT",
-     "XACME_FEATURE_ACME_FLOW",
-     "XACME_FEATURE_ACME_HTTP",
-     "XACME_FEATURE_ACME_CSR",
-     "XACME_FEATURE_ACME_JOSE",
-     "XACME_FEATURE_DNS_ALI",
-     "XACME_FEATURE_DNS_CF",
-     "XACME_FEATURE_DNS_TENCENT",
-     "XACME_FEATURE_DNS_AWS",
-     "XACME_FEATURE_DNS_HUAWEI",
-     "XACME_FEATURE_ACME_OBTAIN"
-    ],
-    "flags": [
-     "-Ilib/xacme/include",
-     "-Ilib/xrtshim"
-    ]
+    "path": "lib/xacme/src/acme/xacme_flow.c"
    },
    {
-    "path": "lib/xacme/src/acme/xacme_http.c",
-    "defines": [
-     "XRT_MODULE_ALL",
-     "XACME_MODULE_ALL",
-     "XACME_MODULE_ACME_CORE",
-     "XACME_MODULE_ACME_FLOW",
-     "XACME_MODULE_ACME_STORE",
-     "XACME_MODULE_DNS_TXT",
-     "XACME_FEATURE_ACME_DNS",
-     "XACME_FEATURE_ACME_CORE",
-     "XACME_FEATURE_ACME_STORE",
-     "XACME_FEATURE_DNS_TXT",
-     "XACME_FEATURE_ACME_FLOW",
-     "XACME_FEATURE_ACME_HTTP",
-     "XACME_FEATURE_ACME_CSR",
-     "XACME_FEATURE_ACME_JOSE",
-     "XACME_FEATURE_DNS_ALI",
-     "XACME_FEATURE_DNS_CF",
-     "XACME_FEATURE_DNS_TENCENT",
-     "XACME_FEATURE_DNS_AWS",
-     "XACME_FEATURE_DNS_HUAWEI",
-     "XACME_FEATURE_ACME_OBTAIN"
-    ],
-    "flags": [
-     "-Ilib/xacme/include",
-     "-Ilib/xrtshim"
-    ]
+    "path": "lib/xacme/src/acme/xacme_http.c"
    },
    {
-    "path": "lib/xacme/src/acme/xacme_jose.c",
-    "defines": [
-     "XRT_MODULE_ALL",
-     "XACME_MODULE_ALL",
-     "XACME_MODULE_ACME_CORE",
-     "XACME_MODULE_ACME_FLOW",
-     "XACME_MODULE_ACME_STORE",
-     "XACME_MODULE_DNS_TXT",
-     "XACME_FEATURE_ACME_DNS",
-     "XACME_FEATURE_ACME_CORE",
-     "XACME_FEATURE_ACME_STORE",
-     "XACME_FEATURE_DNS_TXT",
-     "XACME_FEATURE_ACME_FLOW",
-     "XACME_FEATURE_ACME_HTTP",
-     "XACME_FEATURE_ACME_CSR",
-     "XACME_FEATURE_ACME_JOSE",
-     "XACME_FEATURE_DNS_ALI",
-     "XACME_FEATURE_DNS_CF",
-     "XACME_FEATURE_DNS_TENCENT",
-     "XACME_FEATURE_DNS_AWS",
-     "XACME_FEATURE_DNS_HUAWEI",
-     "XACME_FEATURE_ACME_OBTAIN"
-    ],
-    "flags": [
-     "-Ilib/xacme/include",
-     "-Ilib/xrtshim"
-    ]
+    "path": "lib/xacme/src/acme/xacme_jose.c"
    },
    {
-    "path": "lib/xacme/src/acme/xacme_obtain.c",
-    "defines": [
-     "XRT_MODULE_ALL",
-     "XACME_MODULE_ALL",
-     "XACME_MODULE_ACME_CORE",
-     "XACME_MODULE_ACME_FLOW",
-     "XACME_MODULE_ACME_STORE",
-     "XACME_MODULE_DNS_TXT",
-     "XACME_FEATURE_ACME_DNS",
-     "XACME_FEATURE_ACME_CORE",
-     "XACME_FEATURE_ACME_STORE",
-     "XACME_FEATURE_DNS_TXT",
-     "XACME_FEATURE_ACME_FLOW",
-     "XACME_FEATURE_ACME_HTTP",
-     "XACME_FEATURE_ACME_CSR",
-     "XACME_FEATURE_ACME_JOSE",
-     "XACME_FEATURE_DNS_ALI",
-     "XACME_FEATURE_DNS_CF",
-     "XACME_FEATURE_DNS_TENCENT",
-     "XACME_FEATURE_DNS_AWS",
-     "XACME_FEATURE_DNS_HUAWEI",
-     "XACME_FEATURE_ACME_OBTAIN"
-    ],
-    "flags": [
-     "-Ilib/xacme/include",
-     "-Ilib/xrtshim"
-    ]
+    "path": "lib/xacme/src/acme/xacme_obtain.c"
    },
    {
-    "path": "lib/xacme/src/acme/xacme_registry.c",
-    "defines": [
-     "XRT_MODULE_ALL",
-     "XACME_MODULE_ALL",
-     "XACME_MODULE_ACME_CORE",
-     "XACME_MODULE_ACME_FLOW",
-     "XACME_MODULE_ACME_STORE",
-     "XACME_MODULE_DNS_TXT",
-     "XACME_FEATURE_ACME_DNS",
-     "XACME_FEATURE_ACME_CORE",
-     "XACME_FEATURE_ACME_STORE",
-     "XACME_FEATURE_DNS_TXT",
-     "XACME_FEATURE_ACME_FLOW",
-     "XACME_FEATURE_ACME_HTTP",
-     "XACME_FEATURE_ACME_CSR",
-     "XACME_FEATURE_ACME_JOSE",
-     "XACME_FEATURE_DNS_ALI",
-     "XACME_FEATURE_DNS_CF",
-     "XACME_FEATURE_DNS_TENCENT",
-     "XACME_FEATURE_DNS_AWS",
-     "XACME_FEATURE_DNS_HUAWEI",
-     "XACME_FEATURE_ACME_OBTAIN"
-    ],
-    "flags": [
-     "-Ilib/xacme/include",
-     "-Ilib/xrtshim"
-    ]
+    "path": "lib/xacme/src/acme/xacme_registry.c"
    },
    {
-    "path": "lib/xacme/src/acme/xacme_store.c",
-    "defines": [
-     "XRT_MODULE_ALL",
-     "XACME_MODULE_ALL",
-     "XACME_MODULE_ACME_CORE",
-     "XACME_MODULE_ACME_FLOW",
-     "XACME_MODULE_ACME_STORE",
-     "XACME_MODULE_DNS_TXT",
-     "XACME_FEATURE_ACME_DNS",
-     "XACME_FEATURE_ACME_CORE",
-     "XACME_FEATURE_ACME_STORE",
-     "XACME_FEATURE_DNS_TXT",
-     "XACME_FEATURE_ACME_FLOW",
-     "XACME_FEATURE_ACME_HTTP",
-     "XACME_FEATURE_ACME_CSR",
-     "XACME_FEATURE_ACME_JOSE",
-     "XACME_FEATURE_DNS_ALI",
-     "XACME_FEATURE_DNS_CF",
-     "XACME_FEATURE_DNS_TENCENT",
-     "XACME_FEATURE_DNS_AWS",
-     "XACME_FEATURE_DNS_HUAWEI",
-     "XACME_FEATURE_ACME_OBTAIN"
-    ],
-    "flags": [
-     "-Ilib/xacme/include",
-     "-Ilib/xrtshim"
-    ]
+    "path": "lib/xacme/src/acme/xacme_store.c"
    },
    {
-    "path": "lib/xacme/src/dns/xacme_dns_ali.c",
-    "defines": [
-     "XRT_MODULE_ALL",
-     "XACME_MODULE_ALL",
-     "XACME_MODULE_ACME_CORE",
-     "XACME_MODULE_ACME_FLOW",
-     "XACME_MODULE_ACME_STORE",
-     "XACME_MODULE_DNS_TXT",
-     "XACME_FEATURE_ACME_DNS",
-     "XACME_FEATURE_ACME_CORE",
-     "XACME_FEATURE_ACME_STORE",
-     "XACME_FEATURE_DNS_TXT",
-     "XACME_FEATURE_ACME_FLOW",
-     "XACME_FEATURE_ACME_HTTP",
-     "XACME_FEATURE_ACME_CSR",
-     "XACME_FEATURE_ACME_JOSE",
-     "XACME_FEATURE_DNS_ALI",
-     "XACME_FEATURE_DNS_CF",
-     "XACME_FEATURE_DNS_TENCENT",
-     "XACME_FEATURE_DNS_AWS",
-     "XACME_FEATURE_DNS_HUAWEI",
-     "XACME_FEATURE_ACME_OBTAIN"
-    ],
-    "flags": [
-     "-Ilib/xacme/include",
-     "-Ilib/xrtshim"
-    ]
+    "path": "lib/xacme/src/dns/xacme_dns_ali.c"
    },
    {
-    "path": "lib/xacme/src/dns/xacme_dns_aws.c",
-    "defines": [
-     "XRT_MODULE_ALL",
-     "XACME_MODULE_ALL",
-     "XACME_MODULE_ACME_CORE",
-     "XACME_MODULE_ACME_FLOW",
-     "XACME_MODULE_ACME_STORE",
-     "XACME_MODULE_DNS_TXT",
-     "XACME_FEATURE_ACME_DNS",
-     "XACME_FEATURE_ACME_CORE",
-     "XACME_FEATURE_ACME_STORE",
-     "XACME_FEATURE_DNS_TXT",
-     "XACME_FEATURE_ACME_FLOW",
-     "XACME_FEATURE_ACME_HTTP",
-     "XACME_FEATURE_ACME_CSR",
-     "XACME_FEATURE_ACME_JOSE",
-     "XACME_FEATURE_DNS_ALI",
-     "XACME_FEATURE_DNS_CF",
-     "XACME_FEATURE_DNS_TENCENT",
-     "XACME_FEATURE_DNS_AWS",
-     "XACME_FEATURE_DNS_HUAWEI",
-     "XACME_FEATURE_ACME_OBTAIN"
-    ],
-    "flags": [
-     "-Ilib/xacme/include",
-     "-Ilib/xrtshim"
-    ]
+    "path": "lib/xacme/src/dns/xacme_dns_aws.c"
    },
    {
-    "path": "lib/xacme/src/dns/xacme_dns_aws_txt.c",
-    "defines": [
-     "XRT_MODULE_ALL",
-     "XACME_MODULE_ALL",
-     "XACME_MODULE_ACME_CORE",
-     "XACME_MODULE_ACME_FLOW",
-     "XACME_MODULE_ACME_STORE",
-     "XACME_MODULE_DNS_TXT",
-     "XACME_FEATURE_ACME_DNS",
-     "XACME_FEATURE_ACME_CORE",
-     "XACME_FEATURE_ACME_STORE",
-     "XACME_FEATURE_DNS_TXT",
-     "XACME_FEATURE_ACME_FLOW",
-     "XACME_FEATURE_ACME_HTTP",
-     "XACME_FEATURE_ACME_CSR",
-     "XACME_FEATURE_ACME_JOSE",
-     "XACME_FEATURE_DNS_ALI",
-     "XACME_FEATURE_DNS_CF",
-     "XACME_FEATURE_DNS_TENCENT",
-     "XACME_FEATURE_DNS_AWS",
-     "XACME_FEATURE_DNS_HUAWEI",
-     "XACME_FEATURE_ACME_OBTAIN"
-    ],
-    "flags": [
-     "-Ilib/xacme/include",
-     "-Ilib/xrtshim"
-    ]
+    "path": "lib/xacme/src/dns/xacme_dns_aws_txt.c"
    },
    {
-    "path": "lib/xacme/src/dns/xacme_dns_cf.c",
-    "defines": [
-     "XRT_MODULE_ALL",
-     "XACME_MODULE_ALL",
-     "XACME_MODULE_ACME_CORE",
-     "XACME_MODULE_ACME_FLOW",
-     "XACME_MODULE_ACME_STORE",
-     "XACME_MODULE_DNS_TXT",
-     "XACME_FEATURE_ACME_DNS",
-     "XACME_FEATURE_ACME_CORE",
-     "XACME_FEATURE_ACME_STORE",
-     "XACME_FEATURE_DNS_TXT",
-     "XACME_FEATURE_ACME_FLOW",
-     "XACME_FEATURE_ACME_HTTP",
-     "XACME_FEATURE_ACME_CSR",
-     "XACME_FEATURE_ACME_JOSE",
-     "XACME_FEATURE_DNS_ALI",
-     "XACME_FEATURE_DNS_CF",
-     "XACME_FEATURE_DNS_TENCENT",
-     "XACME_FEATURE_DNS_AWS",
-     "XACME_FEATURE_DNS_HUAWEI",
-     "XACME_FEATURE_ACME_OBTAIN"
-    ],
-    "flags": [
-     "-Ilib/xacme/include",
-     "-Ilib/xrtshim"
-    ]
+    "path": "lib/xacme/src/dns/xacme_dns_cf.c"
    },
    {
-    "path": "lib/xacme/src/dns/xacme_dns_huawei.c",
-    "defines": [
-     "XRT_MODULE_ALL",
-     "XACME_MODULE_ALL",
-     "XACME_MODULE_ACME_CORE",
-     "XACME_MODULE_ACME_FLOW",
-     "XACME_MODULE_ACME_STORE",
-     "XACME_MODULE_DNS_TXT",
-     "XACME_FEATURE_ACME_DNS",
-     "XACME_FEATURE_ACME_CORE",
-     "XACME_FEATURE_ACME_STORE",
-     "XACME_FEATURE_DNS_TXT",
-     "XACME_FEATURE_ACME_FLOW",
-     "XACME_FEATURE_ACME_HTTP",
-     "XACME_FEATURE_ACME_CSR",
-     "XACME_FEATURE_ACME_JOSE",
-     "XACME_FEATURE_DNS_ALI",
-     "XACME_FEATURE_DNS_CF",
-     "XACME_FEATURE_DNS_TENCENT",
-     "XACME_FEATURE_DNS_AWS",
-     "XACME_FEATURE_DNS_HUAWEI",
-     "XACME_FEATURE_ACME_OBTAIN"
-    ],
-    "flags": [
-     "-Ilib/xacme/include",
-     "-Ilib/xrtshim"
-    ]
+    "path": "lib/xacme/src/dns/xacme_dns_huawei.c"
    },
    {
-    "path": "lib/xacme/src/dns/xacme_dns_tencent.c",
-    "defines": [
-     "XRT_MODULE_ALL",
-     "XACME_MODULE_ALL",
-     "XACME_MODULE_ACME_CORE",
-     "XACME_MODULE_ACME_FLOW",
-     "XACME_MODULE_ACME_STORE",
-     "XACME_MODULE_DNS_TXT",
-     "XACME_FEATURE_ACME_DNS",
-     "XACME_FEATURE_ACME_CORE",
-     "XACME_FEATURE_ACME_STORE",
-     "XACME_FEATURE_DNS_TXT",
-     "XACME_FEATURE_ACME_FLOW",
-     "XACME_FEATURE_ACME_HTTP",
-     "XACME_FEATURE_ACME_CSR",
-     "XACME_FEATURE_ACME_JOSE",
-     "XACME_FEATURE_DNS_ALI",
-     "XACME_FEATURE_DNS_CF",
-     "XACME_FEATURE_DNS_TENCENT",
-     "XACME_FEATURE_DNS_AWS",
-     "XACME_FEATURE_DNS_HUAWEI",
-     "XACME_FEATURE_ACME_OBTAIN"
-    ],
-    "flags": [
-     "-Ilib/xacme/include",
-     "-Ilib/xrtshim"
-    ]
+    "path": "lib/xacme/src/dns/xacme_dns_tencent.c"
    },
    {
-    "path": "lib/xacme/src/dns/xacme_dnstxt.c",
-    "defines": [
-     "XRT_MODULE_ALL",
-     "XACME_MODULE_ALL",
-     "XACME_MODULE_ACME_CORE",
-     "XACME_MODULE_ACME_FLOW",
-     "XACME_MODULE_ACME_STORE",
-     "XACME_MODULE_DNS_TXT",
-     "XACME_FEATURE_ACME_DNS",
-     "XACME_FEATURE_ACME_CORE",
-     "XACME_FEATURE_ACME_STORE",
-     "XACME_FEATURE_DNS_TXT",
-     "XACME_FEATURE_ACME_FLOW",
-     "XACME_FEATURE_ACME_HTTP",
-     "XACME_FEATURE_ACME_CSR",
-     "XACME_FEATURE_ACME_JOSE",
-     "XACME_FEATURE_DNS_ALI",
-     "XACME_FEATURE_DNS_CF",
-     "XACME_FEATURE_DNS_TENCENT",
-     "XACME_FEATURE_DNS_AWS",
-     "XACME_FEATURE_DNS_HUAWEI",
-     "XACME_FEATURE_ACME_OBTAIN"
-    ],
-    "flags": [
-     "-Ilib/xacme/include",
-     "-Ilib/xrtshim"
-    ]
+    "path": "lib/xacme/src/dns/xacme_dnstxt.c"
    }
   ],
   "symbols": "src/script/import_xacme.inc",
@@ -757,11 +510,7 @@
   ],
   "feature_macro": [
    "XRT_MODULE_ALL",
-   "XACME_MODULE_ALL",
-   "XACME_MODULE_ACME_CORE",
-   "XACME_MODULE_ACME_FLOW",
-   "XACME_MODULE_ACME_STORE",
-   "XACME_MODULE_DNS_TXT"
+   "XACME_MODULE_ALL"
   ]
  },
  "qrcodegen": {
@@ -784,45 +533,62 @@
  "xjwt": {
   "macro": "XS_USE_XJWT",
   "headers": {
-   "xjwt.h": "lib/xjwt/xjwt.h"
+   "xjwt/api.h": "lib/xjwt/include/xjwt/api.h",
+   "xjwt/features.h": "lib/xjwt/include/xjwt/features.h",
+   "xjwt.h": "lib/xjwt/include/xjwt.h"
   },
   "sources": [
    {
-    "path": "lib/xjwt/xjwt.c",
-    "defines": [
-     "XRT_MODULE_ALL"
-    ],
-    "flags": [
-     "-Ilib/xrtshim"
-    ]
+    "path": "lib/xjwt/src/jwt/xjwt_core.c"
+   },
+   {
+    "path": "lib/xjwt/src/jwt/xjwt_ext.c"
+   },
+   {
+    "path": "lib/xjwt/src/jwt/xjwt_main.c"
+   },
+   {
+    "path": "lib/xjwt/src/jwt/xjwt_sig.c"
    }
   ],
   "symbols": "src/script/import_xjwt.inc",
   "symbol_macro": "XS_XJWT_SYMBOL",
   "host_includes": [
-   "lib/xjwt"
+   "lib/xjwt/include",
+   "lib/xrtshim"
+  ],
+  "feature_macro": [
+   "XRT_MODULE_ALL",
+   "XJWT_MODULE_ALL"
   ]
  },
  "xoauth2": {
   "macro": "XS_USE_XOAUTH2",
   "headers": {
-   "xoauth2.h": "lib/xoauth2/xoauth2.h"
+   "xoauth2/api.h": "lib/xoauth2/include/xoauth2/api.h",
+   "xoauth2/features.h": "lib/xoauth2/include/xoauth2/features.h",
+   "xoauth2.h": "lib/xoauth2/include/xoauth2.h"
   },
   "sources": [
    {
-    "path": "lib/xoauth2/xoauth2.c",
-    "defines": [
-     "XRT_MODULE_ALL"
-    ],
-    "flags": [
-     "-Ilib/xrtshim"
-    ]
+    "path": "lib/xoauth2/src/oauth2/xoauth2_core.c"
+   },
+   {
+    "path": "lib/xoauth2/src/oauth2/xoauth2_flow.c"
+   },
+   {
+    "path": "lib/xoauth2/src/oauth2/xoauth2_http.c"
    }
   ],
   "symbols": "src/script/import_xoauth2.inc",
   "symbol_macro": "XS_XOAUTH2_SYMBOL",
   "host_includes": [
-   "lib/xoauth2"
+   "lib/xoauth2/include",
+   "lib/xrtshim"
+  ],
+  "feature_macro": [
+   "XRT_MODULE_ALL",
+   "XOAUTH2_MODULE_ALL"
   ]
  },
  "webview": {

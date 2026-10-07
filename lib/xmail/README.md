@@ -9,6 +9,11 @@ POP3、SMTP、IMAP 的真实客户端范例共享 `examples/mail_client_setup.h`
 （`dependency_manifests`）组合出完整邮件能力。正式实现不复刻 socket、TLS、压缩、取消或
 截止时间能力。
 
+单头实现与声明分别为仓库根目录的 `single/extlibs/xmail.h` 与
+`single/extlibs/xmail_decl.h`，均只包含 xmail 自身代码。使用前须按顺序提供
+XRT 的所需模块，再包含 xmail；实现宏为 `XMAIL_IMPLEMENTATION`。
+依赖选择与实现组合见 [构建说明](../../docs/BUILD.md#扩展单头与依赖顺序)。
+
 ## 分层
 
 - `mail_content`：CRLF、Quoted-Printable、MIME Base64、Header、编码词、地址、日期、
@@ -66,6 +71,10 @@ multipart、头内 NUL、伪装分隔线，以及逐字节截断与控制字节�
 明文及隐式 TLS 拨号进行中的取消、超时，以及解析器恢复后明文无迟到连接、
 TLS 无迟到会话；两项测试由
 `xmail_tests` 自动收集。
+
+`examples/mail/compose` 向 stdout 输出完整 MIME 报文；Windows 使用二进制模式保留
+CRLF，写入或刷新输出失败时返回失败。`python tools/test_mail_example_output.py`
+独立解析实际输出的主题和正文，并以只读输出句柄验证失败返回；两平台 CI 均执行。
 `test_mail_net_tls_close_fault` 在 TLS 关闭等待 Future 分配时注入内存失败，
 确认立即请求中止、保留内存错误，并在销毁传输前由对端观察到异常关闭。
 可用 `--suite mail_net_tls_close_fault_tests --no-single --no-examples`

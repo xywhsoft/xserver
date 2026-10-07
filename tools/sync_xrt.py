@@ -5,7 +5,7 @@ python tools/sync_xrt.py --check
 
 Upstream files are copied byte-for-byte. The lock records working-tree hashes
 as well as HEAD: an uncommitted upstream snapshot is never labelled a release.
-The generated shims/imports are xs integration code, not upstream patches.
+The generated registry/shims/imports are xs integration code, not upstream patches.
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from xs_extensions import ROOT, load_registry
+from xs_extensions import ROOT, REGISTRY, load_registry
 
 LOCK = ROOT / "lib/xrt_sources.lock.json"
 LIBRARIES = ("xjwt", "xoauth2", "xmail", "xsmtp", "xpop3", "ximap",
@@ -60,7 +60,7 @@ def collect(source: Path) -> dict[str, tuple[Path, bytes]]:
         add(source / "single" / name, "lib/" + name)
     for name in LIBRARIES:
         base = source / "extlibs" / name
-        # Keep xs-owned unity wrappers; modular libraries have no upstream TU.
+        # Older snapshots had flat TUs; current snapshots use manifest sources.
         root_files = {p.name for pattern in ("*.h", "*.c") for p in base.glob(pattern)}
         for relative in sorted(root_files | {"README.md", "LICENSE"}):
             path = base / relative
@@ -88,6 +88,45 @@ def generate_shims(declarations: str, header_names: list[str]) -> dict[str, byte
     return output
 
 
+def modular_registry(source: Path, registry: dict) -> dict:
+    """Derive native objects and the complete public SDK from upstream manifests.
+
+    Native products compile as separate translation units. No copied single
+    implementation or stale xs unity wrapper is allowed to hide missing APIs.
+    Preserve xs's extension names and dependency selection contract.
+    """
+    for name in LIBRARIES:
+        base = source / "extlibs" / name
+        manifest = json.loads((base / "config/modules.json").read_text(encoding="utf-8"))
+        prefix = f"extlibs/{name}/"
+
+        def target(relative: str) -> str:
+            if not relative.startswith(prefix):
+                raise ValueError(f"{name}: manifest path outside product: {relative}")
+            path = source / relative
+            if not path.resolve(strict=True).is_relative_to(base.resolve()):
+                raise ValueError(f"{name}: manifest path escapes product: {relative}")
+            return "lib/" + relative.removeprefix("extlibs/")
+
+        entry = registry[name]
+        headers = {p.relative_to(base / "include").as_posix():
+                   "lib/" + p.relative_to(source / "extlibs").as_posix()
+                   for p in sorted((base / "include").rglob("*.h"))}
+        if not headers:
+            raise ValueError(f"{name}: no public headers")
+        # Retain the former flat TCC spelling for existing consumer scripts.
+        if name == "xllm":
+            headers["xllm-executor.h"] = headers["xllm/executor.h"]
+        sources = sorted({target(p) for m in manifest["modules"] for p in m.get("sources", [])})
+        if not sources:
+            raise ValueError(f"{name}: no native sources")
+        entry["headers"] = headers
+        entry["sources"] = [{"path": p} for p in sources]
+        entry["feature_macro"] = ["XRT_MODULE_ALL", manifest["module_prefix"] + "ALL"]
+        entry["host_includes"] = [f"lib/{name}/include", "lib/xrtshim"]
+    return registry
+
+
 def check_lock(root: Path = ROOT, lock: Path = LOCK) -> None:
     data = json.loads(lock.read_text(encoding="utf-8"))
     if data.get("schema") != 1 or not data.get("files"):
@@ -106,7 +145,7 @@ def refresh(source: Path) -> None:
     files = collect(source)
     generated = generate_shims(files["lib/xrt_decl.h"][1].decode("utf-8"),
                                [p.name for p in sorted((source / "include/xrt").glob("*.h"))])
-    registry = load_registry()
+    registry = modular_registry(source, load_registry())
     for name in LIBRARIES:
         entry = registry[name]
         headers = [files[p][1].decode("utf-8") for p in entry["headers"].values()]
@@ -125,15 +164,31 @@ def refresh(source: Path) -> None:
     for path, data in files.values():
         if path.read_bytes() != data:
             raise ValueError(f"upstream changed during collection: {path}")
+    if subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip() != commit:
+        raise ValueError("upstream commit changed during collection")
     status = subprocess.check_output(
         ["git", "status", "--porcelain", "--", "single", "extlibs", "include/xrt"],
         cwd=source, text=True, encoding="utf-8")
+    # Remove only files owned by the previous snapshot and verify their bytes
+    # before changing anything. An edited vendor file requires an explicit
+    # reconciliation, never silent deletion during an upstream refresh.
+    obsolete = []
+    if LOCK.is_file():
+        check_lock()
+        previous = json.loads(LOCK.read_text(encoding="utf-8"))["files"]
+        obsolete = sorted(set(previous) - set(files) - set(generated) -
+                          {"src/script/import_xrt.inc", "lib/xrt_version.txt"} -
+                          {f"lib/{name}/UPSTREAM.txt" for name in LIBRARIES})
+    for relative in obsolete:
+        (ROOT / relative).unlink()
     for relative, (_, data) in files.items():
         path = ROOT / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
     for relative, data in generated.items():
         (ROOT / relative).write_bytes(data)
+    REGISTRY.write_text(json.dumps(registry, indent=1, ensure_ascii=False) + "\n",
+                        encoding="utf-8", newline="\n")
     version = commit + ("-working-tree" if status else "")
     version_text = version + "\nByte-for-byte upstream snapshot; file hashes in xrt_sources.lock.json.\nNo local upstream patches; refresh with python tools/sync_xrt.py --source ../xrt.\n"
     (ROOT / "lib/xrt_version.txt").write_text(version_text, encoding="utf-8", newline="\n")
@@ -143,7 +198,7 @@ def refresh(source: Path) -> None:
         metadata = (f"Source: xrt extlibs/{name}\nSnapshot: {version}\n"
                     "Upstream source bytes and SHA256 are recorded in ../xrt_sources.lock.json.\n"
                     "Native sources, public headers and module configuration are vendored.\n"
-                    "xs-owned unity wrappers remain integration code; single-header implementations are not used.\n")
+                    "Native module sources compile separately; single-header implementations are not used.\n")
         (ROOT / relative).write_text(metadata, encoding="utf-8", newline="\n")
         generated[relative] = metadata.encode()
     import gen_xrt_symbols

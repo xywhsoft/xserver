@@ -3,7 +3,18 @@
 真实客户端范例在网络清理未完成时返回失败，保留拥有型句柄和原始错误供重试；
 诊断只输出阶段、错误类别和错误码。共享实现见 `../xmail/examples/mail_client_setup.h`。
 
-ximap 是构建在 xmail 邮件基座之上的 IMAP 客户端扩展库：协议解析、命令层、FETCH/BODYSTRUCTURE 数据视图、流式 APPEND 与 RFC 4978 COMPRESS=DEFLATE。通过 `XIMAP_MODULE_*` 宏裁剪，单头形态为 `single/ximap.h`。
+只读 EXAMINE 的 tagged OK 完成后，随后 LOGOUT/TLS 关闭失败单独报告为
+`query completed; shutdown failed`，完整查询结果仍可使用；只有未标记的 EXISTS
+回复不足以表示查询完成。`xrtImapClientLogout` 保持严格关闭检查。QQ 邮箱使用
+`imap.qq.com 993`、`tls`，通过 `XIMAP_USER`、`XIMAP_PASSWORD` 提供运行时账号和认证码，
+CA 文件使用系统可信根。
+
+ximap 是构建在 xmail 邮件基座之上的 IMAP 客户端扩展库：协议解析、命令层、FETCH/BODYSTRUCTURE 数据视图、流式 APPEND 与 RFC 4978 COMPRESS=DEFLATE。通过 `XIMAP_MODULE_*` 宏裁剪，单头形态为 `single/extlibs/ximap.h`。
+
+单头实现与声明分别为仓库根目录的 `single/extlibs/ximap.h` 与
+`single/extlibs/ximap_decl.h`，均只包含 ximap 自身代码。使用前须按顺序提供
+XRT → xmail 的所需模块，再包含 ximap；实现宏为 `XIMAP_IMPLEMENTATION`。
+依赖选择与实现组合见 [构建说明](../../docs/BUILD.md#扩展单头与依赖顺序)。
 
 ## 客户端范例
 

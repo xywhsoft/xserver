@@ -105,7 +105,7 @@ xworkAgentConfigInit(&config);
 config.pClient = client;
 config.pSession = session;
 config.pCancel = operation_cancel;
-config.uDeadline = xrtDeadlineAfter(UINT64_C(120000000));
+config.iTimeout = INT64_C(120000);
 config.sWorkspaceRoot = "D:/GIT/project";
 config.sSessionPath = "D:/GIT/project/.xcode/session.json";
 config.eApprovalMode = XWORK_APPROVAL_AUTO;
@@ -145,7 +145,7 @@ annotations are untrusted by default. A host may opt into `readOnlyHint` only
 for a trusted server; otherwise every proxy retains the configured conservative
 effect used by approval and permission policy.
 
-`config.pCancel` is borrowed and must outlive the agent. The agent creates a child token and passes it, together with the absolute monotonic `config.uDeadline`, to every normal and compaction model request. `xworkAgentCancel()` cancels only the child token. A cancelled scope returns `XWORK_RESULT_CANCELLED`; an expired deadline returns `XWORK_RESULT_TIMEOUT` and `XWORK_ERROR_TIMEOUT`, including during provider transport, retry backoff, MCP calls, or a long `exec_command`. Scoped commands use XRT's bounded process runner and terminate the process group when cancellation or a deadline wins.
+`config.pCancel` is borrowed and must outlive the agent. The agent creates a child token and passes it, together with the relative millisecond budget `config.iTimeout`, to every normal and compaction model request. `xworkAgentCancel()` cancels only the child token. A cancelled scope returns `XWORK_RESULT_CANCELLED`; an expired deadline returns `XWORK_RESULT_TIMEOUT` and `XWORK_ERROR_TIMEOUT`, including during provider transport, retry backoff, MCP calls, or a long `exec_command`. Scoped commands use XRT's bounded process runner and terminate the process group when cancellation or a deadline wins.
 
 If startup inspection reports an interrupted durable run, call `xworkAgentResume(agent, &result, &error)` before accepting another prompt. A normal `xworkAgentRun` refuses to append new user input while the durable tail is waiting for a model response or has unresolved tool calls.
 
@@ -178,19 +178,16 @@ survive as the two APIs above. Archive tag: `pre-xllm-memory-removal`.
 
 ## Build and test
 
-From the repository root on Windows with GCC available:
+依赖闭包由 `config/modules.json` 声明，公共入口是 `include/xwork.h`，实现位于 `src/`，每个 `.c` 独立编译。构建、测试、单头生成与 CI 均使用仓库根目录的统一工具；目录规范见 [扩展库开发说明](../README.md)。
 
-```bat
-build.bat
-```
-
-On Linux or macOS (set `CC` to select GCC, Clang, or a cross compiler):
+从仓库根目录执行（Windows 与 POSIX 使用同一入口）：
 
 ```sh
-sh build.sh
+python tools/build.py --compiler gcc --manifest extlibs/xwork/config/modules.json --suite xwork --jobs 4
+python tools/package.py --compiler gcc --manifest extlibs/xwork/config/modules.json --suite xwork --kind static --verify
+python tools/amalgamate.py --manifest extlibs/xwork/config/modules.json
 ```
 
-Cross builds use `RUN_TESTS=0`; sibling locations and flags are overrideable through
-`XLLM_DIR`, `XRT_DIR`, `BUILD_DIR`, `RELEASE_DIR`, `CFLAGS`, `LDFLAGS`, and `LIBS`.
+单头实现与声明分别生成到 `single/extlibs/xwork.h` 和 `single/extlibs/xwork_decl.h`，只包含本库代码。调用方先提供核心 XRT，再按依赖顺序提供扩展；见 [构建说明](../../docs/BUILD.md)。
 
 The optimized warning-as-error suite covers operation-deadline propagation, bounded read-only delegation and internal-path isolation, a forced context compaction followed by a multi-turn workflow using the built-in tools, transactional multi-file editing and rollback, managed-process stdin/output, artifact spill, session persistence, interrupted parallel-tool recovery, duplicate-prompt rejection, a rejected workspace escape, dynamic registry replacement, and a real local MCP stdio handshake/discovery/call lifecycle.

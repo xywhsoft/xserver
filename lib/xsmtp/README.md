@@ -3,7 +3,12 @@
 真实提交范例在网络清理未完成时返回失败，保留拥有型句柄和原始错误供重试；
 诊断只输出阶段、错误类别和错误码。共享实现见 `../xmail/examples/mail_client_setup.h`。
 
-xsmtp 是构建在 xmail 邮件基座（MIME 内容层与传输层）之上的 SMTP 客户端扩展库：协议解析、同步客户端、STARTTLS/隐式 TLS、SASL 认证与从 xmailmessage 派生的流式提交。通过 `XSMTP_MODULE_*` 宏裁剪，单头形态为 `single/xsmtp.h`。
+xsmtp 是构建在 xmail 邮件基座（MIME 内容层与传输层）之上的 SMTP 客户端扩展库：协议解析、同步客户端、STARTTLS/隐式 TLS、SASL 认证与从 xmailmessage 派生的流式提交。通过 `XSMTP_MODULE_*` 宏裁剪，单头形态为 `single/extlibs/xsmtp.h`。
+
+单头实现与声明分别为仓库根目录的 `single/extlibs/xsmtp.h` 与
+`single/extlibs/xsmtp_decl.h`，均只包含 xsmtp 自身代码。使用前须按顺序提供
+XRT → xmail 的所需模块，再包含 xsmtp；实现宏为 `XSMTP_IMPLEMENTATION`。
+依赖选择与实现组合见 [构建说明](../../docs/BUILD.md#扩展单头与依赖顺序)。
 
 ## 提交范例
 
@@ -22,10 +27,18 @@ python tools/build.py --compiler gcc --manifest extlibs/xsmtp/config/modules.jso
 
 设置 `XSMTP_USER`、`XSMTP_PASSWORD` 后运行生成的 `examples_submit_main`，参数为 `host port ca.pem from to subject body [tls|starttls]`。`ca.pem` 是可信 PEM CA；默认使用 STARTTLS。范例要求服务端支持 PLAIN 认证，密码仅从环境变量读取。无参数运行只打印用法，供离线 CI 验证。
 
+最终 DATA 的正向回复表示提交已完成。范例将随后 QUIT/TLS 关闭失败单独报告为
+`submission completed; shutdown failed`，成功的提交不会因此变成“未发送”；应用应
+记录关闭异常，避免自动重发同一封邮件。`xrtSmtpClientQuit` 仍严格检查协议与 TLS
+关闭，未收到 DATA 最终回复仍返回失败，发送结果可能未知。QQ 邮箱可使用
+`smtp.qq.com 465` 和 `tls`；认证码从上述环境变量读取，CA 文件使用系统可信根，
+不要将账号认证码放入命令行或提交到仓库。
+
 从仓库根目录运行 `python tools/test_mail_tls_interop.py`，可用独立 Python TLS
 服务端、临时 CA 和该真实提交范例完成隐式 TLS/STARTTLS、AUTH PLAIN 与
 邮件提交；DNS、IPv4 和 IPv6 端点均核对证书身份与 SNI，证书身份不匹配时
 拒绝连接。脚本还验证服务端接收完整 DATA 后未返回最终结果时客户端报告失败，
+以及提交完成后缺失 TLS `close_notify` 时单独报告关闭警告，
 同时检查 POP3 和 IMAP 范例；已接入 Linux CI，IPv6 回环不可用时跳过对应场景。
 
 ## TLS 上传故障回归

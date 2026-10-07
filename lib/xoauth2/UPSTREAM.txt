@@ -1,5 +1,5 @@
 Source: xrt extlibs/xoauth2
-Snapshot: ad3da544b198660c26a9b99b575a494fcba4794f-working-tree
+Snapshot: 8e9623c4225a74220e628a9fc80806f01a62e3d2
 Upstream source bytes and SHA256 are recorded in ../xrt_sources.lock.json.
 Native sources, public headers and module configuration are vendored.
-xs-owned unity wrappers remain integration code; single-header implementations are not used.
+Native module sources compile separately; single-header implementations are not used.

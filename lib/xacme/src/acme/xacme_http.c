@@ -1,3 +1,4 @@
+#include <xrt/detail/wait.h>
 #include "../internal/xacme_http.h"
 
 #if defined(XACME_FEATURE_ACME_HTTP)
@@ -52,7 +53,7 @@ static void xacmePendingUnlock(void)
 	写入端点的重放安全性须由调用方及 provider 的幂等/去重语义保证。
 	全部尝试失败时保留首个根因。
 */
-#define XACME_HTTP_RETRY_MAX 3u
+#define XACME_HTTP_RETRY_MAX 3
 #define XACME_HTTP_MAX_RESPONSE_BODY (4u * 1024u * 1024u)
 
 static bool xacmeHttpErrorRetryable(void)
@@ -158,11 +159,11 @@ void xacmeHttpDeferOwner(xacmehttp* pHttp, size_t iOwnerSize)
 	xacmePendingUnlock();
 }
 
-bool xrtAcmeCleanupPending(uint64 uTimeoutUs, size_t* piPending)
+bool xrtAcmeCleanupPending(int64 uTimeoutMs, size_t* piPending)
 {
 	xerror* pPrevious = xrtErrorRef(xrtGetError());
 	xerror* pFirst = NULL;
-	xdeadline Deadline = xrtDeadlineAfter(uTimeoutUs);
+	double Deadline = __xrtWaitAfter(uTimeoutMs);
 	size_t iPending;
 	bool bError = false;
 	for(;;)
@@ -201,7 +202,7 @@ bool xrtAcmeCleanupPending(uint64 uTimeoutUs, size_t* piPending)
 			}
 			pList = pNext;
 			if(pList != NULL && (bError ||
-				(uTimeoutUs != 0u && xrtDeadlineExpired(Deadline))))
+				(uTimeoutMs != 0u && __xrtWaitExpired(Deadline))))
 			{
 				/* 预算耗尽或首个 ERROR 后，未处理的尾段也仍是本次的拥有者。 */
 				if(pWaitTail != NULL) pWaitTail->pPendingNext = pList;
@@ -219,8 +220,8 @@ bool xrtAcmeCleanupPending(uint64 uTimeoutUs, size_t* piPending)
 		}
 		iPending = __xacmePendingCount;
 		xacmePendingUnlock();
-		if(iPending == 0u || bError || uTimeoutUs == 0u) break;
-		if(xrtDeadlineExpired(Deadline))
+		if(iPending == 0u || bError || uTimeoutMs == 0u) break;
+		if(__xrtWaitExpired(Deadline))
 		{
 			xacmeHttpError(XERR_TIMEOUT, XACME_HTTP_ERROR_TIMEOUT,
 				"acme pending cleanup still has live objects");
@@ -244,7 +245,7 @@ bool xrtAcmeCleanupPending(uint64 uTimeoutUs, size_t* piPending)
 
 bool xacmeHttpInit(
 	xacmehttp* pHttp, struct xnetengine* pBorrowedEngine,
-	cstr sCaPem, uint64 uTimeoutUs)
+	cstr sCaPem, int64 uTimeoutMs)
 {
 	xtlsverifierconfig Verify;
 	xx509store* pStore = NULL;
@@ -257,15 +258,15 @@ bool xacmeHttpInit(
 		return false;
 	}
 	memset(pHttp, 0, sizeof(*pHttp));
-	pHttp->uTimeoutUs = (uTimeoutUs != 0u) ?
-		uTimeoutUs : UINT64_C(30000000);
+	pHttp->uTimeoutMs = (uTimeoutMs != 0u) ?
+		uTimeoutMs : INT64_C(30000);
 
 	pHttp->pEngine = pBorrowedEngine;
 	if(pBorrowedEngine == NULL)
 	{
 		size_t iPending = 0u;
 		/* 异常尚未退休时暂停新增私有引擎，避免反复失败无限增加线程和内存。 */
-		if(!xrtAcmeCleanupPending(0u, &iPending))
+		if(!xrtAcmeCleanupPending(0, &iPending))
 		{
 			xacmeHttpError(XERR_STATE, XACME_HTTP_ERROR_CONNECT,
 				"acme pending cleanup must finish before creating a private engine");
@@ -368,7 +369,7 @@ bool xacmeHttpUnit(xacmehttp* pHttp)
 	}
 	if(pHttp->bEngineOwned && (pHttp->pEngine != NULL))
 	{
-		xdeadline Deadline = xrtDeadlineAfter(pHttp->uTimeoutUs);
+		double Deadline = __xrtWaitAfter(pHttp->uTimeoutMs);
 		for(;;)
 		{
 			xnetretireresult Result = xrtNetEngineTryDestroy(pHttp->pEngine);
@@ -379,7 +380,7 @@ bool xacmeHttpUnit(xacmehttp* pHttp)
 				break;
 			}
 			if(Result == XNET_RETIRE_ERROR) { bReady = false; break; }
-			if(xrtDeadlineExpired(Deadline))
+			if(__xrtWaitExpired(Deadline))
 			{
 				xacmeHttpError(XERR_TIMEOUT, XACME_HTTP_ERROR_TIMEOUT,
 					"acme http engine still has live objects during cleanup");
@@ -646,11 +647,11 @@ static bool xacmeStreamSendAll(
 	xacmestream* pStream, const void* pData, size_t iSize, uint64 uUs)
 {
 	size_t iOffset = 0u;
-	xdeadline Deadline = xrtDeadlineAfter(uUs);
+	double Deadline = __xrtWaitAfter(uUs);
 	while(iOffset < iSize)
 	{
 		size_t iChunk = iSize - iOffset;
-		if(xrtDeadlineExpired(Deadline))
+		if(__xrtWaitExpired(Deadline))
 		{
 			return false;
 		}
@@ -663,7 +664,7 @@ static bool xacmeStreamSendAll(
 			xfuture* pFuture = xrtTlsStreamSendAsync(
 				pStream->pTls, (const uint8*)pData + iOffset, iChunk);
 			if((pFuture == NULL) ||
-				!xacmeFutureWait(pFuture, xrtDeadlineRemaining(Deadline)))
+				!xacmeFutureWait(pFuture, __xrtWaitRemaining(Deadline)))
 			{
 				return false;
 			}
@@ -676,14 +677,14 @@ static bool xacmeStreamSendAll(
 				pStream->pTcp, (const uint8*)pData + iOffset, iChunk))
 				== XNET_RESULT_AGAIN)
 			{
-				if(xrtDeadlineExpired(Deadline))
+				if(__xrtWaitExpired(Deadline))
 				{
 					return false;
 				}
 				pFuture = xrtNetStreamWaitAsync(
 					pStream->pTcp, XNET_STREAM_WAIT_WRITE);
 				if((pFuture == NULL) ||
-					!xacmeFutureWait(pFuture, xrtDeadlineRemaining(Deadline)))
+					!xacmeFutureWait(pFuture, __xrtWaitRemaining(Deadline)))
 				{
 					return false;
 				}
@@ -701,13 +702,13 @@ static bool xacmeStreamSendAll(
 /* 返回 1=读到数据，0=流结束，-1=超时，-2=I/O 失败。 */
 static int xacmeStreamRecv(
 	xacmestream* pStream, uint8* pBuffer, size_t iCapacity,
-	size_t* pRead, xdeadline Deadline)
+	size_t* pRead, double Deadline)
 {
 	xfuture* pFuture;
 	xnetbytes* pBytes;
 	xwaitresult eWait;
 	xbytesview View;
-	uint64 uRemaining = xrtDeadlineRemaining(Deadline);
+	int64 uRemaining = __xrtWaitRemaining(Deadline);
 	if(uRemaining == 0u) return -1;
 	if(pStream->pTls != NULL)
 		pFuture = xrtTlsStreamRecvAsync(pStream->pTls, iCapacity);
@@ -724,7 +725,7 @@ static int xacmeStreamRecv(
 			bool bEnd;
 			pFuture = xrtTlsStreamWaitAsync(pStream->pTls, XTLS_STREAM_WAIT_END);
 			if(pFuture == NULL) return -2;
-			eWait = xrtFutureWaitFor(pFuture, xrtDeadlineRemaining(Deadline));
+			eWait = xrtFutureWaitFor(pFuture, __xrtWaitRemaining(Deadline));
 			bEnd = eWait == XWAIT_OK && xrtFutureState(pFuture) == XFUTURE_RESOLVED;
 			xrtFutureDestroy(pFuture);
 			return bEnd ? 0 : (eWait == XWAIT_TIMEOUT ? -1 : -2);
@@ -931,7 +932,7 @@ static bool xacmeHttpExchangeOnceImpl(
 	size_t iUsed = 0u;
 	size_t iConsumed = 0u;
 	xfuture* pFuture = NULL;
-	xdeadline ResponseDeadline;
+	double ResponseDeadline;
 	bool bOk = false;
 	bool bHeadDone = false;
 	bool bStreamEnd = false;
@@ -1075,7 +1076,7 @@ static bool xacmeHttpExchangeOnceImpl(
 		Tls.Verifier = pHttp->pVerifier;
 		xrtTlsDialConfigInit(&Dial);
 		xacmeUrlTlsNames(&Url, &Tls, &Dial);
-		Dial.Timeout = pHttp->uTimeoutUs;
+		Dial.Timeout = pHttp->uTimeoutMs;
 		pFuture = xrtTlsDialAsync(
 			pHttp->pEngine, pHttp->pResolver, Url.sHost, Url.iPort,
 			&Tls, &Dial, NULL, NULL);
@@ -1084,7 +1085,7 @@ static bool xacmeHttpExchangeOnceImpl(
 	{
 		xnetdialconfig Dial;
 		xrtNetDialConfigInit(&Dial);
-		Dial.Timeout = pHttp->uTimeoutUs;
+		Dial.Timeout = pHttp->uTimeoutMs;
 		pFuture = xrtNetDialAsync(
 			pHttp->pEngine, pHttp->pResolver, Url.sHost, Url.iPort,
 			&Dial, NULL, NULL);
@@ -1094,7 +1095,7 @@ static bool xacmeHttpExchangeOnceImpl(
 		/* 底层拨号错误已在线程错误里；仅补充域信息。 */
 		goto Done;
 	}
-	if(xrtFutureWaitFor(pFuture, pHttp->uTimeoutUs) != XWAIT_OK ||
+	if(xrtFutureWaitFor(pFuture, pHttp->uTimeoutMs) != XWAIT_OK ||
 		xrtFutureState(pFuture) != XFUTURE_RESOLVED)
 	{
 		const xerror* pFutureError = xrtFutureError(pFuture);
@@ -1143,14 +1144,14 @@ static bool xacmeHttpExchangeOnceImpl(
 		*pbRequestStarted = true;
 	}
 	if(!xacmeStreamSendAll(
-		&Stream, Request.Data, Request.Size, pHttp->uTimeoutUs))
+		&Stream, Request.Data, Request.Size, pHttp->uTimeoutMs))
 	{
 		xacmeHttpError(
 			XERR_IO, XACME_HTTP_ERROR_SEND,
 			"acme http send failed");
 		goto Done;
 	}
-	ResponseDeadline = xrtDeadlineAfter(pHttp->uTimeoutUs);
+	ResponseDeadline = __xrtWaitAfter(pHttp->uTimeoutMs);
 
 	/* ---- 接收头 ---- */
 	xrtHttp1LimitsInit(&Limits);

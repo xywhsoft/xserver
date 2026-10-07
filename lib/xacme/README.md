@@ -4,7 +4,12 @@
 它把账户、订单、dns-01 挑战与证书获取做成可组合的 C API：宿主传入
 CA directory、DNS provider 与凭据、存储位置，换取**证书链与配对私钥**。
 它不是工具：没有配置文件、没有定时器、没有 reload 钩子——一切由
-宿主经参数与回调组合。单头形态为 `single/xacme.h`。
+宿主经参数与回调组合。单头形态为 `single/extlibs/xacme.h`。
+
+单头实现与声明分别为仓库根目录的 `single/extlibs/xacme.h` 与
+`single/extlibs/xacme_decl.h`，均只包含 xacme 自身代码。使用前须按顺序提供
+XRT 的所需模块，再包含 xacme；实现宏为 `XACME_IMPLEMENTATION`。
+依赖选择与实现组合见 [构建说明](../../docs/BUILD.md#扩展单头与依赖顺序)。
 
 ## 最短路径（一站式申领）
 
@@ -74,7 +79,7 @@ python tools/measure_acme_coverage.py     # 模块套件 + 模拟 CA + 全部独
 ```
 
 覆盖率工具额外依赖 Python `cryptography`，默认重建全部 16 个自有 `.c` 文件，
-执行九项模拟 CA 场景且不允许跳过，并合并独立探针的 gcov JSON 原始计数。
+执行全量模拟 CA 场景且不允许跳过，并合并独立探针的 gcov JSON 原始计数。
 部分探针只编译传输或 provider 文件；工具检查每份探针的实际编译范围、
 相同文件的控制流身份，以及最终分母包含全部 16 个文件，避免重复或漏计。
 测量前先核验 Core 与 ACME 单头生成结果，避免合并来自不同运行时版本的计数。
@@ -82,7 +87,11 @@ python tools/measure_acme_coverage.py     # 模块套件 + 模拟 CA + 全部独
 报告保存在 `out/acme/coverage/{win32,linux}/coverage.json`，含精确计数、
 未触达位置、各探针新增触达量和输入 SHA256；编译产物与计数保留供复核，
 证书和存储夹具使用临时目录。默认防倒退门槛为行 70%/分支结果 55%，
-这些门槛不表示已经通过生产验收；内部头文件中的 static 实现另待统一统计。
+这些门槛不表示已经通过生产验收。内部头文件中的 static 实现使用
+`python tools/measure_extension_header_coverage.py --product xacme` 单独统计；
+同一命令追加 `--report-only` 可核对主报告及原始对象计数的输入绑定。
+结果为 `out/acme/coverage/{win32,linux}/header-functions.json`，分母不混入
+自有 C 报告。
 `--module-only` 仅诊断模块基线，不运行模拟 CA 与独立探针。
 WSL 应使用 `--temp-root /tmp`，保证 POSIX 私钥权限测试位于原生文件系统。
 
@@ -256,6 +265,20 @@ openssl/python 结果固化；Pebble/challtestsrv
 （`XACME_PEBBLE_URL` / `XACME_LIVE` / `XACME_ALI_KEY` / `XACME_CF_TOKEN` /
 `XACME_TENCENT_ID` / `XACME_AWS_KEY` / `XACME_HUAWEI_AK` 等）。
 
+阿里云实际 DNS-01 签发测试 `test_flow_live` 必须显式设置 `XACME_LIVE=1`，
+并通过环境变量提供 `XACME_ALI_KEY`、`XACME_ALI_SECRET`、`XACME_LIVE_DOMAIN`
+（你授权创建、删除挑战 TXT 的域名）和 `XACME_LIVE_STORE`（新的独立测试目录）。
+可选 `XACME_LIVE_CONTACT` 为账户联系邮箱；`XACME_LIVE_DIRECTORY` 默认是
+[Let's Encrypt staging](https://letsencrypt.org/docs/staging-environment/)。使用公开
+Client/Store API 验证签发、账户密钥保存、授权读取及缓存命中；必须观察到本次 TXT
+创建和成功删除。测试会保存生成的账户与证书私钥，测试目录应置于受限且不受版本
+控制的路径。staging 证书用于测试，不能作为正式网站证书。
+
+仅测试 DNS provider 的 `test_dnsali` 也要求 `XACME_LIVE=1`，并显式提供
+`XACME_ALI_FQDN` 与唯一的 `XACME_ALI_VALUE`。没有启用标记时只运行离线解析、
+签名和 OOM 回归；传播失败后仍尝试删除本实例拥有的精确 TXT。其他 provider 的
+门控变量见各测试源码。不得将真实凭据写入示例、测试数据、日志或仓库配置。
+
 写请求已经开始发送但没有完整响应时，错误域 `xrt.acme.http` 的
 `XACME_HTTP_ERROR_UNCERTAIN` 表示服务端执行结果未知。库不会自动重发这类
 写入；调用方应先查询服务端状态，再决定是否重新执行操作。ACME 的只读
@@ -270,10 +293,17 @@ POST-as-GET 由客户端换新 nonce 和 JWS 后限次重试。
 ## CA 中立
 
 任何 RFC 8555 directory 均可（`xacmeaccountconfig.sDirectoryUrl`），
-内置 LE / LE staging / ZeroSSL / Google / Buypass 预设常量；
+内置 LE / LE staging / ZeroSSL / Google 预设常量；
 需要 EAB 的 CA 经 `xacmeeab`（Kid + base64url HMAC，RFC 8555 §7.3.4）
 在开户时自动绑定，联系方式走 `sContactEmail`。
 切换 CA = 换参数，不换构建。
+
+`XACME_DIRECTORY_BUYPASS` 和 `XACME_DIRECTORY_BUYPASS_TEST` 保留为历史
+URL 常量，供已有调用兼容使用。Buypass 已于 2025-10-15 停止 TLS/SSL
+新申请及续签，并于 2025-10-31 停止签发；这两个预设不能作为新部署的
+签发或续签服务。服务状态于 2026-10-04 根据
+[Buypass 官方停服公告](https://www.buypass.com/products/tls-ssl-certificates/discontinues-issuance-of-tls-ssl-certificates)
+核对。公共符号索引保留这些常量，不能据此推定提供商服务仍在运行。
 
 ## DNS provider
 

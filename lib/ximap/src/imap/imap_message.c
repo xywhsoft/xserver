@@ -1,3 +1,5 @@
+#include <xrt/detail/ximap_wait.h>
+#include <xrt/detail/wait.h>
 #include "../internal/xrt_mail.h"
 
 
@@ -251,7 +253,7 @@ static bool __xrtImapMessageLiteralWrite(
 	size_t iLiteralSize,
 	xmailwriteproc pWrite,
 	ptr pUserData,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
@@ -261,7 +263,7 @@ static bool __xrtImapMessageLiteralWrite(
 	while ( iReadTotal < iLiteralSize ) {
 		size_t iRead;
 
-		if ( !xrtImapClientReadLiteral(
+		if ( !__xrtImapClientReadLiteral(
 			pClient,
 			Data,
 			sizeof(Data),
@@ -322,7 +324,7 @@ static bool __xrtImapMessageBufferWrite(xbytesview Data, ptr pUserData)
 
 
 /* 流式读取一个 BODY section。 */
-XRT_API bool xrtImapClientBodyWrite(
+XRT_API bool __xrtImapClientBodyWrite(
 	ximapclient* pClient,
 	uint32 iMessage,
 	xstrview Section,
@@ -332,10 +334,12 @@ XRT_API bool xrtImapClientBodyWrite(
 	xmailwriteproc pWrite,
 	ptr pUserData,
 	size_t* pWritten,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	__ximapmessageitems Items;
 	char sMessage[10];
 	xstrview Message;
@@ -359,7 +363,7 @@ XRT_API bool xrtImapClientBodyWrite(
 		sMessage,
 		__xrtMailUint64Write(sMessage, iMessage)
 	};
-	if ( !xrtImapClientBeginFetch(
+	if ( !__xrtImapClientBeginFetch(
 		pClient,
 		Message,
 		Items.Command,
@@ -372,7 +376,7 @@ XRT_API bool xrtImapClientBodyWrite(
 	}
 	for ( ;; ) {
 		ximapevent Event;
-		xmailnext Next = xrtImapClientNext(
+		xmailnext Next = __xrtImapClientNext(
 			pClient,
 			&Event,
 			iDeadline,
@@ -441,7 +445,7 @@ XRT_API bool xrtImapClientBodyWrite(
 
 
 /* 收集一个 BODY section 并附加零字节。 */
-XRT_API bytes xrtImapClientBodyBytes(
+XRT_API bytes __xrtImapClientBodyBytes(
 	ximapclient* pClient,
 	uint32 iMessage,
 	xstrview Section,
@@ -449,10 +453,12 @@ XRT_API bytes xrtImapClientBodyBytes(
 	bool bPeek,
 	size_t iMaxBytes,
 	size_t* pOutputSize,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return NULL; }
+
 	__ximapmessagebuffer Buffer;
 	bytes pData;
 	size_t iSize;
@@ -466,7 +472,7 @@ XRT_API bytes xrtImapClientBodyBytes(
 		}
 		return NULL;
 	}
-	if ( !xrtImapClientBodyWrite(
+	if ( !__xrtImapClientBodyWrite(
 		pClient,
 		iMessage,
 		Section,
@@ -492,17 +498,19 @@ XRT_API bytes xrtImapClientBodyBytes(
 
 
 /* 收集完整 BODY[] 并解析为拥有型 MIME 树。 */
-XRT_API bool xrtImapClientMessageTree(
+XRT_API bool __xrtImapClientMessageTree(
 	ximapclient* pClient,
 	uint32 iMessage,
 	bool bUid,
 	bool bPeek,
 	const xmailtreelimits* pLimits,
 	xmailtree* pTree,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	xmailtreelimits Limits;
 	bytes pData;
 	size_t iSize;
@@ -520,7 +528,7 @@ XRT_API bool xrtImapClientMessageTree(
 	} else {
 		xrtMailTreeLimitsInit(&Limits);
 	}
-	pData = xrtImapClientBodyBytes(
+	pData = __xrtImapClientBodyBytes(
 		pClient,
 		iMessage,
 		XRT_STR_LITERAL(""),
@@ -543,4 +551,56 @@ XRT_API bool xrtImapClientMessageTree(
 	return bResult;
 }
 
+#endif
+
+#if (defined(XIMAP_FEATURE_IMAP_MESSAGE))
+XRT_API bool xrtImapClientBodyWrite(
+	ximapclient* pClient,
+	uint32 iMessage,
+	xstrview Section,
+	bool bUid,
+	bool bPeek,
+	size_t iMaxBytes,
+	xmailwriteproc pWrite,
+	ptr pUserData,
+	size_t* pWritten,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtImapClientBodyWrite(pClient, iMessage, Section, bUid, bPeek, iMaxBytes, pWrite, pUserData, pWritten, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XIMAP_FEATURE_IMAP_MESSAGE))
+XRT_API bytes xrtImapClientBodyBytes(
+	ximapclient* pClient,
+	uint32 iMessage,
+	xstrview Section,
+	bool bUid,
+	bool bPeek,
+	size_t iMaxBytes,
+	size_t* pOutputSize,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtImapClientBodyBytes(pClient, iMessage, Section, bUid, bPeek, iMaxBytes, pOutputSize, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XIMAP_FEATURE_IMAP_MESSAGE))
+XRT_API bool xrtImapClientMessageTree(
+	ximapclient* pClient,
+	uint32 iMessage,
+	bool bUid,
+	bool bPeek,
+	const xmailtreelimits* pLimits,
+	xmailtree* pTree,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtImapClientMessageTree(pClient, iMessage, bUid, bPeek, pLimits, pTree, __xrtWaitAfter(iTimeout), pCancel);
+}
 #endif

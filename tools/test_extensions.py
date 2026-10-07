@@ -165,25 +165,22 @@ class ExtensionTests(unittest.TestCase):
         self.assertEqual(set(symbols), apis)
 
     def test_xllm_session_import_covers_every_external_api(self):
-        header = (ROOT / "lib/xllm-session/xllm-session.h").read_text(encoding="utf-8")
+        from sync_xrt import public_functions
+        registry = load_registry()
+        apis = set(public_functions([ROOT / p for p in registry["xllm-session"]["headers"].values()], "xllm"))
+        apis -= set(public_functions([ROOT / p for p in registry["xllm"]["headers"].values()], "xllm"))
         imports = (ROOT / "src/script/import_xllm_session.inc").read_text(encoding="utf-8")
-        # 与 xllm 同款单行声明形式；xllmEstimate* 由核心符号表提供，排除。
-        apis = set(re.findall(r"^[A-Za-z_][A-Za-z0-9_ *]*?\**\s*(xllm[A-Z]\w*)\s*\(",
-                              header, re.MULTILINE))
-        apis -= {"xllmEstimateTextTokens", "xllmEstimateMessageTokens"}
         symbols = re.findall(r"XS_XLLM_SESSION_SYMBOL\((\w+)\)", imports)
         self.assertEqual(len(symbols), len(set(symbols)))
         self.assertEqual(set(symbols), apis)
 
     def test_xllm_import_covers_every_external_api(self):
-        header = (ROOT / "lib/xllm/xllm.h").read_text(encoding="utf-8")
+        from sync_xrt import public_functions
+        entry = load_registry()["xllm"]
+        apis = set(public_functions([ROOT / p for p in entry["headers"].values()], "xllm"))
         imports = (ROOT / "src/script/import_xllm.inc").read_text(encoding="utf-8")
-        # 公开头为纯声明：外部函数均为「返回类型 + xllmCamel 名(」的单行形式，
-        # 类型名/枚举/不透明前置声明（typedef struct xllm_client xllm_client;）不带 "("。
-        apis = set(re.findall(r"^[A-Za-z_][A-Za-z0-9_ *]*?\**\s*(xllm[A-Z]\w*)\s*\(",
-                              header, re.MULTILINE))
         symbols = re.findall(r"XS_XLLM_SYMBOL\((\w+)\)", imports)
-        self.assertEqual(len(symbols), 68)
+        self.assertTrue({"xllmClientSetModelProfile", "xllmModelProfileValidateRequest"} <= set(symbols))
         self.assertEqual(len(symbols), len(set(symbols)))
         self.assertEqual(set(symbols), apis)
 
@@ -253,6 +250,7 @@ class ExtensionTests(unittest.TestCase):
                 self.assertEqual(set(symbols), apis)
 
     def test_xacme_import_covers_its_api(self):
+        from sync_xrt import public_functions
         symbols = re.findall(r"XS_XACME_SYMBOL\((\w+)\)",
                              (ROOT / "src/script/import_xacme.inc").read_text(encoding="utf-8"))
         self.assertEqual(len(symbols), len(set(symbols)))
@@ -262,11 +260,9 @@ class ExtensionTests(unittest.TestCase):
             for h in sorted((ROOT / "lib" / "xacme" / "include" / "xrt").glob("*.h")))
         apis = set(re.findall(r"XRT_API[^;{}]*?\b(xrtAcme\w+)\s*\(", headers, re.S))
         self.assertEqual({x for x in symbols if x.startswith("xrtAcme")}, apis)
-        self.assertEqual({x for x in symbols if x.startswith("xacmeClient")},
-                         {"xacmeClientInit", "xacmeClientUnit", "xacmeClientDiscard", "xacmeClientAccountPem",
-                          "xacmeClientIssue", "xacmeClientIssueStored",
-                          "xacmeClientRevoke", "xacmeClientRollover",
-                          "xacmeClientDeactivate"})
+        entry = load_registry()["xacme"]
+        self.assertEqual(set(symbols), set(public_functions(
+            [ROOT / p for p in entry["headers"].values()], "(?:xrt|xacme)")))
 
     def test_qrcodegen_import_covers_every_external_api(self):
         symbols = re.findall(r"XS_QRCODEGEN_SYMBOL\((\w+)\)",

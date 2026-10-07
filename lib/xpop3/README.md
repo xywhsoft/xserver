@@ -1,11 +1,31 @@
 # xpop3
 
-xpop3 是构建在 xmail 邮件基座之上的 POP3 客户端扩展库：协议解析、同步客户端、STLS、SASL 认证与 RETR/TOP 到 MIME 树的桥接。通过 `XPOP3_MODULE_*` 宏裁剪，单头形态为 `single/xpop3.h`。
+xpop3 是构建在 xmail 邮件基座之上的 POP3 客户端扩展库：协议解析、同步客户端、STLS、SASL 认证与 RETR/TOP 到 MIME 树的桥接。通过 `XPOP3_MODULE_*` 宏裁剪，单头形态为 `single/extlibs/xpop3.h`。
+
+单头实现与声明分别为仓库根目录的 `single/extlibs/xpop3.h` 与
+`single/extlibs/xpop3_decl.h`，均只包含 xpop3 自身代码。使用前须按顺序提供
+XRT → xmail 的所需模块，再包含 xpop3；实现宏为 `XPOP3_IMPLEMENTATION`。
+依赖选择与实现组合见 [构建说明](../../docs/BUILD.md#扩展单头与依赖顺序)。
 
 ## 客户端范例
 
 网络清理等待异步退休，失败时保留拥有型句柄并返回失败；诊断只输出阶段、
 错误类别和错误码。共享实现见 `../xmail/examples/mail_client_setup.h`。
+
+只读客户端范例取得完整 RETR 结束标记后，随后 QUIT/TLS 关闭失败单独报告为
+`retrieval completed; shutdown failed`，完整的取信结果仍可使用；未收全正文仍失败。
+此策略限于没有 DELE 的只读取信，删除邮件仍必须核对 UPDATE/QUIT 的结果。
+`xrtPop3ClientQuit` 保持严格关闭检查。QQ 邮箱使用 `pop.qq.com 995`、`tls`，
+通过 `XPOP3_USER`、`XPOP3_PASSWORD` 提供运行时账号和认证码，CA 文件使用系统可信根。
+
+取信范例按原始邮件字节写入标准输出；Windows 使用二进制模式，避免把 CRLF
+改成 CRCRLF。正文输出和刷新失败会使范例返回失败。
+
+CAPA 的扩展标签支持数字及除点号外的可打印 ASCII 标点，例如 QQ 服务广告的
+`XOAUTH2`。未知标签可解析但不设置已知能力位，也不会被当作 SASL 认证机制。
+控制字节、嵌入 NUL、点号和线路注入仍拒绝。标签规则参考
+[RFC 2449 第 3 节](https://www.rfc-editor.org/rfc/rfc2449#section-3)；解析器保留
+拒绝 DEL 的策略。独立 TLS/STLS 夹具在默认能力发现开启时核对未知标签兼容。
 
 `examples/offline/main.c` 自建本机回环 POP3 服务，执行 `Open → USER/PASS →
 RETR → QUIT` 并核对三行邮件内容，不需要外部账号或网络服务：

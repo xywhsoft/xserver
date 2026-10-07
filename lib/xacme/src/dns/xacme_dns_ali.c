@@ -640,7 +640,8 @@ xacmednsalirecordoutcome xacmeDnsAliRecordResponse(
 	if(pCode != NULL) {
 		if(!xrtValueGetString(pCode, &Code)) goto Invalid;
 		if((iStatus == 400u || iStatus == 404u) &&
-			xacmeAliTextEquals(Code, "DomainRecordNotBelongToUser") &&
+			(xacmeAliTextEquals(Code, "DomainRecordNotBelongToUser") ||
+			 xacmeAliTextEquals(Code, "InvalidRR.NoExist")) &&
 			xacmeDnsJsonText(pRoot, "RequestId", sText, sizeof(sText)) && sText[0] != '\0' &&
 			xrtValueObjectGet(pRoot, XRT_STR_LITERAL("RecordId")) == NULL) {
 			Result = XACME_ALI_RECORD_MISSING;
@@ -659,8 +660,10 @@ xacmednsalirecordoutcome xacmeDnsAliRecordResponse(
 		!xacmeAliFormat(sOwner, sizeof(sOwner), "%s.%s", sRr, sDomain) ||
 		!xacmeAliDomainEquals(sOwner, sFqdn) ||
 		!xacmeDnsJsonText(pRoot, "Status", sText, sizeof(sText))) goto Invalid;
-	if(strcmp(sText, "Enable") == 0) bEnabled = true;
-	else if(strcmp(sText, "Disable") != 0) goto Invalid;
+	/* The live service also returns uppercase states; accept only the two
+	 * complete spellings of each documented state. */
+	if(strcmp(sText, "Enable") == 0 || strcmp(sText, "ENABLE") == 0) bEnabled = true;
+	else if(strcmp(sText, "Disable") != 0 && strcmp(sText, "DISABLE") != 0) goto Invalid;
 	Result = XACME_ALI_RECORD_FOUND;
 	if(pEnabled != NULL) *pEnabled = bEnabled;
 	goto Done;
