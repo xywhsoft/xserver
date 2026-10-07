@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "upstream_commit": "8e9623c4225a74220e628a9fc80806f01a62e3d2",
+  "upstream_commit": "c9e04e3b9f4310d8626671d0bbeece0cdc8d4d43",
   "upstream_working_tree": false,
   "files": {
     "lib/xacme/README.md": {
@@ -417,7 +417,7 @@
     },
     "lib/xllm/README.md": {
       "source": "extlibs/xllm/README.md",
-      "sha256": "b47d66523de99fe8ac90b05dd304cc2f18c370aa3d44e4d907fb77b850eafe83"
+      "sha256": "f35613f5f1cdccc22b4659fcf0554957dc33732139d15c0ed6b321b20a7869b3"
     },
     "lib/xllm/config/modules.json": {
       "source": "extlibs/xllm/config/modules.json",
@@ -437,7 +437,7 @@
     },
     "lib/xllm/include/xllm/api.h": {
       "source": "extlibs/xllm/include/xllm/api.h",
-      "sha256": "d6d019507a2a004a94194ddef971b056d7ca451e644d1d54bf7864fff14fbd90"
+      "sha256": "9abd991f3abd883452f9c67cbce89c63dc742a8f962d88a9c900c790bdd96e06"
     },
     "lib/xllm/include/xllm/executor.h": {
       "source": "extlibs/xllm/include/xllm/executor.h",
@@ -469,11 +469,11 @@
     },
     "lib/xllm/src/llm/xllm_client.c": {
       "source": "extlibs/xllm/src/llm/xllm_client.c",
-      "sha256": "ac041f6223083b71fc74eb476d4fd010d4a228aec0d16902098dd1d9a87c75ff"
+      "sha256": "76f83bc2fab0c24b0044ea36224b063e76b0ec6ea4fe188981b453f2ac709ee3"
     },
     "lib/xllm/src/llm/xllm_core.c": {
       "source": "extlibs/xllm/src/llm/xllm_core.c",
-      "sha256": "373a1fb698da0a2246b875cb982a6d475c298ce484f8495b8f0ee15fdf3abf5d"
+      "sha256": "043bbf6ee168030e9d9554f4d6d38f0705154027b962bdd842af08059c30f10d"
     },
     "lib/xllm/src/llm/xllm_dialect.c": {
       "source": "extlibs/xllm/src/llm/xllm_dialect.c",
@@ -797,11 +797,11 @@
     },
     "lib/xrt.h": {
       "source": "single/xrt.h",
-      "sha256": "e1df7bfe6a4f6a80db298008b435acc6226077a65928b11af6520745ade6e4f9"
+      "sha256": "79c2d81072efc9b4490157a95b926595ff1d61626f43247d3a2f82d61f627a0d"
     },
     "lib/xrt_decl.h": {
       "source": "single/xrt_decl.h",
-      "sha256": "684202486f800176b8515f5e4224e85b237d7957b60b38c16375065602a3c21d"
+      "sha256": "a2c5edb19a5557eb1f3347a230459fec96e842d4e739d989f1d45e5e441c81c9"
     },
     "lib/xrtshim/xrt/detail/wait.h": {
       "source": "include/xrt/detail/wait.h",
@@ -917,7 +917,7 @@
     },
     "lib/xwork/src/work/xwork_agent.c": {
       "source": "extlibs/xwork/src/work/xwork_agent.c",
-      "sha256": "4ac9b717198bcebce8dede5925cfde3cfb45b5d82eeb8b0db5319f48835a9846"
+      "sha256": "4a2f020f634c684f33fd5be4bc2448e76a86aea3c88ee435ae9c1f4e6e4f0422"
     },
     "lib/xwork/src/work/xwork_core.c": {
       "source": "extlibs/xwork/src/work/xwork_core.c",
@@ -949,39 +949,39 @@
     },
     "lib/xacme/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "51bcee6774597449f096e6bc58d0236d21c5f1e690625574faea0ce5303b41f3"
+      "sha256": "c87d6aa8b8d0b07257d62571f517156e67457c8c82a45b4e1076540e088ec293"
     },
     "lib/ximap/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "1d010ad271feb16df205999389bf82c9d3fee03c5d736a26ed383b1ae1f29558"
+      "sha256": "f39cecaf60010181957e1c56941749f83d8582c9163f92b3b1fdcc5522ed46a6"
     },
     "lib/xjwt/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "6955f47a49cd6cbd9b663206d097c7d2b4d135b8a7cb0e89f9dcf3f449988f81"
+      "sha256": "bd43a7a25869bfaa9ddec068e6d8a9271a67eca305dde49e5520316af193ab5f"
     },
     "lib/xllm-session/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "7bb4a26923ca20e7b72ef01d9c1eadaf52e01dd46456f4c3d150ed68acef2a40"
+      "sha256": "e23c3193047de2ad14fc14a020d0f75d358e3c8ec9671b515267dec2e979dd75"
     },
     "lib/xllm/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "021d202e62749b0d410805b053f7e201f1c6cc5ddc38430ca21ebf4d93125f1c"
+      "sha256": "04697eb47ec3cfacef0ffb35d862aa484c85d5f9880566bb300ca5e0782b9e75"
     },
     "lib/xmail/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "0898f15196bd42aa7a27bbe4c6ac37dc45ae6d383487d10e0e9987735442c5ff"
+      "sha256": "5367998d9fbb0b6d0be551cf4f711de65e309d96eaae463c40631e572408a331"
     },
     "lib/xoauth2/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "b4950b51001b4622e1e2ef1766523a855e59fbd3dd1f8ee220cf8cfcf576d259"
+      "sha256": "52dd810473f3d0a7a67baa5b66680b5d16558177eda49c5ac00b65c20bf48fe0"
     },
     "lib/xpop3/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "463a7e99ec31b3284950b7c773a6cb20a8717cfa9aa178597c27ff88db315a81"
+      "sha256": "3bac79ca6206746e87b683b940953bec6a289380f8579201f1f95ec4e6795061"
     },
     "lib/xrt_version.txt": {
       "generated": true,
-      "sha256": "700b503861b8dcdf277244ed01e55ec5a25f6be75f4dc26f2d05f0622bc16b62"
+      "sha256": "7a88cc5407b24a2a00531be40940c46006e5fa4b8d34584965418de9bd4e4eae"
     },
     "lib/xrtshim/xrt/array.h": {
       "generated": true,
@@ -1369,11 +1369,11 @@
     },
     "lib/xsmtp/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "37a6c8b3bb9b86703acfc3b3c3be187a153233d322e74f901e04f62ebeb3fe9a"
+      "sha256": "02c4d1811e293265ae101beba605f8b98bc105f2482b367c4ee81535b076035a"
     },
     "lib/xwork/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "a850132ffd9fb7141e8d8b46a440636fe88f828a9b2ef56517858f309b69620f"
+      "sha256": "956fb991c3689dc8dce607dd059290d7f82487ab97cc605227fa68441c51e3d6"
     },
     "src/script/import_xacme.inc": {
       "generated": true,
@@ -1409,7 +1409,7 @@
     },
     "src/script/import_xrt.inc": {
       "generated": true,
-      "sha256": "4b7b44286efc75a98e100ecafa51135c1790fa4765e259f7d7d07ab0095fe4e6"
+      "sha256": "3eec9bb65d895b907ee41f183c84a20308e6b165550cc3d884fd7d91dafb6d91"
     },
     "src/script/import_xsmtp.inc": {
       "generated": true,
