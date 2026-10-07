@@ -803,6 +803,10 @@
       "source": "single/xrt_decl.h",
       "sha256": "684202486f800176b8515f5e4224e85b237d7957b60b38c16375065602a3c21d"
     },
+    "lib/xrtshim/xrt/detail/wait.h": {
+      "source": "include/xrt/detail/wait.h",
+      "sha256": "f011e7cdcc880db3901bda1a9f2e2d69dd571e6c1e9b6909e8d50e355318bbdb"
+    },
     "lib/xsmtp/README.md": {
       "source": "extlibs/xsmtp/README.md",
       "sha256": "82ca04f6606e188a1d69b87dab87bff7d1f321cc89d2a8fbeecb7f6d6ed3fcc2"

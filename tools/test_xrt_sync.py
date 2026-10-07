@@ -13,6 +13,15 @@ class SnapshotTests(unittest.TestCase):
     def test_current_snapshot(self):
         check_lock()
 
+    def test_shared_wait_helper_is_in_the_sdk(self):
+        from gen_tcc_resources import collect
+        resources = dict(collect({}))
+        helper = ROOT / "lib/xrtshim/xrt/detail/wait.h"
+        self.assertEqual(resources["xs/xrt/detail/wait.h"], helper)
+        record = json.loads(LOCK.read_text(encoding="utf-8"))["files"]
+        self.assertEqual(record["lib/xrtshim/xrt/detail/wait.h"]["source"],
+                         "include/xrt/detail/wait.h")
+
     def test_public_extension_exports(self):
         registry = load_registry()
         for name in LIBRARIES:

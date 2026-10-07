@@ -58,6 +58,10 @@ def collect(source: Path) -> dict[str, tuple[Path, bytes]]:
 
     for name in ("xrt.h", "xrt_decl.h"):
         add(source / "single" / name, "lib/" + name)
+    # Inline wait helpers are shared by the modular extensions. They are real
+    # upstream code, not declaration shims, and must retain their bytes.
+    for path in sorted((source / "include/xrt/detail").rglob("*.h")):
+        add(path, "lib/xrtshim/xrt/detail/" + path.relative_to(source / "include/xrt/detail").as_posix())
     for name in LIBRARIES:
         base = source / "extlibs" / name
         # Older snapshots had flat TUs; current snapshots use manifest sources.
