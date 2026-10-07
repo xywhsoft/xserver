@@ -174,6 +174,9 @@ def refresh(source: Path) -> None:
             raise ValueError(f"upstream changed during collection: {path}")
     if subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip() != commit:
         raise ValueError("upstream commit changed during collection")
+    # Object selection and feature gates are part of the same SDK snapshot.
+    generated[REGISTRY.relative_to(ROOT).as_posix()] = (
+        json.dumps(registry, indent=1, ensure_ascii=False) + "\n").encode("utf-8")
     status = subprocess.check_output(
         ["git", "status", "--porcelain", "--", "single", "extlibs", "include/xrt"],
         cwd=source, text=True, encoding="utf-8")
@@ -195,8 +198,6 @@ def refresh(source: Path) -> None:
         path.write_bytes(data)
     for relative, data in generated.items():
         (ROOT / relative).write_bytes(data)
-    REGISTRY.write_text(json.dumps(registry, indent=1, ensure_ascii=False) + "\n",
-                        encoding="utf-8", newline="\n")
     version = commit + ("-working-tree" if status else "")
     version_text = version + "\nByte-for-byte upstream snapshot; file hashes in xrt_sources.lock.json.\nNo local upstream patches; refresh with python tools/sync_xrt.py --source ../xrt.\n"
     (ROOT / "lib/xrt_version.txt").write_text(version_text, encoding="utf-8", newline="\n")

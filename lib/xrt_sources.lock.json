@@ -1418,6 +1418,10 @@
     "src/script/import_xwork.inc": {
       "generated": true,
       "sha256": "c34dd9b58d5fdbaacdcc8f6bd5041fbf2acbf75575c3334820c30873f3f213ba"
+    },
+    "tools/extensions.json": {
+      "generated": true,
+      "sha256": "5f97b23da5291ef4365d94e453d2070b8d8eccb0149b9524cf820002ba134066"
     }
   }
 }

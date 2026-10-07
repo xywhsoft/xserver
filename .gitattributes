@@ -15,3 +15,4 @@
 /lib/xrt_sources.lock.json text eol=lf
 /lib/xrt_version.txt text eol=lf
 /src/script/import_*.inc text eol=lf
+/tools/extensions.json text eol=lf
