@@ -415,7 +415,7 @@ static void XS_TcpSweepProc(xnetworker* pWorker, uint64 iId, xnetresult iResult,
 				iInterval = 10;
 			}
 			if ( XS_GenerationTimerSchedule(pRuntime->pGeneration,
-				iInterval * 1000, XS_TcpSweepProc, pData,
+				iInterval, XS_TcpSweepProc, pData,
 				pRuntime, &pRuntime->tSweepTimer) != 0 &&
 			     xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) != 0 ) {
 				XS_GenerationTimerCancelOwner(pRuntime->pGeneration, pRuntime);
@@ -433,7 +433,7 @@ static bool XS_TcpScheduleSweep(XS_TcpRuntime* pRuntime)
 	if ( iInterval > 1000 ) iInterval = 1000;
 	if ( iInterval < 10 ) iInterval = 10;
 	return XS_GenerationTimerSchedule(pRuntime->pGeneration,
-		iInterval * 1000, XS_TcpSweepProc, pRuntime,
+		iInterval, XS_TcpSweepProc, pRuntime,
 		pRuntime, &pRuntime->tSweepTimer) != 0;
 }
 

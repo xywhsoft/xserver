@@ -61,7 +61,7 @@ typedef struct XS_WsConn {
 	size_t			iMsgSize;
 	size_t			iMsgCap;
 	uint8			iMsgOpcode;
-	xatomic64		tLastActive;	/* xrtNow() 微秒 */
+	xatomic64		tLastActive;	/* xrtNow() 毫秒 */
 	bool			bUpgradeStarted;
 	bool			bHandshakeDone;
 	bool			bMessageFailed;
@@ -721,7 +721,7 @@ static uint32 XS_WsSweepIdle(XS_WsRuntime* pRuntime)
 	xrtMutexLock(pRuntime->pConnLock);
 	for ( pConn = pRuntime->pConns; pConn != NULL; pConn = pConn->pNext ) {
 		int64 tLast = (int64)xrtAtomic64Load(&pConn->tLastActive, XMEMORY_RELAXED);
-		uint64 iElapsedMs = tNow > tLast ? (uint64)(tNow - tLast) / 1000u : 0;
+		uint64 iElapsedMs = tNow > tLast ? (uint64)(tNow - tLast) : 0;
 
 		if ( iElapsedMs <= pRuntime->iIdleMs ) continue;
 		iStale++;
@@ -752,7 +752,7 @@ static void XS_WsSweepProc(xnetworker* pWorker, uint64 iId, xnetresult iResult, 
 		if ( iInterval > 1000 ) iInterval = 1000;
 		if ( iInterval < 10 ) iInterval = 10;
 		if ( XS_GenerationTimerSchedule(pRuntime->pGeneration,
-			iInterval * 1000, XS_WsSweepProc, pRuntime,
+			iInterval, XS_WsSweepProc, pRuntime,
 			pRuntime, &pRuntime->tSweepTimer) != 0 &&
 		     xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) != 0 ) {
 			XS_GenerationTimerCancelOwner(pRuntime->pGeneration, pRuntime);
@@ -769,7 +769,7 @@ static bool XS_WsScheduleSweep(XS_WsRuntime* pRuntime)
 	if ( iInterval > 1000 ) iInterval = 1000;
 	if ( iInterval < 10 ) iInterval = 10;
 	return XS_GenerationTimerSchedule(pRuntime->pGeneration,
-		iInterval * 1000, XS_WsSweepProc, pRuntime,
+		iInterval, XS_WsSweepProc, pRuntime,
 		pRuntime, &pRuntime->tSweepTimer) != 0;
 }
 

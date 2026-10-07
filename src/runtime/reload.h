@@ -1387,7 +1387,7 @@ static uint64 XS_TimerAfter(XS_HostInfo* pOwner, uint32 iMillisecond, XS_TimerPr
 	pWrap->proc = proc;
 	pWrap->pUserData = pUserData;
 	pWrap->pScript = pScript;
-	iId = XS_GenerationTimerSchedule(pGeneration, (uint64)iMillisecond * 1000,
+	iId = XS_GenerationTimerSchedule(pGeneration, (int64)iMillisecond,
 		XS_TimerFire, pWrap, pScript, &pWrap->tTimer);
 	if ( iId == 0 ) {
 		XS_ScriptRelease(pScript);

@@ -1701,7 +1701,7 @@ static void XS_HttpSweepProc(xnetworker* pWorker, uint64 iId, xnetresult iResult
 			if ( iInterval > 1000 ) iInterval = 1000;
 			if ( iInterval < 10 ) iInterval = 10;
 			if ( XS_GenerationTimerSchedule(pRuntime->pGeneration,
-				iInterval * 1000, XS_HttpSweepProc, pData,
+				iInterval, XS_HttpSweepProc, pData,
 				pRuntime, &pRuntime->tSweepTimer) != 0 &&
 			     xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) != 0 ) {
 				XS_GenerationTimerCancelOwner(pRuntime->pGeneration, pRuntime);
@@ -1719,7 +1719,7 @@ static bool XS_HttpScheduleSweep(XS_HttpRuntime* pRuntime)
 	if ( iInterval > 1000 ) iInterval = 1000;
 	if ( iInterval < 10 ) iInterval = 10;
 	return XS_GenerationTimerSchedule(pRuntime->pGeneration,
-		iInterval * 1000, XS_HttpSweepProc, pRuntime,
+		iInterval, XS_HttpSweepProc, pRuntime,
 		pRuntime, &pRuntime->tSweepTimer) != 0;
 }
 

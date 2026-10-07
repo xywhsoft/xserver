@@ -24,7 +24,7 @@ typedef struct XS_ConnRecord {
 	XS_ScriptRuntime*	pScript;
 	xnetstream*		pTcp;		/* 与 pTls 二选一 */
 	xtlsstream*		pTls;
-	xatomic64		tLastActive;	/* xrtNow() 微秒，跨 worker 原子快照 */
+	xatomic64		tLastActive;	/* xrtNow() 毫秒，跨 worker 原子快照 */
 	xatomic32		tApplicationIdle; /* 接管协议由应用负责心跳及空闲期限 */
 } XS_ConnRecord;
 
@@ -124,7 +124,7 @@ static uint32 XS_RegistrySweepIdle(XS_ConnRegistry* pReg, uint64 iIdleMs)
 		 * enforce a bounded heartbeat/idle policy. */
 		if ( xrtAtomic32Load(&pRecord->tApplicationIdle, XMEMORY_ACQUIRE) ) continue;
 		int64 tLast = (int64)xrtAtomic64Load(&pRecord->tLastActive, XMEMORY_RELAXED);
-		uint64 iElapsedMs = tNow > tLast ? (uint64)(tNow - tLast) / 1000u : 0;
+		uint64 iElapsedMs = tNow > tLast ? (uint64)(tNow - tLast) : 0;
 
 		if ( iElapsedMs > iIdleMs ) {
 			iStale++;
