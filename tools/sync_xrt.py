@@ -126,7 +126,11 @@ def modular_registry(source: Path, registry: dict) -> dict:
             raise ValueError(f"{name}: no native sources")
         entry["headers"] = headers
         entry["sources"] = [{"path": p} for p in sources]
-        entry["feature_macro"] = ["XRT_MODULE_ALL", manifest["module_prefix"] + "ALL"]
+        # Upstream native builds select module features explicitly. In
+        # particular the shared mail transport TUs do not include a protocol's
+        # feature header before their gates; MODULE_ALL alone is insufficient.
+        entry["feature_macro"] = ["XRT_MODULE_ALL", manifest["module_prefix"] + "ALL",
+                                  *sorted({m["feature"] for m in manifest["modules"] if m.get("feature")})]
         entry["host_includes"] = [f"lib/{name}/include", "lib/xrtshim"]
     return registry
 
