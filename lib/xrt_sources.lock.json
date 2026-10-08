@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "upstream_commit": "ab5680ccb891a3cfce84cc164a63a69ae5ea91a6",
+  "upstream_commit": "f66d721b2895c71cdc1841b0f9a2021945561a70",
   "upstream_working_tree": false,
   "files": {
     "lib/xacme/README.md": {
@@ -797,11 +797,11 @@
     },
     "lib/xrt.h": {
       "source": "single/xrt.h",
-      "sha256": "79c2d81072efc9b4490157a95b926595ff1d61626f43247d3a2f82d61f627a0d"
+      "sha256": "fc2d1996722d05ae471e8d86065a1aad84c89af7cfa72e5f07690dc8f5c48b84"
     },
     "lib/xrt_decl.h": {
       "source": "single/xrt_decl.h",
-      "sha256": "a2c5edb19a5557eb1f3347a230459fec96e842d4e739d989f1d45e5e441c81c9"
+      "sha256": "0a4ddac97dde662229c9316e1b416f0a46f38db537023c057d54f5cfe5054031"
     },
     "lib/xrtshim/xrt/detail/wait.h": {
       "source": "include/xrt/detail/wait.h",
@@ -917,7 +917,7 @@
     },
     "lib/xwork/src/work/xwork_agent.c": {
       "source": "extlibs/xwork/src/work/xwork_agent.c",
-      "sha256": "4a2f020f634c684f33fd5be4bc2448e76a86aea3c88ee435ae9c1f4e6e4f0422"
+      "sha256": "dcc5a7bf49c118caab095f0ebeb03312259a53f26849d169f8bbfa43dd04c729"
     },
     "lib/xwork/src/work/xwork_core.c": {
       "source": "extlibs/xwork/src/work/xwork_core.c",
@@ -949,39 +949,39 @@
     },
     "lib/xacme/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "ef24854869c7efa976c8ce2fa453cc8ae1ffa56711b809333f12a4b634e6208c"
+      "sha256": "b4c133eff3eea51d6a035cc14a3232a1aa2eba7f27dd6ade77e798d3a7567b58"
     },
     "lib/ximap/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "224a5e6e0520586f46356737846c4490abe00d64fa7d58f504dd35d63235e7f6"
+      "sha256": "4126283172835cd5d0c5c157dcfbad9ec540fa072fdab26d606dd99031c6b84c"
     },
     "lib/xjwt/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "661bc6247ee099003aafadd736658306ad996bed6f1f19e2b351056f03e6c6d4"
+      "sha256": "5c13ea78162ac5747c1101f357e56b99952232cfea0fff96ed467743f5746c5d"
     },
     "lib/xllm-session/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "775ec2488de6b738805e8c1571e870ab9c8bc1b7b9d6de776f4381ab2c8dcf6c"
+      "sha256": "18ad89a43183ae7ed6a96ceb82ba13d9f2710c5d12ea51493838a1a7450683ba"
     },
     "lib/xllm/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "86107fd28df53c74aa5b7a044ac66ca65b40a3bb3ee66afdb31e1f09a81f1bf1"
+      "sha256": "7331690b19002a394c0d83361f9106bc46e6ff5fd629319799d27488bf3b9aad"
     },
     "lib/xmail/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "5d6f3698eed8c3b17681235b7891e6bc3118b95200f6e229de48080fffac714d"
+      "sha256": "6e1db3cc1a170d7fd7e869bf48beaf0bd8105f25d23e6ed14b4d51e656de2c0a"
     },
     "lib/xoauth2/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "b20559f0d37aecad749291c8ce00d292a4272e715e967a7d4877f4a3c0ee7e4d"
+      "sha256": "bcb0f6f299c49ad436c04c783ebcbbf3b17eaacef2acc855d2f94e879d2dbbfe"
     },
     "lib/xpop3/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "f02865e85fe54b8e684634ec9dd5a0d543e028894d16ba410e6afa721f73cfee"
+      "sha256": "02fbffe5af1293d44fb213ff797f11a3dbe0e27f4b2bd1cc1055a78ce2a0c784"
     },
     "lib/xrt_version.txt": {
       "generated": true,
-      "sha256": "1678dd013e896d449d4b5300026fb61e6635d17f17f9ae154a2268c9b8068177"
+      "sha256": "b245e3cae724e4d781e9245d87ff89ed8d157616f13ccda46d5ca1cb8e22d6c8"
     },
     "lib/xrtshim/xrt/array.h": {
       "generated": true,
@@ -1369,11 +1369,11 @@
     },
     "lib/xsmtp/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "61f20c2b62dabf3b77c31f4aa0d7ba60a0d594fbb161ba03b3884fe4667260f1"
+      "sha256": "2405a052db09b6262c0c6d40710e870d06fe99ab96929686eb823084e7071163"
     },
     "lib/xwork/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "715600e7170d464f3eb1dada3efaf710aa0e1f2ba835f23e3d834539c4f806ff"
+      "sha256": "077483d6f9d4a9d4e4a2cfd6667a2b63a2f8803ce4988073b1b20bec4249158c"
     },
     "src/script/import_xacme.inc": {
       "generated": true,
@@ -1409,7 +1409,7 @@
     },
     "src/script/import_xrt.inc": {
       "generated": true,
-      "sha256": "696f1028e5cd15163d571d52de5c1d999af51546d49645d79920345fd64380d9"
+      "sha256": "a1cbd2ec4709b65d2fb5f13fff5a26a03d84f005311817a5dc77d1057f0b83eb"
     },
     "src/script/import_xsmtp.inc": {
       "generated": true,
