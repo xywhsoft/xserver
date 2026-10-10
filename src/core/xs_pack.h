@@ -357,6 +357,7 @@ static bool XS_PackParse(const char* sExe, bool bRequireArchive,
 {
 	uint8_t aTrailer[XS_VFS_TRAILER_SIZE], aHeader[XS_VFS_HEADER_SIZE];
 	uint64_t uHeaderOff, uIndexOff, uIndexLen;
+	uint64_t uDataOff;
 	uint32_t uIndexCrc;
 	uint8_t* pIndex;
 	uint32_t i;
@@ -391,9 +392,18 @@ static bool XS_PackParse(const char* sExe, bool bRequireArchive,
 	{
 		uint64_t uArchiveSize = XS_PackRd64(aHeader + 32);
 		uIndexOff = XS_PackRd64(aHeader + 24);
+		uDataOff = XS_PackRd64(aHeader + 16);
 		if ( pOut->uArchiveStart != uHeaderOff ||
 		     uHeaderOff + uArchiveSize != (uint64_t)pOut->iWholeSize ) {
 			snprintf(sErr, iErrCap, "archive size mismatch (corrupt?)");
+			XS_PackParsedUnit(pOut);
+			return false;
+		}
+		/* 布局校验与运行时装载器（xs_vfs.h XS_VfsLoad）一致：
+		 * 数据区 [DataOffset, IndexOffset) 必须落在归档内且非空 */
+		if ( uDataOff >= uArchiveSize || uIndexOff <= uDataOff ||
+		     uIndexOff >= uArchiveSize ) {
+			snprintf(sErr, iErrCap, "archive layout invalid");
 			XS_PackParsedUnit(pOut);
 			return false;
 		}
@@ -424,10 +434,16 @@ static bool XS_PackParse(const char* sExe, bool bRequireArchive,
 		size_t iPos = 0;
 		for ( i = 0; i < pOut->nCount; i++ ) {
 			uint32_t nRel;
-			if ( iPos + 2 > uIndexLen ) goto malformed;
+			if ( iPos + 2 > uIndexLen ) {
+				snprintf(sErr, iErrCap, "index malformed");
+				goto malformed;
+			}
 			nRel = XS_PackRd16(pIndex + iPos);
 			iPos += 2;
-			if ( nRel == 0 || iPos + nRel + 26 > uIndexLen ) goto malformed;
+			if ( nRel == 0 || iPos + nRel + 26 > uIndexLen ) {
+				snprintf(sErr, iErrCap, "index malformed");
+				goto malformed;
+			}
 			pOut->pEntries[i].sPath = (char*)malloc(nRel + 1);
 			if ( pOut->pEntries[i].sPath == NULL ) {
 				snprintf(sErr, iErrCap, "out of memory");
@@ -436,6 +452,23 @@ static bool XS_PackParse(const char* sExe, bool bRequireArchive,
 			}
 			memcpy(pOut->pEntries[i].sPath, pIndex + iPos, nRel);
 			pOut->pEntries[i].sPath[nRel] = 0;
+			/* 路径规范化校验（拒绝 ../、反斜杠、首/尾/重复斜杠等
+			 * 逃逸形态），与运行时 XS_VfsLoad 相同：规范化结果须与
+			 * 原文完全一致，否则 extract 会写到目标目录之外 */
+			{
+				uint32_t uNormLen = 0;
+				char* sNorm = XS_VfsNormalizePath(
+					pOut->pEntries[i].sPath, &uNormLen);
+
+				if ( sNorm == NULL || uNormLen != nRel ||
+				     strcmp(sNorm, pOut->pEntries[i].sPath) != 0 ) {
+					xrtFree(sNorm);
+					snprintf(sErr, iErrCap, "unsafe entry path: %s",
+						pOut->pEntries[i].sPath);
+					goto malformed;
+				}
+				xrtFree(sNorm);
+			}
 			iPos += nRel;
 			pOut->pEntries[i].Method = pIndex[iPos];
 			iPos += 2;                                           /* method + flags */
@@ -443,13 +476,41 @@ static bool XS_PackParse(const char* sExe, bool bRequireArchive,
 			pOut->pEntries[i].CompSize = XS_PackRd32(pIndex + iPos); iPos += 4;
 			pOut->pEntries[i].OrigSize = XS_PackRd64(pIndex + iPos); iPos += 8;
 			pOut->pEntries[i].OrigCrc32 = XS_PackRd32(pIndex + iPos); iPos += 4;
+			/* 条目级校验与运行时装载器一致：方法号、原始大小上限、
+			 * STORE 大小一致、数据须落在数据区内——CRC32 可被构造者
+			 * 重算，不构成对抗边界，越界读/写必须在解析期拒绝 */
+			if ( pOut->pEntries[i].Method > 1 ) {
+				snprintf(sErr, iErrCap, "entry method invalid: %s",
+					pOut->pEntries[i].sPath);
+				goto malformed;
+			}
+			if ( pOut->pEntries[i].OrigSize > XS_VFS_MAX_ENTRY_ORIG_SIZE ) {
+				snprintf(sErr, iErrCap, "entry size over limit: %s",
+					pOut->pEntries[i].sPath);
+				goto malformed;
+			}
+			if ( pOut->pEntries[i].Method == 0 &&
+			     pOut->pEntries[i].CompSize != (uint32_t)pOut->pEntries[i].OrigSize ) {
+				snprintf(sErr, iErrCap, "store size mismatch: %s",
+					pOut->pEntries[i].sPath);
+				goto malformed;
+			}
+			if ( pOut->pEntries[i].DataOffset < uDataOff ||
+			     pOut->pEntries[i].DataOffset + pOut->pEntries[i].CompSize
+			       > uIndexOff ) {
+				snprintf(sErr, iErrCap, "entry data out of range: %s",
+					pOut->pEntries[i].sPath);
+				goto malformed;
+			}
 		}
-		if ( iPos != uIndexLen ) goto malformed;
+		if ( iPos != uIndexLen ) {
+			snprintf(sErr, iErrCap, "index malformed");
+			goto malformed;
+		}
 	}
 	return true;
 
 malformed:
-	snprintf(sErr, iErrCap, "index malformed");
 	XS_PackParsedUnit(pOut);
 	return false;
 
