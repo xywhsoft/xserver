@@ -87,6 +87,6 @@ ws 服务 9082 端口的连接由宿主完成 WebSocket 握手后进 `WsText`。
 ## 6. 下一步
 
 - 开发指南：<https://xs.xywhsoft.com/guide.html>
-- 教程书（43 章，从零到生产）：<https://xs.xywhsoft.com/book/index.html>
-- API 参考（契约 14 符号 / xs 层 20 API / xrt 2957 符号索引）：<https://xs.xywhsoft.com/api.html>
+- 教程书（50 章，从零到生产）：<https://xs.xywhsoft.com/book/index.html>
+- API 参考（契约 14 符号 / xs 层 26 API / xrt 3057 符号索引）：<https://xs.xywhsoft.com/api.html>
 - 源码仓库：<https://gitee.com/xywhsoft/xserver> · <https://github.com/xywhsoft/xserver>
