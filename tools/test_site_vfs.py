@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import argparse
 import http.client
+import json
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -16,7 +18,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PORT = 18731
+PORT = 0
 PASSED = 0
 FAILED = 0
 
@@ -37,10 +39,12 @@ def run_xs(exe: Path, *args: str, cwd: Path | None = None) -> subprocess.Complet
                          cwd=str(cwd or ROOT))
 
 
-def http_get(path: str = "/", port: int = PORT) -> tuple[int, bytes]:
+def http_get(path: str = "/", port: int | None = None,
+             host: str | None = None) -> tuple[int, bytes]:
     try:
-        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-        conn.request("GET", path)
+        conn = http.client.HTTPConnection("127.0.0.1", PORT if port is None else port,
+                                          timeout=5)
+        conn.request("GET", path, headers={"Host": host} if host else {})
         resp = conn.getresponse()
         body = resp.read()
         conn.close()
@@ -76,18 +80,29 @@ def make_site(dir_: Path) -> None:
     (www / "about.html").write_text(
         "<html><body>pack-about</body></html>", encoding="utf-8")
     (www / "big.js").write_text("var x = 1;\n" * 5000, encoding="utf-8")
+    # 多个 host 重复编译同一份包内源码，捕获提前释放 VFS 缓存的问题。
+    (dir_ / "main.c").write_text(
+        "#include <xsbase.h>\n"
+        "XS_RequestResult RequestProc(XS_HttpReq* req)\n"
+        "{ (void)req; return XS_FALLBACK; }\n", encoding="utf-8")
+    hosts = [{"enabled": True, "name": f"h{i}", "host": f"h{i}.local",
+              "path": "wwwroot", "devlang": "c", "devfile": "main.c"}
+             for i in range(4)]
     (dir_ / "xs.json").write_text(
-        '{"services":[{"enabled":true,"class":"http","name":"t",'
-        f'"ip":"127.0.0.1","port":{PORT},'
-        '"host_default":{"enabled":true,"name":"h","path":"wwwroot"}}]}',
-        encoding="utf-8")
+        json.dumps({"services": [{"enabled": True, "class": "http", "name": "t",
+                   "ip": "127.0.0.1", "port": PORT,
+                   "host_default": hosts[0], "hosts": hosts[1:]}]}), encoding="utf-8")
 
 
 def main() -> int:
+    global PORT
     parser = argparse.ArgumentParser()
     parser.add_argument("--exe", default="release/xs.exe")
     args = parser.parse_args()
     exe = ROOT / args.exe
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        PORT = sock.getsockname()[1]
 
     with tempfile.TemporaryDirectory(prefix="xs-vfs-test-") as tmp:
         tmp_path = Path(tmp)
@@ -103,8 +118,9 @@ def main() -> int:
         # ---- 2. --list ----
         r = run_xs(exe, "pack", "--list", str(packed))
         check("list exits 0", r.returncode == 0, r.stderr)
-        check("list shows 4 entries",
-              "4 entries" in r.stdout and "wwwroot/index.html" in r.stdout,
+        check("list shows 5 entries including shared script",
+              "5 entries" in r.stdout and "main.c" in r.stdout
+              and "wwwroot/index.html" in r.stdout,
               r.stdout)
 
         # ---- 3. --extract round-trip ----
@@ -136,6 +152,10 @@ def main() -> int:
             code, body = http_get("/index.html")
             check("GET /index.html 200", code == 200)
             check("content from pack", b"pack-index" in body)
+            for i in range(1, 4):
+                code, body = http_get("/index.html", host=f"h{i}.local")
+                check(f"shared packed script host h{i}",
+                      code == 200 and b"pack-index" in body)
             code, body = http_get("/about.html")
             check("GET /about.html 200", code == 200 and b"pack-about" in body)
             code, body = http_get("/big.js")

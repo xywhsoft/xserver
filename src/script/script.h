@@ -172,11 +172,16 @@ static str XS_ScriptDevPath(XS_HostInfo* pHost)
 
 static xatomic64 g_XS_Generation;
 
+/* 应用文件统一出口：磁盘缓冲归调用方，VFS 缓存只借用。 */
+extern void* XS_AppReadAll(const char* sRelPath, size_t* pSize, bool* pFromVfs);
+extern void XS_AppFree(void* pData, bool bFromVfs);
+
 /* 编译（不挂载不初始化）；失败返回 NULL。热重载先编译、成功才换代 = 回滚语义 */
 static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 {
 	str sDevPath;
 	bytes pData;
+	bool bFromVfs = false;
 	size_t iSize = 0;
 	char sVirtual[128];
 	TCCState* pTcc;
@@ -188,34 +193,7 @@ static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 	}
 	pData = g_XS_ScriptReadHook != NULL ?
 		g_XS_ScriptReadHook(sDevPath, &iSize, g_XS_ScriptReadContext) :
-		xrtFileReadAll(sDevPath, &iSize);
-	if ( pData == NULL && g_XS_ScriptReadHook == NULL ) {
-		/* 站点 VFS 兜底：单文件模式下 C 源码可进应用包（appPath 相对路径） */
-		extern bool XS_VfsActive(void);
-		extern const unsigned char* XS_VfsReadAll(const char*, size_t*);
-		const char* sSlash = strrchr(sDevPath, '/');
-		const char* sBack = strrchr(sDevPath, '\\');
-		const char* sLast = sSlash > sBack ? sSlash : sBack;
-
-		if ( XS_VfsActive() && sLast != NULL ) {
-			const char* sApp = xsAppPath();
-			size_t nApp = sApp != NULL ? strlen(sApp) : 0;
-
-			if ( nApp > 0 && strncmp(sDevPath, sApp, nApp) == 0 &&
-			     (sDevPath[nApp] == '/' || sDevPath[nApp] == '\\') ) {
-				char aRel[1024];
-				size_t nRel = strlen(sDevPath) - nApp - 1;
-
-				if ( nRel > 0 && nRel < sizeof(aRel) ) {
-					size_t j = 0;
-					for ( size_t k = nApp + 1; sDevPath[k]; k++ )
-						aRel[j++] = sDevPath[k] == '\\' ? '/' : sDevPath[k];
-					aRel[j] = 0;
-					pData = (void*)XS_VfsReadAll(aRel, &iSize);
-				}
-			}
-		}
-	}
+		XS_AppReadAll(sDevPath, &iSize, &bFromVfs);
 	if ( pData == NULL ) {
 		printf("[xs] script read failed: %s\n", sDevPath);
 		xrtFree(sDevPath);
@@ -224,7 +202,7 @@ static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 	pTcc = XS_TccCreateForHost(pHost);	/* 每个候选先拥有独立编译状态 */
 	if ( pTcc == NULL ) {
 		printf("[xs] tcc create failed\n");
-		xrtFree(pData);
+		XS_AppFree(pData, bFromVfs);
 		xrtFree(sDevPath);
 		return NULL;
 	}
@@ -317,11 +295,11 @@ static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 	if ( !tcc_vfs_mount_memory(sVirtual, pData, iSize) ) {
 		printf("[xs] script vfs mount failed\n");
 		tcc_delete(pTcc);
-		xrtFree(pData);
+		XS_AppFree(pData, bFromVfs);
 		xrtFree(sDevPath);
 		return NULL;
 	}
-	xrtFree(pData);		/* mount_memory 深拷贝，源缓冲即弃 */
+	XS_AppFree(pData, bFromVfs);	/* mount_memory 深拷贝；保留包内借用缓存 */
 	if ( tcc_add_file(pTcc, sVirtual) < 0 ) {
 		(void)tcc_vfs_unmount(sVirtual);
 		printf("[xs] script compile failed: %s\n", sDevPath);
