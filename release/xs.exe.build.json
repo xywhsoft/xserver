@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "source_commit": "6d4fee1",
-  "source_sha256": "58237fb3b5b65f931eaf15cb8aec9b769fef7ad131135c92d151a59da17f0f1e",
-  "binary_sha256": "87601903c584a815aed2231b3537acaa3e6eb7f3ce7941e409f97a0111dadd84",
+  "source_commit": "736ff73",
+  "source_sha256": "b5d3d59ef1d1fee27f8e615c9620be7cea03f0ecde2e7b03f40be68306faee25",
+  "binary_sha256": "2fcdceb5c46d006951d627b68b21534ba3e6ef0192121404b51fabec9242e093",
   "platform": "windows",
   "extensions": [
     "sqlite",
@@ -21,5 +21,5 @@
     "xoauth2",
     "webview"
   ],
-  "banner": "[xs] XServer 1.0.0 (commit 6d4fee1, 2026-10-10, windows)\n[xs] extensions (15): sqlite, xtp, xllm, xllm-session, xwork, xmail, xsmtp, xpop3, ximap, md4c, xacme, qrcodegen, xjwt, xoauth2, webview"
+  "banner": "[xs] XServer 1.0.0 (commit 736ff73, 2026-10-10, windows)\n[xs] extensions (15): sqlite, xtp, xllm, xllm-session, xwork, xmail, xsmtp, xpop3, ximap, md4c, xacme, qrcodegen, xjwt, xoauth2, webview"
 }
