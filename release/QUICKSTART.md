@@ -1,9 +1,9 @@
 # XServer 快速上手
 
 **XServer** 是单文件 C 语言应用服务器：一个可执行文件 + 一份 C 源码 = 一个完整的网站 / API 服务。
-编译器（TCC）、SDK 头文件、SQLite、系统库定义已全部内嵌在程序里，目标机上**什么都不用装**。
+编译器（TCC）、SDK 头文件和所选扩展库已内嵌在程序里。Windows 与 musl 静态版无需额外编译环境；glibc 版编译脚本时需要系统 C 开发头文件（如 `libc6-dev`）。
 
-官网：<https://xs.xywhsoft.com>（开发指南 / 43 章教程书 / API 参考与全站搜索）
+官网：<https://xs.xywhsoft.com>（开发指南 / 50 章教程书 / API 参考与全站搜索）
 
 ---
 
@@ -12,7 +12,7 @@
 解压后进入目录：
 
 ```bash
-# Linux / macOS
+# Linux
 ./xs demo/xs.json
 
 # Windows
@@ -27,10 +27,11 @@ xs.exe demo\xs.json
 ```bash
 ./xs --version        # 或 xs.exe --version
 # [xs] XServer 1.0.0 (commit <hash>, <日期>, <平台>)
-# [xs] extensions (10): sqlite, xtp, xllm, ...
+# [xs] extensions (15): sqlite, xtp, xllm, xllm-session, xwork, xmail, xsmtp, xpop3, ximap, md4c, xacme, qrcodegen, xjwt, xoauth2, webview
 ```
 
 启动时也会打印同样的两行。同一份信息见包内 `VERSION` 文件。
+扩展清单以该二进制的实际输出为准；上例对应当前 `all` 变体。
 
 ## 2. 这个包里有什么
 
@@ -88,5 +89,5 @@ ws 服务 9082 端口的连接由宿主完成 WebSocket 握手后进 `WsText`。
 
 - 开发指南：<https://xs.xywhsoft.com/guide.html>
 - 教程书（50 章，从零到生产）：<https://xs.xywhsoft.com/book/index.html>
-- API 参考（契约 14 符号 / xs 层 26 API / xrt 3057 符号索引）：<https://xs.xywhsoft.com/api.html>
+- API 参考（回调契约 / xs API / xrt 符号索引）：<https://xs.xywhsoft.com/api.html>
 - 源码仓库：<https://gitee.com/xywhsoft/xserver> · <https://github.com/xywhsoft/xserver>

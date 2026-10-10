@@ -72,7 +72,7 @@ app.exe                                      # 无参启动：自动从包内读
 - `xs --no-vfs` 忽略应用包强制目录模式（调试用）
 - 归档探测零成本（读自身末尾 24B）；索引启动装载后不可变、内容首次访问惰性解压常驻缓存
 
-格式与设计细节见 [docs/站点VFS设计.md](docs/站点VFS设计.md)；端到端测试 `python tools/test_site_vfs.py`。
+格式与设计细节见 [docs/站点VFS设计.md](docs/站点VFS设计.md)；端到端测试 `python tools/test_site_vfs.py`，覆盖打包往返、多个 host 共用包内 C 脚本、静态服务及磁盘覆盖，使用动态端口与临时站点。
 
 ## 开源许可
 
