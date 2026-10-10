@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "source_commit": "6d4fee1",
+  "source_sha256": "58237fb3b5b65f931eaf15cb8aec9b769fef7ad131135c92d151a59da17f0f1e",
+  "binary_sha256": "c856a7140c347a0ad037b56115ab0d09000f113c51a0e815df3ede918131836e",
+  "platform": "linux",
+  "extensions": [
+    "sqlite",
+    "xtp",
+    "xllm",
+    "xllm-session",
+    "xwork",
+    "xmail",
+    "xsmtp",
+    "xpop3",
+    "ximap",
+    "md4c",
+    "xacme",
+    "qrcodegen",
+    "xjwt",
+    "xoauth2",
+    "webview"
+  ],
+  "banner": "[xs] XServer 1.0.0 (commit 6d4fee1, 2026-10-10, linux)\n[xs] extensions (15): sqlite, xtp, xllm, xllm-session, xwork, xmail, xsmtp, xpop3, ximap, md4c, xacme, qrcodegen, xjwt, xoauth2, webview"
+}
