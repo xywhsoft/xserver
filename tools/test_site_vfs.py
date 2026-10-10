@@ -4,7 +4,8 @@ python tools/test_site_vfs.py [--exe release/xs.exe]
 覆盖 Phase 1+2 验收线：格式往返（list/extract/strip）、包内服务、
 磁盘优先约束三场景、--no-vfs；外加静态索引兑底回归：磁盘目录存在
 但索引页仅在包内（目录/尾斜杠两种形态）、无磁盘根的 static.index
-候选。全部使用临时目录与子进程，结束即清理。
+候选、超长 dev_inc 段不破坏启动。全部使用临时目录与子进程，结束
+即清理。
 """
 from __future__ import annotations
 
@@ -74,7 +75,7 @@ def wait_down(proc: subprocess.Popen) -> None:
         proc.wait()
 
 
-def make_site(dir_: Path) -> None:
+def make_site(dir_: Path, dev_inc: str | None = None) -> None:
     www = dir_ / "wwwroot"
     www.mkdir(parents=True)
     (www / "index.html").write_text(
@@ -96,6 +97,10 @@ def make_site(dir_: Path) -> None:
     hosts = [{"enabled": True, "name": f"h{i}", "host": f"h{i}.local",
               "path": "wwwroot", "devlang": "c", "devfile": "main.c"}
              for i in range(4)]
+    if dev_inc is not None:
+        # 回归：超长 dev_inc 段（512~1007）曾写穿 512 栈缓冲
+        for h in hosts:
+            h["dev_inc"] = dev_inc
     (dir_ / "xs.json").write_text(
         json.dumps({"services": [{"enabled": True, "class": "http", "name": "t",
                    "ip": "127.0.0.1", "port": PORT,
@@ -115,7 +120,11 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="xs-vfs-test-") as tmp:
         tmp_path = Path(tmp)
         site = tmp_path / "site"
-        make_site(site)
+        # 回归（script.h dev_inc）：绝对路径段落在 512~1007 区间，
+        # 修复前会写穿 512 字节栈缓冲，修复后安全跳过、服务正常
+        long_dev_inc = str(site / (("d/" * 299) + "e"))
+        assert 512 <= len(long_dev_inc) < 1008, len(long_dev_inc)
+        make_site(site, dev_inc=long_dev_inc)
 
         # ---- 1. pack ----
         packed = tmp_path / "packed.exe"

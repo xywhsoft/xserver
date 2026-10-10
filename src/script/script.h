@@ -217,6 +217,7 @@ static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 		if ( XS_VfsActive() ) {
 			static const char* s_XS_SiteRoot = "/xs/site";
 			char aVirtual[1024];
+			char aRel[512];
 			int nEntries = XS_VfsEntryCount();
 			static int s_iMounted = 0;
 
@@ -265,8 +266,9 @@ static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 						pUse = p + nApp + 1;
 						nUse = n - nApp - 1;
 					}
-					if ( nUse > 0 && nUse + 16 < sizeof(aVirtual) ) {
-						char aRel[512];
+					/* 长度上限以实际写入的 aRel 为准：曾误用 aVirtual 的
+					 * 1024 上限，512~1007 的段会写穿 512 栈缓冲 */
+					if ( nUse > 0 && nUse < sizeof(aRel) ) {
 						size_t j = 0;
 						for ( size_t k = 0; k < nUse; k++ )
 							aRel[j++] = pUse[k] == '\\' ? '/' : pUse[k];
