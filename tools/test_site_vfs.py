@@ -144,6 +144,8 @@ def main() -> int:
         (rundir / "wwwroot").mkdir()          # 空目录：pRoot 成功打开，
         runexe = rundir / "app.exe"            # 运行期投递文件可被磁盘层看到
         shutil.copy2(packed, runexe)
+        # pack 写出的是字节文件；POSIX 夹具须继承宿主的可执行权限。
+        shutil.copymode(exe, runexe)
         proc = subprocess.Popen([str(runexe)], cwd=str(rundir),
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 text=True, encoding="utf-8", errors="replace")

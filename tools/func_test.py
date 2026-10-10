@@ -88,7 +88,7 @@ def config_matrix():
         try:
             proc = subprocess.run(
                 [str(EXE), path],
-                capture_output=True, text=True, timeout=10, cwd=str(RELEASE))
+                capture_output=True, text=True, encoding='utf-8', timeout=10, cwd=str(RELEASE))
             out = proc.stdout + proc.stderr
             if proc.returncode != 1:
                 fail(f'config/{name}', f'exit={proc.returncode}')
@@ -121,7 +121,7 @@ def config_matrix():
         }]}), encoding='utf-8')
         try:
             proc = subprocess.run(
-                [str(EXE), str(config)], capture_output=True, text=True,
+                [str(EXE), str(config)], capture_output=True, text=True, encoding='utf-8',
                 timeout=10, cwd=str(cwd_root))
             if proc.returncode != 1 or 'script compile failed' not in proc.stdout + proc.stderr:
                 fail('config/dev-path-no-cwd-fallback',
@@ -158,7 +158,7 @@ def listener_failure_matrix():
         path = fp.name
     try:
         proc = subprocess.run(
-            [str(EXE), path], capture_output=True, text=True,
+            [str(EXE), path], capture_output=True, text=True, encoding='utf-8',
             timeout=20, cwd=str(RELEASE))
         if proc.returncode != 1 or 'listen failed' not in proc.stdout + proc.stderr:
             fail('listener/partial-tls-failure',
@@ -215,7 +215,7 @@ def tls_identity_diagnostic_matrix():
         }), encoding='utf-8')
         try:
             proc = subprocess.run(
-                [str(EXE), str(config_path)], capture_output=True, text=True,
+                [str(EXE), str(config_path)], capture_output=True, text=True, encoding='utf-8',
                 timeout=20, cwd=str(RELEASE))
             output = proc.stdout + proc.stderr
             expected = 'certificate uses RSA but private key uses EC'
@@ -533,7 +533,7 @@ XS_RequestResult RequestProc(XS_HttpReq* pReq)
 
     log = open(tempfile.gettempdir() + '/xs_func.log', 'w')
     proc = subprocess.Popen(
-        [str(EXE), 'func_test_config.json'],
+        [str(EXE), str(cfg_path)],
         cwd=str(RELEASE), stdout=log, stderr=subprocess.STDOUT)
     try:
         if not wait_port(http_port):
