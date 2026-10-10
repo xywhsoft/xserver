@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import stat
 import subprocess
 import sys
 import zipfile
@@ -122,6 +123,14 @@ def build_variant(name: str, meta: dict, when: str, record: dict, out_dir: Path)
         for target, source in entries:
             if source is None:
                 zf.writestr(target, version_text)
+                continue
+            if name.startswith("linux") and source == binary:
+                # Windows 打包机的 stat 没有执行位；Linux 解压后须可直接运行。
+                info = zipfile.ZipInfo.from_file(source, target)
+                info.create_system = 3
+                info.external_attr = (stat.S_IFREG | 0o755) << 16
+                zf.writestr(info, source.read_bytes(),
+                            compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
                 continue
             zf.write(source, target)
 
