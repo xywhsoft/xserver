@@ -106,5 +106,7 @@ grep -q "\[xs\] bye" "$XS_SMOKE_LOG"
 python3 tools/func_test.py --exe release/xs
 python3 tools/lifecycle_reload_test.py --exe release/xs
 python3 tools/reload_matrix_test.py --exe release/xs
+python3 tools/test_site_vfs.py --exe release/xs
+python3 tools/test_packed_reload.py --exe release/xs
 
 echo "SMOKE PASS"

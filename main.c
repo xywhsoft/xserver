@@ -386,6 +386,20 @@ int main(int argc, char** argv)
 		}
 	}
 
+	/* 两种启动模式共用实际配置路径，供配置相对路径解析与 reload 快照使用。 */
+	if ( sArgConfig != NULL ) {
+		i = snprintf(sConfigPath, sizeof(sConfigPath), "%s", sArgConfig);
+	} else {
+		const char* sAppPath = XS_AppPath();
+
+		i = sAppPath != NULL ? snprintf(sConfigPath, sizeof(sConfigPath),
+			"%s/xs.json", sAppPath) : -1;
+	}
+	if ( i < 0 || (size_t)i >= sizeof(sConfigPath) ) {
+		printf("[xs] config path is too long\n");
+		return XS_MainExit(1, pOwnedArgv, iOwnedArgc);
+	}
+
 	/* 站点 VFS：无显式 config 时探测自身应用包（单文件发布模式） */
 	if ( sArgConfig == NULL && XS_VfsBootstrap() ) {
 		size_t iVfsSize = 0;
@@ -394,7 +408,7 @@ int main(int argc, char** argv)
 		if ( sVfsJson != NULL ) {
 			XS_PrintVersion();
 			printf("[xs] app pack: %d entries\n", XS_VfsEntryCount());
-			if ( !XS_ConfigLoadMemory("app-pack:xs.json",
+			if ( !XS_ConfigLoadMemory(sConfigPath,
 			                          sVfsJson, iVfsSize, &tApp) ) {
 				printf("[xs] config load failed (from app pack): %s\n",
 					tApp.ParseError);
@@ -412,19 +426,6 @@ int main(int argc, char** argv)
 		}
 	}
 	else {
-	if ( sArgConfig != NULL ) {
-		i = snprintf(sConfigPath, sizeof(sConfigPath), "%s", sArgConfig);
-	} else {
-		const char* sAppPath = XS_AppPath();
-
-		i = sAppPath != NULL ? snprintf(sConfigPath, sizeof(sConfigPath),
-			"%s/xs.json", sAppPath) : -1;
-	}
-	if ( i < 0 || (size_t)i >= sizeof(sConfigPath) ) {
-		printf("[xs] config path is too long\n");
-		return XS_MainExit(1, pOwnedArgv, iOwnedArgc);
-	}
-
 	/* 启动横幅：版本 + 本变体携带的扩展清单（与 --version 同一输出） */
 	XS_PrintVersion();
 

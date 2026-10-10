@@ -83,6 +83,10 @@ if errorlevel 1 (echo LIFECYCLE FAIL & goto :done)
 rem Same-endpoint listener handoff across HTTP/TCP/UDP/WS.
 python tools\reload_matrix_test.py
 if errorlevel 1 (echo RELOAD MATRIX FAIL & goto :done)
+python tools\test_site_vfs.py --exe release/xs.exe
+if errorlevel 1 (echo SITE VFS FAIL & goto :done)
+python tools\test_packed_reload.py --exe release/xs.exe
+if errorlevel 1 (echo PACKED RELOAD FAIL & goto :done)
 cd release
 
 set XS_TEST_RC=0

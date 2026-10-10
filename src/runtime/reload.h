@@ -164,6 +164,22 @@ static uint64 XS_ReloadHashBytes(uint64 iHash, const void* pData, size_t iSize)
 	return iHash;
 }
 
+/* 快照始终拥有缓冲；磁盘读取直接接管，VFS 借用视图复制后保存。 */
+static bytes XS_ReloadReadOwnedFile(const char* sPath, size_t* piSize)
+{
+	bool bFromVfs = false;
+	bytes pData;
+	bytes pCopy;
+
+	if ( piSize == NULL ) return NULL;
+	*piSize = 0;
+	pData = (bytes)XS_AppReadAll(sPath, piSize, &bFromVfs);
+	if ( pData == NULL || !bFromVfs ) return pData;
+	pCopy = (bytes)xrtMalloc(*piSize > 0 ? *piSize : 1);
+	if ( pCopy != NULL && *piSize > 0 ) memcpy(pCopy, pData, *piSize);
+	return pCopy;
+}
+
 /* 返回调用方拥有的副本；缓存本身活到本次 reconcile 终态。 */
 static bytes XS_ReloadReadSourceSnapshot(const char* sPath, size_t* piSize, void* pContext)
 {
@@ -179,7 +195,7 @@ static bytes XS_ReloadReadSourceSnapshot(const char* sPath, size_t* piSize, void
 		pSource = (XS_ReloadSourceFile*)xrtCalloc(1, sizeof(XS_ReloadSourceFile));
 		if ( pSource == NULL ) return NULL;
 		pSource->sPath = xrtStrDup(sPath);
-		pSource->pData = xrtFileReadAll(sPath, &pSource->iSize);
+		pSource->pData = XS_ReloadReadOwnedFile(sPath, &pSource->iSize);
 		if ( pSource->sPath == NULL || pSource->pData == NULL ) {
 			xrtFree(pSource->sPath);
 			xrtFree(pSource->pData);
@@ -397,7 +413,7 @@ static bool XS_ReloadQueryResult(XS_ReloadId iId, XS_ReloadResult* pResult)
 
 static bool XS_ReloadSnapshotConfig(XS_ReloadIntent* pIntent)
 {
-	pIntent->pConfigData = xrtFileReadAll(g_XS_Reload.sConfigPath, &pIntent->iConfigSize);
+	pIntent->pConfigData = XS_ReloadReadOwnedFile(g_XS_Reload.sConfigPath, &pIntent->iConfigSize);
 	if ( pIntent->pConfigData == NULL ) {
 		XS_ReloadSetError("config snapshot read failed");
 		return false;
