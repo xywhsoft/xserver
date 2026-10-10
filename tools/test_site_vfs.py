@@ -2,7 +2,9 @@
 
 python tools/test_site_vfs.py [--exe release/xs.exe]
 覆盖 Phase 1+2 验收线：格式往返（list/extract/strip）、包内服务、
-磁盘优先约束三场景、--no-vfs。全部使用临时目录与子进程，结束即清理。
+磁盘优先约束三场景、--no-vfs；外加静态索引兑底回归：磁盘目录存在
+但索引页仅在包内（目录/尾斜杠两种形态）、无磁盘根的 static.index
+候选。全部使用临时目录与子进程，结束即清理。
 """
 from __future__ import annotations
 
@@ -81,6 +83,11 @@ def make_site(dir_: Path) -> None:
         "<html><body>pack-about</body></html>", encoding="utf-8")
     (www / "big.js").write_text("var x = 1;\n" * 5000, encoding="utf-8")
     (www / "empty.txt").write_bytes(b"")
+    # 子目录索引页：磁盘根存在但子目录不在时，尾斜杠请求应从包内兑底
+    docs = www / "docs"
+    docs.mkdir()
+    (docs / "index.html").write_text(
+        "<html><body>pack-docs-index</body></html>", encoding="utf-8")
     # 多个 host 重复编译同一份包内源码，捕获提前释放 VFS 缓存的问题。
     (dir_ / "main.c").write_text(
         "#include <xsbase.h>\n"
@@ -119,9 +126,10 @@ def main() -> int:
         # ---- 2. --list ----
         r = run_xs(exe, "pack", "--list", str(packed))
         check("list exits 0", r.returncode == 0, r.stderr)
-        check("list shows 6 entries including shared script and empty file",
-              "6 entries" in r.stdout and "main.c" in r.stdout
-              and "wwwroot/index.html" in r.stdout,
+        check("list shows 7 entries including shared script and empty file",
+              "7 entries" in r.stdout and "main.c" in r.stdout
+              and "wwwroot/index.html" in r.stdout
+              and "wwwroot/docs/index.html" in r.stdout,
               r.stdout)
 
         # ---- 3. --extract round-trip ----
@@ -169,6 +177,18 @@ def main() -> int:
                 code, body = http_get("/empty.txt")
                 check(f"empty packed file returns 200 on read {attempt + 1}",
                       code == 200 and body == b"", f"status={code} body={body!r}")
+            # 目录请求的包内索引兑底：磁盘 wwwroot 存在但为空，
+            # 索引页仅在包内（回归：旧代码循环外兑底用已置空路径，恒 404）
+            code, body = http_get("/")
+            check("GET / falls back to packed index",
+                  code == 200 and b"pack-index" in body, f"status={code}")
+            # 磁盘 miss + 尾斜杠：docs 子目录仅在包内，按索引候选兑底
+            code, body = http_get("/docs/")
+            check("GET /docs/ falls back to packed subindex",
+                  code == 200 and b"pack-docs-index" in body, f"status={code}")
+            code, body = http_get("/docs")
+            check("GET /docs (no slash) is not a directory hit",
+                  code == 404, f"status={code}")
             code, _ = http_get("/missing.html")
             check("missing 404", code == 404)
             code, _ = http_get("/../xs.json")
@@ -207,6 +227,48 @@ def main() -> int:
         check("--no-vfs ignores pack",
               proc.returncode not in (0,) and "app pack" not in (output or ""),
               output or "")
+
+        # ---- 9. 无磁盘根：static.index 候选（回归：旧代码写死 index.html） ----
+        siteidx = tmp_path / "siteidx"
+        www2 = siteidx / "wwwroot"
+        www2.mkdir(parents=True)
+        (www2 / "home.html").write_text(
+            "<html><body>pack-home-index</body></html>", encoding="utf-8")
+        (siteidx / "main.c").write_text(
+            "#include <xsbase.h>\n"
+            "XS_RequestResult RequestProc(XS_HttpReq* req)\n"
+            "{ (void)req; return XS_FALLBACK; }\n", encoding="utf-8")
+        (siteidx / "xs.json").write_text(
+            json.dumps({"services": [{"enabled": True, "class": "http",
+                       "name": "t2", "ip": "127.0.0.1", "port": PORT,
+                       "host_default": {"enabled": True, "name": "h",
+                                        "host": "h.local", "path": "wwwroot",
+                                        "devlang": "c", "devfile": "main.c",
+                                        "static": {"index": ["home.html",
+                                                              "index.html"]}}}]}),
+            encoding="utf-8")
+        packed2 = tmp_path / "packed2.exe"
+        r = run_xs(exe, "pack", str(siteidx), "-o", str(packed2))
+        check("pack static.index site exits 0", r.returncode == 0,
+              r.stdout + r.stderr)
+        rundir2 = tmp_path / "run2"
+        rundir2.mkdir()          # 不建 wwwroot：pRoot 打开失败，纯包内模式
+        runexe2 = rundir2 / "app.exe"
+        shutil.copy2(packed2, runexe2)
+        shutil.copymode(exe, runexe2)
+        proc = subprocess.Popen([str(runexe2)], cwd=str(rundir2),
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                text=True, encoding="utf-8", errors="replace")
+        try:
+            check("server up without disk root", wait_up(PORT))
+            code, body = http_get("/")
+            check("GET / honors static.index candidates",
+                  code == 200 and b"pack-home-index" in body, f"status={code}")
+            code, _ = http_get("/index.html")
+            check("second candidate not present as file", code == 404,
+                  f"status={code}")
+        finally:
+            wait_down(proc)
 
     print(f"\n{PASSED} pass, {FAILED} fail")
     return 1 if FAILED > 0 else 0

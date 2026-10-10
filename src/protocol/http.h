@@ -697,6 +697,50 @@ static const unsigned char* XS_HttpVfsServe(XS_HttpRecord* pRec,
 	return pMem;
 }
 
+/* 目录请求索引候选的包内兑底：遍历 static.index（缺省 index.html），
+ * 每个候选拼 <sRel>[/<name>] 查包；返回非 NULL = 已接管响应。
+ * 候选选取规则与磁盘索引分支（XS_HttpStatic）保持一致。 */
+static const unsigned char* XS_HttpVfsServeIndex(XS_HttpRecord* pRec,
+	const char* sRel)
+{
+	xvalue* pStatic = XS_HttpStaticCfg(pRec->pHost);
+	xvalue* pIndex = pStatic != NULL ?
+		xrtValueObjectGet(pStatic, XRT_STR_LITERAL("index")) : NULL;
+	size_t iCount = pIndex != NULL && xrtValueType(pIndex) == XVALUE_ARRAY ?
+		xrtValueCount(pIndex) : 1u;
+	size_t iBase = strlen(sRel);
+	size_t iIdx;
+
+	for ( iIdx = 0; iIdx < iCount; iIdx++ ) {
+		xstrview tName;
+		bool bHas;
+		char aIdx[1024];
+		size_t iAt = iBase;
+
+		if ( pIndex != NULL && xrtValueType(pIndex) == XVALUE_ARRAY ) {
+			xvalue* pItem = xrtValueArrayGet(pIndex, iIdx);
+			bHas = pItem != NULL && xrtValueGetString(pItem, &tName);
+		} else {
+			tName = XRT_STR_LITERAL("index.html");
+			bHas = true;
+		}
+		if ( !bHas || !XS_HttpSafeRelative(tName) || tName.Data[0] == '.' ||
+		     iBase + tName.Size + 3u >= sizeof(aIdx) )
+			continue;
+		memcpy(aIdx, sRel, iBase);
+		if ( iAt > 0 && aIdx[iAt - 1] != '/' )
+			aIdx[iAt++] = '/';
+		memcpy(aIdx + iAt, tName.Data, tName.Size);
+		aIdx[iAt + tName.Size] = '\0';
+		{
+			const unsigned char* pMem = XS_HttpVfsServe(pRec, aIdx);
+
+			if ( pMem != NULL ) return pMem;
+		}
+	}
+	return NULL;
+}
+
 /* ============================================================
  * 静态层（XS_FALLBACK，仅 GET/HEAD）
  * ============================================================ */
@@ -873,18 +917,13 @@ static void XS_HttpStatic(XS_HttpRecord* pRec)
 	}
 	if ( pSite->pRoot == NULL ) {
 		/* 站点 VFS 单文件模式（磁盘根缺失）：全部走包内兜底；
-		 * 目录请求（含根 /）补查 index.html */
+		 * 目录请求（含根 /）按 static.index 候选补查索引页 */
 		{
 			const unsigned char* pMem = XS_HttpVfsServe(pRec, sRel);
 
 			if ( pMem == NULL && ( sRel[0] == 0 ||
 				sRel[strlen(sRel) - 1] == '/') ) {
-				char aIdx[1024];
-
-				if ( strlen(sRel) + 12 < sizeof(aIdx) ) {
-					snprintf(aIdx, sizeof(aIdx), "%sindex.html", sRel);
-					pMem = XS_HttpVfsServe(pRec, aIdx);
-				}
+				pMem = XS_HttpVfsServeIndex(pRec, sRel);
 			}
 			if ( pMem != NULL ) { xrtFree(sDecoded); return; }
 		}
@@ -894,10 +933,15 @@ static void XS_HttpStatic(XS_HttpRecord* pRec)
 	if ( sRel[0] == '\0' ) {
 		bDirectory = true;
 	} else if ( !xrtRootStat(pSite->pRoot, sRel, true, &tInfo) ) {
-		/* 磁盘 miss（目录存在但文件不在）→ VFS 兜底 */
+		/* 磁盘 miss（路径不存在）→ VFS 兜底；目录形态请求
+		 * （尾斜杠）按 static.index 候选补查索引页 */
 		{
 			const unsigned char* pMem = XS_HttpVfsServe(pRec, sRel);
 
+			if ( pMem == NULL && sRel[0] != '\0' &&
+				sRel[strlen(sRel) - 1] == '/' ) {
+				pMem = XS_HttpVfsServeIndex(pRec, sRel);
+			}
 			if ( pMem != NULL ) { xrtFree(sDecoded); return; }
 		}
 		XS_HttpErrorPage(pRec, 404);
@@ -940,24 +984,29 @@ static void XS_HttpStatic(XS_HttpRecord* pRec)
 			}
 			if ( iBase > 0 ) {
 				memcpy(sIndexPath, sRel, iBase);
-				sIndexPath[iBase++] = '/';
+				/* 仅在需要时补分隔：尾斜杠请求（/dir/）拼出规范
+				 * dir/index.html，磁盘与包内条目路径一致 */
+				if ( sIndexPath[iBase - 1] != '/' )
+					sIndexPath[iBase++] = '/';
 			}
 			memcpy(sIndexPath + iBase, tName.Data, tName.Size);
 			sIndexPath[iBase + tName.Size] = '\0';
 			hFile = XS_HttpRootOpenFile(pSite->pRoot, sIndexPath, &tInfo);
 			if ( hFile == NULL ) {
+				/* 磁盘未命中该候选 → 同一候选路径查包内兜底
+				 * （此前循环外统一兜底时 sIndexPath 已释放置空，
+				 * 兜底恒 miss；且多候选只覆盖最后一个） */
+				const unsigned char* pMem =
+					XS_HttpVfsServe(pRec, sIndexPath);
+
 				xrtFree(sIndexPath);
 				sIndexPath = NULL;
+				if ( pMem != NULL ) { xrtFree(sDecoded); return; }
 			} else {
 				sSelected = sIndexPath;
 			}
 		}
 		if ( hFile == NULL ) {
-			/* 磁盘未命中索引页 → VFS 兜底 */
-			const unsigned char* pMem = XS_HttpVfsServe(pRec, sIndexPath);
-			xrtFree(sIndexPath);
-			sIndexPath = NULL;
-			if ( pMem != NULL ) { xrtFree(sDecoded); return; }
 			XS_HttpErrorPage(pRec, 404);
 			goto cleanup;
 		}
