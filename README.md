@@ -2,7 +2,10 @@
 
 **xs 是 xrt 的落地化部署工具。** 它把 xrt 的网络、协议、TLS、并发、数据能力装配成一个由配置文件驱动的可执行程序，并在运行时把 C 脚本编译进进程。xrt 才是主要的那个；xs 只负责部署，不提供框架、不提供治理、不教应用怎么做事。
 
-当前状态：**生产就绪**——五大协议（http(+https)/ws(+wss)/tcp(+tcps)/udp/custom）、期望状态热重载（latest-wins/整代候选/原子发布/自动排空回收）、可选库门控（sqlite、xtp、xllm、xmail 系列、md4c、xacme，可组合、支持依赖自动展开与 all 全选）、dev_inc/dev_lib 应用 SDK 目录、静态层四旋钮、Windows/Linux 双平台回归与四层测试体系（冒烟/功能/压力/攻防演练 6h 704 轮 0 失败）。遗留：xadmin 试点。
+现有能力：五大协议（http(+https)/ws(+wss)/tcp(+tcps)/udp/custom）、期望状态热重载（latest-wins/整代候选/原子发布/自动排空回收）、可选库门控（sqlite、xtp、xllm、xmail 系列、md4c、xacme，可组合、支持依赖自动展开与 all 全选）、dev_inc/dev_lib 应用 SDK 目录、静态层四旋钮、Windows/Linux 双平台回归与四层测试体系（冒烟/功能/压力/攻防演练，历史记录为 6h 704 轮 0 失败）。遗留：xadmin 试点。
+
+维护方向：现阶段冻结功能范围，以代码质量和隐藏缺陷修复为主。优先检查资源所有权、并发与重载生命周期、异常清理、输入边界以及跨平台行为；每个修复先保留复现用例，再补回归测试并独立提交。目录部署与打包部署都纳入基线验证。
+
 - 协议：HTTP 每请求虚拟主机路由（脚本+静态根）、WS 握手期路由并固定 host/脚本、TCP/TCP+TLS、UDP、custom 手动装配
 - 热重载：独立 controller、提交前 latest-wins ticket、reload-all 共享不可变配置 revision、候选 listener 先 bind 但不接入、host/server/all 均以完整 server generation 原子发布；旧代停止新接入后由终态引用自然排空，协议回调以连接记录和具体流的临时引用抵御同步 Close 重入，`ServiceUnit` 与最终析构交给专用 reaper，无泄漏、无宽限/超时强拆
 - 可选库：`build.bat all`（全部可选库）/ `bash build.sh sqlite xtp xllm xsmtp ...`，参数可组合、可去重，邮件协议库自动携带 xmail 基础库；同一扩展清单控制原生编译、VFS 头文件和 TCC 符号导入
@@ -72,7 +75,7 @@ app.exe                                      # 无参启动：自动从包内读
 - `xs --no-vfs` 忽略应用包强制目录模式（调试用）
 - 归档探测零成本（读自身末尾 24B）；索引启动装载后不可变、内容首次访问惰性解压常驻缓存
 
-格式与设计细节见 [docs/站点VFS设计.md](docs/站点VFS设计.md)；端到端测试 `python tools/test_site_vfs.py`，覆盖打包往返、多个 host 共用包内 C 脚本、静态服务及磁盘覆盖，使用动态端口与临时站点。
+格式与设计细节见 [docs/站点VFS设计.md](docs/站点VFS设计.md)；端到端测试 `python tools/test_site_vfs.py`，覆盖打包往返、多个 host 共用包内 C 脚本、空文件、静态服务及磁盘覆盖。`python tools/test_packed_reload.py --exe release/xs.exe` 覆盖包内配置与源码快照、host/server/all 重载、磁盘覆盖及失败回滚。两者均使用动态端口与临时站点，并纳入 `test.bat` / `test.sh` 基线。
 
 ## 开源许可
 
