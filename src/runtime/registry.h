@@ -24,7 +24,8 @@ typedef struct XS_ConnRecord {
 	XS_ScriptRuntime*	pScript;
 	xnetstream*		pTcp;		/* 与 pTls 二选一 */
 	xtlsstream*		pTls;
-	xatomic64		tLastActive;	/* xrtNow() 微秒，跨 worker 原子快照 */
+	xatomic64		tLastActive;	/* xrtNow() 毫秒，跨 worker 原子快照 */
+	xatomic32		tApplicationIdle; /* 接管协议由应用负责心跳及空闲期限 */
 } XS_ConnRecord;
 
 typedef struct XS_ConnRegistry {
@@ -49,6 +50,7 @@ static bool XS_RegistryAdd(XS_ConnRegistry* pReg, XS_ConnRecord* pRecord)
 	xrtMutexLock(pReg->pLock);
 	if ( !pReg->bClosing ) {
 		xrtAtomic64Init(&pRecord->tLastActive, (uint64)xrtNow());
+		xrtAtomic32Init(&pRecord->tApplicationIdle, 0);
 		pRecord->pRegistry = pReg;
 		pRecord->pNext = pReg->pHead;
 		pReg->pHead = pRecord;
@@ -116,8 +118,13 @@ static uint32 XS_RegistrySweepIdle(XS_ConnRegistry* pReg, uint64 iIdleMs)
 	if ( pReg == NULL || pReg->pLock == NULL || iIdleMs == 0 ) return 0;
 	xrtMutexLock(pReg->pLock);
 	for ( pRecord = pReg->pHead; pRecord != NULL; pRecord = pRecord->pNext ) {
+		/* A taken-over HTTP connection no longer uses HTTP Read/Writable
+		 * callbacks, so its HTTP activity timestamp cannot describe liveness.
+		 * Keep it registered for reload/shutdown, but let its protocol owner
+		 * enforce a bounded heartbeat/idle policy. */
+		if ( xrtAtomic32Load(&pRecord->tApplicationIdle, XMEMORY_ACQUIRE) ) continue;
 		int64 tLast = (int64)xrtAtomic64Load(&pRecord->tLastActive, XMEMORY_RELAXED);
-		uint64 iElapsedMs = tNow > tLast ? (uint64)(tNow - tLast) / 1000u : 0;
+		uint64 iElapsedMs = tNow > tLast ? (uint64)(tNow - tLast) : 0;
 
 		if ( iElapsedMs > iIdleMs ) {
 			iStale++;

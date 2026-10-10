@@ -34,7 +34,7 @@ typedef struct XS_WsRuntime {
 	size_t			iReceiveLimit;	/* 握手期线路硬边界，防止 ReadLimit 满后永久 MORE */
 	str			sProtocol;	/* ws_protocol 旋钮（可空） */
 	uint64			iMessageLimit;	/* 0 = 内核默认 */
-	uint64			iIdleMs;	/* 0 = 关闭 idle 保护 */
+	uint64			iIdleMs;	/* 0 = 显式关闭；缺省 XS_IDLE_TIMEOUT_DEFAULT_MS */
 	XS_GenerationTimer	tSweepTimer;
 	struct XS_WsConn*	pConns;		/* 活动连接链（停机批量收口） */
 	uint32			iConnCount;
@@ -61,7 +61,7 @@ typedef struct XS_WsConn {
 	size_t			iMsgSize;
 	size_t			iMsgCap;
 	uint8			iMsgOpcode;
-	xatomic64		tLastActive;	/* xrtNow() 微秒 */
+	xatomic64		tLastActive;	/* xrtNow() 毫秒 */
 	bool			bUpgradeStarted;
 	bool			bHandshakeDone;
 	bool			bMessageFailed;
@@ -721,7 +721,7 @@ static uint32 XS_WsSweepIdle(XS_WsRuntime* pRuntime)
 	xrtMutexLock(pRuntime->pConnLock);
 	for ( pConn = pRuntime->pConns; pConn != NULL; pConn = pConn->pNext ) {
 		int64 tLast = (int64)xrtAtomic64Load(&pConn->tLastActive, XMEMORY_RELAXED);
-		uint64 iElapsedMs = tNow > tLast ? (uint64)(tNow - tLast) / 1000u : 0;
+		uint64 iElapsedMs = tNow > tLast ? (uint64)(tNow - tLast) : 0;
 
 		if ( iElapsedMs <= pRuntime->iIdleMs ) continue;
 		iStale++;
@@ -752,7 +752,7 @@ static void XS_WsSweepProc(xnetworker* pWorker, uint64 iId, xnetresult iResult, 
 		if ( iInterval > 1000 ) iInterval = 1000;
 		if ( iInterval < 10 ) iInterval = 10;
 		if ( XS_GenerationTimerSchedule(pRuntime->pGeneration,
-			iInterval * 1000, XS_WsSweepProc, pRuntime,
+			iInterval, XS_WsSweepProc, pRuntime,
 			pRuntime, &pRuntime->tSweepTimer) != 0 &&
 		     xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) != 0 ) {
 			XS_GenerationTimerCancelOwner(pRuntime->pGeneration, pRuntime);
@@ -769,7 +769,7 @@ static bool XS_WsScheduleSweep(XS_WsRuntime* pRuntime)
 	if ( iInterval > 1000 ) iInterval = 1000;
 	if ( iInterval < 10 ) iInterval = 10;
 	return XS_GenerationTimerSchedule(pRuntime->pGeneration,
-		iInterval * 1000, XS_WsSweepProc, pRuntime,
+		iInterval, XS_WsSweepProc, pRuntime,
 		pRuntime, &pRuntime->tSweepTimer) != 0;
 }
 
@@ -848,8 +848,8 @@ static bool XS_WsStartEx(
 	if ( !XS_CustomReadUInt(pServer->Custom, "ws_message_limit", &iVal,
 		sErr, iErrCap) ) return false;
 	pRuntime->iMessageLimit = iVal;
-	if ( !XS_CustomReadUInt(pServer->Custom, "idle_timeout", &iVal,
-		sErr, iErrCap) ) return false;
+	if ( !XS_CustomReadUIntDefault(pServer->Custom, "idle_timeout", &iVal,
+		XS_IDLE_TIMEOUT_DEFAULT_MS, sErr, iErrCap) ) return false;
 	pRuntime->iIdleMs = iVal;
 	{
 		if ( pServer->Custom != NULL ) {

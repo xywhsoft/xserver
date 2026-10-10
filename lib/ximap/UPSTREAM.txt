@@ -1,7 +1,5 @@
-ximap（IMAP 客户端扩展库）
-来源: https://gitee.com/xywhsoft/xrt 仓库 extlibs/ximap
-基线: xrt@6bbb256e (2026-09-14)
-
-vendored 副本: include/ + src/ + config/。硬依赖 xmail（../../xmail 相对桥），
-构建注册表以 requires 声明，构建时自动携带。
-未收录: single/、tests/、docs/。上游同步后重验 src/script/import_ximap.inc。
+Source: xrt extlibs/ximap
+Snapshot: 7449e55e199faae43de5fdbdebfc2539421f5297
+Upstream source bytes and SHA256 are recorded in ../xrt_sources.lock.json.
+Native sources, public headers and module configuration are vendored.
+Native module sources compile separately; single-header implementations are not used.

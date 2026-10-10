@@ -72,12 +72,12 @@ bool xrtAcmeObtain(
 	ClientConfig.pAccount = &Account;
 	ClientConfig.sCaPem = pConfig->sCaPem;
 	ClientConfig.pBorrowedEngine = pConfig->pBorrowedEngine;
-	ClientConfig.uTimeoutUs = pConfig->uTimeoutUs;
+	ClientConfig.uTimeoutMs = pConfig->uTimeoutMs;
 	ClientConfig.sPropagateResolvers = pConfig->sPropagateResolvers;
 	ClientConfig.iPropagateResolverCount =
 		pConfig->iPropagateResolverCount;
 	ClientConfig.uPropagateTimeoutMs = pConfig->uPropagateTimeoutMs;
-	ClientConfig.uIssueTimeoutUs = pConfig->uIssueTimeoutUs;
+	ClientConfig.uIssueTimeoutMs = pConfig->uIssueTimeoutMs;
 	ClientConfig.sCertKeyPem = pConfig->sCertKeyPem;
 
 	pClient = xrtAcmeClientCreate(&ClientConfig);
@@ -114,7 +114,10 @@ Done:
 	xrtFree(sStoredAccountPem);
 	if(pClient != NULL)
 	{
-		xrtAcmeClientDestroy(pClient);
+		/* 此临时客户端不会交付调用者；回滚单独留出退休预算。 */
+		if(pClient->Http.uTimeoutMs < INT64_C(30000))
+			pClient->Http.uTimeoutMs = INT64_C(30000);
+		xacmeClientDiscard(pClient);
 	}
 	if(!bResult)
 	{

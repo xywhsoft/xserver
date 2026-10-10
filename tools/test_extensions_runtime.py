@@ -184,7 +184,6 @@ static void probe_qrcodegen(void)
 
 #ifdef XS_USE_XACME
 #include <xacme.h>
-#include <xacme/xacme_flow.h>
 #include <xrt/acme_client.h>
 static void probe_xacme(void)
 {
@@ -295,6 +294,8 @@ static void probe_xjwt(void)
     pToken = xjwtSign(&tCfg, pClaims);
     xrtValueRelease(pClaims);
     REQUIRE(pToken != NULL);
+    /* ES256's 64-byte R||S becomes 86 unpadded base64url characters. */
+    REQUIRE(strrchr(pToken, '.') && strlen(strrchr(pToken, '.') + 1) == 86);
     pKey = xjwtKeyParse(s_JwtEcPub);
     REQUIRE(pKey != NULL);
     pOut = xjwtVerifyKey(pToken, pKey, NULL);
@@ -346,7 +347,7 @@ static bool probe_oa_http(const char* sMethod, const char* sUrl,
 }
 static void probe_xoauth2(void)
 {
-    xoauth2client c;
+    xoauth2client c = {0};
     char* url;
     xoauth2token* t;
     char v[128], ch[128], st[64];
@@ -424,6 +425,30 @@ static void probe_xoauth2(void)
         memset(&unk, 0, sizeof(unk));
         unk.AccessToken = "x";
         REQUIRE(!xoauth2TokenExpiring(&unk, 0));
+    }
+
+    /* 微信：GET 专有格式与 openid，两者均经宿主导出，不编译第二份实现。 */
+    xoauth2ClientUnit(&c);
+    xoauth2UseWechat(&c, "wx-app", "wx-secret", "https://app/cb");
+    c.Config.Http = probe_oa_http;
+    url = xoauth2BeginLogin(&c);
+    REQUIRE(url && strstr(url, "appid=wx-app") && strstr(url, "#wechat_redirect"));
+    xrtFree(url);
+    s_OaReply = "{\"access_token\":\"wx-token\",\"openid\":\"wx-openid\",\"expires_in\":7200}";
+    t = xoauth2CompleteLogin(&c, "wx-code", c.sState);
+    REQUIRE(t && t->OpenId && strcmp(t->OpenId, "wx-openid") == 0);
+    REQUIRE(strcmp(s_OaSawMethod, "GET") == 0);
+    s_OaReply = "{\"openid\":\"wx-openid\",\"nickname\":\"test\"}";
+    {
+        xvalue* info = xoauth2GetWechatUserInfo(&c, t);
+        REQUIRE(info != NULL);
+        xrtValueRelease(info);
+    }
+    xoauth2TokenFree(t);
+    {
+        size_t pending = 99;
+        REQUIRE(xoauth2HttpXrtCleanup(NULL));
+        REQUIRE(xoauth2HttpXrtCleanupPending(0, &pending) && pending == 0);
     }
 
     /* 工具 + ClientUnit 语义 */

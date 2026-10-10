@@ -342,7 +342,7 @@ static void XS_GenerationRelease(XS_ServerGeneration* pGeneration)
 
 static uint64 XS_GenerationTimerSchedule(
 	XS_ServerGeneration* pGeneration,
-	uint64 iTimeoutUs,
+	int64 iTimeoutMs,
 	xnettimerproc procTimer,
 	ptr pData,
 	void* pOwner,
@@ -363,7 +363,7 @@ static uint64 XS_GenerationTimerSchedule(
 		pTimer->pNext = pGeneration->pTimers;
 		pGeneration->pTimers = pTimer;
 		iId = xrtNetEngineAfter(pGeneration->pServer->Engine, 0,
-			iTimeoutUs, procTimer, pData);
+			iTimeoutMs, procTimer, pData);
 		pTimer->iId = iId;
 		if ( iId == 0 ) {
 			for ( ppLink = &pGeneration->pTimers; *ppLink != NULL;

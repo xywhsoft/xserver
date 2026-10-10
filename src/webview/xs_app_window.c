@@ -324,17 +324,90 @@ static void app_error_page(const char* sErr, char* sOut, size_t iCap)
 }
 
 /* close=hide：拦 WM_CLOSE 隐藏，再唤起经事件显示 */
+/* ---- 窗口状态持久化：exe 同目录 window-state-<app名>.txt（便携） ----
+   格式：x,y,w,h,max ；坏值/越屏直接丢弃回退默认。 */
+static void app_state_path(const char* sName, char* pOut, size_t iCap)
+{
+	WCHAR sExe[MAX_PATH + 1];
+	char sExeA[MAX_PATH + 1];
+	DWORD n;
+	size_t i;
+
+	n = GetModuleFileNameW(NULL, sExe, MAX_PATH);
+	if ( n == 0 || n >= MAX_PATH ) { snprintf(pOut, iCap, "window-state-%s.txt", sName); return; }
+	WideCharToMultiByte(CP_UTF8, 0, sExe, -1, sExeA, sizeof sExeA, NULL, NULL);
+	for ( i = strlen(sExeA); i > 0; i-- )
+		if ( sExeA[i - 1] == '\\' || sExeA[i - 1] == '/' ) break;
+	sExeA[i] = 0;
+	snprintf(pOut, iCap, "%swindow-state-%s.txt", sExeA, sName);
+}
+
+static bool app_state_load(const char* sName, int* pX, int* pY, int* pW, int* pH, int* pMax)
+{
+	char sPath[MAX_PATH + 64];
+	FILE* f;
+	int x = 0, y = 0, w = 0, h = 0, m = 0;
+
+	app_state_path(sName, sPath, sizeof sPath);
+	f = fopen(sPath, "rb");
+	if ( f == NULL ) return false;
+	if ( fscanf(f, "%d,%d,%d,%d,%d", &x, &y, &w, &h, &m) != 5 ) { fclose(f); return false; }
+	fclose(f);
+	if ( w < 200 || h < 150 || w > 32767 || h > 32767 ) return false;
+	/* 越屏防护：至少有一个角落在虚拟桌面内（显示器拔除后不复活到虚空） */
+	if ( x < GetSystemMetrics(SM_XVIRTUALSCREEN) - 40
+		|| y < GetSystemMetrics(SM_YVIRTUALSCREEN) - 40
+		|| x + w > GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN) + 40
+		|| y + h > GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN) + 40 )
+		return false;
+	*pX = x; *pY = y; *pW = w; *pH = h; *pMax = m;
+	return true;
+}
+
+static void app_state_save(HWND hWnd, const char* sName)
+{
+	char sPath[MAX_PATH + 64];
+	RECT r;
+	FILE* f;
+	int m;
+
+	if ( hWnd == NULL || !GetWindowRect(hWnd, &r) ) return;
+	m = IsZoomed(hWnd) ? 1 : 0;
+	if ( IsIconic(hWnd) ) return;   /* 最小化时保存无意义 */
+	app_state_path(sName, sPath, sizeof sPath);
+	f = fopen(sPath, "wb");
+	if ( f == NULL ) return;
+	fprintf(f, "%ld,%ld,%ld,%ld,%d\n",
+		(long)r.left, (long)r.top, (long)(r.right - r.left), (long)(r.bottom - r.top), m);
+	fclose(f);
+}
+
+/* 按 HWND 反查窗口记录：不能占用窗口的 GWLP_USERDATA（WebView2 内部槽位，
+   抢占会在 STOP 模式关闭路径崩溃——实测 c0000005）。 */
+static XS_AppWindow* app_win_by_hwnd(HWND hWnd)
+{
+	int i;
+
+	for ( i = 0; i < g_iWindowCount; i++ )
+		if ( g_tWindows[i].hWnd == hWnd && g_tWindows[i].iAlive )
+			return &g_tWindows[i];
+	return NULL;
+}
+
 static LRESULT CALLBACK app_wnd_proc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	LONG_PTR pUser = GetWindowLongPtrW(hWnd, GWLP_USERDATA);
+	XS_AppWindow* pWin = app_win_by_hwnd(hWnd);
 
-	if ( pUser != 0 && uMsg == WM_CLOSE
-		&& ((XS_AppWindow*)pUser)->iClose == XS_APP_CLOSE_HIDE ) {
+	/* 关闭前保存窗口状态（此刻窗口仍存活，矩形可读） */
+	if ( pWin != NULL && uMsg == WM_CLOSE )
+		app_state_save(hWnd, pWin->pServer->Name);
+	if ( pWin != NULL && uMsg == WM_CLOSE
+		&& pWin->iClose == XS_APP_CLOSE_HIDE ) {
 		ShowWindow(hWnd, SW_HIDE);
 		return 0;
 	}
-	if ( pUser != 0 )
-		return CallWindowProcW(((XS_AppWindow*)pUser)->pOrigProc,
+	if ( pWin != NULL )
+		return CallWindowProcW(pWin->pOrigProc,
 			hWnd, uMsg, wParam, lParam);
 	return DefWindowProcW(hWnd, uMsg, wParam, lParam);
 }
@@ -362,8 +435,15 @@ static DWORD WINAPI app_ui_thread(LPVOID pParam)
 	if ( pWin->iMinWidth > 0 && pWin->iMinHeight > 0 )
 		xsWvSetSize((void*)pWin->pWebview, pWin->iMinWidth, pWin->iMinHeight, WV_HINT_MIN);
 	pWin->hWnd = (HWND)xsWvGetWindow((void*)pWin->pWebview);
-	if ( pWin->iClose == XS_APP_CLOSE_HIDE && pWin->hWnd != NULL ) {
-		SetWindowLongPtrW(pWin->hWnd, GWLP_USERDATA, (LONG_PTR)pWin);
+	/* 常驻子类化：hide 语义 + 所有窗口的关闭前状态保存 */
+	if ( pWin->hWnd != NULL ) {
+		int x = 0, y = 0, w = 0, h = 0, m = 0;
+
+		if ( app_state_load(pWin->pServer->Name, &x, &y, &w, &h, &m) ) {
+			SetWindowPos(pWin->hWnd, NULL, x, y, w, h,
+				SWP_NOZORDER | SWP_NOACTIVATE);
+			if ( m ) ShowWindow(pWin->hWnd, SW_MAXIMIZE);
+		}
 		pWin->pOrigProc = (WNDPROC)SetWindowLongPtrW(pWin->hWnd,
 			GWLP_WNDPROC, (LONG_PTR)app_wnd_proc);
 	}

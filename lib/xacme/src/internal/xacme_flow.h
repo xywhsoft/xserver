@@ -55,10 +55,10 @@ typedef struct xacmeclient {
 	char sPropagateResolvers[XACME_FLOW_RESOLVER_MAX][64];
 	size_t iPropagateResolverCount;
 	uint32 uPropagateTimeoutMs;
-	/* 单次签发的总预算（微秒；0 = 不限时）。Issue 入口打点，
+	/* 单次签发的总预算（毫秒；0 = 不限时）。Issue 入口打点，
 	   轮询/传播/退避逐段检查剩余时间。 */
-	uint64 uIssueTimeoutUs;
-	uint64 IssueDeadline;
+	int64 uIssueTimeoutMs;
+	double IssueDeadline;
 	bool bIssueDeadline;
 } xacmeclient;
 
@@ -72,17 +72,21 @@ XRT_EXTERN_C_BEGIN
 	初始化：建传输（pBorrowedEngine 为空则自建）、解析 directory、
 	注册或复用账户（kid 来自 Location 头）。pAccount 携带 directory、
 	账户密钥、EAB 与联系方式（借用视图，宿主保证存活至返回）。
-	uTimeoutUs 为 0 时取传输默认（30 秒）。失败设置线程错误。
+	uTimeoutMs 为 0 时取传输默认（30 秒）。失败设置线程错误。
 */
 bool xacmeClientInit(
 	xacmeclient* pClient,
 	struct xnetengine* pBorrowedEngine,
 	cstr sCaPem,
 	const xacmeaccountconfig* pAccount,
-	uint64 uTimeoutUs
+	int64 uTimeoutMs
 );
 
-void xacmeClientUnit(xacmeclient* pClient);
+/* false 时保留传输拥有者，只能继续清理。 */
+bool xacmeClientUnit(xacmeclient* pClient);
+
+/* 消费尚未交付的堆客户端；退休未完成时把拥有权转移到公共待清理队列。 */
+void xacmeClientDiscard(xacmeclient* pClient);
 
 /* 账户密钥的 PKCS#8 PEM 导出（xrtFree 释放），宿主可持久化后传入 Init 复用。 */
 str xacmeClientAccountPem(const xacmeclient* pClient);
@@ -90,8 +94,11 @@ str xacmeClientAccountPem(const xacmeclient* pClient);
 /*
 	一次 dns-01 签发：域名可含通配符（*. 前缀）；产物含证书链与
 	配对私钥（均 xrtFree）。bAlt 时若证书响应带 rel="alternate"
-	备用链则优先采用（失败回退主链）。失败返回 false 并设置线程
-	错误；provider 的 Add 在挑战触发前调用、Remove 在结束后尽力
+	备用链则优先采用（失败回退主链）。链中仅接受证书对象，核对
+	CSR 公钥、SAN、叶有效期及所提供
+	链的相邻签名；备用链要求同一 DER 叶证书，相对 URI 以主下载 URL
+	解析。此检查不代替部署根信任与完整 PKIX 策略。失败返回 false
+	并保留线程错误；provider 的 Add 在挑战触发前调用、Remove 在结束后尽力
 	调用。
 */
 bool xacmeClientIssue(

@@ -1,3 +1,5 @@
+#include <xrt/detail/xpop3_wait.h>
+#include <xrt/detail/wait.h>
 #include "../internal/xrt_mail.h"
 
 
@@ -70,7 +72,7 @@ static bool __xrtPop3MessageWrite(
 	xmailwriteproc pWrite,
 	ptr pUserData,
 	size_t* pWritten,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
@@ -89,7 +91,7 @@ static bool __xrtPop3MessageWrite(
 		iMaxBytes = XPOP3_MESSAGE_BYTES_DEFAULT;
 	}
 	if ( bTop ) {
-		if ( !xrtPop3ClientTop(
+		if ( !__xrtPop3ClientTop(
 			pClient,
 			iMessage,
 			iLines,
@@ -98,7 +100,7 @@ static bool __xrtPop3MessageWrite(
 		) ) {
 			return false;
 		}
-	} else if ( !xrtPop3ClientRetr(
+	} else if ( !__xrtPop3ClientRetr(
 		pClient,
 		iMessage,
 		iDeadline,
@@ -109,7 +111,7 @@ static bool __xrtPop3MessageWrite(
 	for ( ;; ) {
 		size_t iNext;
 
-		Next = xrtPop3ClientNext(
+		Next = __xrtPop3ClientNext(
 			pClient,
 			&Line,
 			iDeadline,
@@ -171,7 +173,7 @@ static bytes __xrtPop3MessageBytes(
 	bool bTop,
 	size_t iMaxBytes,
 	size_t* pOutputSize,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
@@ -213,17 +215,19 @@ static bytes __xrtPop3MessageBytes(
 
 
 /* 流式读取完整邮件。 */
-XRT_API bool xrtPop3ClientRetrWrite(
+XRT_API bool __xrtPop3ClientRetrWrite(
 	xpop3client* pClient,
 	uint64 iMessage,
 	size_t iMaxBytes,
 	xmailwriteproc pWrite,
 	ptr pUserData,
 	size_t* pWritten,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	return __xrtPop3MessageWrite(
 		pClient,
 		iMessage,
@@ -241,7 +245,7 @@ XRT_API bool xrtPop3ClientRetrWrite(
 
 
 /* 流式读取 TOP 结果。 */
-XRT_API bool xrtPop3ClientTopWrite(
+XRT_API bool __xrtPop3ClientTopWrite(
 	xpop3client* pClient,
 	uint64 iMessage,
 	uint64 iLines,
@@ -249,10 +253,12 @@ XRT_API bool xrtPop3ClientTopWrite(
 	xmailwriteproc pWrite,
 	ptr pUserData,
 	size_t* pWritten,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	return __xrtPop3MessageWrite(
 		pClient,
 		iMessage,
@@ -270,15 +276,17 @@ XRT_API bool xrtPop3ClientTopWrite(
 
 
 /* 收集完整 RETR 结果。 */
-XRT_API bytes xrtPop3ClientRetrBytes(
+XRT_API bytes __xrtPop3ClientRetrBytes(
 	xpop3client* pClient,
 	uint64 iMessage,
 	size_t iMaxBytes,
 	size_t* pOutputSize,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return NULL; }
+
 	return __xrtPop3MessageBytes(
 		pClient,
 		iMessage,
@@ -294,16 +302,18 @@ XRT_API bytes xrtPop3ClientRetrBytes(
 
 
 /* 收集完整 TOP 结果。 */
-XRT_API bytes xrtPop3ClientTopBytes(
+XRT_API bytes __xrtPop3ClientTopBytes(
 	xpop3client* pClient,
 	uint64 iMessage,
 	uint64 iLines,
 	size_t iMaxBytes,
 	size_t* pOutputSize,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return NULL; }
+
 	return __xrtPop3MessageBytes(
 		pClient,
 		iMessage,
@@ -319,15 +329,17 @@ XRT_API bytes xrtPop3ClientTopBytes(
 
 
 /* 收集并解析一棵拥有型 MIME 树。 */
-XRT_API bool xrtPop3ClientRetrTree(
+XRT_API bool __xrtPop3ClientRetrTree(
 	xpop3client* pClient,
 	uint64 iMessage,
 	const xmailtreelimits* pLimits,
 	xmailtree* pTree,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	xmailtreelimits Limits;
 	bytes pData;
 	size_t iSize;
@@ -345,7 +357,7 @@ XRT_API bool xrtPop3ClientRetrTree(
 	} else {
 		xrtMailTreeLimitsInit(&Limits);
 	}
-	pData = xrtPop3ClientRetrBytes(
+	pData = __xrtPop3ClientRetrBytes(
 		pClient,
 		iMessage,
 		Limits.MaxSourceBytes,
@@ -365,4 +377,80 @@ XRT_API bool xrtPop3ClientRetrTree(
 	return bResult;
 }
 
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_MESSAGE))
+XRT_API bool xrtPop3ClientRetrWrite(
+	xpop3client* pClient,
+	uint64 iMessage,
+	size_t iMaxBytes,
+	xmailwriteproc pWrite,
+	ptr pUserData,
+	size_t* pWritten,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtPop3ClientRetrWrite(pClient, iMessage, iMaxBytes, pWrite, pUserData, pWritten, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_MESSAGE))
+XRT_API bool xrtPop3ClientTopWrite(
+	xpop3client* pClient,
+	uint64 iMessage,
+	uint64 iLines,
+	size_t iMaxBytes,
+	xmailwriteproc pWrite,
+	ptr pUserData,
+	size_t* pWritten,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtPop3ClientTopWrite(pClient, iMessage, iLines, iMaxBytes, pWrite, pUserData, pWritten, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_MESSAGE))
+XRT_API bytes xrtPop3ClientRetrBytes(
+	xpop3client* pClient,
+	uint64 iMessage,
+	size_t iMaxBytes,
+	size_t* pOutputSize,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtPop3ClientRetrBytes(pClient, iMessage, iMaxBytes, pOutputSize, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_MESSAGE))
+XRT_API bytes xrtPop3ClientTopBytes(
+	xpop3client* pClient,
+	uint64 iMessage,
+	uint64 iLines,
+	size_t iMaxBytes,
+	size_t* pOutputSize,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtPop3ClientTopBytes(pClient, iMessage, iLines, iMaxBytes, pOutputSize, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_MESSAGE))
+XRT_API bool xrtPop3ClientRetrTree(
+	xpop3client* pClient,
+	uint64 iMessage,
+	const xmailtreelimits* pLimits,
+	xmailtree* pTree,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtPop3ClientRetrTree(pClient, iMessage, pLimits, pTree, __xrtWaitAfter(iTimeout), pCancel);
+}
 #endif

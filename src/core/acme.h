@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <math.h>
 
 /* ---------------- 配置模型（不随扩展门控，定义零成本） ---------------- */
 
@@ -711,7 +712,7 @@ static void XS_AcmeRunGroup(XS_AcmeDaemon* pDaemon, XS_AcmeGroup* pGroup)
 		tObtain.pAccount = &tAccount;
 		tObtain.sCaPem = pCa->sCaPem;		/* 可空 = 系统信任库 */
 		tObtain.pBorrowedEngine = pDaemon->pEngine;
-		tObtain.uIssueTimeoutUs = UINT64_C(300000000);	/* 单 CA 5 分钟 */
+		tObtain.uIssueTimeoutMs = UINT64_C(300000);	/* 单 CA 5 分钟 */
 		tObtain.sStoreRoot = pDaemon->sStoreRoot;
 		tObtain.iRenewalDays = pDaemon->tConfig.iRenewalDays;
 
@@ -783,7 +784,7 @@ static void XS_AcmeRunCycle(XS_AcmeDaemon* pDaemon)
 
 /* 计算下一轮唤醒：固定制=下一个 HH:MM 墙钟点；间隔制=now+间隔。
  * 首查固定 5 分钟（启动快速对账），此后按调度。 */
-static xdeadline XS_AcmeNextWake(XS_AcmeDaemon* pDaemon)
+static double XS_AcmeNextWake(XS_AcmeDaemon* pDaemon)
 {
 	if ( pDaemon->tConfig.iCheckHour >= 0 ) {
 		time_t Now = time(NULL);
@@ -796,7 +797,7 @@ static xdeadline XS_AcmeNextWake(XS_AcmeDaemon* pDaemon)
 		if ( localtime_r(&Now, &Local) == NULL )
 #endif
 		{
-			return xrtDeadlineAfter(UINT64_C(3600000000));
+			return xrtTimer() + 3600.0;
 		}
 		iCur = (int64)Local.tm_hour * 3600 +
 			(int64)Local.tm_min * 60 + (int64)Local.tm_sec;
@@ -804,21 +805,29 @@ static xdeadline XS_AcmeNextWake(XS_AcmeDaemon* pDaemon)
 			(int64)pDaemon->tConfig.iCheckMinute * 60;
 		iDelta = iTarget - iCur;
 		if ( iDelta <= 0 ) iDelta += 86400;	/* 今日已过 → 明日 */
-		return xrtDeadlineAfter((uint64)iDelta * UINT64_C(1000000));
+		return xrtTimer() + (double)iDelta;
 	}
-	return xrtDeadlineAfter((uint64)pDaemon->tConfig.iCheckIntervalHours *
-		UINT64_C(3600000000));
+	return xrtTimer() + (double)pDaemon->tConfig.iCheckIntervalHours * 3600.0;
 }
 
 static int32 XS_AcmeThreadProc(ptr pData)
 {
 	XS_AcmeDaemon* pDaemon = (XS_AcmeDaemon*)pData;
-	xdeadline tNext = xrtDeadlineAfter(UINT64_C(300000000));	/* 首查 5 分钟 */
+	double tNext = xrtTimer() + 300.0;	/* 首查 5 分钟 */
 
 	for ( ; ; ) {
 		xrtMutexLock(pDaemon->pLock);
-		while ( !pDaemon->bStop && !xrtDeadlineExpired(tNext) ) {
-			xrtCondWaitUntil(pDaemon->pWake, pDaemon->pLock, tNext);
+		while ( !pDaemon->bStop ) {
+			/* Keep one monotonic budget across spurious wakes. Public xrt
+			 * waits take signed milliseconds; round the remainder outward. */
+			double iRemaining = ceil((tNext - xrtTimer()) * 1000.0);
+			int64 iWaitMs;
+			if ( !isfinite(iRemaining) || iRemaining <= 0 ) break;
+			iWaitMs = iRemaining >= 0x1p63 ? INT64_MAX : (int64)iRemaining;
+			if ( xrtCondWaitFor(pDaemon->pWake, pDaemon->pLock, iWaitMs) == XWAIT_ERROR ) {
+				printf("[xs] acme: timed wait failed, stopping renewal worker\n");
+				pDaemon->bStop = true;
+			}
 		}
 		if ( pDaemon->bStop ) {
 			xrtMutexUnlock(pDaemon->pLock);
@@ -1085,7 +1094,7 @@ static void XS_AcmeDaemonStop(void)
 	xrtCondSignal(pDaemon->pWake);
 	xrtMutexUnlock(pDaemon->pLock);
 	if ( pDaemon->pThread != NULL ) {
-		xrtThreadWaitFor(pDaemon->pThread, UINT64_C(15000000));	/* 15s */
+		xrtThreadWaitFor(pDaemon->pThread, 15000);	/* 15s */
 	}
 	printf("[xs] acme: daemon stop requested\n");
 }

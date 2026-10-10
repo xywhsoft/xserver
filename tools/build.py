@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -14,6 +15,24 @@ from pathlib import Path
 
 import gen_tcc_resources as vfs
 from xs_extensions import ROOT, host_header, load_registry, select_extensions
+
+
+def source_revision() -> str:
+    """Permit a verifiable source-archive revision on build-only servers."""
+    override = os.environ.get("XS_BUILD_COMMIT", "").strip()
+    if override:
+        if re.fullmatch(r"[0-9a-fA-F]{7,40}", override) is None:
+            raise ValueError("XS_BUILD_COMMIT must contain 7 to 40 hexadecimal characters")
+        return override.lower()
+    try:
+        value = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"],
+            text=True, cwd=ROOT, stderr=subprocess.DEVNULL).strip()
+        if subprocess.run(["git", "diff", "--quiet", "HEAD", "--"],
+            cwd=ROOT, stderr=subprocess.DEVNULL).returncode:
+            value += "-dirty"
+        return value
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
 
 
 def run(command: list[str], dry_run: bool = False) -> None:
@@ -39,6 +58,11 @@ def publish(source: Path, output: Path) -> None:
 
 
 def build(args: argparse.Namespace, selected: dict) -> Path:
+    # A build must not mix SDK declarations with a locally patched vendor TU.
+    # Older checkouts without a lock still retain their original build contract.
+    if (ROOT / "lib/xrt_sources.lock.json").is_file():
+        from sync_xrt import check_lock
+        check_lock()
     platform = "windows" if os.name == "nt" else "linux"
     suffix = ".exe" if platform == "windows" else ""
     variant = "+".join(selected) or "default"
@@ -88,12 +112,7 @@ def build(args: argparse.Namespace, selected: dict) -> Path:
         flags.append('-DCONFIG_SYSROOT="/xsroot"')
     # 版本标识：commit / 构建日期 / 平台，注入启动横幅与 --version（见 xs_version.h）
     if not args.dry_run:
-        try:
-            commit = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"],
-                                             text=True, cwd=ROOT,
-                                             stderr=subprocess.DEVNULL).strip()
-        except (OSError, subprocess.CalledProcessError):
-            commit = "unknown"
+        commit = source_revision()
         flags.append(f'-DXS_BUILD_COMMIT="{commit}"')
         flags.append(f'-DXS_BUILD_DATE="{time.strftime("%Y-%m-%d")}"')
         flags.append(f'-DXS_BUILD_PLATFORM="{platform}"')

@@ -9,6 +9,7 @@
  * - 静态层（XS_FALLBACK，GET/HEAD）：路径过滤（解码/穿越/点文件/反斜杠）→
  *   MIME → 自定义头（static.headers）→ 错误页（static.error_pages / 内置）→ SendFile
  * - Custom 旋钮：body_limit / header_limit / path_limit / idle_timeout
+ *   （idle_timeout 缺省 XS_IDLE_TIMEOUT_DEFAULT_MS，显式 0 关闭）
  * - 连接生命周期与 idle 保护复用注册表（与 tcp 驱动同构）
  */
 
@@ -45,7 +46,7 @@ typedef struct XS_HttpRuntime {
 	uint64			iBodyLimit;	/* 0 = recv_limit（整体 body 回调模型的有界默认） */
 	size_t			iReceiveLimit;	/* 完整请求回调模型的线路硬边界 */
 	uint64			iPathLimit;	/* 0 = 默认 2048 */
-	uint64			iIdleMs;
+	uint64			iIdleMs;	/* 0 = 显式关闭；缺省 XS_IDLE_TIMEOUT_DEFAULT_MS */
 	XS_GenerationTimer	tSweepTimer;
 	xatomic32		tStopping;
 	/* static.headers 装配期预渲染缓存（每 host 一条；请求路径零字符串处理） */
@@ -1240,6 +1241,9 @@ static bool XS_HttpDispatch(XS_HttpRecord* pRec)
 			XS_HttpFinishRequest(pRec, true);
 			return false;
 		}
+		/* Application I/O runs outside the HTTP driver. Its own timeout policy
+		 * applies; the retained registry entry still fences host teardown. */
+		xrtAtomic32Store(&pRec->tReg.tApplicationIdle, 1, XMEMORY_RELEASE);
 		return false;
 	}
 	XS_ScriptRelease(pScript);
@@ -1273,6 +1277,20 @@ static bool XS_HttpDispatch(XS_HttpRecord* pRec)
 	return !bClose;
 }
 
+/* TLS publishes retained plaintext once until consumed or explicitly grown.
+ * HTTP keeps prefixes/full bodies for its complete-request callback. Waiting
+ * without ReadMore would pause ciphertext transport forever after one record.
+ * Only call on our worker after a published prefix; an empty buffer already
+ * resumes normally. The listener context reserves a record beyond recv_limit. */
+static void XS_HttpWantMore(XS_HttpRecord* pRec)
+{
+	if ( pRec->tReg.pTls != NULL && XS_HttpAvail(pRec) != 0u &&
+	     xrtTlsStreamState(pRec->tReg.pTls) == XTLS_STREAM_OPEN &&
+	     !xrtTlsStreamReadMore(pRec->tReg.pTls) ) {
+		(void)xrtTlsStreamAbort(pRec->tReg.pTls);
+	}
+}
+
 static void XS_HttpDrive(XS_HttpRecord* pRec)
 {
 	XS_HttpRuntime* pRuntime = pRec->pRuntime;
@@ -1294,6 +1312,7 @@ static void XS_HttpDrive(XS_HttpRecord* pRec)
 				return;
 			}
 			if ( iReady == 0 ) {
+				XS_HttpWantMore(pRec);
 				return;
 			}
 			if ( !XS_HttpDispatch(pRec) ) {
@@ -1311,6 +1330,7 @@ static void XS_HttpDrive(XS_HttpRecord* pRec)
 				return;
 			}
 			if ( iDrain == 0 ) {
+				XS_HttpWantMore(pRec);
 				return;
 			}
 			bClose = (pRec->tHead.Flags & XHTTP1_CONNECTION_CLOSE) != 0;
@@ -1326,7 +1346,7 @@ static void XS_HttpDrive(XS_HttpRecord* pRec)
 			if ( XS_HttpAvail(pRec) >= pRuntime->iReceiveLimit ) {
 				XS_HttpErrorPage(pRec, 431);
 				XS_HttpFinishRequest(pRec, true);
-			}
+			} else XS_HttpWantMore(pRec);
 			return;
 		case XHTTP1_ERROR:
 			XS_HttpErrorPage(pRec, XS_HttpHeadErrorStatus(tErr.Code));
@@ -1409,6 +1429,7 @@ static void XS_HttpDrive(XS_HttpRecord* pRec)
 			}
 			if ( iReady == 0 ) {
 				pRec->iPhase = 2;
+				XS_HttpWantMore(pRec);
 				return;
 			}
 		}
@@ -1680,7 +1701,7 @@ static void XS_HttpSweepProc(xnetworker* pWorker, uint64 iId, xnetresult iResult
 			if ( iInterval > 1000 ) iInterval = 1000;
 			if ( iInterval < 10 ) iInterval = 10;
 			if ( XS_GenerationTimerSchedule(pRuntime->pGeneration,
-				iInterval * 1000, XS_HttpSweepProc, pData,
+				iInterval, XS_HttpSweepProc, pData,
 				pRuntime, &pRuntime->tSweepTimer) != 0 &&
 			     xrtAtomic32Load(&pRuntime->tStopping, XMEMORY_ACQUIRE) != 0 ) {
 				XS_GenerationTimerCancelOwner(pRuntime->pGeneration, pRuntime);
@@ -1698,7 +1719,7 @@ static bool XS_HttpScheduleSweep(XS_HttpRuntime* pRuntime)
 	if ( iInterval > 1000 ) iInterval = 1000;
 	if ( iInterval < 10 ) iInterval = 10;
 	return XS_GenerationTimerSchedule(pRuntime->pGeneration,
-		iInterval * 1000, XS_HttpSweepProc, pRuntime,
+		iInterval, XS_HttpSweepProc, pRuntime,
 		pRuntime, &pRuntime->tSweepTimer) != 0;
 }
 
@@ -2100,8 +2121,8 @@ static bool XS_HttpStartEx(
 			"http server '%s' body_limit exceeds recv_limit", pServer->Name);
 		return false;
 	}
-	if ( !XS_CustomReadUInt(pServer->Custom, "idle_timeout", &iVal,
-		sErr, iErrCap) ) return false;
+	if ( !XS_CustomReadUIntDefault(pServer->Custom, "idle_timeout", &iVal,
+		XS_IDLE_TIMEOUT_DEFAULT_MS, sErr, iErrCap) ) return false;
 	pRuntime->iIdleMs = iVal;
 	if ( !XS_HttpHdrCacheBuildAll(pRuntime, pServer, sErr, iErrCap) ) {
 		if ( sErr[0] == '\0' ) {
@@ -2181,9 +2202,31 @@ static bool XS_HttpStartEx(
 	}
 	if ( bStartEndpoint && pServer->TLS ) {
 		xtlslistenerconfig tTlsListen;
-		xtlscontext* pContext = XS_TlsSharedContext();
+		xtlscontextconfig tContextConfig;
+		xtlscontext* pShared = XS_TlsSharedContext();
+		xtlscontext* pContext;
 		xtlslistener* pTlsListener;
 
+		/* RequestProc sees a complete body. The TLS plaintext queue must reach
+		 * HTTP's receive window before that callback can consume it; the xrt
+		 * default 256 KiB would otherwise stall larger admitted requests. One
+		 * record of slack lets a final record reach the HTTP rejection boundary.
+		 * Keep policy and other TLS limits, with a separate context per listener;
+		 * neither the process default nor unrelated protocols are enlarged. */
+		if ( pShared == NULL || pRuntime->iReceiveLimit >
+		     SIZE_MAX - XTLS_RECORD_PLAINTEXT_MAX ) {
+			snprintf(sErr, iErrCap, "https server '%s' TLS receive window is invalid", pServer->Name);
+			return false;
+		}
+		xrtTlsContextConfigInit(&tContextConfig);
+		tContextConfig.Policy = xrtTlsContextPolicy(pShared);
+		tContextConfig.Limits = *xrtTlsContextLimits(pShared);
+		tContextConfig.Limits.PlainLimit = pRuntime->iReceiveLimit + XTLS_RECORD_PLAINTEXT_MAX;
+		pContext = xrtTlsContextCreate(&tContextConfig);
+		if ( pContext == NULL ) {
+			snprintf(sErr, iErrCap, "https server '%s' TLS receive context creation failed", pServer->Name);
+			return false;
+		}
 		xrtTlsListenerConfigInit(&tTlsListen);
 		tTlsListen.Listen.Address = tTlsAddr;
 		tTlsListen.Listen.ReuseAddress = true;
@@ -2197,9 +2240,14 @@ static bool XS_HttpStartEx(
 		tTlsListen.Tls.Select = XS_TlsSlotSelect;
 		tTlsListen.Tls.SelectContext = pRuntime->pListenerSlot;
 		if ( !XS_ListenerSlotResourceAdd(pRuntime->pListenerSlot,
-		     XS_LISTENER_RESOURCE_TLS) ) return false;
+		     XS_LISTENER_RESOURCE_TLS) ) {
+			xrtTlsContextRelease(pContext);
+			return false;
+		}
 		pTlsListener = xrtTlsListenerStart(pServer->Engine, &tTlsListen,
 			&g_XS_HttpTlsListenerEvents, NULL, pRuntime->pListenerSlot);
+		/* The listener retained its context; failed start retained nothing. */
+		xrtTlsContextRelease(pContext);
 		if ( pTlsListener == NULL ) {
 			XS_ListenerSlotResourceCancel(pRuntime->pListenerSlot,
 				XS_LISTENER_RESOURCE_TLS);

@@ -12,8 +12,9 @@
 
 #if defined(XMAIL_FEATURE_MAIL_NET) && \
 	(!defined(XMAIL_FEATURE_MAIL_WIRE) || \
-	 !defined(XRT_FEATURE_NET_TCP_DIAL_SYNC))
-	#error "XMAIL_FEATURE_MAIL_NET requires mail wire and TCP sync dial"
+	 !defined(XRT_FEATURE_NET_TCP_DIAL_SYNC) || \
+	 !defined(XRT_FEATURE_CODEC_BASE64))
+	#error "XMAIL_FEATURE_MAIL_NET requires mail wire, TCP sync dial and Base64"
 #endif
 
 #if defined(XMAIL_FEATURE_MAIL_NET_TLS) && \
@@ -67,7 +68,7 @@ typedef struct xmailnetconfig {
 	#if defined(XMAIL_FEATURE_MAIL_NET_TLS)
 		xtlsclientconfig Tls;
 		xtlsstreamconfig TlsStream;
-		uint64 TlsTimeout;
+		int64 TlsTimeout;
 	#endif
 } xmailnetconfig;
 

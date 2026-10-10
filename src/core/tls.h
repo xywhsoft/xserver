@@ -23,7 +23,7 @@ static uint64 g_XS_TlsLogWindow;
 static uint32 g_XS_TlsLogCount;
 static uint32 g_XS_TlsLogSuppressed;
 
-#define XS_TLS_LOG_WINDOW_US	(10u * 1000u * 1000u)
+#define XS_TLS_LOG_WINDOW_MS	(10u * 1000u)
 #define XS_TLS_LOG_BURST	8u
 
 static bool XS_TlsRuntimeInit(void)
@@ -59,7 +59,7 @@ static void XS_TlsHandshakeError(
 	if ( g_XS_TlsLogLock != NULL ) {
 		xrtMutexLock(g_XS_TlsLogLock);
 		if ( g_XS_TlsLogWindow == 0 || tNow < g_XS_TlsLogWindow ||
-		     tNow - g_XS_TlsLogWindow >= XS_TLS_LOG_WINDOW_US ) {
+		     tNow - g_XS_TlsLogWindow >= XS_TLS_LOG_WINDOW_MS ) {
 			iSuppressed = g_XS_TlsLogSuppressed;
 			g_XS_TlsLogWindow = tNow;
 			g_XS_TlsLogCount = 0;

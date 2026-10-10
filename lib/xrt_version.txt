@@ -1,8 +1,3 @@
-3c7077f3
-策略：本目录是 xrt 主线（gitee.com/xywhsoft/xrt）单头的纯快照，零分叉、零本地补丁；
-需要 xrt 改动时，先在 xrt 主线提交，再同步本目录，禁止直接修改这里的文件。
-同步步骤：git -C xrt show <commit>:single/xrt.h > lib/xrt.h（xrt_decl.h 同理），
-更新本文件首行为该 commit，然后 python tools/gen_xrt_symbols.py 再生符号表，
-最后 python tools/build.py <extensions> 重建并跑 tools/test_extensions.py。
-历史：2026-09-04 快照曾标注携带工作区增量与未回传补丁；经 2026-09-14 逐项核对，
-那些改动均已进入 xrt 主线，本目录自 2639487c 起为纯主线快照。
+7449e55e199faae43de5fdbdebfc2539421f5297
+Byte-for-byte upstream snapshot; file hashes in xrt_sources.lock.json.
+No local upstream patches; refresh with python tools/sync_xrt.py --source ../xrt.

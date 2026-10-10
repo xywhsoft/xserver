@@ -1,3 +1,4 @@
+#include <xrt/detail/wait.h>
 #include "../internal/xrt_mail_net.h"
 
 
@@ -5,15 +6,38 @@
 #if defined(XMAIL_FEATURE_MAIL_NET_DEFLATE)
 
 #define __XMAIL_DEFLATE_INPUT_CHUNK 256u
+#define __XMAIL_DEFLATE_WRITE_CHUNK 16384u
 
 
 
 /* Deflate 输出回调同步写入原始 TCP 或 TLS 传输。 */
 typedef struct __xmaildeflatesend {
 	__xmailtransport* Transport;
-	xdeadline Deadline;
+	double Deadline;
 	xcancel* Cancel;
 } __xmaildeflatesend;
+
+typedef struct __xmailinflateread {
+	__xmailtransport* Transport;
+	double Deadline;
+	xcancel* Cancel;
+} __xmailinflateread;
+
+/* 编解码器可能只缓存数据；请求检查不能依赖网络回调。 */
+static bool __xrtMailDeflateRequestActive(double Deadline, xcancel* pCancel)
+{
+	if ( __xrtWaitExpired(Deadline) ) {
+		__xrtMailError(XERR_TIMEOUT, XMAIL_ERROR_PROTOCOL,
+			"compressed mail operation timed out");
+		return false;
+	}
+	if ( xrtCancelRequested(pCancel) ) {
+		__xrtMailError(XERR_CANCELLED, XMAIL_ERROR_PROTOCOL,
+			"compressed mail operation was cancelled");
+		return false;
+	}
+	return true;
+}
 
 
 
@@ -42,7 +66,12 @@ static bool __xrtMailTransportInflateOutput(
 	ptr pData
 )
 {
-	__xmailtransport* pTransport = (__xmailtransport*)pData;
+	__xmailinflateread* pRead = (__xmailinflateread*)pData;
+	__xmailtransport* pTransport = pRead->Transport;
+
+	if ( !__xrtMailDeflateRequestActive(pRead->Deadline, pRead->Cancel) ) {
+		return false;
+	}
 
 	if ( Data.Size == 0 ) {
 		return true;
@@ -117,11 +146,13 @@ bool __xrtMailTransportDeflateSend(
 	const void* pData,
 	size_t iSize,
 	bool bFlush,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
 	__xmaildeflatesend Send;
+	const unsigned char* pBytes = (const unsigned char*)pData;
+	size_t iOffset = 0;
 
 	if ( !__xrtMailTransportDeflated(pTransport) ||
 		!xrtMemRangeValid(pData, iSize) ) {
@@ -131,13 +162,23 @@ bool __xrtMailTransportDeflateSend(
 	Send.Transport = pTransport;
 	Send.Deadline = iDeadline;
 	Send.Cancel = pCancel;
-	return xrtDeflateWrite(
-		pTransport->Deflater,
-		(xbytesview) { (cbytes)pData, iSize },
-		bFlush ? XDEFLATE_FLUSH_SYNC : XDEFLATE_FLUSH_NONE,
-		__xrtMailTransportDeflateOutput,
-		&Send
-	);
+	for ( ;; ) {
+		size_t iChunk = iSize - iOffset;
+		if ( !__xrtMailDeflateRequestActive(iDeadline, pCancel) ) return false;
+		if ( iChunk > __XMAIL_DEFLATE_WRITE_CHUNK )
+			iChunk = __XMAIL_DEFLATE_WRITE_CHUNK;
+		bool bLast = iChunk == iSize - iOffset;
+		if ( !xrtDeflateWrite(
+			pTransport->Deflater,
+			(xbytesview) { pBytes != NULL ? pBytes + iOffset : NULL, iChunk },
+			bFlush && bLast ? XDEFLATE_FLUSH_SYNC : XDEFLATE_FLUSH_NONE,
+			__xrtMailTransportDeflateOutput,
+			&Send
+		) ) return false;
+		iOffset += iChunk;
+		if ( bLast ) break;
+	}
+	return __xrtMailDeflateRequestActive(iDeadline, pCancel);
 }
 
 
@@ -170,12 +211,12 @@ static void __xrtMailTransportDeflateInputConsume(
 /* 取得下一小块压缩输入，避免高压缩比正文一次性膨胀。 */
 static bool __xrtMailTransportDeflateInput(
 	__xmailtransport* pTransport,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel,
 	xbytesview* pInput
 )
 {
-	xbytesview Input;
+		xbytesview Input;
 	size_t iRemain;
 	size_t iChunk;
 
@@ -237,10 +278,12 @@ static void __xrtMailTransportDeflateAdvance(
 /* 推进压缩输入，直到至少产生一块可消费明文。 */
 bool __xrtMailTransportDeflateFill(
 	__xmailtransport* pTransport,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+	__xmailinflateread Read = { pTransport, iDeadline, pCancel };
+
 	if ( !__xrtMailTransportDeflated(pTransport) ) {
 		__xrtMailSetInvalidArgument();
 		return false;
@@ -249,7 +292,8 @@ bool __xrtMailTransportDeflateFill(
 		xbytesview Input;
 		size_t iBefore = pTransport->PendingSize;
 
-		if ( !__xrtMailTransportDeflateInput(
+		if ( !__xrtMailDeflateRequestActive(iDeadline, pCancel) ||
+			!__xrtMailTransportDeflateInput(
 			pTransport,
 			iDeadline,
 			pCancel,
@@ -259,13 +303,13 @@ bool __xrtMailTransportDeflateFill(
 			Input,
 			false,
 			__xrtMailTransportInflateOutput,
-			pTransport
+			&Read
 		) ) {
 			return false;
 		}
 		__xrtMailTransportDeflateAdvance(pTransport, Input.Size);
 		if ( pTransport->PendingSize != iBefore ) {
-			return true;
+			return __xrtMailDeflateRequestActive(iDeadline, pCancel);
 		}
 	}
 }

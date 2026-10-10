@@ -1,3 +1,5 @@
+#include <xrt/detail/ximap_wait.h>
+#include <xrt/detail/wait.h>
 #include <xrt/imap_append.h>
 
 #include "../internal/xrt_imap_client.h"
@@ -131,13 +133,13 @@ static bool __xrtImapAppendLiteralMode(
 /* 等待同步 literal continuation，允许普通未请求响应穿过。 */
 static bool __xrtImapAppendWait(
 	ximapclient* pClient,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
 	for ( ;; ) {
 		ximapevent Event;
-		xmailnext Next = xrtImapClientNext(
+		xmailnext Next = __xrtImapClientNext(
 			pClient,
 			&Event,
 			iDeadline,
@@ -148,8 +150,24 @@ static bool __xrtImapAppendWait(
 			return false;
 		}
 		if ( Next == XMAIL_NEXT_END ) {
+			ximapresponseview Final;
+
+			if ( !xrtImapClientLastResponse(pClient, &Final) ) {
+				return __xrtImapClientProtocolFail(
+					pClient,
+					"missing IMAP APPEND completion"
+				);
+			}
+			if ( (Final.Status != XIMAP_STATUS_NO) &&
+				(Final.Status != XIMAP_STATUS_BAD) ) {
+				return __xrtImapClientProtocolFail(
+					pClient,
+					"IMAP APPEND completed before literal upload"
+				);
+			}
 			return __xrtImapAppendError(
-				XERR_PERMISSION,
+				Final.Status == XIMAP_STATUS_NO ?
+					XERR_PERMISSION : XERR_PROTOCOL,
 				"IMAP APPEND was rejected before literal upload"
 			);
 		}
@@ -236,19 +254,21 @@ XRT_API void xrtImapAppendResultInit(ximapappendresult* pResult)
 
 
 /* 发送 APPEND 命令头并进入受约束的 literal 写阶段。 */
-XRT_API bool xrtImapClientAppendBegin(
+XRT_API bool __xrtImapClientAppendBegin(
 	ximapclient* pClient,
 	const ximapappendconfig* pConfig,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	char sMarker[(sizeof(size_t) * 3u) + 4u];
 	xstrview Parts[4];
 	str sMailbox = NULL;
 	str sDate = NULL;
 	size_t iCount = 0;
-	bool bNonSynchronizing;
+	bool bNonSynchronizing = false;
 	bool bSuccess = false;
 
 	if ( (pClient == NULL) ||
@@ -259,6 +279,9 @@ XRT_API bool xrtImapClientAppendBegin(
 		!__xrtImapAppendFlagsValid(pConfig->Flags) ) {
 		__xrtMailSetInvalidArgument();
 		return false;
+	}
+	if ( (uint64)pConfig->Size > (uint64)INT64_MAX ) {
+		return __xrtImapAppendError(XERR_RANGE, "IMAP APPEND size exceeds 63 bits");
 	}
 	if ( (xrtImapClientState(pClient) != XIMAP_CLIENT_AUTHENTICATED) &&
 		(xrtImapClientState(pClient) != XIMAP_CLIENT_SELECTED) ) {
@@ -294,7 +317,7 @@ XRT_API bool xrtImapClientAppendBegin(
 		pConfig->Size,
 		bNonSynchronizing
 	);
-	if ( !xrtImapClientBeginParts(
+	if ( !__xrtImapClientBeginParts(
 		pClient,
 		XRT_STR_LITERAL("APPEND"),
 		Parts,
@@ -330,22 +353,24 @@ XRT_API size_t xrtImapClientAppendRemaining(const ximapclient* pClient)
 
 
 /* 写入一块 APPEND literal。 */
-XRT_API bool xrtImapClientAppendWrite(
+XRT_API bool __xrtImapClientAppendWrite(
 	ximapclient* pClient,
 	const void* pData,
 	size_t iSize,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
 	if ( (__xrtImapClientAppendRemaining(pClient) == 0) ||
 		(iSize == 0) ) {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 		return __xrtImapAppendError(
 			XERR_STATE,
 			"IMAP APPEND has no remaining literal bytes"
 		);
 	}
-	return xrtImapClientWrite(
+	return __xrtImapClientWrite(
 		pClient,
 		pData,
 		iSize,
@@ -357,26 +382,28 @@ XRT_API bool xrtImapClientAppendWrite(
 
 
 /* 结束 APPEND 并解析 tagged completion。 */
-XRT_API bool xrtImapClientAppendEnd(
+XRT_API bool __xrtImapClientAppendEnd(
 	ximapclient* pClient,
 	ximapappendresult* pResult,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	ximapappendresult Result;
 
 	xrtImapAppendResultInit(&Result);
 	if ( !xrtMemRangeValid(
 		pResult,
 		pResult != NULL ? sizeof(*pResult) : 0
-	) || !__xrtImapClientAppendEnd(pClient) ||
-		!xrtImapClientWrite(pClient, "\r\n", 2u, iDeadline, pCancel) ) {
+	) || !__xrtImapClientAppendFinish(pClient) ||
+		!__xrtImapClientWrite(pClient, "\r\n", 2u, iDeadline, pCancel) ) {
 		return false;
 	}
 	for ( ;; ) {
 		ximapevent Event;
-		xmailnext Next = xrtImapClientNext(
+		xmailnext Next = __xrtImapClientNext(
 			pClient,
 			&Event,
 			iDeadline,
@@ -392,10 +419,18 @@ XRT_API bool xrtImapClientAppendEnd(
 			if ( !xrtImapClientLastResponse(pClient, &Final) ) {
 				return false;
 			}
-			if ( Final.Status != XIMAP_STATUS_OK ) {
+			if ( (Final.Status == XIMAP_STATUS_NO) ||
+				(Final.Status == XIMAP_STATUS_BAD) ) {
 				return __xrtImapAppendError(
-					XERR_PERMISSION,
+					Final.Status == XIMAP_STATUS_NO ?
+						XERR_PERMISSION : XERR_PROTOCOL,
 					"IMAP APPEND was rejected"
+				);
+			}
+			if ( Final.Status != XIMAP_STATUS_OK ) {
+				return __xrtImapClientProtocolFail(
+					pClient,
+					"invalid IMAP APPEND completion status"
 				);
 			}
 			if ( !__xrtImapAppendResult(Final.Text, &Result) ) {
@@ -421,21 +456,23 @@ XRT_API bool xrtImapClientAppendEnd(
 
 
 /* 执行内存消息的一次 APPEND。 */
-XRT_API bool xrtImapClientAppend(
+XRT_API bool __xrtImapClientAppend(
 	ximapclient* pClient,
 	const ximapappendconfig* pConfig,
 	const void* pData,
 	ximapappendresult* pResult,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
 	if ( !xrtMemRangeValid(pConfig, sizeof(*pConfig)) ||
 		!xrtMemRangeValid(pData, pConfig != NULL ? pConfig->Size : 0) ) {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 		__xrtMailSetInvalidArgument();
 		return false;
 	}
-	if ( !xrtImapClientAppendBegin(
+	if ( !__xrtImapClientAppendBegin(
 		pClient,
 		pConfig,
 		iDeadline,
@@ -443,7 +480,7 @@ XRT_API bool xrtImapClientAppend(
 	) ) {
 		return false;
 	}
-	if ( (pConfig->Size != 0) && !xrtImapClientAppendWrite(
+	if ( (pConfig->Size != 0) && !__xrtImapClientAppendWrite(
 		pClient,
 		pData,
 		pConfig->Size,
@@ -452,7 +489,7 @@ XRT_API bool xrtImapClientAppend(
 	) ) {
 		return false;
 	}
-	return xrtImapClientAppendEnd(
+	return __xrtImapClientAppendEnd(
 		pClient,
 		pResult,
 		iDeadline,
@@ -460,4 +497,55 @@ XRT_API bool xrtImapClientAppend(
 	);
 }
 
+#endif
+
+#if (defined(XIMAP_FEATURE_IMAP_APPEND))
+XRT_API bool xrtImapClientAppendBegin(
+	ximapclient* pClient,
+	const ximapappendconfig* pConfig,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtImapClientAppendBegin(pClient, pConfig, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XIMAP_FEATURE_IMAP_APPEND))
+XRT_API bool xrtImapClientAppendWrite(
+	ximapclient* pClient,
+	const void* pData,
+	size_t iSize,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtImapClientAppendWrite(pClient, pData, iSize, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XIMAP_FEATURE_IMAP_APPEND))
+XRT_API bool xrtImapClientAppendEnd(
+	ximapclient* pClient,
+	ximapappendresult* pResult,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtImapClientAppendEnd(pClient, pResult, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XIMAP_FEATURE_IMAP_APPEND))
+XRT_API bool xrtImapClientAppend(
+	ximapclient* pClient,
+	const ximapappendconfig* pConfig,
+	const void* pData,
+	ximapappendresult* pResult,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtImapClientAppend(pClient, pConfig, pData, pResult, __xrtWaitAfter(iTimeout), pCancel);
+}
 #endif

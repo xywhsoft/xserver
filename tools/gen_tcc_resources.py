@@ -38,9 +38,9 @@ SDK_FILES = [
 ] + [
     ("/xs/xrt.h", ROOT / "lib" / "xrtshim" / "xrt" / "xrt.h"),
 ] + [
-    (f"/xs/xrt/{path.name}", path)
-    for path in sorted((ROOT / "lib" / "xrtshim" / "xrt").glob("*.h"))
-    if path.name != "xrt.h"
+    ("/xs/xrt/" + path.relative_to(ROOT / "lib/xrtshim/xrt").as_posix(), path)
+    for path in sorted((ROOT / "lib" / "xrtshim" / "xrt").rglob("*.h"))
+    if path != ROOT / "lib/xrtshim/xrt/xrt.h"
 ]
 
 # (虚拟目录前缀, 源目录) —— 整目录递归收录

@@ -1,3 +1,5 @@
+#include <xrt/detail/xsmtp_wait.h>
+#include <xrt/detail/wait.h>
 #include <xrt/smtp_client.h>
 
 #include "../internal/xrt_mail_net.h"
@@ -7,23 +9,7 @@
 
 #if defined(XSMTP_FEATURE_SMTP_CLIENT)
 
-/* 同步客户端只保存会话状态、能力和最后响应，不复制配置。 */
-struct xsmtpclient {
-	__xmailtransport Transport;
-	xsmtpclientstate State;
-	uint64 Capabilities;
-	uint64 SizeLimit;
-	__xmailtext Reply;
-	size_t ReplyLines;
-	size_t ReplyLineLimit;
-	int ReplyCode;
-	xmaildotwriter DataWriter;
-	size_t ChunkRemaining;
-	bool ChunkLast;
-	bool ChunkActive;
-	bool ChunkRejected;
-	bool Authenticated;
-};
+
 
 
 
@@ -84,6 +70,7 @@ static bool __xrtSmtpClientFailed(xsmtpclient* pClient)
 {
 	if ( pClient != NULL ) {
 		pClient->State = XSMTP_CLIENT_FAILED;
+		__xrtMailTransportAbortPreserveError(&pClient->Transport);
 	}
 	return false;
 }
@@ -132,7 +119,7 @@ static bool __xrtSmtpClientReceiveMode(
 	xsmtpreply* pReply,
 	bool bCapabilities,
 	size_t iReplyLines,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
@@ -155,6 +142,7 @@ static bool __xrtSmtpClientReceiveMode(
 			return __xrtSmtpClientFailed(pClient);
 		}
 		if ( bCapabilities && (Parser.Lines > 1u) &&
+			(Line.Code != 421) &&
 			!__xrtSmtpClientCapability(pClient, Line.Text) ) {
 			return __xrtSmtpClientFailed(pClient);
 		}
@@ -168,12 +156,19 @@ static bool __xrtSmtpClientReceiveMode(
 		Line.Code,
 		Parser.Lines
 	) ) {
-		return false;
+		return __xrtSmtpClientFailed(pClient);
 	}
 	pReply->Code = pClient->ReplyCode;
 	pReply->Lines = pClient->ReplyLines;
 	pReply->Text.Data = pClient->Reply.Data;
 	pReply->Text.Size = pClient->Reply.Size;
+	if ( pReply->Code == 421 ) {
+		__xrtSmtpClientError(
+			XERR_CLOSED,
+			"SMTP server is closing the transmission channel"
+		);
+		return __xrtSmtpClientFailed(pClient);
+	}
 	return true;
 }
 
@@ -192,7 +187,7 @@ static bool __xrtSmtpClientUnexpected(void)
 static bool __xrtSmtpClientHello(
 	xsmtpclient* pClient,
 	const xsmtpclientconfig* pConfig,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
@@ -234,7 +229,7 @@ static bool __xrtSmtpClientHello(
 	}
 	pClient->Capabilities = 0;
 	pClient->SizeLimit = 0;
-	if ( !xrtSmtpClientCommand(
+	if ( !__xrtSmtpClientCommand(
 		pClient,
 		XRT_STR_LITERAL("HELO"),
 		pConfig->Hello,
@@ -301,7 +296,7 @@ static bool __xrtSmtpClientPathArguments(
 /* 把 dot writer 输出直接提交到当前 SMTP 传输。 */
 typedef struct __xsmtpclientdatasink {
 	xsmtpclient* Client;
-	xdeadline Deadline;
+	double Deadline;
 	xcancel* Cancel;
 } __xsmtpclientdatasink;
 
@@ -379,12 +374,14 @@ XRT_API bool xrtSmtpClientConfigValid(const xsmtpclientconfig* pConfig)
 
 
 /* 建立并协商 SMTP 会话。 */
-XRT_API xsmtpclient* xrtSmtpClientOpen(
+XRT_API xsmtpclient* __xrtSmtpClientOpen(
 	const xsmtpclientconfig* pConfig,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return NULL; }
+
 	xsmtpclient* pClient;
 	xsmtpreply Reply;
 	bool bOpened;
@@ -443,7 +440,7 @@ XRT_API xsmtpclient* xrtSmtpClientOpen(
 				return NULL;
 			}
 			memset(&Reply, 0, sizeof(Reply));
-			if ( !xrtSmtpClientCommand(
+			if ( !__xrtSmtpClientCommand(
 				pClient,
 				XRT_STR_LITERAL("STARTTLS"),
 				XRT_STR_LITERAL(""),
@@ -565,7 +562,7 @@ static bool __xrtSmtpClientSendLine(
 	xsmtpclient* pClient,
 	xstrview Line,
 	size_t iLimit,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
@@ -613,13 +610,15 @@ static bool __xrtSmtpClientSendLine(
 
 
 /* 发送受普通命令长度约束的低层 SMTP 行。 */
-XRT_API bool xrtSmtpClientSend(
+XRT_API bool __xrtSmtpClientSend(
 	xsmtpclient* pClient,
 	xstrview Line,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	return __xrtSmtpClientSendLine(
 		pClient,
 		Line,
@@ -632,13 +631,15 @@ XRT_API bool xrtSmtpClientSend(
 
 
 /* 发送具有独立长度上限的 SASL continuation 响应。 */
-XRT_API bool xrtSmtpClientAuthLine(
+XRT_API bool __xrtSmtpClientAuthLine(
 	xsmtpclient* pClient,
 	xstrview Line,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	return __xrtSmtpClientSendLine(
 		pClient,
 		Line,
@@ -651,14 +652,16 @@ XRT_API bool xrtSmtpClientAuthLine(
 
 
 /* 读取完整 SMTP 响应。 */
-XRT_API bool xrtSmtpClientReceive(
+XRT_API bool __xrtSmtpClientReceive(
 	xsmtpclient* pClient,
 	xsmtpreply* pReply,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
 	if ( !__xrtSmtpClientCommandMode(pClient, false) ) {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 		return false;
 	}
 	return __xrtSmtpClientReceiveMode(
@@ -674,15 +677,17 @@ XRT_API bool xrtSmtpClientReceive(
 
 
 /* 发送命令并读取响应。 */
-XRT_API bool xrtSmtpClientCommand(
+XRT_API bool __xrtSmtpClientCommand(
 	xsmtpclient* pClient,
 	xstrview Verb,
 	xstrview Arguments,
 	xsmtpreply* pReply,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	char sCommand[XSMTP_COMMAND_MAX + 1u];
 	size_t iSize;
 	bool bReset;
@@ -725,14 +730,16 @@ XRT_API bool xrtSmtpClientCommand(
 
 
 /* 开始 SMTP envelope。 */
-XRT_API bool xrtSmtpClientMail(
+XRT_API bool __xrtSmtpClientMail(
 	xsmtpclient* pClient,
 	xstrview ReversePath,
 	xstrview Parameters,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	char sArguments[XSMTP_COMMAND_MAX + 1u];
 	size_t iSize;
 	xsmtpreply Reply;
@@ -750,7 +757,7 @@ XRT_API bool xrtSmtpClientMail(
 		sArguments,
 		sizeof(sArguments),
 		&iSize
-	) || !xrtSmtpClientCommand(
+	) || !__xrtSmtpClientCommand(
 		pClient,
 		XRT_STR_LITERAL("MAIL"),
 		(xstrview) { sArguments, iSize },
@@ -770,14 +777,16 @@ XRT_API bool xrtSmtpClientMail(
 
 
 /* 增加 SMTP envelope 收件人。 */
-XRT_API bool xrtSmtpClientRcpt(
+XRT_API bool __xrtSmtpClientRcpt(
 	xsmtpclient* pClient,
 	xstrview ForwardPath,
 	xstrview Parameters,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	char sArguments[XSMTP_COMMAND_MAX + 1u];
 	size_t iSize;
 	xsmtpreply Reply;
@@ -799,7 +808,7 @@ XRT_API bool xrtSmtpClientRcpt(
 		sArguments,
 		sizeof(sArguments),
 		&iSize
-	) || !xrtSmtpClientCommand(
+	) || !__xrtSmtpClientCommand(
 		pClient,
 		XRT_STR_LITERAL("RCPT"),
 		(xstrview) { sArguments, iSize },
@@ -820,12 +829,14 @@ XRT_API bool xrtSmtpClientRcpt(
 
 
 /* 进入 SMTP DATA 模式。 */
-XRT_API bool xrtSmtpClientDataBegin(
+XRT_API bool __xrtSmtpClientDataBegin(
 	xsmtpclient* pClient,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	xsmtpreply Reply;
 
 	if ( !__xrtSmtpClientUsable(pClient) ||
@@ -836,7 +847,7 @@ XRT_API bool xrtSmtpClientDataBegin(
 		);
 		return false;
 	}
-	if ( !xrtSmtpClientCommand(
+	if ( !__xrtSmtpClientCommand(
 		pClient,
 		XRT_STR_LITERAL("DATA"),
 		XRT_STR_LITERAL(""),
@@ -859,13 +870,15 @@ XRT_API bool xrtSmtpClientDataBegin(
 
 
 /* 发送一个 SMTP DATA 消息片段。 */
-XRT_API bool xrtSmtpClientDataWrite(
+XRT_API bool __xrtSmtpClientDataWrite(
 	xsmtpclient* pClient,
 	xbytesview Data,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	__xsmtpclientdatasink Sink;
 
 	if ( !__xrtSmtpClientUsable(pClient) ||
@@ -890,12 +903,14 @@ XRT_API bool xrtSmtpClientDataWrite(
 
 
 /* 完成 SMTP DATA 并读取最终响应。 */
-XRT_API bool xrtSmtpClientDataEnd(
+XRT_API bool __xrtSmtpClientDataEnd(
 	xsmtpclient* pClient,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	__xsmtpclientdatasink Sink;
 	xsmtpreply Reply;
 
@@ -931,13 +946,15 @@ XRT_API bool xrtSmtpClientDataEnd(
 
 
 /* 发送一份已经连续存放的 SMTP DATA。 */
-XRT_API bool xrtSmtpClientData(
+XRT_API bool __xrtSmtpClientData(
 	xsmtpclient* pClient,
 	xstrview Message,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	xbytesview Data;
 	size_t iEncoded;
 
@@ -947,22 +964,24 @@ XRT_API bool xrtSmtpClientData(
 	(void)iEncoded;
 	Data.Data = (const unsigned char*)Message.Data;
 	Data.Size = Message.Size;
-	return xrtSmtpClientDataBegin(pClient, iDeadline, pCancel) &&
-		xrtSmtpClientDataWrite(pClient, Data, iDeadline, pCancel) &&
-		xrtSmtpClientDataEnd(pClient, iDeadline, pCancel);
+	return __xrtSmtpClientDataBegin(pClient, iDeadline, pCancel) &&
+		__xrtSmtpClientDataWrite(pClient, Data, iDeadline, pCancel) &&
+		__xrtSmtpClientDataEnd(pClient, iDeadline, pCancel);
 }
 
 
 
 /* 开始一个精确计数的 SMTP BDAT 块。 */
-XRT_API bool xrtSmtpClientBdatBegin(
+XRT_API bool __xrtSmtpClientBdatBegin(
 	xsmtpclient* pClient,
 	size_t iChunkSize,
 	bool Last,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	char sLine[5u + (sizeof(size_t) * 3u) + 5u];
 	size_t iSize;
 
@@ -991,7 +1010,7 @@ XRT_API bool xrtSmtpClientBdatBegin(
 		memcpy(sLine + iSize, " LAST", 5u);
 		iSize += 5u;
 	}
-	if ( !xrtSmtpClientSend(
+	if ( !__xrtSmtpClientSend(
 		pClient,
 		(xstrview) { sLine, iSize },
 		iDeadline,
@@ -1009,16 +1028,18 @@ XRT_API bool xrtSmtpClientBdatBegin(
 
 
 /* 发送当前 BDAT 块的一段原始字节。 */
-XRT_API bool xrtSmtpClientBdatWrite(
+XRT_API bool __xrtSmtpClientBdatWrite(
 	xsmtpclient* pClient,
 	xbytesview Data,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
 	if ( !__xrtSmtpClientUsable(pClient) ||
 		(pClient->State != XSMTP_CLIENT_CHUNK) ||
 		!pClient->ChunkActive ) {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 		__xrtSmtpClientError(XERR_STATE, "SMTP BDAT write requires a block");
 		return false;
 	}
@@ -1046,12 +1067,14 @@ XRT_API bool xrtSmtpClientBdatWrite(
 
 
 /* 完成当前 BDAT 块并读取服务器确认。 */
-XRT_API bool xrtSmtpClientBdatEnd(
+XRT_API bool __xrtSmtpClientBdatEnd(
 	xsmtpclient* pClient,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	xsmtpreply Reply;
 	bool bLast;
 
@@ -1089,44 +1112,48 @@ XRT_API bool xrtSmtpClientBdatEnd(
 
 
 /* 发送一个连续存放的 SMTP BDAT 块。 */
-XRT_API bool xrtSmtpClientBdat(
+XRT_API bool __xrtSmtpClientBdat(
 	xsmtpclient* pClient,
 	xbytesview Data,
 	bool Last,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
 	if ( !xrtMemRangeValid(Data.Data, Data.Size) ) {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 		__xrtMailSetInvalidArgument();
 		return false;
 	}
-	return xrtSmtpClientBdatBegin(
+	return __xrtSmtpClientBdatBegin(
 		pClient,
 		Data.Size,
 		Last,
 		iDeadline,
 		pCancel
-	) && xrtSmtpClientBdatWrite(
+	) && __xrtSmtpClientBdatWrite(
 		pClient,
 		Data,
 		iDeadline,
 		pCancel
-	) && xrtSmtpClientBdatEnd(pClient, iDeadline, pCancel);
+	) && __xrtSmtpClientBdatEnd(pClient, iDeadline, pCancel);
 }
 
 
 
 /* 重置 SMTP envelope。 */
-XRT_API bool xrtSmtpClientReset(
+XRT_API bool __xrtSmtpClientReset(
 	xsmtpclient* pClient,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	xsmtpreply Reply;
 
-	if ( !xrtSmtpClientCommand(
+	if ( !__xrtSmtpClientCommand(
 		pClient,
 		XRT_STR_LITERAL("RSET"),
 		XRT_STR_LITERAL(""),
@@ -1150,15 +1177,17 @@ XRT_API bool xrtSmtpClientReset(
 
 
 /* 发送 SMTP NOOP。 */
-XRT_API bool xrtSmtpClientNoop(
+XRT_API bool __xrtSmtpClientNoop(
 	xsmtpclient* pClient,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	xsmtpreply Reply;
 
-	return xrtSmtpClientCommand(
+	return __xrtSmtpClientCommand(
 		pClient,
 		XRT_STR_LITERAL("NOOP"),
 		XRT_STR_LITERAL(""),
@@ -1171,15 +1200,17 @@ XRT_API bool xrtSmtpClientNoop(
 
 
 /* 发送 QUIT 并关闭传输。 */
-XRT_API bool xrtSmtpClientQuit(
+XRT_API bool __xrtSmtpClientQuit(
 	xsmtpclient* pClient,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	xsmtpreply Reply;
 
-	if ( !xrtSmtpClientCommand(
+	if ( !__xrtSmtpClientCommand(
 		pClient,
 		XRT_STR_LITERAL("QUIT"),
 		XRT_STR_LITERAL(""),
@@ -1192,18 +1223,20 @@ XRT_API bool xrtSmtpClientQuit(
 	if ( Reply.Code != 221 ) {
 		return __xrtSmtpClientUnexpected();
 	}
-	return xrtSmtpClientClose(pClient, iDeadline);
+	return __xrtSmtpClientClose(pClient, iDeadline);
 }
 
 
 
 /* 正常关闭 SMTP 传输。 */
-XRT_API bool xrtSmtpClientClose(
+XRT_API bool __xrtSmtpClientClose(
 	xsmtpclient* pClient,
-	xdeadline iDeadline
+	double iDeadline
 )
 {
 	if ( !__xrtSmtpClientUsable(pClient) ) {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 		return false;
 	}
 	if ( !__xrtMailTransportClose(&pClient->Transport, iDeadline) ) {
@@ -1252,4 +1285,229 @@ XRT_API void xrtSmtpClientDestroy(xsmtpclient* pClient)
 	xrtFree(pClient);
 }
 
+#endif
+
+#if (defined(XSMTP_FEATURE_SMTP_CLIENT))
+XRT_API xsmtpclient* xrtSmtpClientOpen(
+	const xsmtpclientconfig* pConfig,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtSmtpClientOpen(pConfig, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XSMTP_FEATURE_SMTP_CLIENT))
+XRT_API bool xrtSmtpClientSend(
+	xsmtpclient* pClient,
+	xstrview Line,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtSmtpClientSend(pClient, Line, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XSMTP_FEATURE_SMTP_CLIENT))
+XRT_API bool xrtSmtpClientAuthLine(
+	xsmtpclient* pClient,
+	xstrview Line,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtSmtpClientAuthLine(pClient, Line, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XSMTP_FEATURE_SMTP_CLIENT))
+XRT_API bool xrtSmtpClientReceive(
+	xsmtpclient* pClient,
+	xsmtpreply* pReply,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtSmtpClientReceive(pClient, pReply, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XSMTP_FEATURE_SMTP_CLIENT))
+XRT_API bool xrtSmtpClientCommand(
+	xsmtpclient* pClient,
+	xstrview Verb,
+	xstrview Arguments,
+	xsmtpreply* pReply,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtSmtpClientCommand(pClient, Verb, Arguments, pReply, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XSMTP_FEATURE_SMTP_CLIENT))
+XRT_API bool xrtSmtpClientMail(
+	xsmtpclient* pClient,
+	xstrview ReversePath,
+	xstrview Parameters,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtSmtpClientMail(pClient, ReversePath, Parameters, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XSMTP_FEATURE_SMTP_CLIENT))
+XRT_API bool xrtSmtpClientRcpt(
+	xsmtpclient* pClient,
+	xstrview ForwardPath,
+	xstrview Parameters,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtSmtpClientRcpt(pClient, ForwardPath, Parameters, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XSMTP_FEATURE_SMTP_CLIENT))
+XRT_API bool xrtSmtpClientDataBegin(
+	xsmtpclient* pClient,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtSmtpClientDataBegin(pClient, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XSMTP_FEATURE_SMTP_CLIENT))
+XRT_API bool xrtSmtpClientDataWrite(
+	xsmtpclient* pClient,
+	xbytesview Data,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtSmtpClientDataWrite(pClient, Data, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XSMTP_FEATURE_SMTP_CLIENT))
+XRT_API bool xrtSmtpClientDataEnd(
+	xsmtpclient* pClient,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtSmtpClientDataEnd(pClient, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XSMTP_FEATURE_SMTP_CLIENT))
+XRT_API bool xrtSmtpClientData(
+	xsmtpclient* pClient,
+	xstrview Message,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtSmtpClientData(pClient, Message, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XSMTP_FEATURE_SMTP_CLIENT))
+XRT_API bool xrtSmtpClientBdatBegin(
+	xsmtpclient* pClient,
+	size_t iChunkSize,
+	bool Last,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtSmtpClientBdatBegin(pClient, iChunkSize, Last, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XSMTP_FEATURE_SMTP_CLIENT))
+XRT_API bool xrtSmtpClientBdatWrite(
+	xsmtpclient* pClient,
+	xbytesview Data,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtSmtpClientBdatWrite(pClient, Data, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XSMTP_FEATURE_SMTP_CLIENT))
+XRT_API bool xrtSmtpClientBdatEnd(
+	xsmtpclient* pClient,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtSmtpClientBdatEnd(pClient, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XSMTP_FEATURE_SMTP_CLIENT))
+XRT_API bool xrtSmtpClientBdat(
+	xsmtpclient* pClient,
+	xbytesview Data,
+	bool Last,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtSmtpClientBdat(pClient, Data, Last, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XSMTP_FEATURE_SMTP_CLIENT))
+XRT_API bool xrtSmtpClientReset(
+	xsmtpclient* pClient,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtSmtpClientReset(pClient, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XSMTP_FEATURE_SMTP_CLIENT))
+XRT_API bool xrtSmtpClientNoop(
+	xsmtpclient* pClient,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtSmtpClientNoop(pClient, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XSMTP_FEATURE_SMTP_CLIENT))
+XRT_API bool xrtSmtpClientQuit(
+	xsmtpclient* pClient,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtSmtpClientQuit(pClient, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XSMTP_FEATURE_SMTP_CLIENT))
+XRT_API bool xrtSmtpClientClose(
+	xsmtpclient* pClient,
+	int64 iTimeout
+)
+{
+    return __xrtSmtpClientClose(pClient, __xrtWaitAfter(iTimeout));
+}
 #endif

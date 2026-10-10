@@ -5,8 +5,8 @@
 		"extlibs/xmail/config/modules.json"
 	],
 	"module_prefix": "XPOP3_MODULE_",
-	"single_header": "extlibs/xpop3/single/xpop3.h",
-	"declaration_header": "extlibs/xpop3/single/xpop3_decl.h",
+	"single_header": "single/extlibs/xpop3.h",
+	"declaration_header": "single/extlibs/xpop3_decl.h",
 	"implementation_macro": "XPOP3_IMPLEMENTATION",
 	"implementation_once_macro": "XPOP3_IMPLEMENTATION_ONCE",
 	"single_guard": "XPOP3_SINGLE_HEADER_H",
@@ -59,7 +59,8 @@
 				"extlibs/xpop3/include/xrt/pop3.h"
 			],
 			"internal_headers": [
-				"extlibs/xpop3/src/internal/xrt_mail.h"
+				"extlibs/xpop3/src/internal/xrt_mail.h",
+				"extlibs/xpop3/include/xrt/detail/xpop3_wait.h"
 			],
 			"sources": [
 				"extlibs/xpop3/src/pop3/pop3.c"
@@ -188,7 +189,10 @@
 			"feature": null,
 			"depends": [
 				"pop3_auth",
-				"pop3_client_tls"
+				"pop3_client_tls",
+				"string",
+				"tls_context",
+				"tls_verify"
 			],
 			"public_headers": [],
 			"internal_headers": [],
@@ -200,6 +204,27 @@
 			],
 			"docs": [
 				"extlibs/xpop3/docs/api/pop3_client.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "pop3_offline_example",
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"pop3_auth",
+				"thread"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [],
+			"single_tests": [],
+			"examples": [
+				"extlibs/xpop3/examples/offline/main.c"
+			],
+			"docs": [
+				"extlibs/xpop3/README.md"
 			],
 			"legacy": []
 		},
@@ -281,6 +306,28 @@
 			"legacy": []
 		},
 		{
+			"name": "pop3_read_tls_fault_runtime_tests",
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"pop3_message",
+				"pop3_auth",
+				"pop3_client_tls",
+				"tls_identity_rsa",
+				"pem"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xpop3/tests/test_pop3_read_tls_fault_runtime.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [],
+			"legacy": []
+		},
+		{
 			"name": "pop3_protocol_oom_tests",
 			"state": "implemented",
 			"feature": null,
@@ -309,6 +356,7 @@
 				"pop3_client_tls",
 				"pop3_auth",
 				"pop3_client_example",
+				"pop3_offline_example",
 				"pop3_message",
 				"pop3_message_runtime_tests",
 				"pop3_client_tls_runtime_tests"
@@ -328,7 +376,8 @@
 				"extlibs/xpop3/tests/test_pop3_message.c",
 				"extlibs/xpop3/tests/test_pop3_message_runtime.c",
 				"extlibs/xpop3/tests/test_pop3_client_stls_runtime.c",
-				"extlibs/xpop3/tests/test_xpop3_protocol_oom.c"
+				"extlibs/xpop3/tests/test_xpop3_protocol_oom.c",
+				"extlibs/xpop3/tests/test_pop3_read_tls_fault_runtime.c"
 			],
 			"single_tests": [
 				"extlibs/xpop3/tests/single/test_single_xpop3.c"
@@ -353,7 +402,8 @@
 				"pop3_message_runtime_tests",
 				"pop3_client_tls_runtime_tests",
 				"pop3_protocol_oom_tests",
-				"xpop3"
+				"xpop3",
+				"pop3_read_tls_fault_runtime_tests"
 			],
 			"public_headers": [],
 			"internal_headers": [],

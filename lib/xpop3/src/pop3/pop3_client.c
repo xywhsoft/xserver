@@ -1,3 +1,5 @@
+#include <xrt/detail/xpop3_wait.h>
+#include <xrt/detail/wait.h>
 #include <xrt/pop3_client.h>
 
 #include "../internal/xrt_pop3_client.h"
@@ -35,6 +37,7 @@ bool __xrtPop3ClientFail(xpop3client* pClient)
 {
 	if ( pClient != NULL ) {
 		pClient->State = XPOP3_CLIENT_FAILED;
+		__xrtMailTransportAbortPreserveError(&pClient->Transport);
 	}
 	return false;
 }
@@ -50,18 +53,22 @@ bool __xrtPop3ClientReplySave(
 {
 	xpop3replyview Parsed;
 	xstrview Stable;
+	size_t iTextOffset;
 
+	/* 畸形状态行不能覆盖上一条有效回复。 */
+	if ( !xrtPop3ReplyParse(Line, &Parsed) ) {
+		return false;
+	}
+	iTextOffset = (size_t)(Parsed.Text.Data - Line.Data);
 	if ( !__xrtMailTextSet(&pClient->Reply, Line) ) {
 		return false;
 	}
 	Stable.Data = pClient->Reply.Data;
 	Stable.Size = pClient->Reply.Size;
-	if ( !xrtPop3ReplyParse(Stable, &Parsed) ) {
-		return false;
-	}
 	pReply->Ok = Parsed.Ok;
-	pReply->Source = Parsed.Source;
-	pReply->Text = Parsed.Text;
+	pReply->Source = Stable;
+	pReply->Text.Data = Stable.Data + iTextOffset;
+	pReply->Text.Size = Parsed.Text.Size;
 	return true;
 }
 
@@ -129,7 +136,7 @@ static uint32 __xrtPop3ClientSaslMechanisms(xstrview Parameters)
 /* 读取 CAPA 多行响应并合并已知能力。 */
 static bool __xrtPop3ClientCapa(
 	xpop3client* pClient,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
@@ -139,7 +146,7 @@ static bool __xrtPop3ClientCapa(
 
 	pClient->Capabilities = 0;
 	pClient->SaslMechanisms = 0;
-	if ( !xrtPop3ClientCommand(
+	if ( !__xrtPop3ClientCommand(
 		pClient,
 		XRT_STR_LITERAL("CAPA"),
 		XRT_STR_LITERAL(""),
@@ -157,7 +164,7 @@ static bool __xrtPop3ClientCapa(
 	for ( ;; ) {
 		xpop3capabilityview Capability;
 
-		Next = xrtPop3ClientNext(
+		Next = __xrtPop3ClientNext(
 			pClient,
 			&Line,
 			iDeadline,
@@ -222,12 +229,14 @@ XRT_API bool xrtPop3ClientConfigValid(const xpop3clientconfig* pConfig)
 
 
 /* 建立并协商 POP3 会话。 */
-XRT_API xpop3client* xrtPop3ClientOpen(
+XRT_API xpop3client* __xrtPop3ClientOpen(
 	const xpop3clientconfig* pConfig,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return NULL; }
+
 	xpop3client* pClient;
 	xpop3reply Reply;
 
@@ -244,7 +253,7 @@ XRT_API xpop3client* xrtPop3ClientOpen(
 		&pConfig->Net,
 		iDeadline,
 		pCancel
-	) || !xrtPop3ClientReceive(
+	) || !__xrtPop3ClientReceive(
 		pClient,
 		&Reply,
 		iDeadline,
@@ -277,7 +286,7 @@ XRT_API xpop3client* xrtPop3ClientOpen(
 				return NULL;
 			}
 			memset(&Reply, 0, sizeof(Reply));
-			if ( !xrtPop3ClientCommand(
+			if ( !__xrtPop3ClientCommand(
 				pClient,
 				XRT_STR_LITERAL("STLS"),
 				XRT_STR_LITERAL(""),
@@ -386,7 +395,7 @@ static bool __xrtPop3ClientSendLine(
 	xpop3client* pClient,
 	xstrview Line,
 	size_t iMaxLine,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
@@ -439,13 +448,15 @@ static bool __xrtPop3ClientSendLine(
 
 
 /* 发送低层 POP3 命令行。 */
-XRT_API bool xrtPop3ClientSend(
+XRT_API bool __xrtPop3ClientSend(
 	xpop3client* pClient,
 	xstrview Line,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	return __xrtPop3ClientSendLine(
 		pClient,
 		Line,
@@ -458,14 +469,16 @@ XRT_API bool xrtPop3ClientSend(
 
 
 /* 发送较长的 POP3 SASL 响应行。 */
-XRT_API bool xrtPop3ClientAuthLine(
+XRT_API bool __xrtPop3ClientAuthLine(
 	xpop3client* pClient,
 	xstrview Line,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
 	if ( pClient == NULL ) {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 		__xrtMailSetInvalidArgument();
 		return false;
 	}
@@ -487,14 +500,16 @@ XRT_API bool xrtPop3ClientAuthLine(
 
 
 /* 读取一条未解释的 POP3 线路。 */
-XRT_API bool xrtPop3ClientLine(
+XRT_API bool __xrtPop3ClientLine(
 	xpop3client* pClient,
 	xstrview* pLine,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
 	if ( !__xrtPop3ClientUsable(pClient) ) {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 		return false;
 	}
 	if ( pClient->State == XPOP3_CLIENT_MULTILINE ) {
@@ -521,20 +536,22 @@ XRT_API bool xrtPop3ClientLine(
 
 
 /* 读取 POP3 状态行。 */
-XRT_API bool xrtPop3ClientReceive(
+XRT_API bool __xrtPop3ClientReceive(
 	xpop3client* pClient,
 	xpop3reply* pReply,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	xstrview Line;
 
 	if ( !xrtMemRangeValid(pReply, sizeof(*pReply)) ) {
 		__xrtMailSetInvalidArgument();
 		return false;
 	}
-	if ( !xrtPop3ClientLine(
+	if ( !__xrtPop3ClientLine(
 		pClient,
 		&Line,
 		iDeadline,
@@ -548,15 +565,17 @@ XRT_API bool xrtPop3ClientReceive(
 
 
 /* 发送 POP3 命令并读取状态。 */
-XRT_API bool xrtPop3ClientCommand(
+XRT_API bool __xrtPop3ClientCommand(
 	xpop3client* pClient,
 	xstrview Verb,
 	xstrview Arguments,
 	xpop3reply* pReply,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	char sCommand[XPOP3_COMMAND_MAX + 1u];
 	size_t iSize;
 
@@ -591,7 +610,7 @@ XRT_API bool xrtPop3ClientCommand(
 	) ) {
 		return __xrtPop3ClientFail(pClient);
 	}
-	return xrtPop3ClientReceive(
+	return __xrtPop3ClientReceive(
 		pClient,
 		pReply,
 		iDeadline,
@@ -602,17 +621,19 @@ XRT_API bool xrtPop3ClientCommand(
 
 
 /* 开始 POP3 多行响应。 */
-XRT_API bool xrtPop3ClientBegin(
+XRT_API bool __xrtPop3ClientBegin(
 	xpop3client* pClient,
 	xstrview Verb,
 	xstrview Arguments,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	xpop3reply Reply;
 
-	if ( !xrtPop3ClientCommand(
+	if ( !__xrtPop3ClientCommand(
 		pClient,
 		Verb,
 		Arguments,
@@ -633,13 +654,15 @@ XRT_API bool xrtPop3ClientBegin(
 
 
 /* 读取下一条 POP3 多行数据。 */
-XRT_API xmailnext xrtPop3ClientNext(
+XRT_API xmailnext __xrtPop3ClientNext(
 	xpop3client* pClient,
 	xstrview* pLine,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return XMAIL_NEXT_ERROR; }
+
 	xstrview Line;
 	xmailnext Next;
 
@@ -707,14 +730,14 @@ static bool __xrtPop3ClientTransaction(const xpop3client* pClient)
 static bool __xrtPop3ClientSimple(
 	xpop3client* pClient,
 	xstrview Verb,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
 	xpop3reply Reply;
 
 	return __xrtPop3ClientTransaction(pClient) &&
-		xrtPop3ClientCommand(
+		__xrtPop3ClientCommand(
 			pClient,
 			Verb,
 			XRT_STR_LITERAL(""),
@@ -727,13 +750,15 @@ static bool __xrtPop3ClientSimple(
 
 
 /* 查询 POP3 STAT。 */
-XRT_API bool xrtPop3ClientStat(
+XRT_API bool __xrtPop3ClientStat(
 	xpop3client* pClient,
 	xpop3stat* pStat,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	xpop3reply Reply;
 
 	if ( !__xrtPop3ClientTransaction(pClient) ) {
@@ -743,7 +768,7 @@ XRT_API bool xrtPop3ClientStat(
 		__xrtMailSetInvalidArgument();
 		return false;
 	}
-	if ( !xrtPop3ClientCommand(
+	if ( !__xrtPop3ClientCommand(
 			pClient,
 			XRT_STR_LITERAL("STAT"),
 			XRT_STR_LITERAL(""),
@@ -753,21 +778,28 @@ XRT_API bool xrtPop3ClientStat(
 		) ) {
 		return false;
 	}
-	return Reply.Ok ? xrtPop3StatParse(Reply.Source, pStat) :
-		__xrtPop3ClientRejected();
+	if ( !Reply.Ok ) {
+		return __xrtPop3ClientRejected();
+	}
+	if ( !xrtPop3StatParse(Reply.Source, pStat) ) {
+		return __xrtPop3ClientFail(pClient);
+	}
+	return true;
 }
 
 
 
 /* 查询一条 POP3 LIST。 */
-XRT_API bool xrtPop3ClientList(
+XRT_API bool __xrtPop3ClientList(
 	xpop3client* pClient,
 	uint64 iMessage,
 	xpop3listview* pItem,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	char sNumber[21];
 	xpop3reply Reply;
 
@@ -778,7 +810,7 @@ XRT_API bool xrtPop3ClientList(
 		__xrtMailSetInvalidArgument();
 		return false;
 	}
-	if ( !xrtPop3ClientCommand(
+	if ( !__xrtPop3ClientCommand(
 			pClient,
 			XRT_STR_LITERAL("LIST"),
 			__xrtPop3ClientNumbers(sNumber, iMessage, false, 0),
@@ -788,20 +820,27 @@ XRT_API bool xrtPop3ClientList(
 		) ) {
 		return false;
 	}
-	return Reply.Ok ? xrtPop3ListParse(Reply.Text, pItem) :
-		__xrtPop3ClientRejected();
+	if ( !Reply.Ok ) {
+		return __xrtPop3ClientRejected();
+	}
+	if ( !xrtPop3ListParse(Reply.Text, pItem) ) {
+		return __xrtPop3ClientFail(pClient);
+	}
+	return true;
 }
 
 
 
 /* 开始读取全部 POP3 LIST。 */
-XRT_API bool xrtPop3ClientListAll(
+XRT_API bool __xrtPop3ClientListAll(
 	xpop3client* pClient,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
-	return __xrtPop3ClientTransaction(pClient) && xrtPop3ClientBegin(
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
+	return __xrtPop3ClientTransaction(pClient) && __xrtPop3ClientBegin(
 		pClient,
 		XRT_STR_LITERAL("LIST"),
 		XRT_STR_LITERAL(""),
@@ -813,14 +852,16 @@ XRT_API bool xrtPop3ClientListAll(
 
 
 /* 查询一条 POP3 UIDL。 */
-XRT_API bool xrtPop3ClientUidl(
+XRT_API bool __xrtPop3ClientUidl(
 	xpop3client* pClient,
 	uint64 iMessage,
 	xpop3uidlview* pItem,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	char sNumber[21];
 	xpop3reply Reply;
 
@@ -831,7 +872,7 @@ XRT_API bool xrtPop3ClientUidl(
 		__xrtMailSetInvalidArgument();
 		return false;
 	}
-	if ( !xrtPop3ClientCommand(
+	if ( !__xrtPop3ClientCommand(
 			pClient,
 			XRT_STR_LITERAL("UIDL"),
 			__xrtPop3ClientNumbers(sNumber, iMessage, false, 0),
@@ -841,20 +882,27 @@ XRT_API bool xrtPop3ClientUidl(
 		) ) {
 		return false;
 	}
-	return Reply.Ok ? xrtPop3UidlParse(Reply.Text, pItem) :
-		__xrtPop3ClientRejected();
+	if ( !Reply.Ok ) {
+		return __xrtPop3ClientRejected();
+	}
+	if ( !xrtPop3UidlParse(Reply.Text, pItem) ) {
+		return __xrtPop3ClientFail(pClient);
+	}
+	return true;
 }
 
 
 
 /* 开始读取全部 POP3 UIDL。 */
-XRT_API bool xrtPop3ClientUidlAll(
+XRT_API bool __xrtPop3ClientUidlAll(
 	xpop3client* pClient,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
-	return __xrtPop3ClientTransaction(pClient) && xrtPop3ClientBegin(
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
+	return __xrtPop3ClientTransaction(pClient) && __xrtPop3ClientBegin(
 		pClient,
 		XRT_STR_LITERAL("UIDL"),
 		XRT_STR_LITERAL(""),
@@ -866,13 +914,15 @@ XRT_API bool xrtPop3ClientUidlAll(
 
 
 /* 开始读取完整邮件。 */
-XRT_API bool xrtPop3ClientRetr(
+XRT_API bool __xrtPop3ClientRetr(
 	xpop3client* pClient,
 	uint64 iMessage,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	char sNumber[21];
 
 	if ( !__xrtPop3ClientTransaction(pClient) ) {
@@ -882,7 +932,7 @@ XRT_API bool xrtPop3ClientRetr(
 		__xrtMailSetInvalidArgument();
 		return false;
 	}
-	return xrtPop3ClientBegin(
+	return __xrtPop3ClientBegin(
 		pClient,
 		XRT_STR_LITERAL("RETR"),
 		__xrtPop3ClientNumbers(sNumber, iMessage, false, 0),
@@ -894,14 +944,16 @@ XRT_API bool xrtPop3ClientRetr(
 
 
 /* 开始读取邮件字段和有限正文行。 */
-XRT_API bool xrtPop3ClientTop(
+XRT_API bool __xrtPop3ClientTop(
 	xpop3client* pClient,
 	uint64 iMessage,
 	uint64 iLines,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	char sNumbers[42];
 
 	if ( !__xrtPop3ClientTransaction(pClient) ) {
@@ -911,7 +963,7 @@ XRT_API bool xrtPop3ClientTop(
 		__xrtMailSetInvalidArgument();
 		return false;
 	}
-	return xrtPop3ClientBegin(
+	return __xrtPop3ClientBegin(
 		pClient,
 		XRT_STR_LITERAL("TOP"),
 		__xrtPop3ClientNumbers(sNumbers, iMessage, true, iLines),
@@ -923,13 +975,15 @@ XRT_API bool xrtPop3ClientTop(
 
 
 /* 标记一条 POP3 消息删除。 */
-XRT_API bool xrtPop3ClientDelete(
+XRT_API bool __xrtPop3ClientDelete(
 	xpop3client* pClient,
 	uint64 iMessage,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	char sNumber[21];
 	xpop3reply Reply;
 
@@ -940,7 +994,7 @@ XRT_API bool xrtPop3ClientDelete(
 		__xrtMailSetInvalidArgument();
 		return false;
 	}
-	if ( !xrtPop3ClientCommand(
+	if ( !__xrtPop3ClientCommand(
 			pClient,
 			XRT_STR_LITERAL("DELE"),
 			__xrtPop3ClientNumbers(sNumber, iMessage, false, 0),
@@ -956,12 +1010,14 @@ XRT_API bool xrtPop3ClientDelete(
 
 
 /* 清除 POP3 删除标记。 */
-XRT_API bool xrtPop3ClientReset(
+XRT_API bool __xrtPop3ClientReset(
 	xpop3client* pClient,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	return __xrtPop3ClientSimple(
 		pClient,
 		XRT_STR_LITERAL("RSET"),
@@ -973,12 +1029,14 @@ XRT_API bool xrtPop3ClientReset(
 
 
 /* 发送 POP3 NOOP。 */
-XRT_API bool xrtPop3ClientNoop(
+XRT_API bool __xrtPop3ClientNoop(
 	xpop3client* pClient,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	return __xrtPop3ClientSimple(
 		pClient,
 		XRT_STR_LITERAL("NOOP"),
@@ -990,17 +1048,19 @@ XRT_API bool xrtPop3ClientNoop(
 
 
 /* 发送 POP3 QUIT 并关闭传输。 */
-XRT_API bool xrtPop3ClientQuit(
+XRT_API bool __xrtPop3ClientQuit(
 	xpop3client* pClient,
-	xdeadline iDeadline,
+	double iDeadline,
 	xcancel* pCancel
 )
 {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 	xpop3reply Reply;
 
 	if ( !__xrtPop3ClientUsable(pClient) ||
 		(pClient->State == XPOP3_CLIENT_MULTILINE) ||
-		!xrtPop3ClientCommand(
+		!__xrtPop3ClientCommand(
 			pClient,
 			XRT_STR_LITERAL("QUIT"),
 			XRT_STR_LITERAL(""),
@@ -1014,18 +1074,20 @@ XRT_API bool xrtPop3ClientQuit(
 		return __xrtPop3ClientRejected();
 	}
 	pClient->State = XPOP3_CLIENT_UPDATE;
-	return xrtPop3ClientClose(pClient, iDeadline);
+	return __xrtPop3ClientClose(pClient, iDeadline);
 }
 
 
 
 /* 正常关闭 POP3 传输。 */
-XRT_API bool xrtPop3ClientClose(
+XRT_API bool __xrtPop3ClientClose(
 	xpop3client* pClient,
-	xdeadline iDeadline
+	double iDeadline
 )
 {
 	if ( !__xrtPop3ClientUsable(pClient) ) {
+    if ( !__xrtWaitValid(iDeadline) ) { return false; }
+
 		return false;
 	}
 	if ( !__xrtMailTransportClose(&pClient->Transport, iDeadline) ) {
@@ -1074,4 +1136,242 @@ XRT_API void xrtPop3ClientDestroy(xpop3client* pClient)
 	xrtFree(pClient);
 }
 
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_CLIENT))
+XRT_API xpop3client* xrtPop3ClientOpen(
+	const xpop3clientconfig* pConfig,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtPop3ClientOpen(pConfig, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_CLIENT))
+XRT_API bool xrtPop3ClientSend(
+	xpop3client* pClient,
+	xstrview Line,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtPop3ClientSend(pClient, Line, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_CLIENT))
+XRT_API bool xrtPop3ClientAuthLine(
+	xpop3client* pClient,
+	xstrview Line,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtPop3ClientAuthLine(pClient, Line, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_CLIENT))
+XRT_API bool xrtPop3ClientLine(
+	xpop3client* pClient,
+	xstrview* pLine,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtPop3ClientLine(pClient, pLine, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_CLIENT))
+XRT_API bool xrtPop3ClientReceive(
+	xpop3client* pClient,
+	xpop3reply* pReply,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtPop3ClientReceive(pClient, pReply, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_CLIENT))
+XRT_API bool xrtPop3ClientCommand(
+	xpop3client* pClient,
+	xstrview Verb,
+	xstrview Arguments,
+	xpop3reply* pReply,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtPop3ClientCommand(pClient, Verb, Arguments, pReply, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_CLIENT))
+XRT_API bool xrtPop3ClientBegin(
+	xpop3client* pClient,
+	xstrview Verb,
+	xstrview Arguments,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtPop3ClientBegin(pClient, Verb, Arguments, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_CLIENT))
+XRT_API xmailnext xrtPop3ClientNext(
+	xpop3client* pClient,
+	xstrview* pLine,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtPop3ClientNext(pClient, pLine, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_CLIENT))
+XRT_API bool xrtPop3ClientStat(
+	xpop3client* pClient,
+	xpop3stat* pStat,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtPop3ClientStat(pClient, pStat, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_CLIENT))
+XRT_API bool xrtPop3ClientList(
+	xpop3client* pClient,
+	uint64 iMessage,
+	xpop3listview* pItem,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtPop3ClientList(pClient, iMessage, pItem, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_CLIENT))
+XRT_API bool xrtPop3ClientListAll(
+	xpop3client* pClient,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtPop3ClientListAll(pClient, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_CLIENT))
+XRT_API bool xrtPop3ClientUidl(
+	xpop3client* pClient,
+	uint64 iMessage,
+	xpop3uidlview* pItem,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtPop3ClientUidl(pClient, iMessage, pItem, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_CLIENT))
+XRT_API bool xrtPop3ClientUidlAll(
+	xpop3client* pClient,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtPop3ClientUidlAll(pClient, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_CLIENT))
+XRT_API bool xrtPop3ClientRetr(
+	xpop3client* pClient,
+	uint64 iMessage,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtPop3ClientRetr(pClient, iMessage, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_CLIENT))
+XRT_API bool xrtPop3ClientTop(
+	xpop3client* pClient,
+	uint64 iMessage,
+	uint64 iLines,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtPop3ClientTop(pClient, iMessage, iLines, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_CLIENT))
+XRT_API bool xrtPop3ClientDelete(
+	xpop3client* pClient,
+	uint64 iMessage,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtPop3ClientDelete(pClient, iMessage, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_CLIENT))
+XRT_API bool xrtPop3ClientReset(
+	xpop3client* pClient,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtPop3ClientReset(pClient, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_CLIENT))
+XRT_API bool xrtPop3ClientNoop(
+	xpop3client* pClient,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtPop3ClientNoop(pClient, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_CLIENT))
+XRT_API bool xrtPop3ClientQuit(
+	xpop3client* pClient,
+	int64 iTimeout,
+	xcancel* pCancel
+)
+{
+    return __xrtPop3ClientQuit(pClient, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+
+#if (defined(XPOP3_FEATURE_POP3_CLIENT))
+XRT_API bool xrtPop3ClientClose(
+	xpop3client* pClient,
+	int64 iTimeout
+)
+{
+    return __xrtPop3ClientClose(pClient, __xrtWaitAfter(iTimeout));
+}
 #endif
