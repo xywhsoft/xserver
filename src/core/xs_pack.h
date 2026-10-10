@@ -766,7 +766,8 @@ static int XS_PackDoExtract(const char* sExe, const char* sDir)
 
 		snprintf(sPath, sizeof(sPath), "%s/%s", sDir, t.pEntries[i].sPath);
 		if ( t.pEntries[i].Method == 0 ) {
-			pOutBuf = (uint8_t*)malloc((size_t)t.pEntries[i].OrigSize);
+			pOutBuf = (uint8_t*)malloc(t.pEntries[i].OrigSize > 0
+				? (size_t)t.pEntries[i].OrigSize : 1);
 			if ( pOutBuf != NULL )
 				memcpy(pOutBuf, pSrc, (size_t)t.pEntries[i].OrigSize);
 		}

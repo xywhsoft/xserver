@@ -508,9 +508,10 @@ static const unsigned char* XS_VfsEntryDataLocked(int iEntry, size_t* pSize)
 		return pE->pCached;
 	}
 	/* 读压缩区间 */
-	pComp = (unsigned char*)xrtMalloc(pE->CompSize);
+	/* 空 STORE 条目也必须返回有效视图，不能与“未命中/读取失败”混淆。 */
+	pComp = (unsigned char*)xrtMalloc(pE->CompSize > 0 ? pE->CompSize : 1);
 	if ( pComp == NULL ) return NULL;
-	if ( !XS_VfsReadAt(g_XS_Vfs.uArchiveStart + pE->DataOffset,
+	if ( pE->CompSize > 0 && !XS_VfsReadAt(g_XS_Vfs.uArchiveStart + pE->DataOffset,
 	                   pComp, pE->CompSize) ) {
 		xrtFree(pComp);
 		return NULL;

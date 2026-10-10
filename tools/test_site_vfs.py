@@ -80,6 +80,7 @@ def make_site(dir_: Path) -> None:
     (www / "about.html").write_text(
         "<html><body>pack-about</body></html>", encoding="utf-8")
     (www / "big.js").write_text("var x = 1;\n" * 5000, encoding="utf-8")
+    (www / "empty.txt").write_bytes(b"")
     # 多个 host 重复编译同一份包内源码，捕获提前释放 VFS 缓存的问题。
     (dir_ / "main.c").write_text(
         "#include <xsbase.h>\n"
@@ -118,8 +119,8 @@ def main() -> int:
         # ---- 2. --list ----
         r = run_xs(exe, "pack", "--list", str(packed))
         check("list exits 0", r.returncode == 0, r.stderr)
-        check("list shows 5 entries including shared script",
-              "5 entries" in r.stdout and "main.c" in r.stdout
+        check("list shows 6 entries including shared script and empty file",
+              "6 entries" in r.stdout and "main.c" in r.stdout
               and "wwwroot/index.html" in r.stdout,
               r.stdout)
 
@@ -130,6 +131,7 @@ def main() -> int:
         same = ((out / "wwwroot" / "index.html").read_text(encoding="utf-8")
                 == (site / "wwwroot" / "index.html").read_text(encoding="utf-8"))
         check("extract round-trip identical", same)
+        check("extract preserves empty file", (out / "wwwroot" / "empty.txt").read_bytes() == b"")
 
         # ---- 4. --strip identity ----
         stripped = tmp_path / "stripped.exe"
@@ -163,6 +165,10 @@ def main() -> int:
             code, body = http_get("/big.js")
             check("GET /big.js 200 (large asset)",
                   code == 200 and len(body) >= 54000)
+            for attempt in range(2):
+                code, body = http_get("/empty.txt")
+                check(f"empty packed file returns 200 on read {attempt + 1}",
+                      code == 200 and body == b"", f"status={code} body={body!r}")
             code, _ = http_get("/missing.html")
             check("missing 404", code == 404)
             code, _ = http_get("/../xs.json")
