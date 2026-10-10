@@ -1,6 +1,7 @@
 """Release checks reject stale source, swapped binaries and partial variants."""
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from build_provenance import source_digest, verify_metadata, write_metadata
@@ -59,6 +60,15 @@ class ProvenanceTests(unittest.TestCase):
         self.assertEqual(source_digest(root), original)
         (root / "README.md").write_bytes(b"documentation only")
         self.assertEqual(source_digest(root), original)
+
+    def test_source_hash_uses_the_same_case_sensitive_order_on_every_platform(self):
+        root = Path(self.temp.name) / "case-order"
+        (root / "src").mkdir(parents=True)
+        (root / "src/alpha.h").write_bytes(b"a")
+        (root / "src/Zebra.h").write_bytes(b"z")
+        with patch("build_provenance.SOURCE_INPUTS", ("src",)):
+            self.assertEqual(source_digest(root),
+                             "9e8c49d744dfaf9b0aabea8ebab33f37982e17f9910da212224bba4e5e8b2929")
 
 
 if __name__ == "__main__":

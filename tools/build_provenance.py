@@ -27,7 +27,9 @@ def source_digest(root: Path) -> str:
         base = root / relative
         if not base.exists():
             raise RuntimeError(f"missing build input: {relative}")
-        files = sorted(base.rglob("*")) if base.is_dir() else [base]
+        # pathlib 的 Windows 排序忽略大小写；源码签名必须跨平台一致。
+        files = (sorted(base.rglob("*"), key=lambda path: path.relative_to(root).as_posix())
+                 if base.is_dir() else [base])
         for path in files:
             if not path.is_file() or "__pycache__" in path.parts:
                 continue
