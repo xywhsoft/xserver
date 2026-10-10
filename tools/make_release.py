@@ -28,6 +28,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 from xs_extensions import load_registry  # noqa: E402
+from build_provenance import source_digest, verify_metadata  # noqa: E402
 
 VARIANTS = {
     "windows-x64": {
@@ -74,24 +75,19 @@ def iter_files(base: Path, skip_names: set[str] = frozenset()):
             yield path
 
 
-def build_variant(name: str, meta: dict, when: str, commit: str, out_dir: Path) -> dict:
+def build_variant(name: str, meta: dict, when: str, record: dict, out_dir: Path) -> dict:
     binary = meta["binary"]
     if not binary.is_file():
         raise RuntimeError(f"missing binary for {name}: {binary}")
 
     registry = load_registry()
-    # 版本块直接取产物自身输出（与启动横幅/--version 同源，杜绝手拼漂移）
-    import subprocess as _sp
-    try:
-        banner = _sp.run([str(binary), "--version"], capture_output=True, text=True,
-                         encoding="utf-8", errors="replace", timeout=20).stdout.strip()
-    except (OSError, _sp.TimeoutExpired):
-        banner = "XServer (version unavailable)"
+    # 构建时采集原生 --version；打包机无需能够运行其它平台的程序。
+    banner = record["banner"]
     version_text = (
         f"{banner}\n"
         f"platform : {name} ({meta['os']})\n"
-        f"build    : {when}\n"
-        f"commit   : {commit}\n"
+        f"packaged : {when}\n"
+        f"commit   : {record['source_commit']}\n"
         f"license  : MIT (bundled third-party components keep their own)\n"
     )
 
@@ -102,9 +98,11 @@ def build_variant(name: str, meta: dict, when: str, commit: str, out_dir: Path) 
     entries: list[tuple[str, Path]] = []
     staging = f"xserver-{name}"
     entries.append(arc(staging, binary, meta["exe"]))
+    entries.append(arc(staging, Path(str(binary) + ".build.json"), meta["exe"] + ".build.json"))
     for extra, inner in meta.get("extra_binaries", []):
         if extra.is_file():
             entries.append(arc(staging, extra, inner))
+            entries.append(arc(staging, Path(str(extra) + ".build.json"), inner + ".build.json"))
     entries.append((f"{staging}/LICENSE", ROOT / "LICENSE"))
     entries.append((f"{staging}/VERSION", None))  # 占位，稍后写内容
     entries.append((f"{staging}/QUICKSTART.md", ROOT / "release" / "QUICKSTART.md"))
@@ -135,6 +133,8 @@ def build_variant(name: str, meta: dict, when: str, commit: str, out_dir: Path) 
         "file": zip_path.name,
         "size": zip_path.stat().st_size,
         "sha256": digest,
+        "source_commit": record["source_commit"],
+        "source_sha256": record["source_sha256"],
     }
 
 
@@ -144,6 +144,17 @@ def main() -> int:
                         default=Path(r"D:\GIT\home\host\xs\wwwroot\download"),
                         help="download output directory")
     args = parser.parse_args()
+    registry = load_registry()
+    source_hash = source_digest(ROOT)
+    records = {}
+    # 全部预检通过才写发布包，避免混入旧程序、不同 SDK 或缺失的 GUI 变体。
+    for name, meta in VARIANTS.items():
+        platform = "windows" if name.startswith("windows") else "linux"
+        records[name] = verify_metadata(meta["binary"], source_hash=source_hash,
+                                        platform=platform, extensions=list(registry))
+        for extra, _ in meta.get("extra_binaries", []):
+            verify_metadata(extra, source_hash=source_hash, platform=platform,
+                            extensions=list(registry))
     args.out.mkdir(parents=True, exist_ok=True)
     when = datetime.now().strftime("%Y-%m-%d %H:%M")
     commit = git_commit()
@@ -155,7 +166,7 @@ def main() -> int:
         "files": [],
     }
     for name, meta in VARIANTS.items():
-        info = build_variant(name, meta, when, commit, args.out)
+        info = build_variant(name, meta, when, records[name], args.out)
         manifest["files"].append(info)
         print(f"[release] {info['file']}  {info['size'] / 1048576:.1f} MB  {info['sha256'][:16]}…")
     (args.out / "manifest.json").write_text(
@@ -165,4 +176,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except (OSError, ValueError, RuntimeError) as error:
+        print(f"[release] failed: {error}", file=sys.stderr)
+        raise SystemExit(1)

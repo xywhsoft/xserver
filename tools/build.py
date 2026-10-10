@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 
 import gen_tcc_resources as vfs
+from build_provenance import source_digest, write_metadata
 from xs_extensions import ROOT, host_header, load_registry, select_extensions
 
 
@@ -71,6 +72,7 @@ def build(args: argparse.Namespace, selected: dict) -> Path:
     packer = directory / ("vfs_pack" + suffix)
     resources = directory / "tcc_builtin_resources.c"
     linked = directory / ("xs" + suffix)
+    source_hash = source_digest(ROOT) if not args.dry_run else ""
     print(f"[build] platform={platform} extensions={', '.join(selected) or '(none)'}",
           flush=True)
     print(f"[build] directory={directory}", flush=True)
@@ -178,13 +180,22 @@ def build(args: argparse.Namespace, selected: dict) -> Path:
         with tempfile.TemporaryDirectory(prefix="xs-link-", dir=directory) as temp:
             staged = Path(temp) / ("xs" + suffix)
             run([args.cc, *objects, "-O2", "-s", "-o", str(staged), *libraries])
+            if source_digest(ROOT) != source_hash:
+                raise RuntimeError("build inputs changed while compiling; retry from stable sources")
             publish(staged, linked)
             publish(linked, output)
+            banner = subprocess.check_output([str(output), "--version"], cwd=ROOT,
+                text=True, encoding="utf-8", errors="replace").strip()
+            write_metadata(output, source_hash=source_hash, commit=commit,
+                           platform=platform, extensions=list(selected), banner=banner)
             if platform == "windows":
                 staged_gui = Path(temp) / "xsw.exe"
                 run([args.cc, *objects, "-O2", "-s", "-mwindows",
                      "-o", str(staged_gui), *libraries])
                 publish(staged_gui, output.with_name("xsw.exe"))
+                write_metadata(output.with_name("xsw.exe"), source_hash=source_hash,
+                               commit=commit, platform=platform,
+                               extensions=list(selected), banner=banner)
                 print(f"[build] built {output.with_name('xsw.exe')}", flush=True)
     print(f"[build] {'would publish' if args.dry_run else 'built'} {output}", flush=True)
     return output
