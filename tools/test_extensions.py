@@ -7,6 +7,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -296,7 +297,7 @@ class ExtensionTests(unittest.TestCase):
             target.write_bytes(b"previous executable")
 
             def fake_run(command, dry_run=False):
-                if any(arg.endswith("main.o") for arg in command) and "-c" not in command:
+                if any(arg.startswith("@") for arg in command):
                     Path(command[command.index("-o") + 1]).write_bytes(b"incomplete link")
                     raise subprocess.CalledProcessError(1, command)
 
@@ -308,6 +309,19 @@ class ExtensionTests(unittest.TestCase):
                 self.assertEqual(build.main(["--build-dir", str(root), "--output", str(target)]), 1)
             self.assertEqual(target.read_bytes(), b"previous executable")
             self.assertFalse(list(target.parent.glob("xs-link-*")))
+
+    @unittest.skipUnless(shutil.which("gcc"), "requires gcc")
+    def test_link_response_preserves_spaced_object_paths(self):
+        with tempfile.TemporaryDirectory(prefix="xs response paths ") as temp:
+            directory = Path(temp)
+            source = directory / "source with spaces.c"
+            obj = directory / "object with spaces.o"
+            output = directory / ("result.exe" if os.name == "nt" else "result")
+            source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+            subprocess.run(["gcc", "-c", str(source), "-o", str(obj)], check=True)
+            with contextlib.redirect_stdout(io.StringIO()):
+                build.link("gcc", [str(obj)], [], output)
+            self.assertEqual(subprocess.run([str(output)]).returncode, 0)
 
 
 if __name__ == "__main__":

@@ -11,6 +11,15 @@
 /lib/xllm/** -text
 /lib/xllm-session/** -text
 /lib/xwork/** -text
+/lib/xhttp/** -text
+/lib/xhttp-client/** -text
+/lib/xhttp-policy/** -text
+/lib/xhttp-server/** -text
+/lib/xws/** -text
+/lib/xws-client/** -text
+/lib/xws-group/** -text
+/lib/xws-server/** -text
+/lib/xssh/** -text
 /lib/xrtshim/** text eol=lf
 /lib/xrt_sources.lock.json text eol=lf
 /lib/xrt_version.txt text eol=lf

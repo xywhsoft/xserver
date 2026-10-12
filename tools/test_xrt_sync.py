@@ -5,7 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from sync_xrt import LOCK, LIBRARIES, check_lock, digest, public_functions
+from sync_xrt import (LOCK, LIBRARIES, check_lock, digest, library_names,
+                      public_functions, public_functions_text, symbol_prefix)
 from xs_extensions import ROOT, load_registry
 
 
@@ -27,13 +28,53 @@ class SnapshotTests(unittest.TestCase):
         for name in LIBRARIES:
             with self.subTest(name=name):
                 entry = registry[name]
-                prefix = "(?:xrt|xacme)" if name == "xacme" else "xrt" if name in ("xmail", "xsmtp", "xpop3", "ximap") else "xllm" if name == "xllm-session" else name
+                manifest = json.loads((ROOT / f"lib/{name}/config/modules.json")
+                                      .read_text(encoding="utf-8"))
+                prefix = symbol_prefix(name, manifest)
                 expected = public_functions([ROOT / p for p in entry["headers"].values()], prefix)
                 if name == "xllm-session":
                     companion = public_functions([ROOT / p for p in registry["xllm"]["headers"].values()], "xllm")
                     expected = sorted(set(expected) - set(companion))
                 actual = re.findall(entry["symbol_macro"] + r"\((\w+)\)", (ROOT / entry["symbols"]).read_text(encoding="utf-8"))
                 self.assertEqual(actual, expected)
+
+    def test_xlang_runtime_is_excluded_from_discovery_and_builds(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            for name in ("xssh", "xruntime", "xhttp"):
+                manifest = directory / name / "config/modules.json"
+                manifest.parent.mkdir(parents=True)
+                manifest.write_text("{}", encoding="utf-8")
+            self.assertEqual(library_names(directory), ("xhttp", "xssh"))
+        self.assertNotIn("xruntime", load_registry())
+        self.assertFalse(any(p.startswith("lib/xruntime/") for p in
+                             json.loads(LOCK.read_text(encoding="utf-8"))["files"]))
+
+    def test_inline_calls_are_not_public_exports(self):
+        text = """
+        XHTTP_API bool xrtHttpPublic(void);
+        static inline void helper(void) { xrtErrorFree(NULL); }
+        /* XHTTP_API void xrtHttpComment(void); */
+        """
+        self.assertEqual(public_functions_text([text], "xrt"), ["xrtHttpPublic"])
+
+    def test_protocol_dependency_closures(self):
+        from xs_extensions import select_extensions
+        self.assertEqual(set(select_extensions(["xhttp-client"])),
+                         {"xhttp", "xhttp-policy", "xhttp-client"})
+        self.assertEqual(set(select_extensions(["xws-client"])),
+                         {"xhttp", "xhttp-policy", "xhttp-client", "xws", "xws-client"})
+        self.assertEqual(set(select_extensions(["xws-server"])),
+                         {"xhttp", "xhttp-server", "xws", "xws-server"})
+        self.assertEqual(set(select_extensions(["xws-group"])), {"xws", "xws-group"})
+        self.assertEqual(set(select_extensions(["xssh"])), {"xssh"})
+
+    def test_snapshot_covers_every_registered_upstream_product(self):
+        products = {Path(item["source"]).parts[1]
+                    for item in json.loads(LOCK.read_text(encoding="utf-8"))["files"].values()
+                    if item.get("source", "").startswith("extlibs/")}
+        self.assertEqual(products, set(LIBRARIES))
+        self.assertTrue(products <= load_registry().keys())
 
     def test_drift_and_missing_file_are_rejected(self):
         with tempfile.TemporaryDirectory() as temp:

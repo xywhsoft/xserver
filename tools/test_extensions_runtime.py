@@ -9,11 +9,106 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import tempfile
 from pathlib import Path
 
-from xs_extensions import select_extensions
+from xs_extensions import ROOT, select_extensions
+
+
+PROTOCOL_PROBES = {
+    "xhttp": """
+        xurl url;
+        REQUIRE(xrtUrlParse(XRT_STR_LITERAL("https://example.com/a?q=1"), &url));
+    """,
+    "xhttp-policy": """
+        xcookiejarconfig config;
+        xrtCookieJarConfigInit(&config);
+    """,
+    "xhttp-client": """
+        xhttpclientconfig config;
+        xrtHttpClientConfigInit(&config);
+        REQUIRE(config.Timeout > 0);
+    """,
+    "xhttp-server": """
+        xhttpserverconfig config;
+        xrtHttpServerConfigInit(&config);
+        REQUIRE(config.WriteSize > 0);
+    """,
+    "xws": """
+        xwsconnconfig config;
+        xrtWsConnConfigInit(&config);
+        REQUIRE(xrtWsConnConfigValid(&config));
+    """,
+    "xws-client": """
+        xwsclientconfig config;
+        char key[XWS_KEY_CAPACITY];
+        xhttprequest* request;
+        xrtWsClientConfigInit(&config);
+        request = xrtWsClientRequestCreate(XRT_STR_LITERAL("ws://localhost/test"), &config, key);
+        REQUIRE(request != NULL && xrtWsKeyValid((xstrview){key, XWS_KEY_SIZE}));
+        xrtHttpRequestDestroy(request);
+    """,
+    "xws-server": """
+        xwsserverconfig config;
+        xrtWsServerConfigInit(&config);
+        REQUIRE(xrtWsServerConfigValid(&config));
+    """,
+    "xws-group": """
+        xwsgroup* group = xrtWsGroupCreate(8);
+        xwsgroupsnapshot* snapshot;
+        REQUIRE(group != NULL);
+        snapshot = xrtWsGroupSnapshotCreate(group);
+        REQUIRE(snapshot != NULL && xrtWsGroupSnapshotCount(snapshot) == 0);
+        xrtWsGroupSnapshotDestroy(snapshot);
+        xrtWsGroupDestroy(group);
+    """,
+    "xssh": """
+        xstrview banner;
+        size_t consumed;
+        REQUIRE(xrtSshBannerRead(XRT_STR_LITERAL("SSH-2.0-xs_probe\\r\\n"),
+                                &banner, &consumed) == XSSH_OK);
+        REQUIRE(consumed == sizeof("SSH-2.0-xs_probe\\r\\n") - 1);
+    """,
+}
+
+
+def check_public_sdk(exe: Path, selected: dict, directory: Path) -> None:
+    """Resolve every selected public export in both outer and nested TCC."""
+    includes = sorted({virtual for entry in selected.values() for virtual in entry["headers"]})
+    code = "#include <xsbase.h>\n#include <stdlib.h>\n#include <stdio.h>\n"
+    code += "".join(f"#include <{header}>\n" for header in includes)
+    code += '#define REQUIRE(x) do { if (!(x)) { printf("FAIL SDK: %s\\n", #x); exit(5); } } while (0)\n'
+    code += "static const void* const exports[] = {\n"
+    # Let the target TCC evaluate platform gates in the same import lists as
+    # the host (SQLite's win32 entry points are intentionally absent on Linux).
+    for entry in selected.values():
+        macro = entry["symbol_macro"]
+        code += f"#define {macro}(name) (const void*)name,\n"
+        code += (ROOT / entry["symbols"]).read_text(encoding="utf-8") + "\n"
+        code += f"#undef {macro}\n"
+    code += "NULL };\n"
+    code += "void CheckSDK(void) { size_t i;\n"
+    code += "for (i = 0; i + 1 < sizeof(exports)/sizeof(exports[0]); ++i) REQUIRE(exports[i] != NULL);\n"
+    for name, body in PROTOCOL_PROBES.items():
+        if name in selected:
+            code += "{\n" + body + "}\n"
+    code += '}\n'
+    source = code + '#include <libtcc.h>\nvoid ServiceInit(XS_HostInfo* host) {\n'
+    source += '(void)host; CheckSDK();\nTCCState* nested = xsCreateTCC();\nREQUIRE(nested != NULL);\n'
+    source += f'REQUIRE(tcc_compile_string(nested, {json.dumps(code)}) == 0);\n'
+    source += 'REQUIRE(tcc_relocate(nested) == 0);\n'
+    source += 'void (*run)(void) = (void(*)(void))tcc_get_symbol(nested, "CheckSDK");\n'
+    source += 'REQUIRE(run != NULL); run(); xsDestroyTCC(nested);\n'
+    source += 'printf("[sdk] outer + nested ok exports=%u\\n", (unsigned)(sizeof(exports)/sizeof(exports[0])-1)); fflush(stdout); exit(0); }\n'
+    proc = invoke(exe, source, directory, "public-sdk")
+    if proc.returncode != 0 or "[sdk] outer + nested ok" not in proc.stdout:
+        raise RuntimeError(f"public SDK probe failed:\n{proc.stdout}{proc.stderr}")
+    count = re.search(r"\[sdk\] outer \+ nested ok exports=(\d+)", proc.stdout)
+    if count is None:
+        raise RuntimeError(f"public SDK export count missing:\n{proc.stdout}")
+    print(f"PASS public SDK: {len(selected)} extensions, {count[1]} exports, outer + nested TCC", flush=True)
 
 PROBE = r'''
 #include <xsbase.h>
@@ -658,6 +753,7 @@ def check(exe: Path, names: list[str]) -> None:
         if proc.returncode != 0 or f"[extensions] ok mask={mask}" not in output:
             raise RuntimeError(f"enabled/nested probe failed ({proc.returncode}):\n{output}")
         print(f"PASS enabled + nested TCC: {', '.join(selected) or '(none)'}", flush=True)
+        check_public_sdk(exe, selected, directory)
 
         # 启动横幅与 --version 一致地报告本变体扩展清单
         expected_list = (f"[xs] extensions ({len(selected)}): "
@@ -672,6 +768,24 @@ def check(exe: Path, names: list[str]) -> None:
                                f"{version.stdout}{version.stderr}")
         print(f"PASS version banner + --version: {expected_list}", flush=True)
         absent = {
+            "xhttp": ("xhttp.h", "extern int xrtUrlParse(void*, void*);",
+                      "xrtUrlParse(0, 0)"),
+            "xhttp-policy": ("xhttp-policy.h", "extern void xrtCookieJarConfigInit(void*);",
+                             "xrtCookieJarConfigInit(0)"),
+            "xhttp-client": ("xhttp-client.h", "extern void xrtHttpClientConfigInit(void*);",
+                             "xrtHttpClientConfigInit(0)"),
+            "xhttp-server": ("xhttp-server.h", "extern void xrtHttpServerConfigInit(void*);",
+                             "xrtHttpServerConfigInit(0)"),
+            "xws": ("xws.h", "extern void xrtWsConnConfigInit(void*);", "xrtWsConnConfigInit(0)"),
+            "xws-client": ("xws-client.h", "extern void xrtWsClientConfigInit(void*);",
+                           "xrtWsClientConfigInit(0)"),
+            "xws-server": ("xws-server.h", "extern void xrtWsServerConfigInit(void*);",
+                           "xrtWsServerConfigInit(0)"),
+            "xws-group": ("xws-group.h", "extern void* xrtWsGroupCreate(size_t);", "xrtWsGroupCreate(8)"),
+            "xssh": ("xssh.h", "extern int xrtSshBannerRead(void*, void*, void*);",
+                     "xrtSshBannerRead(0, 0, 0)"),
+            "xruntime": ("xruntime.h", "extern void* xrtTypeRegistryCreate(void);",
+                         "xrtTypeRegistryCreate()"),
             "sqlite": ("sqlite3.h", "extern int sqlite3_libversion_number(void);",
                        "sqlite3_libversion_number()"),
             "xtp": ("xtp2.h", "extern const char *xtp2_error_string(int);",

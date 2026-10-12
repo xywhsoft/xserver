@@ -19,8 +19,27 @@ from pathlib import Path
 from xs_extensions import ROOT, REGISTRY, load_registry
 
 LOCK = ROOT / "lib/xrt_sources.lock.json"
-LIBRARIES = ("xjwt", "xoauth2", "xmail", "xsmtp", "xpop3", "ximap",
-             "xacme", "xllm", "xllm-session", "xwork")
+# xruntime is xlang's typed language runtime, not an xs deployment extension.
+EXCLUDED_LIBRARIES = frozenset({"xruntime"})
+
+
+def library_names(directory: Path) -> tuple[str, ...]:
+    return tuple(p.parent.parent.name for p in sorted(directory.glob("*/config/modules.json"))
+                 if p.parent.parent.name not in EXCLUDED_LIBRARIES)
+
+
+LIBRARIES = library_names(ROOT / "lib")
+
+
+def symbol_prefix(name: str, manifest: dict) -> str:
+    if name == "xacme":
+        return "(?:xrt|xacme)"
+    if name == "xllm-session":
+        return "xllm"
+    prefix = manifest["api_reference"]["function_prefix"]
+    if not re.fullmatch(r"[A-Za-z_]\w*", prefix):
+        raise ValueError(f"{name}: invalid public function prefix")
+    return prefix
 
 
 def digest(data: bytes) -> str:
@@ -33,8 +52,11 @@ def without_comments(text: str) -> str:
 
 
 def public_functions_text(headers: list[str], prefix: str) -> list[str]:
-    """The public headers contain prototypes, never implementation fragments."""
-    pattern = re.compile(r"\b(" + prefix + r"[A-Z]\w*)\s*\([^;{}]*\)\s*;")
+    """Extract annotated public prototypes without exporting inline calls."""
+    # Public detail headers also contain inline helpers. Calls inside those
+    # helpers are not exports; require the declaration's API annotation.
+    pattern = re.compile(r"\b[A-Z][A-Z0-9_]*_API\s+[^;{}]*?\b(" + prefix
+                         + r"[A-Z]\w*)\s*\([^;{}]*\)\s*;", re.S)
     names = set()
     for header in headers:
         names.update(pattern.findall(without_comments(header)))
@@ -62,7 +84,7 @@ def collect(source: Path) -> dict[str, tuple[Path, bytes]]:
     # upstream code, not declaration shims, and must retain their bytes.
     for path in sorted((source / "include/xrt/detail").rglob("*.h")):
         add(path, "lib/xrtshim/xrt/detail/" + path.relative_to(source / "include/xrt/detail").as_posix())
-    for name in LIBRARIES:
+    for name in library_names(source / "extlibs"):
         base = source / "extlibs" / name
         # Older snapshots had flat TUs; current snapshots use manifest sources.
         root_files = {p.name for pattern in ("*.h", "*.c") for p in base.glob(pattern)}
@@ -99,9 +121,14 @@ def modular_registry(source: Path, registry: dict) -> dict:
     implementation or stale xs unity wrapper is allowed to hide missing APIs.
     Preserve xs's extension names and dependency selection contract.
     """
-    for name in LIBRARIES:
+    libraries = library_names(source / "extlibs")
+    manifests = {name: json.loads((source / "extlibs" / name / "config/modules.json")
+                                 .read_text(encoding="utf-8")) for name in libraries}
+    owners = {module["name"]: name for name, manifest in manifests.items()
+              for module in manifest["modules"]}
+    for name in libraries:
         base = source / "extlibs" / name
-        manifest = json.loads((base / "config/modules.json").read_text(encoding="utf-8"))
+        manifest = manifests[name]
         prefix = f"extlibs/{name}/"
 
         def target(relative: str) -> str:
@@ -112,7 +139,12 @@ def modular_registry(source: Path, registry: dict) -> dict:
                 raise ValueError(f"{name}: manifest path escapes product: {relative}")
             return "lib/" + relative.removeprefix("extlibs/")
 
-        entry = registry[name]
+        identifier = name.replace("-", "_").upper()
+        entry = registry.setdefault(name, {
+            "macro": "XS_USE_" + identifier,
+            "symbols": f"src/script/import_{name.replace('-', '_')}.inc",
+            "symbol_macro": "XS_" + identifier + "_SYMBOL",
+        })
         headers = {p.relative_to(base / "include").as_posix():
                    "lib/" + p.relative_to(source / "extlibs").as_posix()
                    for p in sorted((base / "include").rglob("*.h"))}
@@ -132,6 +164,16 @@ def modular_registry(source: Path, registry: dict) -> dict:
         entry["feature_macro"] = ["XRT_MODULE_ALL", manifest["module_prefix"] + "ALL",
                                   *sorted({m["feature"] for m in manifest["modules"] if m.get("feature")})]
         entry["host_includes"] = [f"lib/{name}/include", "lib/xrtshim"]
+        # dependency_manifests also contain test-only dependencies. Only
+        # production feature/source modules determine the native closure.
+        requires = sorted({owners[dependency] for module in manifest["modules"]
+                           if module.get("feature") or module.get("sources")
+                           for dependency in module.get("depends", [])
+                           if dependency in owners and owners[dependency] != name})
+        if requires:
+            entry["requires"] = requires
+        else:
+            entry.pop("requires", None)
     return registry
 
 
@@ -150,14 +192,18 @@ def check_lock(root: Path = ROOT, lock: Path = LOCK) -> None:
 def refresh(source: Path) -> None:
     source = source.resolve(strict=True)
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip()
+    libraries = library_names(source / "extlibs")
+    if not libraries:
+        raise ValueError("upstream has no extension manifests")
     files = collect(source)
     generated = generate_shims(files["lib/xrt_decl.h"][1].decode("utf-8"),
                                [p.name for p in sorted((source / "include/xrt").glob("*.h"))])
     registry = modular_registry(source, load_registry())
-    for name in LIBRARIES:
+    for name in libraries:
         entry = registry[name]
         headers = [files[p][1].decode("utf-8") for p in entry["headers"].values()]
-        prefix = "(?:xrt|xacme)" if name == "xacme" else "xrt" if name in ("xmail", "xsmtp", "xpop3", "ximap") else "xllm" if name == "xllm-session" else name
+        manifest = json.loads(files[f"lib/{name}/config/modules.json"][1])
+        prefix = symbol_prefix(name, manifest)
         # Session headers repeat the companion estimators for consumers. Their
         # implementation/export belongs to xllm, a required dependency.
         names = public_functions_text(headers, prefix)
@@ -189,7 +235,7 @@ def refresh(source: Path) -> None:
         previous = json.loads(LOCK.read_text(encoding="utf-8"))["files"]
         obsolete = sorted(set(previous) - set(files) - set(generated) -
                           {"src/script/import_xrt.inc", "lib/xrt_version.txt"} -
-                          {f"lib/{name}/UPSTREAM.txt" for name in LIBRARIES})
+                          {f"lib/{name}/UPSTREAM.txt" for name in libraries})
     for relative in obsolete:
         (ROOT / relative).unlink()
     for relative, (_, data) in files.items():
@@ -197,12 +243,14 @@ def refresh(source: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
     for relative, data in generated.items():
-        (ROOT / relative).write_bytes(data)
+        path = ROOT / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
     version = commit + ("-working-tree" if status else "")
     version_text = version + "\nByte-for-byte upstream snapshot; file hashes in xrt_sources.lock.json.\nNo local upstream patches; refresh with python tools/sync_xrt.py --source ../xrt.\n"
     (ROOT / "lib/xrt_version.txt").write_text(version_text, encoding="utf-8", newline="\n")
     generated["lib/xrt_version.txt"] = version_text.encode()
-    for name in LIBRARIES:
+    for name in libraries:
         relative = f"lib/{name}/UPSTREAM.txt"
         metadata = (f"Source: xrt extlibs/{name}\nSnapshot: {version}\n"
                     "Upstream source bytes and SHA256 are recorded in ../xrt_sources.lock.json.\n"

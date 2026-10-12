@@ -43,6 +43,15 @@ def run(command: list[str], dry_run: bool = False) -> None:
         subprocess.run(command, cwd=ROOT, check=True)
 
 
+def link(cc: str, objects: list[str], options: list[str], output: Path) -> None:
+    """Keep hundreds of object paths below Windows' process command limit."""
+    response = output.parent / "link.rsp"
+    response.write_text("\n".join('"' + path.replace("\\", "\\\\")
+                                  .replace('"', '\\"') + '"' for path in objects)
+                        + "\n", encoding="utf-8", newline="\n")
+    run([cc, "@" + str(response), "-O2", "-s", "-o", str(output), *options])
+
+
 def publish(source: Path, output: Path) -> None:
     """Keep the previous executable intact on compiler/linker/copy failure."""
     if source.resolve() == output.resolve():
@@ -179,7 +188,7 @@ def build(args: argparse.Namespace, selected: dict) -> Path:
         # Even --output=<variant>/xs is protected from a failed linker.
         with tempfile.TemporaryDirectory(prefix="xs-link-", dir=directory) as temp:
             staged = Path(temp) / ("xs" + suffix)
-            run([args.cc, *objects, "-O2", "-s", "-o", str(staged), *libraries])
+            link(args.cc, objects, libraries, staged)
             if source_digest(ROOT) != source_hash:
                 raise RuntimeError("build inputs changed while compiling; retry from stable sources")
             publish(staged, linked)
@@ -190,8 +199,7 @@ def build(args: argparse.Namespace, selected: dict) -> Path:
                            platform=platform, extensions=list(selected), banner=banner)
             if platform == "windows":
                 staged_gui = Path(temp) / "xsw.exe"
-                run([args.cc, *objects, "-O2", "-s", "-mwindows",
-                     "-o", str(staged_gui), *libraries])
+                link(args.cc, objects, ["-mwindows", *libraries], staged_gui)
                 publish(staged_gui, output.with_name("xsw.exe"))
                 write_metadata(output.with_name("xsw.exe"), source_hash=source_hash,
                                commit=commit, platform=platform,

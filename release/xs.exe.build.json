@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "source_commit": "736ff73",
-  "source_sha256": "b5d3d59ef1d1fee27f8e615c9620be7cea03f0ecde2e7b03f40be68306faee25",
-  "binary_sha256": "2fcdceb5c46d006951d627b68b21534ba3e6ef0192121404b51fabec9242e093",
+  "source_commit": "6824cfd-dirty",
+  "source_sha256": "89072d6e379edc1f0093005837f7df8f10c8d80f9613245b2c0300061140cdfd",
+  "binary_sha256": "6f562488acacc9ca8c3b8f49dbe0cf4d0ac1df3724a5fc2bb2ee395a18c78bef",
   "platform": "windows",
   "extensions": [
     "sqlite",
@@ -19,7 +19,16 @@
     "qrcodegen",
     "xjwt",
     "xoauth2",
-    "webview"
+    "webview",
+    "xhttp",
+    "xhttp-client",
+    "xhttp-policy",
+    "xhttp-server",
+    "xssh",
+    "xws",
+    "xws-client",
+    "xws-group",
+    "xws-server"
   ],
-  "banner": "[xs] XServer 1.0.0 (commit 736ff73, 2026-10-10, windows)\n[xs] extensions (15): sqlite, xtp, xllm, xllm-session, xwork, xmail, xsmtp, xpop3, ximap, md4c, xacme, qrcodegen, xjwt, xoauth2, webview"
+  "banner": "[xs] XServer 1.0.0 (commit 6824cfd-dirty, 2026-10-12, windows)\n[xs] extensions (24): sqlite, xtp, xllm, xllm-session, xwork, xmail, xsmtp, xpop3, ximap, md4c, xacme, qrcodegen, xjwt, xoauth2, webview, xhttp, xhttp-client, xhttp-policy, xhttp-server, xssh, xws, xws-client, xws-group, xws-server"
 }

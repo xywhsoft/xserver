@@ -28,7 +28,7 @@ TCC 宿主吸收了 xlang（demo6）的成熟经验并推进到**单文件交付
 - 不做 bus、内置 XTP 服务驱动、管理面、调试面、任何治理；XTP2 编解码器作为可选独立库提供，连接由应用管理
 - 不做 HTTP 便利封装、路由、session、权限——那是 xadmin 们的事
 - 不做沙盒与权限限制——C 语言限制不住，一切对脚本开放
-- 本阶段不使用 xhttp / xws（只基于已压实的 xrt http core 与 websocket core）
+- 宿主协议驱动基于 xrt http core 与 websocket core；应用可通过可选扩展使用完整 xhttp / xws 系列与 xssh。
 
 ## 路线定位
 
@@ -53,6 +53,8 @@ build.bat all
 ```
 
 Linux 使用相同参数，例如 `bash build.sh sqlite xtp xllm xsmtp`；需要 GCC 与 Python 3.10+。不传参数只包含固定的 xrt/libtcc 等基础能力。参数顺序无关、重复自动去重、名称不区分大小写，未知库名报错退出，不会悄悄生成错误变体。
+
+当前提供 24 个可选扩展，其中 xrt 扩展共 19 个：既有认证、邮件、ACME、LLM/会话/Agent 库，以及 `xhttp`、`xhttp-client`、`xhttp-server`、`xhttp-policy`、`xws`、`xws-client`、`xws-server`、`xws-group`、`xssh`。`build.bat all` 全部启用；如只选 `xws-client`，会自动携带 xws 与 HTTP 客户端依赖。**xruntime 是 xlang 专属扩展，不进入 xs。** 更新快照使用 `python tools/sync_xrt.py --source ../xrt`，上游模块清单同时控制源码、SDK、导出及生产依赖。
 
 `build.bat --list-extensions` 查看可选库；`build.bat sqlite xtp --dry-run` 查看实际构建命令。产物默认仍为 `release/xs.exe` 或 `release/xs`，可用 `--output` 指定其他位置。构建中间文件按平台和库组合隔离到 `.build/`，不会重写 `src/script/tcc_builtin_resources.c` 旧快照。
 

@@ -6027,6 +6027,407 @@ XRT_EXTERN_C_END
 
 
 /* ========================================================================== */
+/* public: include/xrt/time.h */
+/* ========================================================================== */
+
+#ifndef XRT_TIME_H
+#define XRT_TIME_H
+
+
+
+
+#if (defined(XRT_FEATURE_TIME_LOCAL) || defined(XRT_FEATURE_TIME_TEXT)) && !defined(XRT_FEATURE_TIME)
+	#error "XRT local time and time text features require XRT_FEATURE_TIME"
+#endif
+
+
+
+/* 公元日期时间和固定日历时长统一使用整数毫秒。 */
+#define XRT_TIME_MILLISECOND	INT64_C(1)
+#define XRT_TIME_SECOND		INT64_C(1000)
+#define XRT_TIME_MINUTE		INT64_C(60000)
+#define XRT_TIME_HOUR		INT64_C(3600000)
+#define XRT_TIME_DAY			INT64_C(86400000)
+#define XRT_TIME_UNIX_EPOCH	INT64_C(62135596800000)
+
+#define XRT_TIME_WEEK		INT64_C(604800000)
+
+
+
+/* 星期值固定从星期日零开始，便于和 C/POSIX 及 HTTP-date 对接。 */
+typedef enum xtimeweekday {
+	XTIME_SUNDAY = 0,
+	XTIME_MONDAY,
+	XTIME_TUESDAY,
+	XTIME_WEDNESDAY,
+	XTIME_THURSDAY,
+	XTIME_FRIDAY,
+	XTIME_SATURDAY
+} xtimeweekday;
+
+
+
+/* 日期计算单位；月、季度和年使用日历语义，其余单位使用固定时长。 */
+typedef enum xtimeunit {
+
+	XTIME_UNIT_MILLISECOND = 0,
+	XTIME_UNIT_SECOND,
+	XTIME_UNIT_MINUTE,
+	XTIME_UNIT_HOUR,
+	XTIME_UNIT_DAY,
+	XTIME_UNIT_WEEK,
+	XTIME_UNIT_MONTH,
+	XTIME_UNIT_QUARTER,
+	XTIME_UNIT_YEAR
+} xtimeunit;
+
+
+
+/* 本地时间在夏令时回拨区间出现两个候选值时的选择规则。 */
+typedef enum xtimefold {
+	XTIME_FOLD_REJECT = 0,
+	XTIME_FOLD_EARLIER,
+	XTIME_FOLD_LATER
+} xtimefold;
+
+
+
+/* 时间模块稳定错误代码。 */
+typedef enum xtimeerror {
+	XTIME_ERROR_RANGE = 1,
+	XTIME_ERROR_OVERFLOW,
+	XTIME_ERROR_FORMAT,
+	XTIME_ERROR_PARSE,
+	XTIME_ERROR_LOCAL_GAP,
+	XTIME_ERROR_LOCAL_FOLD,
+	XTIME_ERROR_LOCAL_UNSUPPORTED
+} xtimeerror;
+
+
+
+/* 分解后的 Gregorian 日期时间；Offset 为 UTC 以东秒数。 */
+typedef struct xdatetime {
+	int64 Year;
+	int Month;
+	int Day;
+	int Hour;
+	int Minute;
+	int Second;
+	int Millisecond;
+	int Offset;
+	int Weekday;
+	int YearDay;
+	int IsDST;
+} xdatetime;
+
+
+
+XRT_EXTERN_C_BEGIN
+
+
+
+#if defined(XRT_FEATURE_TIME)
+
+/* 返回高精度单调计时器的 double 秒数；原点无意义，两个读数相减得到耗时。 */
+XRT_API double xrtTimer(void);
+
+
+
+/* 返回当前公元 UTC 毫秒。 */
+XRT_API xtime xrtNow(void);
+
+
+
+/* 至少睡眠指定毫秒；零表示让出当前执行时间片。 */
+XRT_API void xrtSleep(int64 iMilliseconds);
+
+
+
+/* 判断公元年份是否为闰年；负数表示公元前，不接受零年。 */
+XRT_API bool xrtIsLeapYear(int64 iYear);
+
+
+
+/* 返回指定月份的天数；月份无效时返回零并设置参数错误。 */
+XRT_API int xrtDaysInMonth(int64 iYear, int iMonth);
+
+
+
+/* 返回指定年份的天数。 */
+XRT_API int xrtDaysInYear(int64 iYear);
+
+
+
+/* 构造 UTC 零点日期。 */
+XRT_API bool xrtDate(int64 iYear, int iMonth, int iDay, xtime* pTime);
+
+
+
+/* 构造 UTC 日期时间。 */
+XRT_API bool xrtDateTime(int64 iYear, int iMonth, int iDay,
+	int iHour, int iMinute, int iSecond, int iMillisecond, xtime* pTime);
+
+
+
+/* 按结构中的显式 UTC 偏移构造绝对时间。 */
+XRT_API bool xrtTimeMake(const xdatetime* pDateTime, xtime* pTime);
+
+
+
+/* 把绝对时间按 UTC 分解为日期时间。 */
+XRT_API bool xrtTimeSplit(xtime iTime, xdatetime* pDateTime);
+
+
+
+/* 把绝对时间按固定 UTC 偏移分解，偏移范围为 -23:59:59 到 +23:59:59。 */
+XRT_API bool xrtTimeSplitAt(xtime iTime, int iOffset, xdatetime* pDateTime);
+
+
+
+/* 从 Unix 秒安全构造 xtime。 */
+XRT_API bool xrtTimeFromUnix(int64 iSeconds, xtime* pTime);
+
+
+
+/* 从 Unix 毫秒安全构造 xtime。 */
+XRT_API bool xrtTimeFromUnixMs(int64 iMilliseconds, xtime* pTime);
+
+
+
+/* 返回向负无穷取整的 Unix 秒。 */
+XRT_API int64 xrtTimeUnix(xtime iTime);
+
+
+
+/* 安全转换为 Unix 毫秒；目标范围溢出时不修改输出。 */
+XRT_API bool xrtTimeToUnixMs(xtime iTime, int64* pMilliseconds);
+
+/* 32 位有符号 Unix 秒的安全双向转换。 */
+XRT_API bool xrtTimeFromUnix32(int32 iSeconds, xtime* pTime);
+XRT_API bool xrtTimeToUnix32(xtime iTime, int32* pSeconds);
+
+
+
+/* 提取 UTC 年份。 */
+XRT_API int64 xrtYear(xtime iTime);
+
+
+
+/* 提取 UTC 月份。 */
+XRT_API int xrtMonth(xtime iTime);
+
+
+
+/* 提取 UTC 月内日期。 */
+XRT_API int xrtDay(xtime iTime);
+
+
+
+/* 提取 UTC 小时。 */
+XRT_API int xrtHour(xtime iTime);
+
+
+
+/* 提取 UTC 分钟。 */
+XRT_API int xrtMinute(xtime iTime);
+
+
+
+/* 提取 UTC 秒。 */
+XRT_API int xrtSecond(xtime iTime);
+
+
+
+/* 提取秒内毫秒。 */
+XRT_API int xrtMillisecond(xtime iTime);
+
+
+
+/* 提取星期，范围为 XTIME_SUNDAY 到 XTIME_SATURDAY。 */
+XRT_API int xrtWeekday(xtime iTime);
+
+
+
+/* 提取年内日期，范围为 1 到 366。 */
+XRT_API int xrtDayOfYear(xtime iTime);
+
+
+
+/* 提取季度，范围为 1 到 4。 */
+XRT_API int xrtQuarter(xtime iTime);
+
+
+
+/* 返回 UTC 当日零点。 */
+XRT_API xtime xrtDatePart(xtime iTime);
+
+
+
+/* 返回 UTC 当日已经经过的毫秒，范围为 [0, XRT_TIME_DAY)。 */
+XRT_API xtime xrtTimePart(xtime iTime);
+
+
+
+/* 使用显式毫秒容差比较两个时间，计算覆盖完整 int64 域。 */
+XRT_API bool xrtTimeNear(xtime iLeft, xtime iRight, uint64 iTolerance);
+
+
+
+/* 判断两个 UTC 时间是否位于同一个 Gregorian 日期。 */
+XRT_API bool xrtTimeSameDay(xtime iLeft, xtime iRight);
+
+
+
+/* 判断两个 UTC 时间是否位于同一个 Gregorian 月份。 */
+XRT_API bool xrtTimeSameMonth(xtime iLeft, xtime iRight);
+
+
+
+/* 判断两个 UTC 时间是否位于同一个 Gregorian 年份。 */
+XRT_API bool xrtTimeSameYear(xtime iLeft, xtime iRight);
+
+
+
+/* 判断时间是否位于闭区间；反向区间返回 false。 */
+XRT_API bool xrtTimeIn(xtime iTime, xtime iStart, xtime iEnd);
+
+
+
+/* 判断两个闭区间是否重叠；任一反向区间返回 false。 */
+XRT_API bool xrtTimeOverlap(xtime iStart1, xtime iEnd1,
+	xtime iStart2, xtime iEnd2);
+
+
+
+/* 增加固定时长或 Gregorian 日历单位，月末会钳制到目标月最后一天。 */
+XRT_API bool xrtTimeAdd(xtime iTime, int64 iValue, xtimeunit Unit, xtime* pResult);
+
+
+
+/* 按指定维度计算整数日期差；固定单位向零截断，年月按日历序号计算。 */
+XRT_API bool xrtDateDiff(xtime iStart, xtime iEnd, xtimeunit Unit, int64* pResult);
+
+
+
+/* 返回包含给定时间的半开月份区间 [start, end)。 */
+XRT_API bool xrtMonthRange(xtime iTime, xtime* pStart, xtime* pEnd);
+
+
+
+/* 返回包含给定时间的半开年份区间 [start, end)。 */
+XRT_API bool xrtYearRange(xtime iTime, xtime* pStart, xtime* pEnd);
+
+
+
+/* 返回包含给定时间的半开星期区间 [start, end)。 */
+XRT_API bool xrtWeekRange(xtime iTime, int iFirstWeekday, xtime* pStart, xtime* pEnd);
+
+
+
+/* 返回 ISO 8601 周年、周数和星期值，其中星期一为 1，星期日为 7。 */
+XRT_API bool xrtISOWeek(xtime iTime, int64* pWeekYear, int* pWeek, int* pWeekday);
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_TIME_LOCAL)
+
+/* 使用操作系统当前时区规则分解绝对时间。 */
+XRT_API bool xrtTimeLocal(xtime iTime, xdatetime* pDateTime);
+
+
+
+/* 使用操作系统时区规则构造本地时间，并显式处理 DST 重复区间。 */
+XRT_API bool xrtTimeFromLocal(const xdatetime* pDateTime, xtimefold Fold, xtime* pTime);
+
+#endif
+
+
+
+#if defined(XRT_FEATURE_TIME_TEXT)
+
+/* 按 % 占位符写入并返回所需字节数；%-m 等数字占位符取消填充，输出缓冲不得与 Format 重叠。 */
+XRT_API size_t xrtDateTimeWrite(char* sBuffer, size_t iCapacity,
+	const xdatetime* pDateTime, xstrview Format);
+
+
+
+/* 按 % 占位符创建时间文本；%p 输出大写午别，%P 输出小写午别，返回值由 xrtFree 释放。 */
+XRT_API str xrtDateTimeFormat(const xdatetime* pDateTime, xstrview Format);
+
+
+
+/* 严格解析完整格式；%-m 等字段接受一到两位数字，格式非法与文本不匹配使用不同错误码。 */
+XRT_API bool xrtDateTimeParse(xstrview Text, xstrview Format, xdatetime* pDateTime);
+
+
+
+/* 按固定 UTC 偏移和上述占位符写入；输出缓冲不得与 Format 重叠。 */
+XRT_API size_t xrtTimeWrite(char* sBuffer, size_t iCapacity,
+	xtime iTime, int iOffset, xstrview Format);
+
+
+
+/* 按固定 UTC 偏移和上述占位符创建时间文本，返回值由 xrtFree 释放。 */
+XRT_API str xrtTimeFormat(xtime iTime, int iOffset, xstrview Format);
+
+
+
+/* 严格按上述完整格式解析绝对时间。 */
+XRT_API bool xrtTimeParse(xstrview Text, xstrview Format, xtime* pTime);
+
+
+
+/* 写入 RFC 3339 文本；零偏移使用 Z，毫秒末尾的零会被删除。 */
+XRT_API size_t xrtTimeWriteRFC3339(char* sBuffer, size_t iCapacity,
+	xtime iTime, int iOffset);
+
+
+
+/* 创建 RFC 3339 文本，返回值由 xrtFree 释放。 */
+XRT_API str xrtTimeRFC3339(xtime iTime, int iOffset);
+
+
+
+/* 严格解析 RFC 3339；秒内小数的毫秒以下尾数会被丢弃。 */
+XRT_API bool xrtTimeParseRFC3339(xstrview Text, xtime* pTime);
+
+
+
+/* 写入 HTTP IMF-fixdate，时间始终转换为 GMT 并丢弃秒以下部分。 */
+XRT_API size_t xrtTimeWriteHTTPDate(char* sBuffer, size_t iCapacity, xtime iTime);
+
+
+
+/* 创建 HTTP IMF-fixdate，返回值由 xrtFree 释放。 */
+XRT_API str xrtTimeHTTPDate(xtime iTime);
+
+
+
+/* 解析 IMF-fixdate、RFC 850 和 ANSI C asctime 三种 HTTP 日期格式。 */
+XRT_API bool xrtTimeParseHTTPDate(xstrview Text, xtime* pTime);
+
+
+
+/* 尝试解析三种 HTTP 日期格式；失败不修改输出和线程错误。 */
+XRT_API bool xrtTimeTryParseHTTPDate(xstrview Text, xtime* pTime);
+
+
+
+/* 解析 RFC 3339、HTTP-date 和常见数字日期时间。 */
+XRT_API bool xrtTimeParseAny(xstrview Text, xtime* pTime);
+
+#endif
+
+
+
+XRT_EXTERN_C_END
+
+#endif
+
+
+/* ========================================================================== */
 /* public: include/xrt/wait.h */
 /* ========================================================================== */
 
@@ -6042,6 +6443,70 @@ typedef enum xwaitresult {
     XWAIT_ERROR = -1, XWAIT_OK = 0, XWAIT_TIMEOUT = 1,
     XWAIT_CANCELLED = 2, XWAIT_CLOSED = 3
 } xwaitresult;
+#endif
+
+/* Shared arithmetic for independently compiled runtime extensions. */
+#include <math.h>
+#include <string.h>
+#if defined(XRT_FEATURE_WAIT)
+/* Private Timer arithmetic. Public waits receive signed milliseconds only. */
+static inline uint64 __xrtWaitTimerBits(double Value)
+{ uint64 Bits; memcpy(&Bits, &Value, sizeof(Bits)); return Bits; }
+static inline double __xrtWaitTimerFromBits(uint64 Bits)
+{ double Value; memcpy(&Value, &Bits, sizeof(Value)); return Value; }
+static inline void __xrtWaitInvalid(void)
+{
+    xerrordesc Desc; xerror* Error;
+    memset(&Desc, 0, sizeof(Desc));
+    Desc.Kind = XERR_ARGUMENT; Desc.Domain = "xrt.wait"; Desc.Code = 1;
+    Desc.Operation = "timeout"; Desc.Message = "invalid millisecond timeout or timer value";
+    Error = xrtErrorBuild(&Desc);
+    if ( Error != NULL ) { xrtSetErrorTake(Error); }
+}
+static inline double __xrtWaitAfter(int64 Milliseconds)
+{
+    double Now, Seconds, Result;
+    if ( Milliseconds == XRT_WAIT_FOREVER ) { return INFINITY; }
+    if ( Milliseconds < 0 ) { __xrtWaitInvalid(); return NAN; }
+    Now = xrtTimer();
+    if ( !isfinite(Now) ) { return NAN; }
+    if ( Milliseconds == 0 ) { return Now; }
+    Seconds = (double)(Milliseconds / 1000) + (double)(Milliseconds % 1000) * 0.001;
+    /* Round outward, never turning a positive interval into immediate expiry. */
+    Result = nextafter(Now + Seconds, INFINITY);
+    return Result;
+}
+static inline int64 __xrtWaitElapsedMs(double Start)
+{
+    double Elapsed = (xrtTimer() - Start) * 1000.0;
+    if (!isfinite(Elapsed)) return 0;
+    if (Elapsed <= 0) return 0;
+    return Elapsed >= 0x1p63 ? INT64_MAX : (int64)Elapsed;
+}
+static inline bool __xrtWaitValid(double Limit)
+{
+    if ( isnan(Limit) || Limit < 0 ) { __xrtWaitInvalid(); return false; }
+    return true;
+}
+static inline bool __xrtWaitExpired(double Limit)
+{
+    double Now;
+    if ( Limit == INFINITY ) { return false; }
+    if ( !__xrtWaitValid(Limit) ) { return true; }
+    Now = xrtTimer();
+    return !isfinite(Now) || Now >= Limit;
+}
+static inline int64 __xrtWaitRemaining(double Limit)
+{
+    double Remaining;
+    if ( Limit == INFINITY ) { return XRT_WAIT_FOREVER; }
+    if ( !__xrtWaitValid(Limit) ) { return -2; }
+    Remaining = Limit - xrtTimer();
+    if ( !isfinite(Remaining) ) { return -2; }
+    if ( Remaining <= 0 ) { return 0; }
+    Remaining = ceil(Remaining * 1000.0);
+    return Remaining >= 0x1p63 ? INT64_MAX : (int64)Remaining;
+}
 #endif
 #endif
 
@@ -7261,6 +7726,18 @@ XRT_API bool xrtPromiseClose(xpromise* pPromise);
 XRT_API bool xrtPromiseDone(const xpromise* pPromise);
 
 
+
+/* Internal absolute waits shared with independently built extensions. */
+#if (defined(XRT_FEATURE_FUTURE))
+XRT_API xwaitresult __xrtFutureWaitUntil(xfuture* pFuture, double iDeadline);
+#endif
+#if (defined(XRT_FEATURE_FUTURE))
+XRT_API xwaitresult __xrtFutureWaitUntilCancel(
+	xfuture* pFuture,
+	double iDeadline,
+	xcancel* pCancel
+);
+#endif
 
 XRT_EXTERN_C_END
 
@@ -9802,6 +10279,13 @@ XRT_API bool xrtNetEnginePost(xnetengine* pEngine,
 
 
 
+/* Internal absolute timer entry used by independently built extensions. */
+#if (defined(XRT_FEATURE_NET_ENGINE))
+XRT_API uint64 __xrtNetEngineSchedule(xnetengine* pEngine,
+	uint64 iAffinity, double iDeadline,
+	xnettimerproc pProc, ptr pData);
+#endif
+
 /* 按单调时钟截止时间调度 Timer；成功返回非零 ID。 */
 XRT_API uint64 xrtNetEngineSchedule(xnetengine* pEngine,
 	uint64 iAffinity, int64 iTimeout,
@@ -10085,407 +10569,6 @@ XRT_API size_t xrtNetBufConsume(xnetbuf* pBuffer, size_t iSize);
 XRT_EXTERN_C_END
 
 #endif
-
-#endif
-
-
-/* ========================================================================== */
-/* public: include/xrt/time.h */
-/* ========================================================================== */
-
-#ifndef XRT_TIME_H
-#define XRT_TIME_H
-
-
-
-
-#if (defined(XRT_FEATURE_TIME_LOCAL) || defined(XRT_FEATURE_TIME_TEXT)) && !defined(XRT_FEATURE_TIME)
-	#error "XRT local time and time text features require XRT_FEATURE_TIME"
-#endif
-
-
-
-/* 公元日期时间和固定日历时长统一使用整数毫秒。 */
-#define XRT_TIME_MILLISECOND	INT64_C(1)
-#define XRT_TIME_SECOND		INT64_C(1000)
-#define XRT_TIME_MINUTE		INT64_C(60000)
-#define XRT_TIME_HOUR		INT64_C(3600000)
-#define XRT_TIME_DAY			INT64_C(86400000)
-#define XRT_TIME_UNIX_EPOCH	INT64_C(62135596800000)
-
-#define XRT_TIME_WEEK		INT64_C(604800000)
-
-
-
-/* 星期值固定从星期日零开始，便于和 C/POSIX 及 HTTP-date 对接。 */
-typedef enum xtimeweekday {
-	XTIME_SUNDAY = 0,
-	XTIME_MONDAY,
-	XTIME_TUESDAY,
-	XTIME_WEDNESDAY,
-	XTIME_THURSDAY,
-	XTIME_FRIDAY,
-	XTIME_SATURDAY
-} xtimeweekday;
-
-
-
-/* 日期计算单位；月、季度和年使用日历语义，其余单位使用固定时长。 */
-typedef enum xtimeunit {
-
-	XTIME_UNIT_MILLISECOND = 0,
-	XTIME_UNIT_SECOND,
-	XTIME_UNIT_MINUTE,
-	XTIME_UNIT_HOUR,
-	XTIME_UNIT_DAY,
-	XTIME_UNIT_WEEK,
-	XTIME_UNIT_MONTH,
-	XTIME_UNIT_QUARTER,
-	XTIME_UNIT_YEAR
-} xtimeunit;
-
-
-
-/* 本地时间在夏令时回拨区间出现两个候选值时的选择规则。 */
-typedef enum xtimefold {
-	XTIME_FOLD_REJECT = 0,
-	XTIME_FOLD_EARLIER,
-	XTIME_FOLD_LATER
-} xtimefold;
-
-
-
-/* 时间模块稳定错误代码。 */
-typedef enum xtimeerror {
-	XTIME_ERROR_RANGE = 1,
-	XTIME_ERROR_OVERFLOW,
-	XTIME_ERROR_FORMAT,
-	XTIME_ERROR_PARSE,
-	XTIME_ERROR_LOCAL_GAP,
-	XTIME_ERROR_LOCAL_FOLD,
-	XTIME_ERROR_LOCAL_UNSUPPORTED
-} xtimeerror;
-
-
-
-/* 分解后的 Gregorian 日期时间；Offset 为 UTC 以东秒数。 */
-typedef struct xdatetime {
-	int64 Year;
-	int Month;
-	int Day;
-	int Hour;
-	int Minute;
-	int Second;
-	int Millisecond;
-	int Offset;
-	int Weekday;
-	int YearDay;
-	int IsDST;
-} xdatetime;
-
-
-
-XRT_EXTERN_C_BEGIN
-
-
-
-#if defined(XRT_FEATURE_TIME)
-
-/* 返回高精度单调计时器的 double 秒数；原点无意义，两个读数相减得到耗时。 */
-XRT_API double xrtTimer(void);
-
-
-
-/* 返回当前公元 UTC 毫秒。 */
-XRT_API xtime xrtNow(void);
-
-
-
-/* 至少睡眠指定毫秒；零表示让出当前执行时间片。 */
-XRT_API void xrtSleep(int64 iMilliseconds);
-
-
-
-/* 判断公元年份是否为闰年；负数表示公元前，不接受零年。 */
-XRT_API bool xrtIsLeapYear(int64 iYear);
-
-
-
-/* 返回指定月份的天数；月份无效时返回零并设置参数错误。 */
-XRT_API int xrtDaysInMonth(int64 iYear, int iMonth);
-
-
-
-/* 返回指定年份的天数。 */
-XRT_API int xrtDaysInYear(int64 iYear);
-
-
-
-/* 构造 UTC 零点日期。 */
-XRT_API bool xrtDate(int64 iYear, int iMonth, int iDay, xtime* pTime);
-
-
-
-/* 构造 UTC 日期时间。 */
-XRT_API bool xrtDateTime(int64 iYear, int iMonth, int iDay,
-	int iHour, int iMinute, int iSecond, int iMillisecond, xtime* pTime);
-
-
-
-/* 按结构中的显式 UTC 偏移构造绝对时间。 */
-XRT_API bool xrtTimeMake(const xdatetime* pDateTime, xtime* pTime);
-
-
-
-/* 把绝对时间按 UTC 分解为日期时间。 */
-XRT_API bool xrtTimeSplit(xtime iTime, xdatetime* pDateTime);
-
-
-
-/* 把绝对时间按固定 UTC 偏移分解，偏移范围为 -23:59:59 到 +23:59:59。 */
-XRT_API bool xrtTimeSplitAt(xtime iTime, int iOffset, xdatetime* pDateTime);
-
-
-
-/* 从 Unix 秒安全构造 xtime。 */
-XRT_API bool xrtTimeFromUnix(int64 iSeconds, xtime* pTime);
-
-
-
-/* 从 Unix 毫秒安全构造 xtime。 */
-XRT_API bool xrtTimeFromUnixMs(int64 iMilliseconds, xtime* pTime);
-
-
-
-/* 返回向负无穷取整的 Unix 秒。 */
-XRT_API int64 xrtTimeUnix(xtime iTime);
-
-
-
-/* 安全转换为 Unix 毫秒；目标范围溢出时不修改输出。 */
-XRT_API bool xrtTimeToUnixMs(xtime iTime, int64* pMilliseconds);
-
-/* 32 位有符号 Unix 秒的安全双向转换。 */
-XRT_API bool xrtTimeFromUnix32(int32 iSeconds, xtime* pTime);
-XRT_API bool xrtTimeToUnix32(xtime iTime, int32* pSeconds);
-
-
-
-/* 提取 UTC 年份。 */
-XRT_API int64 xrtYear(xtime iTime);
-
-
-
-/* 提取 UTC 月份。 */
-XRT_API int xrtMonth(xtime iTime);
-
-
-
-/* 提取 UTC 月内日期。 */
-XRT_API int xrtDay(xtime iTime);
-
-
-
-/* 提取 UTC 小时。 */
-XRT_API int xrtHour(xtime iTime);
-
-
-
-/* 提取 UTC 分钟。 */
-XRT_API int xrtMinute(xtime iTime);
-
-
-
-/* 提取 UTC 秒。 */
-XRT_API int xrtSecond(xtime iTime);
-
-
-
-/* 提取秒内毫秒。 */
-XRT_API int xrtMillisecond(xtime iTime);
-
-
-
-/* 提取星期，范围为 XTIME_SUNDAY 到 XTIME_SATURDAY。 */
-XRT_API int xrtWeekday(xtime iTime);
-
-
-
-/* 提取年内日期，范围为 1 到 366。 */
-XRT_API int xrtDayOfYear(xtime iTime);
-
-
-
-/* 提取季度，范围为 1 到 4。 */
-XRT_API int xrtQuarter(xtime iTime);
-
-
-
-/* 返回 UTC 当日零点。 */
-XRT_API xtime xrtDatePart(xtime iTime);
-
-
-
-/* 返回 UTC 当日已经经过的毫秒，范围为 [0, XRT_TIME_DAY)。 */
-XRT_API xtime xrtTimePart(xtime iTime);
-
-
-
-/* 使用显式毫秒容差比较两个时间，计算覆盖完整 int64 域。 */
-XRT_API bool xrtTimeNear(xtime iLeft, xtime iRight, uint64 iTolerance);
-
-
-
-/* 判断两个 UTC 时间是否位于同一个 Gregorian 日期。 */
-XRT_API bool xrtTimeSameDay(xtime iLeft, xtime iRight);
-
-
-
-/* 判断两个 UTC 时间是否位于同一个 Gregorian 月份。 */
-XRT_API bool xrtTimeSameMonth(xtime iLeft, xtime iRight);
-
-
-
-/* 判断两个 UTC 时间是否位于同一个 Gregorian 年份。 */
-XRT_API bool xrtTimeSameYear(xtime iLeft, xtime iRight);
-
-
-
-/* 判断时间是否位于闭区间；反向区间返回 false。 */
-XRT_API bool xrtTimeIn(xtime iTime, xtime iStart, xtime iEnd);
-
-
-
-/* 判断两个闭区间是否重叠；任一反向区间返回 false。 */
-XRT_API bool xrtTimeOverlap(xtime iStart1, xtime iEnd1,
-	xtime iStart2, xtime iEnd2);
-
-
-
-/* 增加固定时长或 Gregorian 日历单位，月末会钳制到目标月最后一天。 */
-XRT_API bool xrtTimeAdd(xtime iTime, int64 iValue, xtimeunit Unit, xtime* pResult);
-
-
-
-/* 按指定维度计算整数日期差；固定单位向零截断，年月按日历序号计算。 */
-XRT_API bool xrtDateDiff(xtime iStart, xtime iEnd, xtimeunit Unit, int64* pResult);
-
-
-
-/* 返回包含给定时间的半开月份区间 [start, end)。 */
-XRT_API bool xrtMonthRange(xtime iTime, xtime* pStart, xtime* pEnd);
-
-
-
-/* 返回包含给定时间的半开年份区间 [start, end)。 */
-XRT_API bool xrtYearRange(xtime iTime, xtime* pStart, xtime* pEnd);
-
-
-
-/* 返回包含给定时间的半开星期区间 [start, end)。 */
-XRT_API bool xrtWeekRange(xtime iTime, int iFirstWeekday, xtime* pStart, xtime* pEnd);
-
-
-
-/* 返回 ISO 8601 周年、周数和星期值，其中星期一为 1，星期日为 7。 */
-XRT_API bool xrtISOWeek(xtime iTime, int64* pWeekYear, int* pWeek, int* pWeekday);
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_TIME_LOCAL)
-
-/* 使用操作系统当前时区规则分解绝对时间。 */
-XRT_API bool xrtTimeLocal(xtime iTime, xdatetime* pDateTime);
-
-
-
-/* 使用操作系统时区规则构造本地时间，并显式处理 DST 重复区间。 */
-XRT_API bool xrtTimeFromLocal(const xdatetime* pDateTime, xtimefold Fold, xtime* pTime);
-
-#endif
-
-
-
-#if defined(XRT_FEATURE_TIME_TEXT)
-
-/* 按 % 占位符写入并返回所需字节数；%-m 等数字占位符取消填充，输出缓冲不得与 Format 重叠。 */
-XRT_API size_t xrtDateTimeWrite(char* sBuffer, size_t iCapacity,
-	const xdatetime* pDateTime, xstrview Format);
-
-
-
-/* 按 % 占位符创建时间文本；%p 输出大写午别，%P 输出小写午别，返回值由 xrtFree 释放。 */
-XRT_API str xrtDateTimeFormat(const xdatetime* pDateTime, xstrview Format);
-
-
-
-/* 严格解析完整格式；%-m 等字段接受一到两位数字，格式非法与文本不匹配使用不同错误码。 */
-XRT_API bool xrtDateTimeParse(xstrview Text, xstrview Format, xdatetime* pDateTime);
-
-
-
-/* 按固定 UTC 偏移和上述占位符写入；输出缓冲不得与 Format 重叠。 */
-XRT_API size_t xrtTimeWrite(char* sBuffer, size_t iCapacity,
-	xtime iTime, int iOffset, xstrview Format);
-
-
-
-/* 按固定 UTC 偏移和上述占位符创建时间文本，返回值由 xrtFree 释放。 */
-XRT_API str xrtTimeFormat(xtime iTime, int iOffset, xstrview Format);
-
-
-
-/* 严格按上述完整格式解析绝对时间。 */
-XRT_API bool xrtTimeParse(xstrview Text, xstrview Format, xtime* pTime);
-
-
-
-/* 写入 RFC 3339 文本；零偏移使用 Z，毫秒末尾的零会被删除。 */
-XRT_API size_t xrtTimeWriteRFC3339(char* sBuffer, size_t iCapacity,
-	xtime iTime, int iOffset);
-
-
-
-/* 创建 RFC 3339 文本，返回值由 xrtFree 释放。 */
-XRT_API str xrtTimeRFC3339(xtime iTime, int iOffset);
-
-
-
-/* 严格解析 RFC 3339；秒内小数的毫秒以下尾数会被丢弃。 */
-XRT_API bool xrtTimeParseRFC3339(xstrview Text, xtime* pTime);
-
-
-
-/* 写入 HTTP IMF-fixdate，时间始终转换为 GMT 并丢弃秒以下部分。 */
-XRT_API size_t xrtTimeWriteHTTPDate(char* sBuffer, size_t iCapacity, xtime iTime);
-
-
-
-/* 创建 HTTP IMF-fixdate，返回值由 xrtFree 释放。 */
-XRT_API str xrtTimeHTTPDate(xtime iTime);
-
-
-
-/* 解析 IMF-fixdate、RFC 850 和 ANSI C asctime 三种 HTTP 日期格式。 */
-XRT_API bool xrtTimeParseHTTPDate(xstrview Text, xtime* pTime);
-
-
-
-/* 尝试解析三种 HTTP 日期格式；失败不修改输出和线程错误。 */
-XRT_API bool xrtTimeTryParseHTTPDate(xstrview Text, xtime* pTime);
-
-
-
-/* 解析 RFC 3339、HTTP-date 和常见数字日期时间。 */
-XRT_API bool xrtTimeParseAny(xstrview Text, xtime* pTime);
-
-#endif
-
-
-
-XRT_EXTERN_C_END
 
 #endif
 
@@ -13780,6 +13863,54 @@ XRT_API bool xrtValueObjectSetNewPostCommit(
 	xvalue* pItem
 );
 
+/* Compiler/host-private field transaction. Preparation pins the actual
+ * receiver and a COW observation, copies its field storage (NOT a language
+ * object/clone/finalization duty), and leaves the receiver unchanged. SetTake
+ * changes only prepared storage, consuming the item only on success.
+ * Records and receiver access are caller-serialized; tables remain borrowed.
+ * Call Free outside freeze/mutation: it may run retired-field cleanup.
+ * Failed preparation only releases temporary pins while the borrowed receiver
+ * still protects its original fields and lifetime; no producer cleanup runs.
+ * No record or snapshot is a proof that a default object is private. */
+typedef struct xvalueobjectfieldsv1 xvalueobjectfieldsv1;
+typedef enum xvalueobjectfieldsresultv1 {
+	XVALUE_OBJECT_FIELDS_ERROR_V1 = -1,
+	XVALUE_OBJECT_FIELDS_BUSY_V1 = 0,
+	XVALUE_OBJECT_FIELDS_COMMITTED_V1 = 1,
+	XVALUE_OBJECT_FIELDS_SHARED_V1 = 2
+} xvalueobjectfieldsresultv1;
+XRT_API xvalueobjectfieldsv1* xrtValueObjectFieldsPrepareV1(xvalue* pObject);
+XRT_API bool xrtValueObjectFieldsSetTakeV1(xvalueobjectfieldsv1* pFields,
+	xstrview Key, xvalue** ppItem);
+/* A real unique record with exactly three owned Value slots. Borrowed under
+ * caller-owned freeze; this is not a synthetic root or extra owning slot. */
+XRT_API xrtownershipref xrtValueObjectFieldsOwnershipV1(const xvalueobjectfieldsv1* pFields);
+/* Nonblocking ONE freeze: admit the complete physical graph before Count/
+ * Trace, verify receiver privacy and unchanged observations, and preflight
+ * combined planned Value-container cycles. Only then swap all prepared field stores without
+ * allocation, release, producer callbacks or failure. Preserve the original
+ * class lifetime/identity and its one finalization duty. Free later retires
+ * old fields outside freeze. Ordinary COW aliases keep their old backing.
+ * Every supplied internal slot MUST be a real independently owned reference;
+ * each record's own unique owner is supplied automatically, once. An anchor
+ * is not an internal slot. Admission is mandatory, read-only and resident.
+ * SHARED/BUSY leave every receiver unchanged and do not set an error. Unknown
+ * participants, changed receivers, misuse/cycles/OOM return ERROR, also before
+ * any receiver write. This does not perform or infer a language clone. */
+XRT_API xvalueobjectfieldsresultv1 xrtValueObjectFieldsCommitV1(
+	xvalueobjectfieldsv1* const* ppFields, size_t iCount,
+	const xrtownershipref* pInternalSlots, size_t iInternalSlotCount,
+	xrtownershipadmitproc pAdmit, ptr pContext);
+/* Same single-freeze transaction. On SHARED only, return the first shared
+ * receiver's record index in caller order. The entire batch remains unchanged.
+ * Other outcomes leave the output untouched. The index is an observation,
+ * not a retained reference, mutation authority or inferred clone capability. */
+XRT_API xvalueobjectfieldsresultv1 xrtValueObjectFieldsCommitV2(
+	xvalueobjectfieldsv1* const* ppFields, size_t iCount,
+	const xrtownershipref* pInternalSlots, size_t iInternalSlotCount,
+	xrtownershipadmitproc pAdmit, ptr pContext, size_t* piSharedIndex);
+XRT_API void xrtValueObjectFieldsFreeV1(xvalueobjectfieldsv1* pFields);
+
 
 
 /* 判断对象键是否存在。 */
@@ -14071,8 +14202,11 @@ typedef int (*xvaluegraphobjectcopyv1)(uint64 iTypeId,
 /* Exact nominal sequence policies for data projection. Only the matching
  * IntMap/Set identity is written as an Array, in its ordinary iteration order.
  * Untyped/unlisted containers retain their representation. A listed identity
- * on the wrong physical type fails closed. The immutable table is borrowed
- * only for the synchronous copy; no registry or application callback is used. */
+ * on the wrong physical type fails closed. A HANDLE with a listed identity
+ * must be authenticated by CopyHandle and projected to an Array: refusal,
+ * missing adaptation, or another output type fails closed, never retains the
+ * opaque source. The wire rule itself uses no registry or item callback.
+ * The immutable table is borrowed only for the synchronous copy. */
 typedef struct xvaluegraphsequencev1 {
 	uint64 TypeId;
 	xvaluetype Type; /* XVALUE_INT_MAP or XVALUE_SET */
@@ -22456,6 +22590,18 @@ XRT_API xhttpnext xrtHttpTokenNext(
 	xstrview* pToken
 );
 
+/*
+	读取逗号分隔字段列表的一项，跳过空项和 OWS，保留 quoted-string 内逗号。
+	只划分成员边界；成员的具体语法由调用方验证。成功时推进 pNext。
+	输出可以未对齐，但不能相互覆盖或覆盖输入。
+*/
+XRT_API xhttpnext xrtHttpListNext(
+	xstrview Value,
+	size_t iOffset,
+	size_t* pNext,
+	xstrview* pElement
+);
+
 
 
 /* 判断完整 token-list 是否包含指定 token；非空元素语法错误仍返回 false 并设置错误。 */
@@ -22666,6 +22812,19 @@ XRT_API xhttpnext xrtHttpParamNext(
 	xstrview Parameters,
 	size_t* pOffset,
 	xhttpparam* pParam
+);
+
+/*
+	读取指定分隔符的 name/value 列表；分隔符仅支持分号或逗号。
+	bIgnoreEmpty 控制是否跳过空成员，其余校验与 ParamNext 相同。
+	用于扩展字段语法复用核心参数解析器。
+*/
+XRT_API xhttpnext xrtHttpNameValueNext(
+	xstrview Parameters,
+	size_t* pOffset,
+	xhttpparam* pParam,
+	char iSeparator,
+	bool bIgnoreEmpty
 );
 
 
@@ -44740,68 +44899,8 @@ bool __xrtTimeLocalParts(xtime iTime, xdatetime* pDateTime, int* pSystemCode);
 #if defined(XRT_FEATURE_WAIT)
 #ifndef XRT_DETAIL_XRT_WAIT_H
 #define XRT_DETAIL_XRT_WAIT_H
-#include <math.h>
-#include <string.h>
 
-#if defined(XRT_FEATURE_WAIT)
-/* Private Timer arithmetic. Public waits receive signed milliseconds only. */
-static inline uint64 __xrtWaitTimerBits(double Value)
-{ uint64 Bits; memcpy(&Bits, &Value, sizeof(Bits)); return Bits; }
-static inline double __xrtWaitTimerFromBits(uint64 Bits)
-{ double Value; memcpy(&Value, &Bits, sizeof(Value)); return Value; }
-static inline void __xrtWaitInvalid(void)
-{
-    xerrordesc Desc = {0}; xerror* Error;
-    Desc.Kind = XERR_ARGUMENT; Desc.Domain = "xrt.wait"; Desc.Code = 1;
-    Desc.Operation = "timeout"; Desc.Message = "invalid millisecond timeout or timer value";
-    Error = xrtErrorBuild(&Desc);
-    if ( Error != NULL ) { xrtSetErrorTake(Error); }
-}
-static inline double __xrtWaitAfter(int64 Milliseconds)
-{
-    double Now, Seconds, Result;
-    if ( Milliseconds == XRT_WAIT_FOREVER ) { return INFINITY; }
-    if ( Milliseconds < 0 ) { __xrtWaitInvalid(); return NAN; }
-    Now = xrtTimer();
-    if ( !isfinite(Now) ) { return NAN; }
-    if ( Milliseconds == 0 ) { return Now; }
-    Seconds = (double)(Milliseconds / 1000) + (double)(Milliseconds % 1000) * 0.001;
-    /* Round outward, never turning a positive interval into immediate expiry. */
-    Result = nextafter(Now + Seconds, INFINITY);
-    return Result;
-}
-static inline int64 __xrtWaitElapsedMs(double Start)
-{
-    double Elapsed = (xrtTimer() - Start) * 1000.0;
-    if (!isfinite(Elapsed)) return 0;
-    if (Elapsed <= 0) return 0;
-    return Elapsed >= 0x1p63 ? INT64_MAX : (int64)Elapsed;
-}
-static inline bool __xrtWaitValid(double Limit)
-{
-    if ( isnan(Limit) || Limit < 0 ) { __xrtWaitInvalid(); return false; }
-    return true;
-}
-static inline bool __xrtWaitExpired(double Limit)
-{
-    double Now;
-    if ( Limit == INFINITY ) { return false; }
-    if ( !__xrtWaitValid(Limit) ) { return true; }
-    Now = xrtTimer();
-    return !isfinite(Now) || Now >= Limit;
-}
-static inline int64 __xrtWaitRemaining(double Limit)
-{
-    double Remaining;
-    if ( Limit == INFINITY ) { return XRT_WAIT_FOREVER; }
-    if ( !__xrtWaitValid(Limit) ) { return -2; }
-    Remaining = Limit - xrtTimer();
-    if ( !isfinite(Remaining) ) { return -2; }
-    if ( Remaining <= 0 ) { return 0; }
-    Remaining = ceil(Remaining * 1000.0);
-    return Remaining >= 0x1p63 ? INT64_MAX : (int64)Remaining;
-}
-#endif
+
 
 
 XRT_EXTERN_C_BEGIN
@@ -44895,16 +44994,8 @@ XRT_API xwaitresult __xrtExecutorWaitUntil(
 	double iDeadline
 );
 #endif
-#if (defined(XRT_FEATURE_FUTURE))
-XRT_API xwaitresult __xrtFutureWaitUntil(xfuture* pFuture, double iDeadline);
-#endif
-#if (defined(XRT_FEATURE_FUTURE))
-XRT_API xwaitresult __xrtFutureWaitUntilCancel(
-	xfuture* pFuture,
-	double iDeadline,
-	xcancel* pCancel
-);
-#endif
+
+
 #if (defined(XRT_FEATURE_FUTURE_COROUTINE))
 XRT_API xwaitresult __xrtFutureAwaitUntil(xfuture* pFuture, double iDeadline);
 #endif
@@ -44917,11 +45008,7 @@ XRT_API xnetresult __xrtNetPortWait(xnetport* pPort,
 XRT_API uint64 __xrtNetEngineScheduleOwnedV1(xnetengine* pEngine, uint64 iAffinity,
 	double iDeadline, ptr pData, const xnettimerownershipv1* pPolicy);
 #endif
-#if (defined(XRT_FEATURE_NET_ENGINE))
-XRT_API uint64 __xrtNetEngineSchedule(xnetengine* pEngine,
-	uint64 iAffinity, double iDeadline,
-	xnettimerproc pProc, ptr pData);
-#endif
+
 #if (defined(XRT_FEATURE_PROCESS))
 XRT_API xwaitresult __xrtProcessWaitUntil(
 	xprocess* pProcess,
@@ -106422,9 +106509,14 @@ XRT_API bool xrtSetEqual(const xset* pLeft, const xset* pRight)
 
 #if defined(XRT_FEATURE_VALUE_CONTAINER)
 
-
-
 #if defined(XRT_FEATURE_VALUE_CONTAINER)
+
+struct xvalueobjectfieldsv1 {
+	xvalue* Receiver;
+	xvalue* Observation;
+	xvalue* Prepared;
+	bool Committed;
+};
 
 #define XRT_VALUE_BACKING_FINALIZING 0x0001u
 #define XRT_VALUE_BACKING_OWNERSHIP_CLEARED 0x0002u
@@ -106671,6 +106763,8 @@ typedef enum xvaluecontainsresult {
 typedef struct xvaluecontainscontext {
 	const xvaluebacking* TargetBacking;
 	const xvalue* TargetValue;
+	xvalueobjectfieldsv1* const* Fields;
+	size_t FieldCount;
 	const xvaluebacking* Active[XRT_VALUE_DEPTH_MAX];
 	const xvaluebacking* Inline[XRT_VALUE_VISITED_INLINE];
 	size_t InlineCount;
@@ -107616,6 +107710,20 @@ static xvaluecontainsresult __xrtValueContains(
 	}
 	if ( !__xrtValueContainerType((xvaluetype)pValue->Type) ) {
 		return XVALUE_CONTAINS_NO;
+	}
+	/* Follow the combined prospective graph, not only the old receivers.
+	 * A bound finalizer is one physical reference-identity backing, including
+	 * its DIFFERENT alias shells. Test that backing before substitution, then
+	 * follow every alias through the planned fields of that same identity. */
+	if (pContext->FieldCount && pContext->TargetBacking && pValue->Data.Backing == pContext->TargetBacking)
+		return XVALUE_CONTAINS_YES;
+	for (size_t i = 0; i < pContext->FieldCount; ++i) {
+		const xvalue* pReceiver = pContext->Fields[i]->Receiver;
+		if (pReceiver == pValue || (pReceiver->Type == XVALUE_OBJECT &&
+			((const xvalueobjectbacking*)pReceiver->Data.Backing)->FinalizerBound &&
+			pReceiver->Data.Backing == pValue->Data.Backing)) {
+			pValue = pContext->Fields[i]->Prepared; break;
+		}
 	}
 	if ( iDepth >= XRT_VALUE_DEPTH_MAX ) {
 		__xrtErrorSetValue();
@@ -109950,6 +110058,221 @@ XRT_API bool xrtValueObjectSetNewPostCommit(xvalue* pObject, xstrview Key, xvalu
 	return bResult;
 }
 
+static bool __xrtValueFieldsCount(const void* pData, size_t* pCount)
+{
+	const xvalueobjectfieldsv1* pFields = (const xvalueobjectfieldsv1*)pData;
+	if (pFields == NULL || pFields->Receiver == NULL ||
+		pFields->Observation == NULL || pFields->Prepared == NULL) return false;
+	/* A live record has one unique owning handle, not a sampled Value count.
+	 * There is intentionally no public Retain/aliasing operation for records. */
+	*pCount = 1; return true;
+}
+static bool __xrtValueFieldsTrace(const void* pData, xrtownershipvisitor pVisit, ptr pContext)
+{
+	const xvalueobjectfieldsv1* pFields = (const xvalueobjectfieldsv1*)pData;
+	size_t iCount;
+	return __xrtValueFieldsCount(pData, &iCount) &&
+		pVisit(xrtValueOwnership(pFields->Receiver), pContext) &&
+		pVisit(xrtValueOwnership(pFields->Observation), pContext) &&
+		pVisit(xrtValueOwnership(pFields->Prepared), pContext);
+}
+static const xrtownershipops __xrtValueFieldsOps = {
+	__xrtValueFieldsCount, __xrtValueFieldsTrace
+};
+XRT_API xrtownershipref xrtValueObjectFieldsOwnershipV1(const xvalueobjectfieldsv1* pFields)
+{ return (xrtownershipref){pFields, &__xrtValueFieldsOps}; }
+
+XRT_API void xrtValueObjectFieldsFreeV1(xvalueobjectfieldsv1* pFields)
+{
+	if (pFields == NULL) return;
+	xerror* pPrimary = xrtTakeError();
+	/* Retired fields first, then the observation, then the ACTUAL receiver.
+	 * A COW observation must never become the last class-finalizer receiver. */
+	xvalue* pValues[3] = {pFields->Prepared, pFields->Observation, pFields->Receiver};
+	xrtFree(pFields);
+	for (size_t i = 0; i < 3; ++i) {
+		xrtValueRelease(pValues[i]);
+		if (pPrimary == NULL) pPrimary = xrtTakeError();
+		else xrtClearError();
+	}
+	xrtSetErrorTake(pPrimary);
+}
+static xvalueobjectfieldsv1* __xrtValueFieldsPrepare(xvalue* pObject)
+{
+	xvalueobjectbacking* pBacking = (xvalueobjectbacking*)__xrtValueBacking(pObject, XVALUE_OBJECT);
+	if (pBacking == NULL) return NULL;
+	if ((pObject->Flags & (XRT_VALUE_FLAG_FINALIZING | XRT_VALUE_FLAG_OWNERSHIP_CLEARED)) != 0 ||
+		pObject->OwnershipClaim != NULL || pBacking->Base.OwnershipClaim != NULL ||
+		(pBacking->Base.Flags & (XRT_VALUE_BACKING_FINALIZING | XRT_VALUE_BACKING_OWNERSHIP_CLEARED)) != 0 ||
+		pBacking->FinalizerPrepared) {
+		__xrtErrorSetInvalidState(); return NULL;
+	}
+	xvalueobjectfieldsv1* pFields = (xvalueobjectfieldsv1*)xrtCalloc(1, sizeof(*pFields));
+	if (pFields == NULL) return NULL;
+	pFields->Receiver = xrtValueRetain(pObject);
+	if (pFields->Receiver != NULL) pFields->Observation = xrtValueClone(pObject);
+	if (pFields->Observation != NULL) pFields->Prepared = __xrtValueCreate(XVALUE_OBJECT);
+	if (pFields->Prepared != NULL) {
+		pObject->Flags |= XRT_VALUE_FLAG_BUSY;
+		pFields->Prepared->Data.Backing = __xrtValueBackingCopy(pFields->Observation->Data.Backing);
+		pObject->Flags &= (uint16)(UINT16_MAX ^ XRT_VALUE_FLAG_BUSY);
+		if (pFields->Prepared->Data.Backing != NULL) {
+			pFields->Prepared->TypeId = pObject->TypeId;
+			pFields->Prepared->IdentityHash = pObject->IdentityHash;
+			pFields->Prepared->IdentityEqual = pObject->IdentityEqual;
+			pFields->Prepared->IdentityUserData = pObject->IdentityUserData;
+			return pFields;
+		}
+	}
+	/* No producer destructor is copied to the temporary backing. Every
+	 * original field is still owned by the independently pinned observation. */
+	xrtValueObjectFieldsFreeV1(pFields); return NULL;
+}
+XRT_API xvalueobjectfieldsv1* xrtValueObjectFieldsPrepareV1(xvalue* pObject)
+{ XRT_VALUE_MUTATION_RETURN(xvalueobjectfieldsv1*, __xrtValueFieldsPrepare(pObject)); }
+XRT_API bool xrtValueObjectFieldsSetTakeV1(xvalueobjectfieldsv1* pFields, xstrview Key, xvalue** ppItem)
+{
+	if (pFields == NULL || pFields->Committed) { __xrtErrorSetInvalidState(); return false; }
+	return xrtValueObjectSetTake(pFields->Prepared, Key, ppItem);
+}
+
+typedef struct xrt_value_fields_admission {
+	xvalueobjectfieldsv1* const* Fields;
+	size_t Count;
+	xrtownershipadmitproc Admit;
+	ptr Context;
+} xrt_value_fields_admission;
+static bool __xrtValueFieldsAdmit(xrtownershipref Reference, ptr pContext)
+{
+	const xrt_value_fields_admission* pAdmission = (const xrt_value_fields_admission*)pContext;
+	if (Reference.Ops == &__xrtValueFieldsOps) {
+		for (size_t i = 0; i < pAdmission->Count; ++i)
+			if (Reference.Data == pAdmission->Fields[i]) return true;
+		return false;
+	}
+	return pAdmission->Admit(Reference, pAdmission->Context);
+}
+static bool __xrtValueFieldsObserved(const xvalueobjectfieldsv1* pFields)
+{
+	const xvalue* pValue = pFields->Receiver;
+	const xvalue* pObservation = pFields->Observation;
+	const xvalueobjectbacking* pBacking;
+	if (pFields->Committed || pValue == NULL || pObservation == NULL || pFields->Prepared == NULL ||
+		pValue->Type != XVALUE_OBJECT || pValue->Data.Backing != pObservation->Data.Backing ||
+		pValue->TypeId != pObservation->TypeId || pValue->IdentityHash != pObservation->IdentityHash ||
+		pValue->IdentityEqual != pObservation->IdentityEqual || pValue->IdentityUserData != pObservation->IdentityUserData ||
+		pValue->OwnershipClaim != NULL || (pValue->Flags &
+		(XRT_VALUE_FLAG_BUSY | XRT_VALUE_FLAG_FINALIZING | XRT_VALUE_FLAG_OWNERSHIP_CLEARED)) != 0) return false;
+	pBacking = (const xvalueobjectbacking*)pValue->Data.Backing;
+	return pBacking != NULL && pBacking->Base.OwnershipClaim == NULL &&
+		(pBacking->Base.Flags & (XRT_VALUE_BACKING_FINALIZING | XRT_VALUE_BACKING_OWNERSHIP_CLEARED)) == 0 &&
+		!pBacking->FinalizerPrepared;
+}
+static bool __xrtValueFieldsReachable(const xrtownershipsnapshot* pSnapshot,
+	xrtownershipref Reference, bool* pReachable)
+{
+	for (size_t i = 0; i < xrtOwnershipSnapshotNodeCount(pSnapshot); ++i) {
+		xrtownershipnode Node;
+		if (!xrtOwnershipSnapshotNode(pSnapshot, i, &Node)) return false;
+		if (Node.Reference.Data == Reference.Data && Node.Reference.Ops == Reference.Ops) {
+			*pReachable = Node.Reachable; return true;
+		}
+	}
+	return false;
+}
+XRT_API xvalueobjectfieldsresultv1 xrtValueObjectFieldsCommitV2(
+	xvalueobjectfieldsv1* const* ppFields, size_t iCount,
+	const xrtownershipref* pInternalSlots, size_t iInternalSlotCount,
+	xrtownershipadmitproc pAdmit, ptr pContext, size_t* piSharedIndex)
+{
+	xrtownershipscope Freeze = {0};
+	xrtownershipsnapshot* pSnapshot = NULL;
+	xrtownershipref* pSlots = NULL;
+	xvalueobjectfieldsresultv1 Result = XVALUE_OBJECT_FIELDS_ERROR_V1;
+	if ((iCount != 0 && ppFields == NULL) || pAdmit == NULL ||
+		(iInternalSlotCount != 0 && pInternalSlots == NULL) ||
+		iCount > SIZE_MAX - iInternalSlotCount ||
+		iCount + iInternalSlotCount > SIZE_MAX / sizeof(*pSlots)) {
+		__xrtErrorSetInvalidArgument(); return Result;
+	}
+	if (!xrtOwnershipFreezeTryBegin(&Freeze)) return XVALUE_OBJECT_FIELDS_BUSY_V1;
+	for (size_t i = 0; i < iCount; ++i) {
+		if (ppFields[i] == NULL || !__xrtValueFieldsObserved(ppFields[i])) {
+			__xrtErrorSetInvalidState(); goto done;
+		}
+		for (size_t j = 0; j < i; ++j) {
+			if (ppFields[i]->Receiver == ppFields[j]->Receiver ||
+				(((xvalueobjectbacking*)ppFields[i]->Receiver->Data.Backing)->FinalizerBound &&
+				ppFields[i]->Receiver->Data.Backing == ppFields[j]->Receiver->Data.Backing)) {
+				__xrtErrorSetInvalidState(); goto done;
+			}
+		}
+	}
+	size_t iSlotCount = iCount + iInternalSlotCount;
+	pSlots = iSlotCount ? (xrtownershipref*)xrtMalloc(iSlotCount * sizeof(*pSlots)) : NULL;
+	if (iSlotCount && pSlots == NULL) goto done;
+	for (size_t i = 0; i < iCount; ++i) pSlots[i] = xrtValueObjectFieldsOwnershipV1(ppFields[i]);
+	if (iInternalSlotCount) memcpy(pSlots + iCount, pInternalSlots, iInternalSlotCount * sizeof(*pSlots));
+	xrt_value_fields_admission Admission = {ppFields, iCount, pAdmit, pContext};
+	if (!xrtOwnershipSnapshotCreate(pSlots, iCount, pSlots, iSlotCount,
+		__xrtValueFieldsAdmit, &Admission, &pSnapshot)) goto done;
+	for (size_t i = 0; i < iCount; ++i) {
+		bool bShared;
+		xvalueobjectbacking* pBacking = (xvalueobjectbacking*)ppFields[i]->Receiver->Data.Backing;
+		if (!__xrtValueFieldsReachable(pSnapshot, xrtValueOwnership(ppFields[i]->Receiver), &bShared)) {
+			__xrtErrorSetInvalidState(); goto done;
+		}
+		if (!bShared && pBacking->FinalizerBound) {
+			if (!__xrtValueFieldsReachable(pSnapshot, __xrtValueBackingOwnership(ppFields[i]->Receiver), &bShared)) {
+				__xrtErrorSetInvalidState(); goto done;
+			}
+		}
+		if (bShared) {
+			if (piSharedIndex != NULL) *piSharedIndex = i;
+			Result = XVALUE_OBJECT_FIELDS_SHARED_V1; goto done;
+		}
+		xvaluecontainscontext Contains = {0};
+		Contains.TargetValue = ppFields[i]->Receiver;
+		if (pBacking->FinalizerBound) Contains.TargetBacking = &pBacking->Base;
+		Contains.Fields = ppFields; Contains.FieldCount = iCount;
+		xvaluecontainsresult Cycle = __xrtValueContains(ppFields[i]->Prepared, &Contains, 0);
+		if (Contains.OverflowReady) xrtSetUnit(&Contains.Overflow);
+		if (Cycle != XVALUE_CONTAINS_NO) {
+			if (Cycle == XVALUE_CONTAINS_YES) __xrtErrorSetValue();
+			goto done;
+		}
+	}
+	/* ALL fallible work is complete. No destructor, allocation, descriptor
+	 * callback or graph access occurs during publication of this whole batch. */
+	for (size_t i = 0; i < iCount; ++i) {
+		xvalueobjectfieldsv1* pFields = ppFields[i];
+		xvalueobjectbacking* pBacking = (xvalueobjectbacking*)pFields->Receiver->Data.Backing;
+		if (pBacking->FinalizerBound) {
+			xmap Old = pBacking->Items;
+			pBacking->Items = ((xvalueobjectbacking*)pFields->Prepared->Data.Backing)->Items;
+			((xvalueobjectbacking*)pFields->Prepared->Data.Backing)->Items = Old;
+		} else {
+			xvaluebacking* pOld = pFields->Receiver->Data.Backing;
+			pFields->Receiver->Data.Backing = pFields->Prepared->Data.Backing;
+			pFields->Prepared->Data.Backing = pOld;
+		}
+		pFields->Committed = true;
+	}
+	Result = XVALUE_OBJECT_FIELDS_COMMITTED_V1;
+done:
+	xrtOwnershipSnapshotDestroy(pSnapshot); xrtFree(pSlots);
+	if (!xrtOwnershipScopeEnd(&Freeze)) abort();
+	return Result;
+}
+XRT_API xvalueobjectfieldsresultv1 xrtValueObjectFieldsCommitV1(
+	xvalueobjectfieldsv1* const* ppFields, size_t iCount,
+	const xrtownershipref* pInternalSlots, size_t iInternalSlotCount,
+	xrtownershipadmitproc pAdmit, ptr pContext)
+{
+	return xrtValueObjectFieldsCommitV2(ppFields, iCount, pInternalSlots,
+		iInternalSlotCount, pAdmit, pContext, NULL);
+}
+
 
 
 /* 判断对象键是否存在。 */
@@ -111494,7 +111817,13 @@ static xvalue* __xrtValueDeepClone(
 	for (size_t i = 0; i < pContext->Config.SequenceCount; ++i) {
 		const xvaluegraphsequencev1* pSequence = &pContext->Config.Sequences[i];
 		if (pSource->TypeId != pSequence->TypeId) continue;
-		if (Type != pSequence->Type) { __xrtErrorSetType(); return NULL; }
+		/* A logical sequence can have a wire and an authenticated native
+		 * carrier. Only the explicit handle adapter may bridge that boundary;
+		 * every other physical mismatch retains the strict wire rejection. */
+		if (Type != pSequence->Type &&
+			(Type != XVALUE_HANDLE || !pContext->Config.CopyHandle)) {
+			__xrtErrorSetType(); return NULL;
+		}
 		bSequence = true; break;
 	}
 	if (Type == XVALUE_OBJECT && pContext->Config.CopyObject) {
@@ -111507,7 +111836,16 @@ static xvalue* __xrtValueDeepClone(
 		iFound = __xrtValueCloneFind(pContext, pSource, &pTarget);
 		if (iFound != 0) return iFound > 0 ? pTarget : NULL;
 		iFound = __xrtValueCloneAdapt(pContext, pSource, iDepth, false, &pTarget);
-		if (iFound != 0) return iFound > 0 ? pTarget : NULL;
+		if (iFound < 0) return NULL;
+		if (iFound > 0) {
+			if (bSequence && pTarget->Type != XVALUE_ARRAY) {
+				__xrtErrorSetType(); __xrtValueCloneRelease(pContext, pTarget);
+				return NULL;
+			}
+			return pTarget;
+		}
+		/* A listed native sequence has no opaque-handle retention fallback. */
+		if (bSequence) { __xrtErrorSetType(); return NULL; }
 		if (pContext->Config.Flags & XVALUE_GRAPH_COPY_DATA_V1) {
 			pTarget = xrtValueRetain(pSource);
 			if (pTarget && (!__xrtValueCloneStart(pContext, pSource, pTarget) ||
@@ -143966,6 +144304,37 @@ xhttpnext __xrtHttpQuotedListNext(
 
 
 
+/* 为扩展字段提供经过内存边界校验的通用列表扫描入口。 */
+XRT_API xhttpnext xrtHttpListNext(
+	xstrview Value,
+	size_t iOffset,
+	size_t* pNext,
+	xstrview* pElement
+)
+{
+	xstrview Element;
+	size_t iNext;
+	xhttpnext Result;
+
+	if ( !__xrtHttpViewValid(Value) || (iOffset > Value.Size) ||
+		!__xrtRangeValid(pNext, sizeof(iNext)) ||
+		!__xrtRangeValid(pElement, sizeof(Element)) ||
+		__xrtRangesOverlap(pNext, sizeof(iNext), pElement, sizeof(Element)) ||
+		__xrtRangesOverlap(pNext, sizeof(iNext), Value.Data, Value.Size) ||
+		__xrtRangesOverlap(pElement, sizeof(Element), Value.Data, Value.Size) ) {
+		__xrtErrorSetInvalidArgument();
+		return XHTTP_NEXT_ERROR;
+	}
+	Result = __xrtHttpQuotedListNext(Value, iOffset, &iNext, &Element);
+	if ( Result != XHTTP_NEXT_ERROR ) {
+		memcpy(pNext, &iNext, sizeof(iNext));
+		memcpy(pElement, &Element, sizeof(Element));
+	}
+	return Result;
+}
+
+
+
 /* 严格读取逗号分隔 token-list 的下一项。 */
 XRT_API xhttpnext xrtHttpTokenNext(
 	xstrview List,
@@ -146697,6 +147066,26 @@ xhttpnext __xrtHttpNameValueNext(
 	memcpy(pParam, &Param, sizeof(Param));
 	memcpy(pOffset, &iNext, sizeof(iNext));
 	return XHTTP_NEXT_ITEM;
+}
+
+
+
+/* 为扩展字段提供指定分隔符的参数扫描入口。 */
+XRT_API xhttpnext xrtHttpNameValueNext(
+	xstrview Parameters,
+	size_t* pOffset,
+	xhttpparam* pParam,
+	char iSeparator,
+	bool bIgnoreEmpty
+)
+{
+	if ( (iSeparator != ';') && (iSeparator != ',') ) {
+		__xrtErrorSetInvalidArgument();
+		return XHTTP_NEXT_ERROR;
+	}
+	return __xrtHttpNameValueNext(
+		Parameters, pOffset, pParam, iSeparator, bIgnoreEmpty
+	);
 }
 
 

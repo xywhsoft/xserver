@@ -1,0 +1,1030 @@
+{
+	"schema": 1,
+	"product": "xws",
+	"package_ownership": "separate",
+	"api_macro": "XWS_API",
+	"dependency_manifests": [],
+	"module_prefix": "XWS_MODULE_",
+	"single_header": "single/extlibs/xws.h",
+	"declaration_header": "single/extlibs/xws_decl.h",
+	"implementation_macro": "XWS_IMPLEMENTATION",
+	"implementation_once_macro": "XWS_IMPLEMENTATION_ONCE",
+	"single_guard": "XWS_SINGLE_HEADER_H",
+	"single_marker": "XWS_SINGLE_HEADER",
+	"declaration_guard": "XWS_DECLARATIONS_H",
+	"declaration_marker": "XWS_DECLARATIONS",
+	"package_consumer": "extlibs/xws/tests/package/test_consumer.c",
+	"product_root": "extlibs/xws",
+	"performance_config": "extlibs/xws/config/performance_profiles.json",
+	"size_config": "extlibs/xws/config/size_profiles.json",
+	"scope": {
+		"product": "xws",
+		"external_integrations": [
+			{
+				"name": "xlang",
+				"state": "deferred"
+			}
+		],
+		"systems": [
+			{
+				"name": "websocket_extension",
+				"state": "retained",
+				"source_roots": [
+					"websocket"
+				]
+			}
+		]
+	},
+	"api_reference": {
+		"title": "xws API 参考",
+		"function_prefix": "xrtWs",
+		"constant_prefix": "XWS_",
+		"type_prefix": "xws",
+		"guide": "../../README.md",
+		"output": "extlibs/xws/docs/api/reference.md"
+	},
+	"features_guard": "XWS_FEATURES_H",
+	"features_header": "extlibs/xws/include/xws/features.h",
+	"include_dirs": [
+		"extlibs/xws/include"
+	],
+	"header_roots": [
+		"extlibs/xws/include",
+		"extlibs/xws/src/internal"
+	],
+	"modules": [
+		{
+			"name": "websocket_connection",
+			"state": "implemented",
+			"feature": "XWS_FEATURE_WEBSOCKET_CONNECTION",
+			"depends": [
+				"websocket_message",
+				"random_secure",
+				"net_tcp",
+				"spin"
+			],
+			"public_headers": [
+				"extlibs/xws/include/xws/export.h",
+				"extlibs/xws/include/xrt/websocket_runtime.h"
+			],
+			"internal_headers": [
+				"extlibs/xws/src/internal/xrt_websocket.h"
+			],
+			"sources": [
+				"extlibs/xws/src/websocket/connection.c"
+			],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection.c",
+				"extlibs/xws/tests/websocket/test_connection_protocol.c",
+				"extlibs/xws/tests/websocket/test_connection_invalid.c"
+			],
+			"single_tests": [
+				"extlibs/xws/tests/single/test_single_websocket_connection.c"
+			],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_connection_iocp_tests",
+			"asset_platforms": [
+				"windows"
+			],
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_connection",
+				"net_port_iocp"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_iocp.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_connection_protocol_iocp_tests",
+			"asset_platforms": [
+				"windows"
+			],
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_connection",
+				"net_port_iocp"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_protocol_iocp.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_connection_ref",
+			"state": "implemented",
+			"feature": "XWS_FEATURE_WEBSOCKET_CONNECTION_REF",
+			"depends": [
+				"websocket_connection"
+			],
+			"public_headers": [
+				"extlibs/xws/include/xws/export.h"
+			],
+			"internal_headers": [],
+			"sources": [
+				"extlibs/xws/src/websocket/connection_ref.c"
+			],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection.c"
+			],
+			"single_tests": [
+				"extlibs/xws/tests/single/test_single_websocket_connection.c"
+			],
+			"examples": [
+				"extlibs/xws/examples/websocket/connection_ref/main.c"
+			],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_connection_ref_iocp_tests",
+			"asset_platforms": [
+				"windows"
+			],
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_connection_ref",
+				"net_port_iocp"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_iocp.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_writer",
+			"state": "implemented",
+			"feature": "XWS_FEATURE_WEBSOCKET_WRITER",
+			"depends": [
+				"websocket_connection"
+			],
+			"public_headers": [
+				"extlibs/xws/include/xws/export.h"
+			],
+			"internal_headers": [],
+			"sources": [
+				"extlibs/xws/src/websocket/writer.c"
+			],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection.c",
+				"extlibs/xws/tests/websocket/test_writer_abandon.c"
+			],
+			"single_tests": [
+				"extlibs/xws/tests/single/test_single_websocket_connection.c"
+			],
+			"examples": [
+				"extlibs/xws/examples/websocket/writer/main.c"
+			],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_writer_deflate",
+			"state": "implemented",
+			"feature": "XWS_FEATURE_WEBSOCKET_WRITER_DEFLATE",
+			"depends": [
+				"websocket_writer",
+				"websocket_connection_deflate"
+			],
+			"public_headers": [
+				"extlibs/xws/include/xws/export.h"
+			],
+			"internal_headers": [],
+			"sources": [
+				"extlibs/xws/src/websocket/writer_deflate.c"
+			],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_writer_deflate.c",
+				"extlibs/xws/tests/websocket/test_connection.c"
+			],
+			"single_tests": [
+				"extlibs/xws/tests/single/test_single_websocket_writer_deflate.c"
+			],
+			"examples": [
+				"extlibs/xws/examples/websocket/writer_deflate/main.c"
+			],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_writer_deflate_iocp_tests",
+			"asset_platforms": [
+				"windows"
+			],
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_writer_deflate",
+				"net_port_iocp"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_iocp.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_writer_iocp_tests",
+			"asset_platforms": [
+				"windows"
+			],
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_writer",
+				"net_port_iocp"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_iocp.c",
+				"extlibs/xws/tests/websocket/test_writer_abandon_iocp.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_writer_ref",
+			"state": "implemented",
+			"feature": "XWS_FEATURE_WEBSOCKET_WRITER_REF",
+			"depends": [
+				"websocket_writer",
+				"websocket_connection_ref"
+			],
+			"public_headers": [
+				"extlibs/xws/include/xws/export.h"
+			],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection.c"
+			],
+			"single_tests": [
+				"extlibs/xws/tests/single/test_single_websocket_connection.c"
+			],
+			"examples": [
+				"extlibs/xws/examples/websocket/writer_ref/main.c"
+			],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_writer_ref_iocp_tests",
+			"asset_platforms": [
+				"windows"
+			],
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_writer_ref",
+				"net_port_iocp"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_iocp.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_connection_future",
+			"state": "implemented",
+			"feature": "XWS_FEATURE_WEBSOCKET_CONNECTION_FUTURE",
+			"depends": [
+				"websocket_connection",
+				"future"
+			],
+			"public_headers": [
+				"extlibs/xws/include/xws/export.h"
+			],
+			"internal_headers": [],
+			"sources": [
+				"extlibs/xws/src/websocket/connection_future.c"
+			],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_future.c"
+			],
+			"single_tests": [
+				"extlibs/xws/tests/single/test_single_websocket_connection_future.c"
+			],
+			"examples": [
+				"extlibs/xws/examples/websocket/connection_future/main.c"
+			],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_session_channel_coroutine",
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_connection_future",
+				"channel_coroutine",
+				"future_coroutine"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [],
+			"single_tests": [],
+			"examples": [
+				"extlibs/xws/examples/websocket/session_channel_coroutine/main.c"
+			],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_connection_ref_future",
+			"state": "implemented",
+			"feature": "XWS_FEATURE_WEBSOCKET_CONNECTION_REF_FUTURE",
+			"depends": [
+				"websocket_connection_ref",
+				"websocket_connection_future"
+			],
+			"public_headers": [
+				"extlibs/xws/include/xws/export.h"
+			],
+			"internal_headers": [],
+			"sources": [
+				"extlibs/xws/src/websocket/connection_future.c"
+			],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_ref_future.c"
+			],
+			"single_tests": [
+				"extlibs/xws/tests/single/test_single_websocket_connection_ref_future.c"
+			],
+			"examples": [
+				"extlibs/xws/examples/websocket/connection_ref_future/main.c"
+			],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_connection_ref_future_oom_tests",
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_connection_ref_future",
+				"memory_debug"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_ref_future_oom.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_connection_future_iocp_tests",
+			"asset_platforms": [
+				"windows"
+			],
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_connection_future",
+				"net_port_iocp"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_future_iocp.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_writer_future_tests",
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_writer",
+				"websocket_connection_future"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_future.c",
+				"extlibs/xws/tests/websocket/test_writer_future_abandon.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_writer_future_iocp_tests",
+			"asset_platforms": [
+				"windows"
+			],
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_writer_future_tests",
+				"net_port_iocp"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_future_iocp.c",
+				"extlibs/xws/tests/websocket/test_writer_future_abandon_iocp.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_connection_future_coroutine_tests",
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_connection_future",
+				"future_coroutine"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_future_coroutine.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_connection_future_deflate_tests",
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_connection_future",
+				"websocket_connection_deflate"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_future_deflate.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_connection_tls",
+			"state": "implemented",
+			"feature": "XWS_FEATURE_WEBSOCKET_CONNECTION_TLS",
+			"depends": [
+				"websocket_connection",
+				"tls_stream"
+			],
+			"public_headers": [
+				"extlibs/xws/include/xws/export.h"
+			],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_invalid.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_connection_tls_tests",
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_connection_tls",
+				"tls_stream_tests"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_tls.c",
+				"extlibs/xws/tests/websocket/test_connection_tls_iocp.c"
+			],
+			"single_tests": [
+				"extlibs/xws/tests/single/test_single_websocket_connection_tls.c"
+			],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_connection_tls_ref_tests",
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_connection_tls_tests",
+				"websocket_connection_ref"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_tls.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_connection_tls_ref_iocp_tests",
+			"asset_platforms": [
+				"windows"
+			],
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_connection_tls_ref_tests",
+				"net_port_iocp"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_tls_iocp.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_writer_tls_tests",
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_writer",
+				"websocket_connection_tls_tests"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_tls.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_writer_tls_iocp_tests",
+			"asset_platforms": [
+				"windows"
+			],
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_writer_tls_tests",
+				"net_port_iocp"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_tls_iocp.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_writer_deflate_tls_tests",
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_writer_deflate",
+				"websocket_connection_tls_tests"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_tls.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_writer_deflate_tls_iocp_tests",
+			"asset_platforms": [
+				"windows"
+			],
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_writer_deflate_tls_tests",
+				"net_port_iocp"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_tls_iocp.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_writer_deflate_ref_tls_tests",
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_writer_deflate_tls_tests",
+				"websocket_writer_ref"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_tls.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_writer_deflate_ref_tls_iocp_tests",
+			"asset_platforms": [
+				"windows"
+			],
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_writer_deflate_ref_tls_tests",
+				"net_port_iocp"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_tls_iocp.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_writer_ref_tls_tests",
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_writer_ref",
+				"websocket_connection_tls_tests"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_tls.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_writer_ref_tls_iocp_tests",
+			"asset_platforms": [
+				"windows"
+			],
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_writer_ref_tls_tests",
+				"net_port_iocp"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_tls_iocp.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_connection_tls_future_tests",
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_connection_tls_tests",
+				"websocket_connection_future"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_tls_future.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_connection_tls_future_iocp_tests",
+			"asset_platforms": [
+				"windows"
+			],
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_connection_tls_future_tests",
+				"net_port_iocp"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_tls_future_iocp.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "websocket_connection_deflate",
+			"state": "implemented",
+			"feature": "XWS_FEATURE_WEBSOCKET_CONNECTION_DEFLATE",
+			"depends": [
+				"websocket_connection",
+				"websocket_inflater",
+				"websocket_deflater"
+			],
+			"public_headers": [
+				"extlibs/xws/include/xws/export.h"
+			],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection_deflate_config.c",
+				"extlibs/xws/tests/websocket/test_connection_protocol_deflate.c"
+			],
+			"single_tests": [],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/docs/api/websocket.md"
+			],
+			"legacy": []
+		},
+		{
+			"name": "xws",
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"websocket_connection",
+				"websocket_connection_ref",
+				"websocket_writer",
+				"websocket_writer_deflate",
+				"websocket_writer_ref",
+				"websocket_connection_future",
+				"websocket_connection_ref_future",
+				"websocket_connection_tls",
+				"websocket_connection_deflate"
+			],
+			"public_headers": [
+				"extlibs/xws/include/xws.h",
+				"extlibs/xws/include/xws/features.h"
+			],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [],
+			"single_tests": [
+				"extlibs/xws/tests/single/test_single_xws.c"
+			],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/README.md",
+				"extlibs/xws/docs/api/websocket.md",
+				"extlibs/xws/docs/api/reference.md"
+			],
+			"legacy": [],
+			"benchmarks": [
+				"dev/bench/bench_common.h",
+				"extlibs/xws/config/performance_profiles.json",
+				"extlibs/xws/bench/bench_connection_config.c"
+			]
+		},
+		{
+			"name": "xws_tests",
+			"state": "implemented",
+			"feature": null,
+			"depends": [
+				"xws",
+				"websocket_connection_iocp_tests",
+				"websocket_connection_protocol_iocp_tests",
+				"websocket_connection_ref_iocp_tests",
+				"websocket_writer_deflate_iocp_tests",
+				"websocket_writer_iocp_tests",
+				"websocket_writer_ref_iocp_tests",
+				"websocket_session_channel_coroutine",
+				"websocket_connection_ref_future_oom_tests",
+				"websocket_connection_future_iocp_tests",
+				"websocket_writer_future_tests",
+				"websocket_writer_future_iocp_tests",
+				"websocket_connection_future_coroutine_tests",
+				"websocket_connection_future_deflate_tests",
+				"websocket_connection_tls_tests",
+				"websocket_connection_tls_ref_tests",
+				"websocket_connection_tls_ref_iocp_tests",
+				"websocket_writer_tls_tests",
+				"websocket_writer_tls_iocp_tests",
+				"websocket_writer_deflate_tls_tests",
+				"websocket_writer_deflate_tls_iocp_tests",
+				"websocket_writer_deflate_ref_tls_tests",
+				"websocket_writer_deflate_ref_tls_iocp_tests",
+				"websocket_writer_ref_tls_tests",
+				"websocket_writer_ref_tls_iocp_tests",
+				"websocket_connection_tls_future_tests",
+				"websocket_connection_tls_future_iocp_tests"
+			],
+			"public_headers": [],
+			"internal_headers": [],
+			"sources": [],
+			"tests": [
+				"extlibs/xws/tests/websocket/test_connection.c",
+				"extlibs/xws/tests/websocket/test_connection_protocol.c",
+				"extlibs/xws/tests/websocket/test_connection_invalid.c",
+				"extlibs/xws/tests/websocket/test_connection_iocp.c",
+				"extlibs/xws/tests/websocket/test_connection_protocol_iocp.c",
+				"extlibs/xws/tests/websocket/test_writer_abandon.c",
+				"extlibs/xws/tests/websocket/test_writer_deflate.c",
+				"extlibs/xws/tests/websocket/test_writer_abandon_iocp.c",
+				"extlibs/xws/tests/websocket/test_connection_future.c",
+				"extlibs/xws/tests/websocket/test_connection_ref_future.c",
+				"extlibs/xws/tests/websocket/test_connection_ref_future_oom.c",
+				"extlibs/xws/tests/websocket/test_connection_future_iocp.c",
+				"extlibs/xws/tests/websocket/test_writer_future_abandon.c",
+				"extlibs/xws/tests/websocket/test_writer_future_abandon_iocp.c",
+				"extlibs/xws/tests/websocket/test_connection_future_coroutine.c",
+				"extlibs/xws/tests/websocket/test_connection_future_deflate.c",
+				"extlibs/xws/tests/websocket/test_connection_tls.c",
+				"extlibs/xws/tests/websocket/test_connection_tls_iocp.c",
+				"extlibs/xws/tests/websocket/test_connection_tls_future.c",
+				"extlibs/xws/tests/websocket/test_connection_tls_future_iocp.c",
+				"extlibs/xws/tests/websocket/test_connection_deflate_config.c",
+				"extlibs/xws/tests/websocket/test_connection_protocol_deflate.c"
+			],
+			"single_tests": [
+				"extlibs/xws/tests/single/test_single_websocket_connection.c",
+				"extlibs/xws/tests/single/test_single_websocket_writer_deflate.c",
+				"extlibs/xws/tests/single/test_single_websocket_connection_future.c",
+				"extlibs/xws/tests/single/test_single_websocket_connection_ref_future.c",
+				"extlibs/xws/tests/single/test_single_websocket_connection_tls.c",
+				"extlibs/xws/tests/single/test_single_xws.c"
+			],
+			"examples": [],
+			"docs": [
+				"extlibs/xws/README.md"
+			],
+			"legacy": [],
+			"single_test_owners": {
+				"extlibs/xws/tests/single/test_single_websocket_connection.c": "websocket_connection",
+				"extlibs/xws/tests/single/test_single_websocket_writer_deflate.c": "websocket_writer_deflate",
+				"extlibs/xws/tests/single/test_single_websocket_connection_future.c": "websocket_connection_future",
+				"extlibs/xws/tests/single/test_single_websocket_connection_ref_future.c": "websocket_connection_ref_future",
+				"extlibs/xws/tests/single/test_single_websocket_connection_tls.c": "websocket_connection_tls_tests",
+				"extlibs/xws/tests/single/test_single_xws.c": "xws"
+			},
+			"collect_dependency_assets": [
+				"examples"
+			]
+		}
+	],
+	"umbrella_header": "xws.h"
+}

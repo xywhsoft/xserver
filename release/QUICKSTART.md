@@ -27,7 +27,7 @@ xs.exe demo\xs.json
 ```bash
 ./xs --version        # 或 xs.exe --version
 # [xs] XServer 1.0.0 (commit <hash>, <日期>, <平台>)
-# [xs] extensions (15): sqlite, xtp, xllm, xllm-session, xwork, xmail, xsmtp, xpop3, ximap, md4c, xacme, qrcodegen, xjwt, xoauth2, webview
+# [xs] extensions (24): sqlite, xtp, xllm, xllm-session, xwork, xmail, xsmtp, xpop3, ximap, md4c, xacme, qrcodegen, xjwt, xoauth2, webview, xhttp, xhttp-client, xhttp-policy, xhttp-server, xssh, xws, xws-client, xws-group, xws-server
 ```
 
 启动时也会打印同样的两行。同一份信息见包内 `VERSION` 文件。

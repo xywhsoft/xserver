@@ -141,7 +141,6 @@
  "xwork": {
   "macro": "XS_USE_XWORK",
   "requires": [
-   "xllm",
    "xllm-session"
   ],
   "host_includes": [
@@ -690,5 +689,1443 @@
    ],
    "linux": []
   }
+ },
+ "xhttp": {
+  "macro": "XS_USE_XHTTP",
+  "symbols": "src/script/import_xhttp.inc",
+  "symbol_macro": "XS_XHTTP_SYMBOL",
+  "headers": {
+   "xhttp/detail/support.h": "lib/xhttp/include/xhttp/detail/support.h",
+   "xhttp/export.h": "lib/xhttp/include/xhttp/export.h",
+   "xhttp/features.h": "lib/xhttp/include/xhttp/features.h",
+   "xhttp.h": "lib/xhttp/include/xhttp.h",
+   "xrt/cookie.h": "lib/xhttp/include/xrt/cookie.h",
+   "xrt/form.h": "lib/xhttp/include/xrt/form.h",
+   "xrt/form_data.h": "lib/xhttp/include/xrt/form_data.h",
+   "xrt/http_accept.h": "lib/xhttp/include/xrt/http_accept.h",
+   "xrt/http_auth.h": "lib/xhttp/include/xrt/http_auth.h",
+   "xrt/http_body.h": "lib/xhttp/include/xrt/http_body.h",
+   "xrt/http_body_compose.h": "lib/xhttp/include/xrt/http_body_compose.h",
+   "xrt/http_body_decode.h": "lib/xhttp/include/xrt/http_body_decode.h",
+   "xrt/http_body_deflate.h": "lib/xhttp/include/xrt/http_body_deflate.h",
+   "xrt/http_body_inflate.h": "lib/xhttp/include/xrt/http_body_inflate.h",
+   "xrt/http_body_stream.h": "lib/xhttp/include/xrt/http_body_stream.h",
+   "xrt/http_bridge.h": "lib/xhttp/include/xrt/http_bridge.h",
+   "xrt/http_cache.h": "lib/xhttp/include/xrt/http_cache.h",
+   "xrt/http_cache_status.h": "lib/xhttp/include/xrt/http_cache_status.h",
+   "xrt/http_cache_time.h": "lib/xhttp/include/xrt/http_cache_time.h",
+   "xrt/http_client.h": "lib/xhttp/include/xrt/http_client.h",
+   "xrt/http_content_disposition.h": "lib/xhttp/include/xrt/http_content_disposition.h",
+   "xrt/http_digest.h": "lib/xhttp/include/xrt/http_digest.h",
+   "xrt/http_exchange.h": "lib/xhttp/include/xrt/http_exchange.h",
+   "xrt/http_exchange_async.h": "lib/xhttp/include/xrt/http_exchange_async.h",
+   "xrt/http_ext_value.h": "lib/xhttp/include/xrt/http_ext_value.h",
+   "xrt/http_forward.h": "lib/xhttp/include/xrt/http_forward.h",
+   "xrt/http_forwarded.h": "lib/xhttp/include/xrt/http_forwarded.h",
+   "xrt/http_headers.h": "lib/xhttp/include/xrt/http_headers.h",
+   "xrt/http_language.h": "lib/xhttp/include/xrt/http_language.h",
+   "xrt/http_link.h": "lib/xhttp/include/xrt/http_link.h",
+   "xrt/http_origin.h": "lib/xhttp/include/xrt/http_origin.h",
+   "xrt/http_priority.h": "lib/xhttp/include/xrt/http_priority.h",
+   "xrt/http_proxy_status.h": "lib/xhttp/include/xrt/http_proxy_status.h",
+   "xrt/http_retry.h": "lib/xhttp/include/xrt/http_retry.h",
+   "xrt/http_semantics.h": "lib/xhttp/include/xrt/http_semantics.h",
+   "xrt/http_server.h": "lib/xhttp/include/xrt/http_server.h",
+   "xrt/http_server_exchange.h": "lib/xhttp/include/xrt/http_server_exchange.h",
+   "xrt/http_server_response_async.h": "lib/xhttp/include/xrt/http_server_response_async.h",
+   "xrt/http_sse.h": "lib/xhttp/include/xrt/http_sse.h",
+   "xrt/http_structured.h": "lib/xhttp/include/xrt/http_structured.h",
+   "xrt/http_vary.h": "lib/xhttp/include/xrt/http_vary.h",
+   "xrt/http_via.h": "lib/xhttp/include/xrt/http_via.h",
+   "xrt/mime.h": "lib/xhttp/include/xrt/mime.h",
+   "xrt/multipart.h": "lib/xhttp/include/xrt/multipart.h",
+   "xrt/query.h": "lib/xhttp/include/xrt/query.h",
+   "xrt/query_params.h": "lib/xhttp/include/xrt/query_params.h",
+   "xrt/url.h": "lib/xhttp/include/xrt/url.h"
+  },
+  "sources": [
+   {
+    "path": "lib/xhttp/src/http/cookie.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/form_data.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/form_data_multipart.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/form_data_parse.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/form_data_random.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_accept.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_auth.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_auth_basic.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_auth_bearer.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_auth_bearer_challenge.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_auth_digest.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_auth_digest_challenge.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_auth_digest_credentials.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_auth_digest_info.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_body.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_body_async.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_body_compose.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_body_decode.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_body_deflate.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_body_inflate.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_body_stream.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_body_transform.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_cache.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_cache_status.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_cache_status_write.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_cache_time.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_client_exchange.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_client_exchange_async.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_client_exchange_input.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_client_exchange_output.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_client_prepare.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_client_request.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_client_request_auth.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_client_request_auth_basic.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_client_request_auth_bearer.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_client_request_auth_digest.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_client_request_form.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_client_request_form_data.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_client_request_form_data_random.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_client_request_query.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_client_request_te.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_client_request_trailers.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_client_response.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_client_response_auth.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_client_response_auth_basic.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_client_response_auth_bearer.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_client_response_auth_digest.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_client_response_auth_digest_info.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_client_response_content_type.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_client_response_set_cookie.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_content_disposition.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_digest.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_digest_sha2.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_digest_write.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_etag.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_ext_value.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_forward.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_forwarded.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_forwarded_write.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_headers.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_language.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_language_common.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_link.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_link_value.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_link_write.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_origin.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_origin_write.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_precondition.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_priority.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_priority_write.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_proxy_alias.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_proxy_alias_write.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_proxy_status.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_proxy_status_write.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_range.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_range_multipart.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_retry.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_exchange.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_exchange_body.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_exchange_head.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_exchange_input.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_reply.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_reply_auth.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_reply_auth_basic.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_reply_auth_bearer.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_reply_auth_digest.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_reply_auth_digest_info.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_request.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_request_auth.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_request_auth_basic.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_request_auth_bearer.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_request_auth_digest.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_request_content_type.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_request_cookie.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_request_form.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_request_form_data.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_request_query.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_response.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_response_async.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_response_bridge.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_response_output.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_server_response_prepare.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_sse.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_sse_http.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_sse_parser.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_structured.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_structured_status.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_structured_write.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_vary.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_via.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/http_via_write.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/mime.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/mime_types.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/multipart.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/multipart_random.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/multipart_stream.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/multipart_write.c"
+   },
+   {
+    "path": "lib/xhttp/src/http/set_cookie.c"
+   },
+   {
+    "path": "lib/xhttp/src/url/form.c"
+   },
+   {
+    "path": "lib/xhttp/src/url/query.c"
+   },
+   {
+    "path": "lib/xhttp/src/url/query_codec.c"
+   },
+   {
+    "path": "lib/xhttp/src/url/query_params.c"
+   },
+   {
+    "path": "lib/xhttp/src/url/url.c"
+   },
+   {
+    "path": "lib/xhttp/src/url/url_param.c"
+   }
+  ],
+  "feature_macro": [
+   "XRT_MODULE_ALL",
+   "XHTTP_MODULE_ALL",
+   "XHTTP_FEATURE_COOKIE",
+   "XHTTP_FEATURE_FORM_DATA",
+   "XHTTP_FEATURE_FORM_DATA_MULTIPART",
+   "XHTTP_FEATURE_FORM_DATA_PARSE",
+   "XHTTP_FEATURE_FORM_DATA_RANDOM",
+   "XHTTP_FEATURE_FORM_URLENCODED",
+   "XHTTP_FEATURE_HTTP_ACCEPT",
+   "XHTTP_FEATURE_HTTP_AUTH",
+   "XHTTP_FEATURE_HTTP_AUTH_BASIC",
+   "XHTTP_FEATURE_HTTP_AUTH_BEARER",
+   "XHTTP_FEATURE_HTTP_AUTH_BEARER_CHALLENGE",
+   "XHTTP_FEATURE_HTTP_AUTH_DIGEST",
+   "XHTTP_FEATURE_HTTP_AUTH_DIGEST_CHALLENGE",
+   "XHTTP_FEATURE_HTTP_AUTH_DIGEST_CREDENTIALS",
+   "XHTTP_FEATURE_HTTP_AUTH_DIGEST_INFO",
+   "XHTTP_FEATURE_HTTP_BODY",
+   "XHTTP_FEATURE_HTTP_BODY_ASYNC",
+   "XHTTP_FEATURE_HTTP_BODY_COMPOSE",
+   "XHTTP_FEATURE_HTTP_BODY_DECODE",
+   "XHTTP_FEATURE_HTTP_BODY_DEFLATE",
+   "XHTTP_FEATURE_HTTP_BODY_INFLATE",
+   "XHTTP_FEATURE_HTTP_BODY_STREAM",
+   "XHTTP_FEATURE_HTTP_BODY_TRANSFORM",
+   "XHTTP_FEATURE_HTTP_CACHE",
+   "XHTTP_FEATURE_HTTP_CACHE_STATUS",
+   "XHTTP_FEATURE_HTTP_CACHE_STATUS_WRITE",
+   "XHTTP_FEATURE_HTTP_CACHE_TIME",
+   "XHTTP_FEATURE_HTTP_CLIENT_CONTENT_TYPE",
+   "XHTTP_FEATURE_HTTP_CLIENT_PREPARE",
+   "XHTTP_FEATURE_HTTP_CLIENT_REQUEST",
+   "XHTTP_FEATURE_HTTP_CLIENT_REQUEST_AUTH",
+   "XHTTP_FEATURE_HTTP_CLIENT_REQUEST_AUTH_BASIC",
+   "XHTTP_FEATURE_HTTP_CLIENT_REQUEST_AUTH_BEARER",
+   "XHTTP_FEATURE_HTTP_CLIENT_REQUEST_AUTH_DIGEST",
+   "XHTTP_FEATURE_HTTP_CLIENT_REQUEST_FORM",
+   "XHTTP_FEATURE_HTTP_CLIENT_REQUEST_FORM_DATA",
+   "XHTTP_FEATURE_HTTP_CLIENT_REQUEST_FORM_DATA_RANDOM",
+   "XHTTP_FEATURE_HTTP_CLIENT_REQUEST_QUERY",
+   "XHTTP_FEATURE_HTTP_CLIENT_REQUEST_TE",
+   "XHTTP_FEATURE_HTTP_CLIENT_REQUEST_TRAILERS",
+   "XHTTP_FEATURE_HTTP_CLIENT_RESPONSE",
+   "XHTTP_FEATURE_HTTP_CLIENT_RESPONSE_AUTH",
+   "XHTTP_FEATURE_HTTP_CLIENT_RESPONSE_AUTH_BASIC",
+   "XHTTP_FEATURE_HTTP_CLIENT_RESPONSE_AUTH_BEARER",
+   "XHTTP_FEATURE_HTTP_CLIENT_RESPONSE_AUTH_DIGEST",
+   "XHTTP_FEATURE_HTTP_CLIENT_RESPONSE_AUTH_DIGEST_INFO",
+   "XHTTP_FEATURE_HTTP_CLIENT_SET_COOKIE",
+   "XHTTP_FEATURE_HTTP_CONTENT_DISPOSITION",
+   "XHTTP_FEATURE_HTTP_DIGEST",
+   "XHTTP_FEATURE_HTTP_DIGEST_SHA2",
+   "XHTTP_FEATURE_HTTP_DIGEST_WRITE",
+   "XHTTP_FEATURE_HTTP_ETAG",
+   "XHTTP_FEATURE_HTTP_EXCHANGE",
+   "XHTTP_FEATURE_HTTP_EXCHANGE_ASYNC",
+   "XHTTP_FEATURE_HTTP_EXT_VALUE",
+   "XHTTP_FEATURE_HTTP_FORWARD",
+   "XHTTP_FEATURE_HTTP_FORWARDED",
+   "XHTTP_FEATURE_HTTP_FORWARDED_WRITE",
+   "XHTTP_FEATURE_HTTP_HEADERS",
+   "XHTTP_FEATURE_HTTP_LANGUAGE",
+   "XHTTP_FEATURE_HTTP_LANGUAGE_CORE",
+   "XHTTP_FEATURE_HTTP_LINK",
+   "XHTTP_FEATURE_HTTP_LINK_WRITE",
+   "XHTTP_FEATURE_HTTP_ORIGIN",
+   "XHTTP_FEATURE_HTTP_ORIGIN_WRITE",
+   "XHTTP_FEATURE_HTTP_PRECONDITION",
+   "XHTTP_FEATURE_HTTP_PRIORITY",
+   "XHTTP_FEATURE_HTTP_PRIORITY_WRITE",
+   "XHTTP_FEATURE_HTTP_PROXY_ALIAS",
+   "XHTTP_FEATURE_HTTP_PROXY_ALIAS_WRITE",
+   "XHTTP_FEATURE_HTTP_PROXY_STATUS",
+   "XHTTP_FEATURE_HTTP_PROXY_STATUS_WRITE",
+   "XHTTP_FEATURE_HTTP_RANGE",
+   "XHTTP_FEATURE_HTTP_RANGE_MULTIPART",
+   "XHTTP_FEATURE_HTTP_RETRY",
+   "XHTTP_FEATURE_HTTP_SERVER_CONTENT_TYPE",
+   "XHTTP_FEATURE_HTTP_SERVER_COOKIE",
+   "XHTTP_FEATURE_HTTP_SERVER_EXCHANGE",
+   "XHTTP_FEATURE_HTTP_SERVER_FORM",
+   "XHTTP_FEATURE_HTTP_SERVER_FORM_DATA",
+   "XHTTP_FEATURE_HTTP_SERVER_QUERY",
+   "XHTTP_FEATURE_HTTP_SERVER_REPLY",
+   "XHTTP_FEATURE_HTTP_SERVER_REPLY_AUTH",
+   "XHTTP_FEATURE_HTTP_SERVER_REPLY_AUTH_BASIC",
+   "XHTTP_FEATURE_HTTP_SERVER_REPLY_AUTH_BEARER",
+   "XHTTP_FEATURE_HTTP_SERVER_REPLY_AUTH_DIGEST",
+   "XHTTP_FEATURE_HTTP_SERVER_REPLY_AUTH_DIGEST_INFO",
+   "XHTTP_FEATURE_HTTP_SERVER_REQUEST",
+   "XHTTP_FEATURE_HTTP_SERVER_REQUEST_AUTH",
+   "XHTTP_FEATURE_HTTP_SERVER_REQUEST_AUTH_BASIC",
+   "XHTTP_FEATURE_HTTP_SERVER_REQUEST_AUTH_BEARER",
+   "XHTTP_FEATURE_HTTP_SERVER_REQUEST_AUTH_DIGEST",
+   "XHTTP_FEATURE_HTTP_SERVER_RESPONSE",
+   "XHTTP_FEATURE_HTTP_SERVER_RESPONSE_ASYNC",
+   "XHTTP_FEATURE_HTTP_SSE",
+   "XHTTP_FEATURE_HTTP_SSE_HTTP",
+   "XHTTP_FEATURE_HTTP_SSE_PARSER",
+   "XHTTP_FEATURE_HTTP_STRUCTURED",
+   "XHTTP_FEATURE_HTTP_STRUCTURED_WRITE",
+   "XHTTP_FEATURE_HTTP_VARY",
+   "XHTTP_FEATURE_HTTP_VIA",
+   "XHTTP_FEATURE_HTTP_VIA_WRITE",
+   "XHTTP_FEATURE_MIME",
+   "XHTTP_FEATURE_MIME_TYPES",
+   "XHTTP_FEATURE_MULTIPART",
+   "XHTTP_FEATURE_MULTIPART_RANDOM",
+   "XHTTP_FEATURE_MULTIPART_STREAM",
+   "XHTTP_FEATURE_MULTIPART_WRITE",
+   "XHTTP_FEATURE_QUERY",
+   "XHTTP_FEATURE_QUERY_CODEC",
+   "XHTTP_FEATURE_QUERY_PARAMS",
+   "XHTTP_FEATURE_SET_COOKIE",
+   "XHTTP_FEATURE_URL",
+   "XHTTP_FEATURE_URL_PARAM"
+  ],
+  "host_includes": [
+   "lib/xhttp/include",
+   "lib/xrtshim"
+  ]
+ },
+ "xhttp-client": {
+  "macro": "XS_USE_XHTTP_CLIENT",
+  "symbols": "src/script/import_xhttp_client.inc",
+  "symbol_macro": "XS_XHTTP_CLIENT_SYMBOL",
+  "headers": {
+   "xhttp-client/export.h": "lib/xhttp-client/include/xhttp-client/export.h",
+   "xhttp-client/features.h": "lib/xhttp-client/include/xhttp-client/features.h",
+   "xhttp-client.h": "lib/xhttp-client/include/xhttp-client.h",
+   "xrt/http_client_easy.h": "lib/xhttp-client/include/xrt/http_client_easy.h",
+   "xrt/http_client_future.h": "lib/xhttp-client/include/xrt/http_client_future.h",
+   "xrt/http_client_runtime.h": "lib/xhttp-client/include/xrt/http_client_runtime.h",
+   "xrt/http_client_stream.h": "lib/xhttp-client/include/xrt/http_client_stream.h",
+   "xrt/http_sse_client.h": "lib/xhttp-client/include/xrt/http_sse_client.h"
+  },
+  "sources": [
+   {
+    "path": "lib/xhttp-client/src/http/http_client_cache.c"
+   },
+   {
+    "path": "lib/xhttp-client/src/http/http_client_cache_multipart.c"
+   },
+   {
+    "path": "lib/xhttp-client/src/http/http_client_cookie.c"
+   },
+   {
+    "path": "lib/xhttp-client/src/http/http_client_decompress.c"
+   },
+   {
+    "path": "lib/xhttp-client/src/http/http_client_easy.c"
+   },
+   {
+    "path": "lib/xhttp-client/src/http/http_client_easy_future.c"
+   },
+   {
+    "path": "lib/xhttp-client/src/http/http_client_future.c"
+   },
+   {
+    "path": "lib/xhttp-client/src/http/http_client_https.c"
+   },
+   {
+    "path": "lib/xhttp-client/src/http/http_client_pool.c"
+   },
+   {
+    "path": "lib/xhttp-client/src/http/http_client_proxy.c"
+   },
+   {
+    "path": "lib/xhttp-client/src/http/http_client_redirect.c"
+   },
+   {
+    "path": "lib/xhttp-client/src/http/http_client_resume.c"
+   },
+   {
+    "path": "lib/xhttp-client/src/http/http_client_retry.c"
+   },
+   {
+    "path": "lib/xhttp-client/src/http/http_client_runtime.c"
+   },
+   {
+    "path": "lib/xhttp-client/src/http/http_client_stream.c"
+   },
+   {
+    "path": "lib/xhttp-client/src/http/http_client_stream_async.c"
+   },
+   {
+    "path": "lib/xhttp-client/src/http/http_client_tcp.c"
+   },
+   {
+    "path": "lib/xhttp-client/src/http/http_sse_client.c"
+   }
+  ],
+  "feature_macro": [
+   "XRT_MODULE_ALL",
+   "XHTTP_CLIENT_MODULE_ALL",
+   "XHTTP_FEATURE_HTTP_CLIENT",
+   "XHTTP_FEATURE_HTTP_CLIENT_CACHE",
+   "XHTTP_FEATURE_HTTP_CLIENT_COOKIES",
+   "XHTTP_FEATURE_HTTP_CLIENT_DECOMPRESS",
+   "XHTTP_FEATURE_HTTP_CLIENT_EASY",
+   "XHTTP_FEATURE_HTTP_CLIENT_EASY_FUTURE",
+   "XHTTP_FEATURE_HTTP_CLIENT_FUTURE",
+   "XHTTP_FEATURE_HTTP_CLIENT_HTTPS",
+   "XHTTP_FEATURE_HTTP_CLIENT_POOL",
+   "XHTTP_FEATURE_HTTP_CLIENT_PROXY",
+   "XHTTP_FEATURE_HTTP_CLIENT_REDIRECT",
+   "XHTTP_FEATURE_HTTP_CLIENT_RESUME",
+   "XHTTP_FEATURE_HTTP_CLIENT_RETRY",
+   "XHTTP_FEATURE_HTTP_CLIENT_STREAM",
+   "XHTTP_FEATURE_HTTP_CLIENT_STREAM_ASYNC",
+   "XHTTP_FEATURE_HTTP_CLIENT_TLS",
+   "XHTTP_FEATURE_HTTP_SSE_CLIENT"
+  ],
+  "host_includes": [
+   "lib/xhttp-client/include",
+   "lib/xrtshim"
+  ],
+  "requires": [
+   "xhttp",
+   "xhttp-policy"
+  ]
+ },
+ "xhttp-policy": {
+  "macro": "XS_USE_XHTTP_POLICY",
+  "symbols": "src/script/import_xhttp_policy.inc",
+  "symbol_macro": "XS_XHTTP_POLICY_SYMBOL",
+  "headers": {
+   "xhttp-policy/export.h": "lib/xhttp-policy/include/xhttp-policy/export.h",
+   "xhttp-policy/features.h": "lib/xhttp-policy/include/xhttp-policy/features.h",
+   "xhttp-policy.h": "lib/xhttp-policy/include/xhttp-policy.h",
+   "xrt/cookie_jar.h": "lib/xhttp-policy/include/xrt/cookie_jar.h",
+   "xrt/http_auth_policy.h": "lib/xhttp-policy/include/xrt/http_auth_policy.h",
+   "xrt/http_cache_policy.h": "lib/xhttp-policy/include/xrt/http_cache_policy.h",
+   "xrt/http_cache_range.h": "lib/xhttp-policy/include/xrt/http_cache_range.h",
+   "xrt/http_cache_store.h": "lib/xhttp-policy/include/xrt/http_cache_store.h",
+   "xrt/http_cache_validate.h": "lib/xhttp-policy/include/xrt/http_cache_validate.h",
+   "xrt/http_client_policy.h": "lib/xhttp-policy/include/xrt/http_client_policy.h",
+   "xrt/http_redirect_policy.h": "lib/xhttp-policy/include/xrt/http_redirect_policy.h",
+   "xrt/http_retry_policy.h": "lib/xhttp-policy/include/xrt/http_retry_policy.h"
+  },
+  "sources": [
+   {
+    "path": "lib/xhttp-policy/src/http/cookie_jar.c"
+   },
+   {
+    "path": "lib/xhttp-policy/src/http/cookie_jar_headers.c"
+   },
+   {
+    "path": "lib/xhttp-policy/src/http/http_auth_digest_client.c"
+   },
+   {
+    "path": "lib/xhttp-policy/src/http/http_auth_digest_compute.c"
+   },
+   {
+    "path": "lib/xhttp-policy/src/http/http_auth_digest_nonce.c"
+   },
+   {
+    "path": "lib/xhttp-policy/src/http/http_auth_digest_replay.c"
+   },
+   {
+    "path": "lib/xhttp-policy/src/http/http_auth_digest_session.c"
+   },
+   {
+    "path": "lib/xhttp-policy/src/http/http_auth_digest_verify.c"
+   },
+   {
+    "path": "lib/xhttp-policy/src/http/http_cache_combine.c"
+   },
+   {
+    "path": "lib/xhttp-policy/src/http/http_cache_coverage.c"
+   },
+   {
+    "path": "lib/xhttp-policy/src/http/http_cache_fragment.c"
+   },
+   {
+    "path": "lib/xhttp-policy/src/http/http_cache_invalidate.c"
+   },
+   {
+    "path": "lib/xhttp-policy/src/http/http_cache_policy.c"
+   },
+   {
+    "path": "lib/xhttp-policy/src/http/http_cache_record.c"
+   },
+   {
+    "path": "lib/xhttp-policy/src/http/http_cache_store.c"
+   },
+   {
+    "path": "lib/xhttp-policy/src/http/http_cache_update.c"
+   },
+   {
+    "path": "lib/xhttp-policy/src/http/http_cache_validate.c"
+   },
+   {
+    "path": "lib/xhttp-policy/src/http/http_client_prepare_auth_digest_session.c"
+   },
+   {
+    "path": "lib/xhttp-policy/src/http/http_client_response_auth_digest_choose.c"
+   },
+   {
+    "path": "lib/xhttp-policy/src/http/http_client_response_auth_digest_session.c"
+   },
+   {
+    "path": "lib/xhttp-policy/src/http/http_redirect_policy.c"
+   },
+   {
+    "path": "lib/xhttp-policy/src/http/http_retry_policy.c"
+   }
+  ],
+  "feature_macro": [
+   "XRT_MODULE_ALL",
+   "XHTTP_POLICY_MODULE_ALL",
+   "XHTTP_FEATURE_COOKIE_JAR",
+   "XHTTP_FEATURE_COOKIE_JAR_HEADERS",
+   "XHTTP_FEATURE_HTTP_AUTH_DIGEST_CLIENT",
+   "XHTTP_FEATURE_HTTP_AUTH_DIGEST_MD5",
+   "XHTTP_FEATURE_HTTP_AUTH_DIGEST_NONCE",
+   "XHTTP_FEATURE_HTTP_AUTH_DIGEST_NONCE_RANDOM",
+   "XHTTP_FEATURE_HTTP_AUTH_DIGEST_REPLAY",
+   "XHTTP_FEATURE_HTTP_AUTH_DIGEST_SESSION",
+   "XHTTP_FEATURE_HTTP_AUTH_DIGEST_SHA2",
+   "XHTTP_FEATURE_HTTP_AUTH_DIGEST_VERIFY",
+   "XHTTP_FEATURE_HTTP_CACHE_POLICY",
+   "XHTTP_FEATURE_HTTP_CACHE_RANGE",
+   "XHTTP_FEATURE_HTTP_CACHE_STORE",
+   "XHTTP_FEATURE_HTTP_CACHE_VALIDATE",
+   "XHTTP_FEATURE_HTTP_CLIENT_PREPARE_AUTH_DIGEST_SESSION",
+   "XHTTP_FEATURE_HTTP_CLIENT_RESPONSE_AUTH_DIGEST_CHOOSE",
+   "XHTTP_FEATURE_HTTP_CLIENT_RESPONSE_AUTH_DIGEST_SESSION",
+   "XHTTP_FEATURE_HTTP_REDIRECT_POLICY",
+   "XHTTP_FEATURE_HTTP_RETRY_POLICY"
+  ],
+  "host_includes": [
+   "lib/xhttp-policy/include",
+   "lib/xrtshim"
+  ],
+  "requires": [
+   "xhttp"
+  ]
+ },
+ "xhttp-server": {
+  "macro": "XS_USE_XHTTP_SERVER",
+  "symbols": "src/script/import_xhttp_server.inc",
+  "symbol_macro": "XS_XHTTP_SERVER_SYMBOL",
+  "headers": {
+   "xhttp-server/export.h": "lib/xhttp-server/include/xhttp-server/export.h",
+   "xhttp-server/features.h": "lib/xhttp-server/include/xhttp-server/features.h",
+   "xhttp-server.h": "lib/xhttp-server/include/xhttp-server.h",
+   "xrt/http_body_file.h": "lib/xhttp-server/include/xrt/http_body_file.h",
+   "xrt/http_compress.h": "lib/xhttp-server/include/xrt/http_compress.h",
+   "xrt/http_route.h": "lib/xhttp-server/include/xrt/http_route.h",
+   "xrt/http_router.h": "lib/xhttp-server/include/xrt/http_router.h",
+   "xrt/http_server_file.h": "lib/xhttp-server/include/xrt/http_server_file.h",
+   "xrt/http_server_future.h": "lib/xhttp-server/include/xrt/http_server_future.h",
+   "xrt/http_server_middleware.h": "lib/xhttp-server/include/xrt/http_server_middleware.h",
+   "xrt/http_server_mux.h": "lib/xhttp-server/include/xrt/http_server_mux.h",
+   "xrt/http_server_mux_tls.h": "lib/xhttp-server/include/xrt/http_server_mux_tls.h",
+   "xrt/http_server_raw.h": "lib/xhttp-server/include/xrt/http_server_raw.h",
+   "xrt/http_server_router.h": "lib/xhttp-server/include/xrt/http_server_router.h",
+   "xrt/http_server_router_tls.h": "lib/xhttp-server/include/xrt/http_server_router_tls.h",
+   "xrt/http_server_runtime.h": "lib/xhttp-server/include/xrt/http_server_runtime.h",
+   "xrt/http_server_static.h": "lib/xhttp-server/include/xrt/http_server_static.h",
+   "xrt/http_server_tls.h": "lib/xhttp-server/include/xrt/http_server_tls.h",
+   "xrt/http_server_upgrade.h": "lib/xhttp-server/include/xrt/http_server_upgrade.h",
+   "xrt/http_sse_server.h": "lib/xhttp-server/include/xrt/http_sse_server.h",
+   "xrt/http_static.h": "lib/xhttp-server/include/xrt/http_static.h"
+  },
+  "sources": [
+   {
+    "path": "lib/xhttp-server/src/http/http_body_file.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_reply_compress.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_route.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_router.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_router_match.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_router_methods.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_server_body_async.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_server_compress.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_server_connection.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_server_file.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_server_future.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_server_middleware.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_server_mux.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_server_mux_runtime.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_server_mux_tls.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_server_raw.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_server_router.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_server_router_dispatch.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_server_router_runtime.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_server_router_tls.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_server_runtime.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_server_static.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_server_tls.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_server_transport.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_server_upgrade.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_sse_server.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_static_file.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_static_multipart_body.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_static_path.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_static_plan.c"
+   },
+   {
+    "path": "lib/xhttp-server/src/http/http_static_response.c"
+   }
+  ],
+  "feature_macro": [
+   "XRT_MODULE_ALL",
+   "XHTTP_SERVER_MODULE_ALL",
+   "XHTTP_FEATURE_HTTP_BODY_FILE",
+   "XHTTP_FEATURE_HTTP_REPLY_COMPRESS",
+   "XHTTP_FEATURE_HTTP_ROUTE",
+   "XHTTP_FEATURE_HTTP_ROUTER",
+   "XHTTP_FEATURE_HTTP_SERVER",
+   "XHTTP_FEATURE_HTTP_SERVER_BODY_ASYNC",
+   "XHTTP_FEATURE_HTTP_SERVER_COMPRESS",
+   "XHTTP_FEATURE_HTTP_SERVER_FILE",
+   "XHTTP_FEATURE_HTTP_SERVER_FUTURE",
+   "XHTTP_FEATURE_HTTP_SERVER_MIDDLEWARE",
+   "XHTTP_FEATURE_HTTP_SERVER_MUX",
+   "XHTTP_FEATURE_HTTP_SERVER_MUX_TLS",
+   "XHTTP_FEATURE_HTTP_SERVER_RAW",
+   "XHTTP_FEATURE_HTTP_SERVER_ROUTER",
+   "XHTTP_FEATURE_HTTP_SERVER_ROUTER_TLS",
+   "XHTTP_FEATURE_HTTP_SERVER_STATIC",
+   "XHTTP_FEATURE_HTTP_SERVER_TLS",
+   "XHTTP_FEATURE_HTTP_SERVER_UPGRADE",
+   "XHTTP_FEATURE_HTTP_SSE_SERVER",
+   "XHTTP_FEATURE_HTTP_STATIC_FILE",
+   "XHTTP_FEATURE_HTTP_STATIC_MULTIPART_BODY",
+   "XHTTP_FEATURE_HTTP_STATIC_PATH",
+   "XHTTP_FEATURE_HTTP_STATIC_PLAN",
+   "XHTTP_FEATURE_HTTP_STATIC_RESPONSE"
+  ],
+  "host_includes": [
+   "lib/xhttp-server/include",
+   "lib/xrtshim"
+  ],
+  "requires": [
+   "xhttp"
+  ]
+ },
+ "xssh": {
+  "macro": "XS_USE_XSSH",
+  "symbols": "src/script/import_xssh.inc",
+  "symbol_macro": "XS_XSSH_SYMBOL",
+  "headers": {
+   "xrt/ssh_auth_guard.h": "lib/xssh/include/xrt/ssh_auth_guard.h",
+   "xrt/ssh_auth_hostbased.h": "lib/xssh/include/xrt/ssh_auth_hostbased.h",
+   "xrt/ssh_auth_keyboard.h": "lib/xssh/include/xrt/ssh_auth_keyboard.h",
+   "xrt/ssh_auth_message.h": "lib/xssh/include/xrt/ssh_auth_message.h",
+   "xrt/ssh_auth_password.h": "lib/xssh/include/xrt/ssh_auth_password.h",
+   "xrt/ssh_auth_publickey.h": "lib/xssh/include/xrt/ssh_auth_publickey.h",
+   "xrt/ssh_auth_session.h": "lib/xssh/include/xrt/ssh_auth_session.h",
+   "xrt/ssh_channel_core.h": "lib/xssh/include/xrt/ssh_channel_core.h",
+   "xrt/ssh_channel_io.h": "lib/xssh/include/xrt/ssh_channel_io.h",
+   "xrt/ssh_channel_message.h": "lib/xssh/include/xrt/ssh_channel_message.h",
+   "xrt/ssh_channel_pty.h": "lib/xssh/include/xrt/ssh_channel_pty.h",
+   "xrt/ssh_channel_request.h": "lib/xssh/include/xrt/ssh_channel_request.h",
+   "xrt/ssh_channel_state.h": "lib/xssh/include/xrt/ssh_channel_state.h",
+   "xrt/ssh_channel_window.h": "lib/xssh/include/xrt/ssh_channel_window.h",
+   "xrt/ssh_channels.h": "lib/xssh/include/xrt/ssh_channels.h",
+   "xrt/ssh_client.h": "lib/xssh/include/xrt/ssh_client.h",
+   "xrt/ssh_client_auth_ed25519.h": "lib/xssh/include/xrt/ssh_client_auth_ed25519.h",
+   "xrt/ssh_client_core.h": "lib/xssh/include/xrt/ssh_client_core.h",
+   "xrt/ssh_client_dial.h": "lib/xssh/include/xrt/ssh_client_dial.h",
+   "xrt/ssh_client_forward.h": "lib/xssh/include/xrt/ssh_client_forward.h",
+   "xrt/ssh_client_future.h": "lib/xssh/include/xrt/ssh_client_future.h",
+   "xrt/ssh_client_pty.h": "lib/xssh/include/xrt/ssh_client_pty.h",
+   "xrt/ssh_client_session.h": "lib/xssh/include/xrt/ssh_client_session.h",
+   "xrt/ssh_connection_message.h": "lib/xssh/include/xrt/ssh_connection_message.h",
+   "xrt/ssh_connection_session.h": "lib/xssh/include/xrt/ssh_connection_session.h",
+   "xrt/ssh_fingerprint.h": "lib/xssh/include/xrt/ssh_fingerprint.h",
+   "xrt/ssh_forward_message.h": "lib/xssh/include/xrt/ssh_forward_message.h",
+   "xrt/ssh_hostkey.h": "lib/xssh/include/xrt/ssh_hostkey.h",
+   "xrt/ssh_hostkey_ed25519.h": "lib/xssh/include/xrt/ssh_hostkey_ed25519.h",
+   "xrt/ssh_kex_curve25519.h": "lib/xssh/include/xrt/ssh_kex_curve25519.h",
+   "xrt/ssh_kex_curve25519_random.h": "lib/xssh/include/xrt/ssh_kex_curve25519_random.h",
+   "xrt/ssh_kex_ecdh.h": "lib/xssh/include/xrt/ssh_kex_ecdh.h",
+   "xrt/ssh_kex_exchange.h": "lib/xssh/include/xrt/ssh_kex_exchange.h",
+   "xrt/ssh_kex_exchange_random.h": "lib/xssh/include/xrt/ssh_kex_exchange_random.h",
+   "xrt/ssh_kex_session.h": "lib/xssh/include/xrt/ssh_kex_session.h",
+   "xrt/ssh_kex_session_random.h": "lib/xssh/include/xrt/ssh_kex_session_random.h",
+   "xrt/ssh_kex_sha256.h": "lib/xssh/include/xrt/ssh_kex_sha256.h",
+   "xrt/ssh_kexinit.h": "lib/xssh/include/xrt/ssh_kexinit.h",
+   "xrt/ssh_kexinit_random.h": "lib/xssh/include/xrt/ssh_kexinit_random.h",
+   "xrt/ssh_key_text.h": "lib/xssh/include/xrt/ssh_key_text.h",
+   "xrt/ssh_known_host.h": "lib/xssh/include/xrt/ssh_known_host.h",
+   "xrt/ssh_known_host_db.h": "lib/xssh/include/xrt/ssh_known_host_db.h",
+   "xrt/ssh_known_host_hash.h": "lib/xssh/include/xrt/ssh_known_host_hash.h",
+   "xrt/ssh_packet.h": "lib/xssh/include/xrt/ssh_packet.h",
+   "xrt/ssh_packet_aes_gcm.h": "lib/xssh/include/xrt/ssh_packet_aes_gcm.h",
+   "xrt/ssh_packet_codec.h": "lib/xssh/include/xrt/ssh_packet_codec.h",
+   "xrt/ssh_packet_codec_random.h": "lib/xssh/include/xrt/ssh_packet_codec_random.h",
+   "xrt/ssh_packet_random.h": "lib/xssh/include/xrt/ssh_packet_random.h",
+   "xrt/ssh_private_key.h": "lib/xssh/include/xrt/ssh_private_key.h",
+   "xrt/ssh_private_key_ed25519.h": "lib/xssh/include/xrt/ssh_private_key_ed25519.h",
+   "xrt/ssh_private_key_pem.h": "lib/xssh/include/xrt/ssh_private_key_pem.h",
+   "xrt/ssh_reply_queue.h": "lib/xssh/include/xrt/ssh_reply_queue.h",
+   "xrt/ssh_session_core.h": "lib/xssh/include/xrt/ssh_session_core.h",
+   "xrt/ssh_session_core_random.h": "lib/xssh/include/xrt/ssh_session_core_random.h",
+   "xrt/ssh_session_reader.h": "lib/xssh/include/xrt/ssh_session_reader.h",
+   "xrt/ssh_session_stream.h": "lib/xssh/include/xrt/ssh_session_stream.h",
+   "xrt/ssh_session_tcp.h": "lib/xssh/include/xrt/ssh_session_tcp.h",
+   "xrt/ssh_session_tcp_random.h": "lib/xssh/include/xrt/ssh_session_tcp_random.h",
+   "xrt/ssh_transport_core.h": "lib/xssh/include/xrt/ssh_transport_core.h",
+   "xrt/ssh_transport_message.h": "lib/xssh/include/xrt/ssh_transport_message.h",
+   "xrt/ssh_transport_rekey.h": "lib/xssh/include/xrt/ssh_transport_rekey.h",
+   "xrt/ssh_transport_state.h": "lib/xssh/include/xrt/ssh_transport_state.h",
+   "xrt/ssh_transport_tcp.h": "lib/xssh/include/xrt/ssh_transport_tcp.h",
+   "xrt/ssh_transport_tcp_random.h": "lib/xssh/include/xrt/ssh_transport_tcp_random.h",
+   "xrt/ssh_wire.h": "lib/xssh/include/xrt/ssh_wire.h",
+   "xssh/features.h": "lib/xssh/include/xssh/features.h",
+   "xssh.h": "lib/xssh/include/xssh.h"
+  },
+  "sources": [
+   {
+    "path": "lib/xssh/src/auth/ssh_auth_guard.c"
+   },
+   {
+    "path": "lib/xssh/src/auth/ssh_auth_hostbased.c"
+   },
+   {
+    "path": "lib/xssh/src/auth/ssh_auth_keyboard.c"
+   },
+   {
+    "path": "lib/xssh/src/auth/ssh_auth_message.c"
+   },
+   {
+    "path": "lib/xssh/src/auth/ssh_auth_password.c"
+   },
+   {
+    "path": "lib/xssh/src/auth/ssh_auth_publickey.c"
+   },
+   {
+    "path": "lib/xssh/src/auth/ssh_auth_session.c"
+   },
+   {
+    "path": "lib/xssh/src/connection/ssh_channel_core.c"
+   },
+   {
+    "path": "lib/xssh/src/connection/ssh_channel_io.c"
+   },
+   {
+    "path": "lib/xssh/src/connection/ssh_channel_message.c"
+   },
+   {
+    "path": "lib/xssh/src/connection/ssh_channel_pty.c"
+   },
+   {
+    "path": "lib/xssh/src/connection/ssh_channel_request.c"
+   },
+   {
+    "path": "lib/xssh/src/connection/ssh_channel_state.c"
+   },
+   {
+    "path": "lib/xssh/src/connection/ssh_channel_window.c"
+   },
+   {
+    "path": "lib/xssh/src/connection/ssh_channels.c"
+   },
+   {
+    "path": "lib/xssh/src/connection/ssh_connection_message.c"
+   },
+   {
+    "path": "lib/xssh/src/connection/ssh_connection_session.c"
+   },
+   {
+    "path": "lib/xssh/src/connection/ssh_forward_message.c"
+   },
+   {
+    "path": "lib/xssh/src/connection/ssh_reply_queue.c"
+   },
+   {
+    "path": "lib/xssh/src/kex/ssh_hostkey.c"
+   },
+   {
+    "path": "lib/xssh/src/kex/ssh_hostkey_ed25519.c"
+   },
+   {
+    "path": "lib/xssh/src/kex/ssh_kex_curve25519.c"
+   },
+   {
+    "path": "lib/xssh/src/kex/ssh_kex_curve25519_random.c"
+   },
+   {
+    "path": "lib/xssh/src/kex/ssh_kex_ecdh.c"
+   },
+   {
+    "path": "lib/xssh/src/kex/ssh_kex_exchange.c"
+   },
+   {
+    "path": "lib/xssh/src/kex/ssh_kex_exchange_random.c"
+   },
+   {
+    "path": "lib/xssh/src/kex/ssh_kex_session.c"
+   },
+   {
+    "path": "lib/xssh/src/kex/ssh_kex_session_random.c"
+   },
+   {
+    "path": "lib/xssh/src/kex/ssh_kex_sha256.c"
+   },
+   {
+    "path": "lib/xssh/src/kex/ssh_kexinit.c"
+   },
+   {
+    "path": "lib/xssh/src/kex/ssh_kexinit_random.c"
+   },
+   {
+    "path": "lib/xssh/src/key/ssh_fingerprint.c"
+   },
+   {
+    "path": "lib/xssh/src/key/ssh_key_text.c"
+   },
+   {
+    "path": "lib/xssh/src/key/ssh_known_host.c"
+   },
+   {
+    "path": "lib/xssh/src/key/ssh_known_host_db.c"
+   },
+   {
+    "path": "lib/xssh/src/key/ssh_known_host_hash.c"
+   },
+   {
+    "path": "lib/xssh/src/key/ssh_private_key.c"
+   },
+   {
+    "path": "lib/xssh/src/key/ssh_private_key_ed25519.c"
+   },
+   {
+    "path": "lib/xssh/src/key/ssh_private_key_pem.c"
+   },
+   {
+    "path": "lib/xssh/src/packet/ssh_packet.c"
+   },
+   {
+    "path": "lib/xssh/src/packet/ssh_packet_aes_gcm.c"
+   },
+   {
+    "path": "lib/xssh/src/packet/ssh_packet_codec.c"
+   },
+   {
+    "path": "lib/xssh/src/packet/ssh_packet_codec_random.c"
+   },
+   {
+    "path": "lib/xssh/src/packet/ssh_packet_random.c"
+   },
+   {
+    "path": "lib/xssh/src/session/ssh_client.c"
+   },
+   {
+    "path": "lib/xssh/src/session/ssh_client_auth_ed25519.c"
+   },
+   {
+    "path": "lib/xssh/src/session/ssh_client_core.c"
+   },
+   {
+    "path": "lib/xssh/src/session/ssh_client_dial.c"
+   },
+   {
+    "path": "lib/xssh/src/session/ssh_client_forward.c"
+   },
+   {
+    "path": "lib/xssh/src/session/ssh_client_future.c"
+   },
+   {
+    "path": "lib/xssh/src/session/ssh_client_pty.c"
+   },
+   {
+    "path": "lib/xssh/src/session/ssh_client_session.c"
+   },
+   {
+    "path": "lib/xssh/src/session/ssh_session_core.c"
+   },
+   {
+    "path": "lib/xssh/src/session/ssh_session_core_random.c"
+   },
+   {
+    "path": "lib/xssh/src/session/ssh_session_reader.c"
+   },
+   {
+    "path": "lib/xssh/src/session/ssh_session_stream.c"
+   },
+   {
+    "path": "lib/xssh/src/session/ssh_session_tcp.c"
+   },
+   {
+    "path": "lib/xssh/src/session/ssh_session_tcp_random.c"
+   },
+   {
+    "path": "lib/xssh/src/transport/ssh_transport_core.c"
+   },
+   {
+    "path": "lib/xssh/src/transport/ssh_transport_message.c"
+   },
+   {
+    "path": "lib/xssh/src/transport/ssh_transport_rekey.c"
+   },
+   {
+    "path": "lib/xssh/src/transport/ssh_transport_state.c"
+   },
+   {
+    "path": "lib/xssh/src/transport/ssh_transport_tcp.c"
+   },
+   {
+    "path": "lib/xssh/src/transport/ssh_transport_tcp_random.c"
+   },
+   {
+    "path": "lib/xssh/src/wire/ssh_wire.c"
+   }
+  ],
+  "feature_macro": [
+   "XRT_MODULE_ALL",
+   "XSSH_MODULE_ALL",
+   "XSSH_FEATURE_AUTH_GUARD",
+   "XSSH_FEATURE_AUTH_HOSTBASED",
+   "XSSH_FEATURE_AUTH_KEYBOARD",
+   "XSSH_FEATURE_AUTH_MESSAGE",
+   "XSSH_FEATURE_AUTH_PASSWORD",
+   "XSSH_FEATURE_AUTH_PUBLICKEY",
+   "XSSH_FEATURE_AUTH_SESSION",
+   "XSSH_FEATURE_CHANNELS",
+   "XSSH_FEATURE_CHANNEL_CORE",
+   "XSSH_FEATURE_CHANNEL_IO",
+   "XSSH_FEATURE_CHANNEL_MESSAGE",
+   "XSSH_FEATURE_CHANNEL_PTY",
+   "XSSH_FEATURE_CHANNEL_REQUEST",
+   "XSSH_FEATURE_CHANNEL_STATE",
+   "XSSH_FEATURE_CHANNEL_WINDOW",
+   "XSSH_FEATURE_CLIENT",
+   "XSSH_FEATURE_CLIENT_AUTH_ED25519",
+   "XSSH_FEATURE_CLIENT_CORE",
+   "XSSH_FEATURE_CLIENT_DIAL",
+   "XSSH_FEATURE_CLIENT_FORWARD",
+   "XSSH_FEATURE_CLIENT_FUTURE",
+   "XSSH_FEATURE_CLIENT_PTY",
+   "XSSH_FEATURE_CLIENT_SESSION",
+   "XSSH_FEATURE_CONNECTION_MESSAGE",
+   "XSSH_FEATURE_CONNECTION_SESSION",
+   "XSSH_FEATURE_FINGERPRINT",
+   "XSSH_FEATURE_FORWARD_MESSAGE",
+   "XSSH_FEATURE_HOSTKEY",
+   "XSSH_FEATURE_HOSTKEY_ED25519",
+   "XSSH_FEATURE_KEXINIT",
+   "XSSH_FEATURE_KEXINIT_RANDOM",
+   "XSSH_FEATURE_KEX_CURVE25519",
+   "XSSH_FEATURE_KEX_CURVE25519_RANDOM",
+   "XSSH_FEATURE_KEX_ECDH",
+   "XSSH_FEATURE_KEX_EXCHANGE",
+   "XSSH_FEATURE_KEX_EXCHANGE_RANDOM",
+   "XSSH_FEATURE_KEX_SESSION",
+   "XSSH_FEATURE_KEX_SESSION_RANDOM",
+   "XSSH_FEATURE_KEX_SHA256",
+   "XSSH_FEATURE_KEY_TEXT",
+   "XSSH_FEATURE_KNOWN_HOST",
+   "XSSH_FEATURE_KNOWN_HOST_DB",
+   "XSSH_FEATURE_KNOWN_HOST_HASH",
+   "XSSH_FEATURE_PACKET",
+   "XSSH_FEATURE_PACKET_AES_GCM",
+   "XSSH_FEATURE_PACKET_CODEC",
+   "XSSH_FEATURE_PACKET_CODEC_RANDOM",
+   "XSSH_FEATURE_PACKET_RANDOM",
+   "XSSH_FEATURE_PRIVATE_KEY",
+   "XSSH_FEATURE_PRIVATE_KEY_ED25519",
+   "XSSH_FEATURE_PRIVATE_KEY_PEM",
+   "XSSH_FEATURE_REPLY_QUEUE",
+   "XSSH_FEATURE_SESSION_CORE",
+   "XSSH_FEATURE_SESSION_CORE_RANDOM",
+   "XSSH_FEATURE_SESSION_READER",
+   "XSSH_FEATURE_SESSION_STREAM",
+   "XSSH_FEATURE_SESSION_TCP",
+   "XSSH_FEATURE_SESSION_TCP_RANDOM",
+   "XSSH_FEATURE_SSH",
+   "XSSH_FEATURE_TRANSPORT_CORE",
+   "XSSH_FEATURE_TRANSPORT_MESSAGE",
+   "XSSH_FEATURE_TRANSPORT_REKEY",
+   "XSSH_FEATURE_TRANSPORT_STATE",
+   "XSSH_FEATURE_TRANSPORT_TCP",
+   "XSSH_FEATURE_TRANSPORT_TCP_RANDOM",
+   "XSSH_FEATURE_WIRE"
+  ],
+  "host_includes": [
+   "lib/xssh/include",
+   "lib/xrtshim"
+  ]
+ },
+ "xws": {
+  "macro": "XS_USE_XWS",
+  "symbols": "src/script/import_xws.inc",
+  "symbol_macro": "XS_XWS_SYMBOL",
+  "headers": {
+   "xrt/websocket_runtime.h": "lib/xws/include/xrt/websocket_runtime.h",
+   "xws/export.h": "lib/xws/include/xws/export.h",
+   "xws/features.h": "lib/xws/include/xws/features.h",
+   "xws.h": "lib/xws/include/xws.h"
+  },
+  "sources": [
+   {
+    "path": "lib/xws/src/websocket/connection.c"
+   },
+   {
+    "path": "lib/xws/src/websocket/connection_future.c"
+   },
+   {
+    "path": "lib/xws/src/websocket/connection_ref.c"
+   },
+   {
+    "path": "lib/xws/src/websocket/writer.c"
+   },
+   {
+    "path": "lib/xws/src/websocket/writer_deflate.c"
+   }
+  ],
+  "feature_macro": [
+   "XRT_MODULE_ALL",
+   "XWS_MODULE_ALL",
+   "XWS_FEATURE_WEBSOCKET_CONNECTION",
+   "XWS_FEATURE_WEBSOCKET_CONNECTION_DEFLATE",
+   "XWS_FEATURE_WEBSOCKET_CONNECTION_FUTURE",
+   "XWS_FEATURE_WEBSOCKET_CONNECTION_REF",
+   "XWS_FEATURE_WEBSOCKET_CONNECTION_REF_FUTURE",
+   "XWS_FEATURE_WEBSOCKET_CONNECTION_TLS",
+   "XWS_FEATURE_WEBSOCKET_WRITER",
+   "XWS_FEATURE_WEBSOCKET_WRITER_DEFLATE",
+   "XWS_FEATURE_WEBSOCKET_WRITER_REF"
+  ],
+  "host_includes": [
+   "lib/xws/include",
+   "lib/xrtshim"
+  ]
+ },
+ "xws-client": {
+  "macro": "XS_USE_XWS_CLIENT",
+  "symbols": "src/script/import_xws_client.inc",
+  "symbol_macro": "XS_XWS_CLIENT_SYMBOL",
+  "headers": {
+   "xrt/websocket_client.h": "lib/xws-client/include/xrt/websocket_client.h",
+   "xrt/websocket_client_future.h": "lib/xws-client/include/xrt/websocket_client_future.h",
+   "xws-client/export.h": "lib/xws-client/include/xws-client/export.h",
+   "xws-client/features.h": "lib/xws-client/include/xws-client/features.h",
+   "xws-client.h": "lib/xws-client/include/xws-client.h"
+  },
+  "sources": [
+   {
+    "path": "lib/xws-client/src/websocket/client.c"
+   },
+   {
+    "path": "lib/xws-client/src/websocket/client_future.c"
+   },
+   {
+    "path": "lib/xws-client/src/websocket/client_result.c"
+   }
+  ],
+  "feature_macro": [
+   "XRT_MODULE_ALL",
+   "XWS_CLIENT_MODULE_ALL",
+   "XWS_CLIENT_FEATURE_WEBSOCKET_CLIENT",
+   "XWS_CLIENT_FEATURE_WEBSOCKET_CLIENT_DEFLATE",
+   "XWS_CLIENT_FEATURE_WEBSOCKET_CLIENT_FUTURE",
+   "XWS_CLIENT_FEATURE_WEBSOCKET_CLIENT_HTTPS"
+  ],
+  "host_includes": [
+   "lib/xws-client/include",
+   "lib/xrtshim"
+  ],
+  "requires": [
+   "xhttp-client",
+   "xws"
+  ]
+ },
+ "xws-group": {
+  "macro": "XS_USE_XWS_GROUP",
+  "symbols": "src/script/import_xws_group.inc",
+  "symbol_macro": "XS_XWS_GROUP_SYMBOL",
+  "headers": {
+   "xrt/detail/xws_group_wait.h": "lib/xws-group/include/xrt/detail/xws_group_wait.h",
+   "xrt/websocket_group.h": "lib/xws-group/include/xrt/websocket_group.h",
+   "xws-group/export.h": "lib/xws-group/include/xws-group/export.h",
+   "xws-group/features.h": "lib/xws-group/include/xws-group/features.h",
+   "xws-group.h": "lib/xws-group/include/xws-group.h"
+  },
+  "sources": [
+   {
+    "path": "lib/xws-group/src/websocket/group.c"
+   },
+   {
+    "path": "lib/xws-group/src/websocket/group_broadcast.c"
+   },
+   {
+    "path": "lib/xws-group/src/websocket/group_future.c"
+   }
+  ],
+  "feature_macro": [
+   "XRT_MODULE_ALL",
+   "XWS_GROUP_MODULE_ALL",
+   "XWS_GROUP_FEATURE_WEBSOCKET_GROUP",
+   "XWS_GROUP_FEATURE_WEBSOCKET_GROUP_FUTURE"
+  ],
+  "host_includes": [
+   "lib/xws-group/include",
+   "lib/xrtshim"
+  ],
+  "requires": [
+   "xws"
+  ]
+ },
+ "xws-server": {
+  "macro": "XS_USE_XWS_SERVER",
+  "symbols": "src/script/import_xws_server.inc",
+  "symbol_macro": "XS_XWS_SERVER_SYMBOL",
+  "headers": {
+   "xrt/websocket_server.h": "lib/xws-server/include/xrt/websocket_server.h",
+   "xrt/websocket_server_future.h": "lib/xws-server/include/xrt/websocket_server_future.h",
+   "xrt/websocket_server_router.h": "lib/xws-server/include/xrt/websocket_server_router.h",
+   "xws-server/export.h": "lib/xws-server/include/xws-server/export.h",
+   "xws-server/features.h": "lib/xws-server/include/xws-server/features.h",
+   "xws-server.h": "lib/xws-server/include/xws-server.h"
+  },
+  "sources": [
+   {
+    "path": "lib/xws-server/src/websocket/server.c"
+   },
+   {
+    "path": "lib/xws-server/src/websocket/server_future.c"
+   },
+   {
+    "path": "lib/xws-server/src/websocket/server_result.c"
+   },
+   {
+    "path": "lib/xws-server/src/websocket/server_router.c"
+   },
+   {
+    "path": "lib/xws-server/src/websocket/server_router_events.c"
+   }
+  ],
+  "feature_macro": [
+   "XRT_MODULE_ALL",
+   "XWS_SERVER_MODULE_ALL",
+   "XWS_SERVER_FEATURE_WEBSOCKET_SERVER",
+   "XWS_SERVER_FEATURE_WEBSOCKET_SERVER_DEFLATE",
+   "XWS_SERVER_FEATURE_WEBSOCKET_SERVER_FUTURE",
+   "XWS_SERVER_FEATURE_WEBSOCKET_SERVER_ROUTER",
+   "XWS_SERVER_FEATURE_WEBSOCKET_SERVER_TLS"
+  ],
+  "host_includes": [
+   "lib/xws-server/include",
+   "lib/xrtshim"
+  ],
+  "requires": [
+   "xhttp",
+   "xhttp-server",
+   "xws"
+  ]
  }
 }
