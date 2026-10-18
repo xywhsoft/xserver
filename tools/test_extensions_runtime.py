@@ -78,7 +78,7 @@ def check_public_sdk(exe: Path, selected: dict, directory: Path) -> None:
     """Resolve every selected public export in both outer and nested TCC."""
     includes = sorted({virtual for entry in selected.values() for virtual in entry["headers"]})
     code = "#include <xsbase.h>\n#include <stdlib.h>\n#include <stdio.h>\n"
-    code += "".join(f"#include <{header}>\n" for header in includes)
+    code += "".join(f"#include </xs/{header}>\n" for header in includes)
     code += '#define REQUIRE(x) do { if (!(x)) { printf("FAIL SDK: %s\\n", #x); exit(5); } } while (0)\n'
     code += "static const void* const exports[] = {\n"
     # Let the target TCC evaluate platform gates in the same import lists as
@@ -812,7 +812,8 @@ def check(exe: Path, names: list[str]) -> None:
         for name, (header, declaration, call) in absent.items():
             if name in selected:
                 continue
-            source = (f"#include <xsbase.h>\n#include <stdlib.h>\n#include <{header}>\n"
+            # Check the SDK namespace, independent of installed system headers.
+            source = (f"#include <xsbase.h>\n#include <stdlib.h>\n#include </xs/{header}>\n"
                       "void ServiceInit(XS_HostInfo *h){(void)h;exit(0);}\n")
             proc = invoke(exe, source, directory, name + "-absent-header")
             if proc.returncode != 1 or header not in proc.stdout + proc.stderr:
