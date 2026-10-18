@@ -1,5 +1,5 @@
 Source: xrt extlibs/xws
-Snapshot: 13cc17b6d7aaff8a5fc927929b89a77e6cc151f5
+Snapshot: 1d35b80b936d6c6e4c23b9bf73c3e2abc4ccd288
 Upstream source bytes and SHA256 are recorded in ../xrt_sources.lock.json.
 Native sources, public headers and module configuration are vendored.
 Native module sources compile separately; single-header implementations are not used.
