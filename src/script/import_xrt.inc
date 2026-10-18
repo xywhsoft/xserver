@@ -1,5 +1,5 @@
 /* 由 tools/gen_xrt_symbols.py 生成，勿手改。xrt 锁定版本见 lib/xrt_version.txt */
-/* xrt commit: ac05926783fae77d9d9b13902172414343d84631 | 登记公共函数 3197 个 */
+/* xrt commit: 7c82e311d314e8fc2eb3521c234b7a0c5df9a13c | 登记公共函数 3197 个 */
 XS_XRT_SYMBOL(xrtAVLClear)
 XS_XRT_SYMBOL(xrtAVLFind)
 XS_XRT_SYMBOL(xrtAVLFirst)

@@ -1,3 +1,3 @@
-ac05926783fae77d9d9b13902172414343d84631
+7c82e311d314e8fc2eb3521c234b7a0c5df9a13c
 Byte-for-byte upstream snapshot; file hashes in xrt_sources.lock.json.
 No local upstream patches; refresh with python tools/sync_xrt.py --source ../xrt.
