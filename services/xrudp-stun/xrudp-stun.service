@@ -1,0 +1,26 @@
+[Unit]
+Description=XRUDP bounded STUN Binding reflector
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecStart=%h/.local/libexec/xrudp-stun --port 3478
+Restart=on-failure
+RestartSec=2s
+TimeoutStopSec=10s
+KillSignal=SIGTERM
+NoNewPrivileges=yes
+UMask=0077
+LimitCORE=0
+LimitNOFILE=64
+TasksMax=8
+MemoryMax=32M
+MemorySwapMax=0
+CPUQuota=25%
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+RestrictRealtime=yes
+
+[Install]
+WantedBy=default.target
