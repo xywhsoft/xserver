@@ -1,6 +1,7 @@
 """Refresh vendored xrt sources, SDK shims and imports as one recorded snapshot.
 
 python tools/sync_xrt.py --source ../xrt
+python tools/sync_xrt.py --source ../xrt --ref COMMIT
 python tools/sync_xrt.py --check
 
 Upstream files are copied byte-for-byte. The lock records working-tree hashes
@@ -14,7 +15,8 @@ import hashlib
 import json
 import re
 import subprocess
-from pathlib import Path
+import tempfile
+from pathlib import Path, PurePosixPath
 
 from xs_extensions import ROOT, REGISTRY, load_registry
 
@@ -189,9 +191,95 @@ def check_lock(root: Path = ROOT, lock: Path = LOCK) -> None:
             raise ValueError(f"xrt snapshot drift: {relative}; sync again instead of patching vendor files")
 
 
-def refresh(source: Path) -> None:
+def _snapshot_path(name: str) -> Path:
+    """Git paths must also be safe on Windows (drives, ADS and backslashes)."""
+    path = PurePosixPath(name)
+    if (not path.parts or path.is_absolute() or "\\" in name or
+            any(part in ("", ".", "..") or ":" in part for part in name.split("/"))):
+        raise ValueError(f"unsafe committed source path: {name}")
+    return Path(*path.parts)
+
+
+def _export_commit(source: Path, commit: str, destination: Path) -> None:
+    """Export raw Git blobs, ignoring dirty files, filters and export-subst.
+
+    A fresh private destination prevents overwriting the checkout. No checkout,
+    branch, worktree or index operation, and no upstream Python code is run.
+    """
+    listing = subprocess.check_output(
+        ["git", "ls-tree", "-rz", "--full-tree", commit, "--",
+         "single/xrt.h", "single/xrt_decl.h", "include/xrt", "extlibs"], cwd=source)
+    entries = []
+    for item in listing.split(b"\0"):
+        if not item:
+            continue
+        metadata, name = item.split(b"\t", 1)
+        mode, kind, oid = metadata.split(b" ")
+        relative = _snapshot_path(name.decode("utf-8"))
+        # Mirror collect's library trees; no tests, binaries or generated
+        # single extlibs are needed to refresh the production SDK.
+        parts = relative.parts
+        if parts[0] == "extlibs" and not (
+                len(parts) >= 4 and parts[2] in ("include", "src", "config") or
+                len(parts) == 3 and (parts[2] in ("README.md", "LICENSE") or
+                                    relative.suffix in (".c", ".h"))):
+            continue
+        if mode not in (b"100644", b"100755") or kind != b"blob":
+            raise ValueError(f"committed source must be a regular file: {name!r}")
+        entries.append((relative, oid))
+    if not entries:
+        raise ValueError("committed source snapshot is empty")
+    destination.mkdir()  # Must not already exist, including as a symlink.
+    with tempfile.TemporaryFile() as errors, subprocess.Popen(
+            ["git", "cat-file", "--batch"], cwd=source, stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=errors) as process:
+        try:
+            for relative, oid in entries:
+                process.stdin.write(oid + b"\n")
+                process.stdin.flush()
+                header = process.stdout.readline(200).split()
+                if len(header) != 3 or header[0] != oid or header[1] != b"blob":
+                    raise ValueError(f"cannot read committed source blob: {relative}")
+                remaining = int(header[2])
+                if remaining < 0:
+                    raise ValueError(f"invalid committed source size: {relative}")
+                target = destination / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with target.open("xb") as output:
+                    while remaining:
+                        data = process.stdout.read(min(65536, remaining))
+                        if not data:
+                            raise ValueError(f"truncated committed source blob: {relative}")
+                        output.write(data)
+                        remaining -= len(data)
+                if process.stdout.read(1) != b"\n":
+                    raise ValueError(f"invalid committed source separator: {relative}")
+            process.stdin.close()
+            if process.wait(timeout=30) != 0:
+                errors.seek(0)
+                raise ValueError(errors.read().decode("utf-8", errors="replace"))
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=10)
+
+
+def refresh_commit(source: Path, reference: str) -> None:
     source = source.resolve(strict=True)
-    commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip()
+    commit = subprocess.check_output(
+        ["git", "rev-parse", "--verify", "--end-of-options", reference + "^{commit}"],
+        cwd=source, text=True, encoding="utf-8").strip()
+    if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", commit):
+        raise ValueError("invalid committed source identity")
+    with tempfile.TemporaryDirectory(prefix="xs-xrt-commit-") as directory:
+        snapshot = Path(directory) / "source"
+        _export_commit(source, commit, snapshot)
+        refresh(snapshot, committed=commit)
+
+
+def refresh(source: Path, *, committed: str | None = None) -> None:
+    source = source.resolve(strict=True)
+    commit = committed or subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip()
     libraries = library_names(source / "extlibs")
     if not libraries:
         raise ValueError("upstream has no extension manifests")
@@ -218,12 +306,12 @@ def refresh(source: Path) -> None:
     for path, data in files.values():
         if path.read_bytes() != data:
             raise ValueError(f"upstream changed during collection: {path}")
-    if subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip() != commit:
+    if committed is None and subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip() != commit:
         raise ValueError("upstream commit changed during collection")
     # Object selection and feature gates are part of the same SDK snapshot.
     generated[REGISTRY.relative_to(ROOT).as_posix()] = (
         json.dumps(registry, indent=1, ensure_ascii=False) + "\n").encode("utf-8")
-    status = subprocess.check_output(
+    status = "" if committed is not None else subprocess.check_output(
         ["git", "status", "--porcelain", "--", "single", "extlibs", "include/xrt"],
         cwd=source, text=True, encoding="utf-8")
     # Remove only files owned by the previous snapshot and verify their bytes
@@ -277,12 +365,18 @@ def main() -> None:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--source", type=Path)
     group.add_argument("--check", action="store_true")
+    parser.add_argument("--ref", help="sync only raw files from this Git commit/ref, ignoring the working tree")
     args = parser.parse_args()
+    if args.ref is not None and args.source is None:
+        parser.error("--ref requires --source")
     if args.check:
         check_lock()
         print("PASS xrt snapshot hashes")
     else:
-        refresh(args.source)
+        if args.ref is not None:
+            refresh_commit(args.source, args.ref)
+        else:
+            refresh(args.source)
 
 
 if __name__ == "__main__":
