@@ -15,6 +15,7 @@
 #include "../protocol/stream.h"
 #include "../protocol/ws.h"
 #include "../protocol/udp.h"
+#include "../protocol/xrudp.h"
 
 static void XS_ServerDriverUnit(XS_ServerInfo* pServer);
 
@@ -59,6 +60,16 @@ static bool XS_ServerDriverStartEx(
 		XS_ServerDriverUnit(pServer);
 		return false;
 	}
+	if ( strcmp(pServer->Class, "xrudp") == 0 ) {
+#ifdef XS_USE_XRUDP
+		if ( XS_RudpStartEx(pServer, bStartEndpoint, bAcceptEndpoint, sErr, iErrCap) ) return true;
+		XS_RudpStop((XS_RudpRuntime*)pServer->Runtime);
+		XS_ServerDriverUnit(pServer);
+#else
+		snprintf(sErr, iErrCap, "class 'xrudp' requires an xs build with the xrudp extension");
+#endif
+		return false;
+	}
 	snprintf(sErr, iErrCap, "unknown class '%s'", pServer->Class);
 	return false;
 }
@@ -89,6 +100,13 @@ static XS_ListenerSlot* XS_ServerDriverListenerSlot(
 		*ppExpectedRuntime = pRuntime;
 		return pRuntime->pListenerSlot;
 	}
+#ifdef XS_USE_XRUDP
+	if ( strcmp(pServer->Class, "xrudp") == 0 ) {
+		XS_RudpRuntime* runtime = pServer->Runtime;
+		*ppExpectedRuntime = runtime;
+		return runtime->Slot;
+	}
+#endif
 	return NULL;
 }
 
@@ -107,6 +125,9 @@ static bool XS_ServerDriverHandoff(XS_ServerInfo* pOld, XS_ServerInfo* pNew)
 	if ( strcmp(pOld->Class, "udp") == 0 ) {
 		return XS_UdpHandoff((XS_UdpRuntime*)pOld->Runtime, (XS_UdpRuntime*)pNew->Runtime);
 	}
+#ifdef XS_USE_XRUDP
+	if ( strcmp(pOld->Class, "xrudp") == 0 ) return XS_RudpHandoff(pOld->Runtime, pNew->Runtime);
+#endif
 	return false;
 }
 
@@ -117,6 +138,9 @@ static bool XS_ServerDriverCanHandoff(XS_ServerInfo* pOld, XS_ServerInfo* pNew)
 
 	if ( pOld == NULL || pNew == NULL || pOld->Runtime == NULL || pNew->Runtime == NULL ||
 	     strcmp(pOld->Class, pNew->Class) != 0 ) return false;
+#ifdef XS_USE_XRUDP
+	if ( strcmp(pOld->Class, "xrudp") == 0 && !XS_RudpCanHandoff(pOld->Runtime, pNew->Runtime) ) return false;
+#endif
 	pSlot = XS_ServerDriverListenerSlot(pOld, &pExpected);
 	return XS_ListenerSlotCanHandoff(pSlot, pExpected);
 }
@@ -166,6 +190,9 @@ static void XS_ServerDriverStop(XS_ServerInfo* pServer)
 	} else if ( strcmp(pServer->Class, "udp") == 0 ) {
 		XS_UdpStop((XS_UdpRuntime*)pServer->Runtime);
 	}
+#ifdef XS_USE_XRUDP
+	else if ( strcmp(pServer->Class, "xrudp") == 0 ) XS_RudpStop(pServer->Runtime);
+#endif
 }
 
 /* 进程退出才主动关闭旧连接；在线换代只 Stop listener 后自然排空。 */
@@ -192,6 +219,9 @@ static void XS_ServerDriverUnit(XS_ServerInfo* pServer)
 	} else if ( strcmp(pServer->Class, "udp") == 0 ) {
 		XS_UdpUnit((XS_UdpRuntime*)pServer->Runtime);
 	}
+#ifdef XS_USE_XRUDP
+	else if ( strcmp(pServer->Class, "xrudp") == 0 ) XS_RudpUnit(pServer->Runtime);
+#endif
 	pServer->Runtime = NULL;
 }
 
@@ -203,6 +233,12 @@ static bool XS_HostHasScript(XS_HostInfo* pHost)
 
 static bool XS_ServerScriptsLoad(XS_ServerInfo* pServer)
 {
+#ifndef XS_USE_XRUDP
+	if ( strcmp(pServer->Class, "xrudp") == 0 ) {
+		printf("[xs] class 'xrudp' requires an xs build with the xrudp extension\n");
+		return false;
+	}
+#endif
 	bool bVirtualHosts = XS_ClassIsHttp(pServer->Class) ||
 		strcmp(pServer->Class, "ws") == 0;
 	uint32 iCount = bVirtualHosts ? pServer->HostCount + 1 : 1;
@@ -316,6 +352,9 @@ static bool XS_AssembleServers(XS_App* pApp)
 	for ( i = 0; i < pApp->ServerCount; i++ ) {
 		pServer = pApp->Servers[i];
 		(void)XS_GenerationPublish((XS_ServerGeneration*)pServer->Generation);
+#ifdef XS_USE_XRUDP
+		if ( pServer->Enabled && strcmp(pServer->Class, "xrudp") == 0 ) XS_RudpPublished(pServer->Runtime);
+#endif
 		pServer->DefaultHost->State = pServer->Enabled && pServer->DefaultHost->Enabled ?
 			XS_RUN_RUNNING : XS_RUN_STOPPED;
 		for ( uint32 j = 0; j < pServer->HostCount; j++ ) {

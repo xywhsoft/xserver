@@ -23,6 +23,9 @@
 #endif
 #include <string.h>	/* XS_ClassIsHttp 用 strcmp；宿主侧 xrt.h 已含
 				 string.h，脚本侧 xrt_decl.h 仅声明不含它 */
+#ifdef XS_USE_XRUDP
+#include <xrudp.h>
+#endif
 
 /* 进程内直连：宿主单进程实现，脚本经 tcc_add_symbol 按地址解析，
  * 因此无需任何导出修饰 */
@@ -105,7 +108,7 @@ static bool XS_ClassIsHttp(const char* sClass)
 
 typedef struct XS_ServerInfo {
 	bool			Enabled;
-	const char*			Class;		/* "http"|"app"|"ws"|"tcp"|"udp"|"custom"；app 复用 http 全套装配 */
+	const char*			Class;		/* "http"|"app"|"ws"|"tcp"|"udp"|"xrudp"|"custom"；app 复用 http 全套装配 */
 	const char*			Name;		/* 唯一名，xsServerFind 的键 */
 	const char*			IP;
 	uint16			Port;
@@ -183,6 +186,25 @@ typedef void (*XS_EventCloseProc)(XS_HostInfo* pHost, XS_StreamConn* pConn, xnet
 /* udp */
 typedef void (*XS_EventDgramProc)(XS_HostInfo* pHost, xnetudp* pUdp, const xnetudpmessage* pMsg);
 
+#ifdef XS_USE_XRUDP
+/* xrudp: native, nonblocking owner-worker callbacks. All handles are borrowed;
+ * Ref before retaining them and never Destroy the service's endpoint reference.
+ * Ready runs after publication, once per service generation. Authorization is
+ * bounded and side-effect-free: Info==NULL checks the Noise-authenticated key;
+ * non-NULL checks the final identity/context again before Open. It must not
+ * consume a one-use grant, block or reenter transport operations. A configured
+ * peer_public pin AND this optional callback must both approve when present.
+ * Changed/StreamChanged are edge hints: drain native reads to BACKPRESSURE.
+ * Abort can synchronously deliver Close, including inside another callback.
+ * Established peers keep their original script across same-endpoint reload. */
+typedef void (*XS_RudpReadyProc)(XS_HostInfo*, xrudpendpoint*);
+typedef bool (*XS_RudpAuthorizeProc)(XS_HostInfo*, const unsigned char*, const xrudphandshakeinfo*);
+typedef void (*XS_RudpOpenProc)(XS_HostInfo*, xrudppeer*);
+typedef void (*XS_RudpChangedProc)(XS_HostInfo*, xrudppeer*, uint32_t);
+typedef void (*XS_RudpStreamChangedProc)(XS_HostInfo*, xrudppeer*, const xrudpstreamevent*);
+typedef void (*XS_RudpCloseProc)(XS_HostInfo*, xrudppeer*, xrudpresult);
+#endif
+
 /* 生命周期（全部可选导出；ServiceSwap 的交接数据在新代 ServiceInit 时经
  * xsSwapTake 取回。Swap 必须是无破坏的快照导出：在新代正式发布前，旧代
  * 仍可能继续服务或因极端 listener 终态而取消提交，见设计 §10） */
@@ -205,6 +227,12 @@ typedef bool (*XS_ServiceSwapProc)(XS_HostInfo* pHost, xvalue** ppShared);
 #define XS_SYM_EVENT_DATA	"EventData"
 #define XS_SYM_EVENT_CLOSE	"EventClose"
 #define XS_SYM_EVENT_DGRAM	"EventDgram"
+#define XS_SYM_RUDP_READY	"RudpReady"
+#define XS_SYM_RUDP_AUTHORIZE	"RudpAuthorize"
+#define XS_SYM_RUDP_OPEN		"RudpOpen"
+#define XS_SYM_RUDP_CHANGED	"RudpChanged"
+#define XS_SYM_RUDP_STREAM_CHANGED "RudpStreamChanged"
+#define XS_SYM_RUDP_CLOSE		"RudpClose"
 
 /* ============================================================
  * xs API（其余一切能力皆为 xrt 或可选库符号）

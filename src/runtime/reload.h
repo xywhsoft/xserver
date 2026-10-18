@@ -674,8 +674,8 @@ static bool XS_ServerCanHandoffEndpoint(XS_ServerInfo* pOld, XS_ServerInfo* pNew
 /* 两代不能同时绑定同一传输端点时，优先走稳定 listener 切槽。 */
 static bool XS_ServerBindConflicts(XS_ServerInfo* pOld, XS_ServerInfo* pNew)
 {
-	bool bOldUdp = strcmp(pOld->Class, "udp") == 0;
-	bool bNewUdp = strcmp(pNew->Class, "udp") == 0;
+	bool bOldUdp = strcmp(pOld->Class, "udp") == 0 || strcmp(pOld->Class, "xrudp") == 0;
+	bool bNewUdp = strcmp(pNew->Class, "udp") == 0 || strcmp(pNew->Class, "xrudp") == 0;
 
 	if ( !pOld->Enabled || !pNew->Enabled || strcmp(pOld->Class, "custom") == 0 ||
 	     strcmp(pNew->Class, "custom") == 0 ) return false;
@@ -879,6 +879,9 @@ static void XS_ReloadActivateCandidateScripts(XS_ServerInfo* pServer)
 		pHost->State = pHost->Enabled && pServer->Enabled ? XS_RUN_RUNNING : XS_RUN_STOPPED;
 	}
 	(void)XS_GenerationPublish((XS_ServerGeneration*)pServer->Generation);
+#ifdef XS_USE_XRUDP
+	if ( pServer->Enabled && strcmp(pServer->Class, "xrudp") == 0 ) XS_RudpPublished(pServer->Runtime);
+#endif
 	pServer->State = pServer->Enabled ? XS_RUN_RUNNING : XS_RUN_STOPPED;
 }
 

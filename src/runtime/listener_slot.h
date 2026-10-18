@@ -29,7 +29,7 @@ typedef struct XS_ListenerSlot {
 	uint32			iResources;	/* listener / TLS listener / UDP socket 数 */
 	uint32			iResourceMask;
 	uint32			iRequiredMask;	/* 启动阶段声明的完整端点集合，终态后不随之缩小 */
-	void*			arrResources[3];
+	void*			arrResources[4];
 	bool			bAccepting;	/* 候选端点已 bind 但未发布时为 false */
 	bool			bClosing;
 	bool			bOwner;		/* 当前 driver runtime 的 owner ref */
@@ -40,13 +40,17 @@ typedef struct XS_ListenerSlot {
 typedef enum XS_ListenerResourceKind {
 	XS_LISTENER_RESOURCE_PLAIN = 0,
 	XS_LISTENER_RESOURCE_TLS = 1,
-	XS_LISTENER_RESOURCE_UDP = 2
+	XS_LISTENER_RESOURCE_UDP = 2,
+	XS_LISTENER_RESOURCE_RUDP = 3
 } XS_ListenerResourceKind;
 
 typedef struct XS_ListenerResources {
 	xnetlistener*	pPlain;
 	xtlslistener*	pTls;
 	xnetudp*	pUdp;
+#ifdef XS_USE_XRUDP
+	xrudpendpoint*	pRudp;
+#endif
 } XS_ListenerResources;
 
 static void XS_ListenerSlotFree(XS_ListenerSlot* pSlot)
@@ -89,7 +93,7 @@ static bool XS_ListenerSlotResourceAdd(
 	bool bOk = false;
 	uint32 iBit;
 
-	if ( pSlot == NULL || iKind < 0 || iKind > XS_LISTENER_RESOURCE_UDP ) return false;
+	if ( pSlot == NULL || iKind < 0 || iKind > XS_LISTENER_RESOURCE_RUDP ) return false;
 	iBit = (uint32)1u << (uint32)iKind;
 	xrtMutexLock(pSlot->pLock);
 	if ( pSlot->bOwner && !pSlot->bClosing &&
@@ -114,7 +118,7 @@ static bool XS_ListenerSlotResourceAttach(
 	bool bOk = false;
 
 	if ( pSlot == NULL || pResource == NULL ||
-	     iKind < 0 || iKind > XS_LISTENER_RESOURCE_UDP ) return false;
+	     iKind < 0 || iKind > XS_LISTENER_RESOURCE_RUDP ) return false;
 	iBit = (uint32)1u << (uint32)iKind;
 	xrtMutexLock(pSlot->pLock);
 	if ( (pSlot->iResourceMask & iBit) != 0 ) {
@@ -132,7 +136,7 @@ static void XS_ListenerSlotResourceCancel(
 	XS_ServerGeneration* pGeneration = NULL;
 	uint32 iBit;
 
-	if ( pSlot == NULL || iKind < 0 || iKind > XS_LISTENER_RESOURCE_UDP ) return;
+	if ( pSlot == NULL || iKind < 0 || iKind > XS_LISTENER_RESOURCE_RUDP ) return;
 	iBit = (uint32)1u << (uint32)iKind;
 	xrtMutexLock(pSlot->pLock);
 	if ( (pSlot->iResourceMask & iBit) != 0 ) {
@@ -320,6 +324,12 @@ static bool XS_ListenerSlotBeginClose(
 			pResources->pUdp = xrtNetUdpRef(
 				(xnetudp*)pSlot->arrResources[XS_LISTENER_RESOURCE_UDP]);
 		}
+#ifdef XS_USE_XRUDP
+		if ( pSlot->arrResources[XS_LISTENER_RESOURCE_RUDP] != NULL ) {
+			pResources->pRudp = xrtRudpEndpointRef(
+				(xrudpendpoint*)pSlot->arrResources[XS_LISTENER_RESOURCE_RUDP]);
+		}
+#endif
 		memset(pSlot->arrResources, 0, sizeof(pSlot->arrResources));
 		pSlot->bClosing = true;
 		pSlot->bAccepting = false;
@@ -343,7 +353,7 @@ static void XS_ListenerSlotResourceClose(
 	uint32 iBit;
 	bool bFree = false;
 
-	if ( pSlot == NULL || iKind < 0 || iKind > XS_LISTENER_RESOURCE_UDP ) return;
+	if ( pSlot == NULL || iKind < 0 || iKind > XS_LISTENER_RESOURCE_RUDP ) return;
 	iBit = (uint32)1u << (uint32)iKind;
 	xrtMutexLock(pSlot->pLock);
 	if ( (pSlot->iResourceMask & iBit) != 0 ) {

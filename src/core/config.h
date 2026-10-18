@@ -216,7 +216,7 @@ static bool XS_ConfigClassValid(const char* sClass)
 	return sClass != NULL && (
 		strcmp(sClass, "http") == 0 || strcmp(sClass, "app") == 0 ||
 		strcmp(sClass, "ws") == 0 ||
-		strcmp(sClass, "tcp") == 0 || strcmp(sClass, "udp") == 0 ||
+		strcmp(sClass, "tcp") == 0 || strcmp(sClass, "udp") == 0 || strcmp(sClass, "xrudp") == 0 ||
 		strcmp(sClass, "custom") == 0 );
 }
 
@@ -302,11 +302,11 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 
 	if ( strcmp(pServer->Class, "custom") != 0 ) {
 		if ( !XS_ConfigTakeInt(pObj, "port", &iVal, sErr, iErrCap) ) return false;
-		/* port 0 = OS 自动分配（app 专属，设计 §8）；其余类 1-65535 */
+		/* app/xrudp port 0 = OS 自动分配；其余类 1-65535 */
 		if ( iVal < 0 || iVal > 65535
-			|| (iVal == 0 && strcmp(pServer->Class, "app") != 0) ) {
+			|| (iVal == 0 && strcmp(pServer->Class, "app") != 0 && strcmp(pServer->Class, "xrudp") != 0) ) {
 			snprintf(sErr, iErrCap, "field 'port' required (1-65535%s) for class '%s'",
-				strcmp(pServer->Class, "app") == 0 ? " or 0 (auto)" : "",
+				(strcmp(pServer->Class, "app") == 0 || strcmp(pServer->Class, "xrudp") == 0) ? " or 0 (auto)" : "",
 				pServer->Class);
 			return false;
 		}
@@ -315,8 +315,8 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 			const char* sPlainIp;
 			const char* sTlsIp;
 
-			if ( strcmp(pServer->Class, "udp") == 0 ) {
-				snprintf(sErr, iErrCap, "field 'tls' not supported on udp");
+			if ( strcmp(pServer->Class, "udp") == 0 || strcmp(pServer->Class, "xrudp") == 0 ) {
+				snprintf(sErr, iErrCap, "field 'tls' not supported on %s", pServer->Class);
 				return false;
 			}
 			bHasPortTls = xrtValueObjectGet(pObj, XRT_STR_LITERAL("port_tls")) != NULL;

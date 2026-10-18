@@ -40,6 +40,14 @@ typedef struct XS_ScriptRuntime {
 	XS_WsPingProc			procWsPing;
 	XS_WsPongProc			procWsPong;
 	XS_WsCloseProc			procWsClose;
+#ifdef XS_USE_XRUDP
+	XS_RudpReadyProc		procRudpReady;
+	XS_RudpAuthorizeProc	procRudpAuthorize;
+	XS_RudpOpenProc		procRudpOpen;
+	XS_RudpChangedProc	procRudpChanged;
+	XS_RudpStreamChangedProc	procRudpStreamChanged;
+	XS_RudpCloseProc		procRudpClose;
+#endif
 } XS_ScriptRuntime;
 
 /* 让脚本内创建的定时器绑定“正在执行的旧代”，而不是可变的 host->Runtime。 */
@@ -338,6 +346,14 @@ static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 	pRuntime->procWsPing = (XS_WsPingProc)tcc_get_symbol(pTcc, XS_SYM_WS_PING);
 	pRuntime->procWsPong = (XS_WsPongProc)tcc_get_symbol(pTcc, XS_SYM_WS_PONG);
 	pRuntime->procWsClose = (XS_WsCloseProc)tcc_get_symbol(pTcc, XS_SYM_WS_CLOSE);
+#ifdef XS_USE_XRUDP
+	pRuntime->procRudpReady = (XS_RudpReadyProc)tcc_get_symbol(pTcc, XS_SYM_RUDP_READY);
+	pRuntime->procRudpAuthorize = (XS_RudpAuthorizeProc)tcc_get_symbol(pTcc, XS_SYM_RUDP_AUTHORIZE);
+	pRuntime->procRudpOpen = (XS_RudpOpenProc)tcc_get_symbol(pTcc, XS_SYM_RUDP_OPEN);
+	pRuntime->procRudpChanged = (XS_RudpChangedProc)tcc_get_symbol(pTcc, XS_SYM_RUDP_CHANGED);
+	pRuntime->procRudpStreamChanged = (XS_RudpStreamChangedProc)tcc_get_symbol(pTcc, XS_SYM_RUDP_STREAM_CHANGED);
+	pRuntime->procRudpClose = (XS_RudpCloseProc)tcc_get_symbol(pTcc, XS_SYM_RUDP_CLOSE);
+#endif
 	pRuntime->pHost = pHost;
 	pRuntime->tGeneration = xrtAtomic64FetchAdd(
 		&g_XS_Generation, 1, XMEMORY_RELAXED) + 1u;
