@@ -2127,5 +2127,121 @@
    "xhttp-server",
    "xws"
   ]
+ },
+ "xrudp": {
+  "macro": "XS_USE_XRUDP",
+  "symbols": "src/script/import_xrudp.inc",
+  "symbol_macro": "XS_XRUDP_SYMBOL",
+  "headers": {
+   "xrudp/ack.h": "lib/xrudp/include/xrudp/ack.h",
+   "xrudp/congestion.h": "lib/xrudp/include/xrudp/congestion.h",
+   "xrudp/cookie.h": "lib/xrudp/include/xrudp/cookie.h",
+   "xrudp/crypto.h": "lib/xrudp/include/xrudp/crypto.h",
+   "xrudp/datagram.h": "lib/xrudp/include/xrudp/datagram.h",
+   "xrudp/discovery.h": "lib/xrudp/include/xrudp/discovery.h",
+   "xrudp/endpoint.h": "lib/xrudp/include/xrudp/endpoint.h",
+   "xrudp/export.h": "lib/xrudp/include/xrudp/export.h",
+   "xrudp/features.h": "lib/xrudp/include/xrudp/features.h",
+   "xrudp/handshake.h": "lib/xrudp/include/xrudp/handshake.h",
+   "xrudp/message.h": "lib/xrudp/include/xrudp/message.h",
+   "xrudp/noise.h": "lib/xrudp/include/xrudp/noise.h",
+   "xrudp/punch.h": "lib/xrudp/include/xrudp/punch.h",
+   "xrudp/receive.h": "lib/xrudp/include/xrudp/receive.h",
+   "xrudp/sent.h": "lib/xrudp/include/xrudp/sent.h",
+   "xrudp/session.h": "lib/xrudp/include/xrudp/session.h",
+   "xrudp/stun.h": "lib/xrudp/include/xrudp/stun.h",
+   "xrudp/timing.h": "lib/xrudp/include/xrudp/timing.h",
+   "xrudp/transmit.h": "lib/xrudp/include/xrudp/transmit.h",
+   "xrudp/wire.h": "lib/xrudp/include/xrudp/wire.h",
+   "xrudp.h": "lib/xrudp/include/xrudp.h"
+  },
+  "sources": [
+   {
+    "path": "lib/xrudp/src/crypto/rudp_cipher.c"
+   },
+   {
+    "path": "lib/xrudp/src/crypto/rudp_cookie.c"
+   },
+   {
+    "path": "lib/xrudp/src/crypto/rudp_handshake.c"
+   },
+   {
+    "path": "lib/xrudp/src/crypto/rudp_noise.c"
+   },
+   {
+    "path": "lib/xrudp/src/network/rudp_discovery.c"
+   },
+   {
+    "path": "lib/xrudp/src/network/rudp_endpoint.c"
+   },
+   {
+    "path": "lib/xrudp/src/network/rudp_path.c"
+   },
+   {
+    "path": "lib/xrudp/src/network/rudp_punch.c"
+   },
+   {
+    "path": "lib/xrudp/src/network/rudp_session.c"
+   },
+   {
+    "path": "lib/xrudp/src/recovery/rudp_ack.c"
+   },
+   {
+    "path": "lib/xrudp/src/recovery/rudp_congestion.c"
+   },
+   {
+    "path": "lib/xrudp/src/recovery/rudp_sent.c"
+   },
+   {
+    "path": "lib/xrudp/src/recovery/rudp_timing.c"
+   },
+   {
+    "path": "lib/xrudp/src/stream/rudp_datagram.c"
+   },
+   {
+    "path": "lib/xrudp/src/stream/rudp_message.c"
+   },
+   {
+    "path": "lib/xrudp/src/stream/rudp_receive.c"
+   },
+   {
+    "path": "lib/xrudp/src/stream/rudp_transmit.c"
+   },
+   {
+    "path": "lib/xrudp/src/wire/rudp_replay.c"
+   },
+   {
+    "path": "lib/xrudp/src/wire/rudp_stun.c"
+   },
+   {
+    "path": "lib/xrudp/src/wire/rudp_wire.c"
+   }
+  ],
+  "feature_macro": [
+   "XRT_MODULE_ALL",
+   "XRUDP_MODULE_ALL",
+   "XRUDP_FEATURE_RUDP_ACK",
+   "XRUDP_FEATURE_RUDP_CONGESTION",
+   "XRUDP_FEATURE_RUDP_COOKIE",
+   "XRUDP_FEATURE_RUDP_CRYPTO",
+   "XRUDP_FEATURE_RUDP_DATAGRAM",
+   "XRUDP_FEATURE_RUDP_DISCOVERY",
+   "XRUDP_FEATURE_RUDP_ENDPOINT",
+   "XRUDP_FEATURE_RUDP_HANDSHAKE",
+   "XRUDP_FEATURE_RUDP_MESSAGE",
+   "XRUDP_FEATURE_RUDP_NOISE",
+   "XRUDP_FEATURE_RUDP_PUNCH",
+   "XRUDP_FEATURE_RUDP_RECEIVE",
+   "XRUDP_FEATURE_RUDP_SENT",
+   "XRUDP_FEATURE_RUDP_SESSION",
+   "XRUDP_FEATURE_RUDP_STUN",
+   "XRUDP_FEATURE_RUDP_TIMING",
+   "XRUDP_FEATURE_RUDP_TRANSMIT",
+   "XRUDP_FEATURE_RUDP_WIRE"
+  ],
+  "host_includes": [
+   "lib/xrudp/include",
+   "lib/xrtshim"
+  ]
  }
 }

@@ -20,6 +20,7 @@
 /lib/xws-group/** -text
 /lib/xws-server/** -text
 /lib/xssh/** -text
+/lib/xrudp/** -text
 /lib/xrtshim/** text eol=lf
 /lib/xrt_sources.lock.json text eol=lf
 /lib/xrt_version.txt text eol=lf

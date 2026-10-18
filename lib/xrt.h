@@ -1068,6 +1068,9 @@
 #ifndef XRT_MODULE_COND
 #define XRT_MODULE_COND
 #endif
+#ifndef XRT_MODULE_CRC32
+#define XRT_MODULE_CRC32
+#endif
 #endif
 
 /* vfs_disk 及其直接依赖。 */
@@ -3802,6 +3805,9 @@
 #ifndef XRT_FEATURE_DEFLATE
 #define XRT_FEATURE_DEFLATE
 #endif
+#ifndef XRT_MODULE_CRC32
+#define XRT_MODULE_CRC32
+#endif
 #endif
 
 /* websocket_inflater 及其直接依赖。 */
@@ -3821,6 +3827,16 @@
 #if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_INFLATE)
 #ifndef XRT_FEATURE_INFLATE
 #define XRT_FEATURE_INFLATE
+#endif
+#ifndef XRT_MODULE_CRC32
+#define XRT_MODULE_CRC32
+#endif
+#endif
+
+/* crc32 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRC32)
+#ifndef XRT_FEATURE_CRC32
+#define XRT_FEATURE_CRC32
 #endif
 #endif
 
@@ -4114,6 +4130,16 @@
 #endif
 #ifndef XRT_MODULE_CANCEL
 #define XRT_MODULE_CANCEL
+#endif
+#endif
+
+/* channel_subscribe 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CHANNEL_SUBSCRIBE)
+#ifndef XRT_FEATURE_CHANNEL_SUBSCRIBE
+#define XRT_FEATURE_CHANNEL_SUBSCRIBE
+#endif
+#ifndef XRT_MODULE_CHANNEL_SELECT
+#define XRT_MODULE_CHANNEL_SELECT
 #endif
 #endif
 
@@ -5043,6 +5069,16 @@ struct xrtownershipops {
 	bool (*Count)(const void* pData, size_t* pCount);
 	bool (*Trace)(const void* pData, xrtownershipvisitor pVisit, ptr pContext);
 };
+/* Independent resident capability for a known participant's transient native
+ * execution. Call Busy only under the entire graph's ownership freeze, after
+ * exact Ops identity admission. It is read-only: no Count/Trace, user code,
+ * allocation, locking or reference changes. true defers snapshot admission;
+ * false is NOT lifecycle certification and never admits an opaque resource. */
+typedef struct xrtownershipquiescencev1 {
+	size_t size;
+	const xrtownershipops* Ops;
+	bool (*Busy)(const void* pData);
+} xrtownershipquiescencev1;
 /* Separate, explicitly admitted lifecycle protocol. Never read an extension
  * past xrtownershipops: existing native descriptors contain only two entries.
  * The resolver certifies complete mutation-domain participation, including
@@ -5095,6 +5131,25 @@ typedef struct xrtownershippreparationv1 {
 	bool (*Ready)(const void* pData);
 	xrtownershipprepareresult (*Prepare)(const void* pData, const void* pToken);
 } xrtownershippreparationv1;
+
+/* Optional completion after Clear, distinct from semantic preparation.
+ * Exact Adapter identity and permanent code are admitted with this descriptor.
+ * Step runs outside freeze/mutation with all plan pins retained. BUSY makes
+ * no owning-edge change or semantic notification and never waits for another
+ * participant: the collector must try other duties, then retry. READY is
+ * idempotent; FAILED is explicit even without an allocated diagnostic.
+ * A consumer of this descriptor MUST use Step, not the V1 bool Finish slot,
+ * to distinguish an unfinished dependency from a cleanup failure. */
+typedef enum xrtownershipfinishresult {
+	XRT_OWNERSHIP_FINISH_FAILED = -1,
+	XRT_OWNERSHIP_FINISH_BUSY = 0,
+	XRT_OWNERSHIP_FINISH_READY = 1
+} xrtownershipfinishresult;
+typedef struct xrtownershipfinishv1 {
+	size_t size;
+	const xrtownershipadapterv1* Adapter;
+	xrtownershipfinishresult (*Step)(const void* pData, const void* pToken);
+} xrtownershipfinishv1;
 typedef struct xrtownershipresult {
 	size_t NodeCount;
 	size_t EdgeCount;
@@ -7161,6 +7216,10 @@ XRT_API void xrtCancelDestroy(xcancel* pCancel);
  * Watch-list links borrow registration storage and are not strong references.
  * Caller provides whole-graph quiescence and code residency. */
 XRT_API xrtownershipref xrtCancelOwnership(const xcancel* pCancel);
+/* Exact native dispatch state under whole-graph freeze. false never admits
+ * an unknown observer; neither query invokes policies or changes rights. */
+XRT_API const xrtownershipquiescencev1* xrtCancelOwnershipQuiescenceV1Get(void);
+XRT_API const xrtownershipquiescencev1* xrtCancelWatchOwnershipQuiescenceV1Get(void);
 
 /* Explicit native adapter, queried under whole-graph freeze. Registered
  * observers are refused before Trace, not treated as empty owning slots.
@@ -7208,6 +7267,23 @@ XRT_API const xrtownershipadapterv1* xrtCancelWatchOwnershipAdapterV1(xrtownersh
 	const xcancelwatchownershipv1* const* pPolicies, size_t iPolicyCount,
 	const xrtownershippreparationv1** ppPreparation);
 
+/* Post-Clear owner-driven retirement. Unlike the earlier adapters, these do
+ * not require or perform Unwatch before semantic finalization. Whole-graph
+ * freeze admits the same closed owned-policy set and rejects active/unknown
+ * observers. Clear prevents new notification without dropping any slot.
+ * The actual registration owner must detach and Unwatch during its Finish;
+ * Watch completion stays BUSY until that right is consumed and dispatch tails
+ * retire. Token completion stays BUSY while linked registrations remain.
+ * The returned completion is mandatory and must be admitted by exact Adapter
+ * identity; refusal leaves its output unchanged. No legacy observer is opted
+ * in, no request is delivered or undone, and abort leaves registration armed. */
+XRT_API const xrtownershipadapterv1* xrtCancelWatchOwnershipAdapterV2(xrtownershipref Reference,
+	const xcancelwatchownershipv1* const* pPolicies, size_t iPolicyCount,
+	const xrtownershipfinishv1** ppCompletion);
+XRT_API const xrtownershipadapterv1* xrtCancelOwnershipAdapterV3(xrtownershipref Reference,
+	const xcancelwatchownershipv1* const* pPolicies, size_t iPolicyCount,
+	const xrtownershipfinishv1** ppCompletion);
+
 
 
 /* 查询监听是否已命中取消。 */
@@ -7225,6 +7301,15 @@ XRT_API xrtownershipref xrtCancelWatchOwnership(const xcancelwatch* pWatch);
 
 /* 注销并释放监听；从其他线程调用时等待正在执行的回调返回。 */
 XRT_API void xrtCancelUnwatch(xcancelwatch* pWatch);
+
+/* Consume the same registration right, reporting whether unlink/retirement
+ * was accepted even when no diagnostic can be allocated. NULL succeeds.
+ * False leaves the owner's right unconsumed; retry while storage is valid.
+ * Self-unwatch succeeds with its physical release deferred until callback
+ * return. Success does not imply that all dispatcher references have left.
+ * Repeated calls require an independent real lifetime pin; never reuse a
+ * pointer whose last right was consumed by an earlier call. */
+XRT_API bool xrtCancelUnwatchChecked(xcancelwatch* pWatch);
 
 
 
@@ -7503,6 +7588,9 @@ XRT_API bool xrtFutureDebugSetNameN(xfuture* pFuture, cstr Name, size_t Size);
  * Whole-graph quiescence through any later commit and callback code residency
  * remain the caller's responsibility; this API does not establish either. */
 XRT_API xrtownershipref xrtFutureOwnership(const xfuture* pFuture);
+/* Same physical Future/Promise identity. Only native completion reservation
+ * and cancellation dispatch defer admission; unknown payloads stay refused. */
+XRT_API const xrtownershipquiescencev1* xrtFutureOwnershipQuiescenceV1Get(void);
 XRT_API xrtownershipref xrtPromiseOwnership(const xpromise* pPromise);
 
 /* Publish an explicitly certified owned result atomically. Failure does not
@@ -7551,6 +7639,15 @@ XRT_API bool xrtFutureWatchInitOwnershipV2(xfuturewatch* pWatch, ptr pData,
 XRT_API const xrtownershipadapterv1* xrtFutureOwnershipAdapterV4(xrtownershipref Reference,
 	const xfutureownershipadmissionv1* pAdmission,
 	const xrtownershippreparationv1** ppPreparation);
+
+/* Explicit post-Clear registration retirement. No preparation closes the
+ * pending Future before finalizers. Clear never notifies and preserves all
+ * physical slots; actual owners detach registrations in Finish. Step stays
+ * BUSY without edge changes until waiters retire, then releases slots outside
+ * mutation. Use the exact mandatory completion, not bool Finish. Unknown or
+ * legacy policies and transitive nodes remain independently unadmitted. */
+XRT_API const xrtownershipadapterv1* xrtFutureOwnershipAdapterV5(xrtownershipref Reference,
+	const xfutureownershipadmissionv1* pAdmission, const xrtownershipfinishv1** ppCompletion);
 
 /* Atomically publish value, destructor, context and non-NULL ownership trace.
  * Success transfers the same ownership as ResolveOwned. Failure (including
@@ -7839,6 +7936,21 @@ XRT_API const xfuturepayloadownershipv1* xrtFutureCombinePickPayloadPolicyV1Get(
 XRT_API const xrtownershipadapterv1* xrtFutureCombineOwnershipAdapterV1(xrtownershipref Reference,
 	const xfuturecombineownershipv1* const* pPolicies, size_t iPolicyCount,
 	const xrtownershippreparationv1** ppPreparation);
+
+/* Post-Clear physical retirement, with no eager input completion, mapper or
+ * cancellation. Use Future V5, Watch V2 and Token V3 for the transitive graph.
+ * Clear suppresses new completion/map work and keeps every strong slot.
+ * Step first obtains a short exclusive freeze: an active/queued callback or
+ * a busy freeze yields BUSY with no owning-edge changes. Stable registrations
+ * are then detached; context and endpoint rights are dropped outside freeze.
+ * All physical plan pins outlive every duty, including dispatch tails. Map
+ * Data still needs independent semantic finalization/admission. This protocol
+ * does not replace the old preparation contract or authorize skipping an
+ * accepted language callback. Mandatory completion output is unchanged on
+ * refusal; unknown/legacy mapped policies remain unadmitted. */
+XRT_API const xrtownershipadapterv1* xrtFutureCombineOwnershipAdapterV2(xrtownershipref Reference,
+	const xfuturecombineownershipv1* const* pPolicies, size_t iPolicyCount,
+	const xrtownershipfinishv1** ppCompletion);
 
 typedef enum xfuturewaitrulev1 {
 	XFUTURE_WAIT_ALL_TERMINAL = 1,
@@ -14698,6 +14810,60 @@ XRT_API xcancel* xrtTaskGroupCancelToken(const xtaskgroup* pGroup);
 /* 关闭并取消仍活动的项，随后以延迟回收方式释放任务组。 */
 XRT_API void xrtTaskGroupDestroy(xtaskgroup* pGroup);
 
+/* Borrowed physical graph, requiring whole-graph freeze and resident code.
+ * Counts include the owned cancel observer, active-list rights, Future
+ * registrations and every real temporary pin. Busy callbacks/reservations
+ * refuse inspection. This view alone grants no collection or unload right. */
+XRT_API xrtownershipref xrtTaskGroupOwnership(const xtaskgroup* pGroup);
+/* Exact resident group/item operations, including private Start reservation
+ * and waiter publication. Whole-graph freeze only; no Count/Trace or callback.
+ * These descriptors do not weaken the physical views or lifecycle adapters. */
+XRT_API const xrtownershipquiescencev1* xrtTaskGroupOwnershipQuiescenceV1Get(void);
+XRT_API const xrtownershipquiescencev1* xrtTaskGroupItemOwnershipQuiescenceV1Get(void);
+XRT_API const xfuturewatchownershipv1* xrtTaskGroupWatchPolicyV1Get(void);
+XRT_API const xcancelwatchownershipv1* xrtTaskGroupCancelPolicyV1Get(void);
+/* Pending Done owns one actual group producer reference, released exactly
+ * once before terminal notification. Dropping Done does not cancel the group.
+ * Admit this identity explicitly when inspecting/collecting that Future. */
+XRT_API const xfutureproducerownershipv1* xrtTaskGroupProducerPolicyV1Get(void);
+
+/* Group and real active-item lifecycle admission under whole-graph freeze.
+ * No early close, cancel or Unwatch. All semantic finalizers precede Clear;
+ * the mandatory exact completion detaches only actual owned rights afterward.
+ * Use with Future V5 and Cancel Watch V2/Token V3, and independently admit every
+ * transitive node. Unknown references leave the completion output unchanged. */
+XRT_API const xrtownershipadapterv1* xrtTaskGroupOwnershipAdapterV1(xrtownershipref Reference,
+	const xrtownershipfinishv1** ppCompletion);
+
+/* V2 adds normal Close/drain preparation, without cancellation or invented
+ * completion. A normally completed item remains an honest physical anchor
+ * while a plan pin owns it; V1 keeps its active-item refusal boundary.
+ * Prepare runs outside freeze, with the whole graph independently admitted,
+ * claimed unreachable and pinned. Semantic callbacks/finally finish normally
+ * before Clear; completion still requires all transitive pins until READY.
+ * Both mandatory outputs are unchanged on refusal. Group/Item identities
+ * are distinct from V1; never replace descriptors in an existing plan. */
+XRT_API const xrtownershipadapterv1* xrtTaskGroupOwnershipAdapterV2(xrtownershipref Reference,
+	const xrtownershippreparationv1** ppPreparation, const xrtownershipfinishv1** ppCompletion);
+
+typedef struct xtaskgroupwaitv1 {
+	size_t size;
+	xpromise* Output;
+	size_t Count;
+} xtaskgroupwaitv1;
+typedef bool (*xtaskgroupwaitvisitorv1)(xfuture* pSource, ptr pContext);
+/* Borrowed ALL-terminal dependencies of a closed, stable, pending group.
+ * Caller holds the entire physical graph's exclusive freeze and one same
+ * unreachable claim on the group AND every active item. Ordered duplicate
+ * sources are visited once per real item, without allocation or new refs.
+ * A NULL visitor queries metadata only. The visitor is collector code: no
+ * mutation, retain, semantic callback, waiting or reentrant group operations;
+ * private analysis scratch is allowed. Invalid state is checked before any
+ * visit; visitor refusal leaves output unchanged (its own scratch may change).
+ * This fact neither proves a cycle nor grants cancellation/collection. */
+XRT_API bool xrtTaskGroupWaitV1(xrtownershipref Reference, const void* pToken,
+	xtaskgroupwaitv1* pWait, xtaskgroupwaitvisitorv1 pVisit, ptr pContext);
+
 
 
 XRT_EXTERN_C_END
@@ -14772,6 +14938,10 @@ XRT_API xrtownershipref xrtTaskPoolOwnership(const xtaskpool* pPool);
  * caller's owner reference. ppPreparation changes only on success. */
 XRT_API const xrtownershipadapterv1* xrtTaskPoolOwnershipAdapterV1(
     xrtownershipref Reference, const xrtownershippreparationv1** ppPreparation);
+/* Exact native transition capability; does not relax Count/Trace admission.
+ * Queued opaque jobs and retained resources still require their own policies.
+ * The immutable descriptor and callback reside with this XRT instance. */
+XRT_API const xrtownershipquiescencev1* xrtTaskPoolOwnershipQuiescenceV1Get(void);
 
 
 
@@ -19080,6 +19250,113 @@ XRT_EXTERN_C_END
 
 
 /* ========================================================================== */
+/* public: include/xrt/channel_subscribe.h */
+/* ========================================================================== */
+
+#ifndef XRT_CHANNEL_SUBSCRIBE_H
+#define XRT_CHANNEL_SUBSCRIBE_H
+
+
+#if defined(XRT_FEATURE_CHANNEL_SUBSCRIBE) && !defined(XRT_FEATURE_CHANNEL_SELECT)
+	#error "XRT_FEATURE_CHANNEL_SUBSCRIBE requires XRT_FEATURE_CHANNEL_SELECT"
+#endif
+
+#if defined(XRT_FEATURE_CHANNEL_SUBSCRIBE)
+
+typedef struct xchannelsubscription xchannelsubscription;
+
+/* Copied at Create: no caller output address is retained. Channel and payload
+ * remain caller-owned, as for ChannelSelect. Keep every Channel alive until
+ * completion and until all concurrent originating Channel calls have returned. */
+typedef struct xchannelsubscribecase {
+	xchannel* Channel;
+	xchannelop Operation;
+	ptr Value;
+} xchannelsubscribecase;
+
+/* Success consumes ONE real Data reference, failure none. Notify borrows it
+ * and runs exactly once, after physical unlink, on Start/Stop or a Channel
+ * caller's thread, OUTSIDE all Channel locks. It may reenter and release the
+ * subscription's external reference. Drop returns Data exactly once, after all
+ * dispatch/call tails and the last external reference retire. Policy and code
+ * must outlive that Drop. This raw observer is opaque to ownership collection;
+ * merely registering it does not certify its context or invent graph edges. */
+typedef struct xchannelsubscribepolicyv1 {
+	size_t size;
+	void (*Notify)(xchannelsubscription* pSubscription, ptr pData);
+	void (*Drop)(const void* pData);
+} xchannelsubscribepolicyv1;
+
+/* Explicit resident ownership contract, not an extension of the raw policy.
+ * ONE real Data reference is consumed on success. Ops describes that same
+ * physical owner and all its owning children; no trace-only callback is opted
+ * in. Drop mechanically returns that reference, without starting a new semantic
+ * finalizer after graph Clear. Notify/Drop coordinate their own mutation/code
+ * lifetime and must return normally. Both execute outside API-owned scopes.
+ * Channels and messages remain BORROWED, never synthetic graph edges. */
+typedef struct xchannelsubscribeownershipv1 {
+	size_t size;
+	void (*Notify)(xchannelsubscription* pSubscription, ptr pData);
+	void (*Drop)(const void* pData);
+	const xrtownershipops* Ops;
+} xchannelsubscribeownershipv1;
+
+XRT_EXTERN_C_BEGIN
+
+/* All storage and case validation precede publication. No Channel operation,
+ * callback, worker, coroutine stack or timer is started here. */
+XRT_API xchannelsubscription* xrtChannelSubscribeCreateV1(
+	const xchannelsubscribecase* pCases, size_t iCount,
+	ptr pData, const xchannelsubscribepolicyv1* pPolicy);
+
+XRT_API xchannelsubscription* xrtChannelSubscribeCreateOwnedV1(
+	const xchannelsubscribecase* pCases, size_t iCount,
+	ptr pData, const xchannelsubscribeownershipv1* pPolicy);
+
+/* Read-only physical views under independently held whole-graph freeze.
+ * A live registration owns ONE execution credit in addition to external
+ * handles. It is an actual pending-work root, not an incoming edge invented
+ * for each borrowed Channel/case. No collection API cancels accepted work.
+ * Raw-policy contexts are refused. Adapter admission matches the exact policy
+ * identity before reading it; its Data remains independently admitted.
+ * Active dispatch/publication refuses inspection. Clear is legal only before
+ * Start or after completion; Finish returns the Data reference outside freeze.
+ * Ref/Start/Stop quarantine new admission while claimed, Restore reopens it. */
+XRT_API xrtownershipref xrtChannelSubscribeOwnership(const xchannelsubscription* pSubscription);
+XRT_API const xrtownershipquiescencev1* xrtChannelSubscribeOwnershipQuiescenceV1Get(void);
+XRT_API const xrtownershipadapterv1* xrtChannelSubscribeOwnershipAdapterV1(
+	xrtownershipref Reference,
+	const xchannelsubscribeownershipv1* const* pPolicies, size_t iPolicyCount);
+
+/* Admit once. May complete and notify inline before returning. On success no
+ * allocation is needed to wait, wake, select, stop or unlink. */
+XRT_API bool xrtChannelSubscribeStart(xchannelsubscription* pSubscription);
+
+XRT_API xchannelsubscription* xrtChannelSubscribeRef(xchannelsubscription* pSubscription);
+
+/* Consume one external reference. Last release requests cancellation of a
+ * pending operation, but does not undo a committed send/receive. Never waits
+ * for a callback; internal dispatch credits delay physical destruction. */
+XRT_API void xrtChannelSubscribeDestroy(xchannelsubscription* pSubscription);
+
+/* Record the first CANCELLED/TIMEOUT/ERROR stop request; true means recorded,
+ * not that it beat a ready case. Can be requested before Start. Runtime timers
+ * call this API: this module does not allocate a per-wait timer/worker/thread. */
+XRT_API bool xrtChannelSubscribeStop(xchannelsubscription* pSubscription, xwaitresult iReason);
+
+/* false while pending; outputs remain unchanged. After Ready, copies the
+ * immutable result and received raw pointer (NULL also is a valid message).
+ * Output addresses are used only during this call, never retained. */
+XRT_API bool xrtChannelSubscribeResult(const xchannelsubscription* pSubscription,
+	xchannelselectresult* pResult, ptr* pValue);
+
+XRT_EXTERN_C_END
+
+#endif
+#endif
+
+
+/* ========================================================================== */
 /* public: include/xrt/memory_stats.h */
 /* ========================================================================== */
 
@@ -22100,6 +22377,20 @@ XRT_API bool xrtChaCha20Poly1305Open(
 	size_t iPlainSize
 );
 
+/* 与 Open 相同，但标签不匹配或输入短于标签是正常 false 结果：不分配、
+ * 不改变线程错误且不修改输出。其他本地参数错误仍报告普通诊断。
+ * 用于处理不可信网络数据报，避免认证失败触发每包错误对象分配。 */
+XRT_API bool xrtChaCha20Poly1305TryOpen(
+	const void* pKey,
+	const void* pNonce,
+	const void* pAad,
+	size_t iAadSize,
+	const void* pInput,
+	size_t iInputSize,
+	void* pPlain,
+	size_t iPlainSize
+);
+
 #endif
 
 
@@ -24398,6 +24689,34 @@ XRT_API bool xrtWsKeyGenerate(
 
 XRT_EXTERN_C_END
 
+#endif
+
+
+/* ========================================================================== */
+/* public: include/xrt/crc32.h */
+/* ========================================================================== */
+
+#ifndef XRT_CRC32_H
+#define XRT_CRC32_H
+
+
+#if defined(XRT_FEATURE_CRC32) || defined(XRT_FEATURE_INFLATE) || \
+	defined(XRT_FEATURE_DEFLATE) || defined(XRT_FEATURE_VFS_PACK)
+
+XRT_EXTERN_C_BEGIN
+
+/* CRC-32/ISO-HDLC (ZIP/gzip), not CRC32C and not an authentication hash.
+ * Empty input is zero. NULL is valid only for empty input. Invalid ranges
+ * publish XERR_ARGUMENT and return zero; success preserves the current error.
+ * No allocation, initialization table, shared mutable state or alignment need. */
+XRT_API uint32 xrtCrc32(const void* pData, size_t iSize);
+
+/* Extend a FINALIZED CRC returned by either public function. Start with zero;
+ * an empty update returns iCrc unchanged. Callers never complement the state. */
+XRT_API uint32 xrtCrc32Update(uint32 iCrc, const void* pData, size_t iSize);
+
+XRT_EXTERN_C_END
+#endif
 #endif
 
 
@@ -40992,6 +41311,15 @@ XRT_API xprocess* xrtProcessRef(xprocess* pProcess);
 */
 XRT_API void xrtProcessDestroy(xprocess* pProcess);
 
+/* Physical process control block. Count includes ALL real references: user
+ * endpoints, the native waiter's independent lifetime and collector pins.
+ * Trace exposes the owned Error and (when selected) shared Future/Promise.
+ * Queries require graph Freeze; all children need independent admission.
+ * Clear retires slots without closing pipes; Finish releases them outside
+ * Freeze. Holds are NOT user endpoints and never postpone last-user EOF. */
+XRT_API xrtownershipref xrtProcessOwnership(const xprocess* pProcess);
+XRT_API const xrtownershipadapterv1* xrtProcessOwnershipAdapterV1(xrtownershipref Reference);
+
 
 
 /* 返回进程状态快照。 */
@@ -41348,6 +41676,10 @@ XRT_EXTERN_C_BEGIN
 
 /* Future 成功值是由 Future 自身拥有的只读 xprocessstatus 快照。 */
 XRT_API xfuture* xrtProcessWaitAsync(xprocess* pProcess);
+
+/* Exact policy for the immutable, owned xprocessstatus terminal snapshot.
+ * This does not certify arbitrary Future payloads, observers or producers. */
+XRT_API const xfuturepayloadownershipv1* xrtProcessFuturePayloadPolicyV1Get(void);
 
 
 
@@ -48079,6 +48411,14 @@ int __xrtFormatWrite(
 
 typedef struct xrt_channel_select_state xrt_channel_select_state;
 typedef struct xrt_channel_select_waiter xrt_channel_select_waiter;
+
+#if defined(XRT_FEATURE_CHANNEL_SUBSCRIBE)
+/* Preallocated, coalesced work; Dispatch never runs under a Channel mutex. */
+typedef struct xrt_channel_deferred {
+	struct xrt_channel_deferred* Next;
+	void (*Dispatch)(struct xrt_channel_deferred* pWork);
+} xrt_channel_deferred;
+#endif
 typedef void (*xrt_channel_select_wake_proc)(ptr pData);
 typedef bool (*xrt_channel_select_prepare_proc)(ptr pData);
 typedef xwaitresult (*xrt_channel_select_wait_proc)(
@@ -48094,6 +48434,9 @@ struct xrt_channel_select_state {
 	xrt_channel_select_wake_proc Wake;
 	ptr WakeData;
 	xwaitresult StopResult;
+	#if defined(XRT_FEATURE_CHANNEL_SUBSCRIBE)
+		xrt_channel_deferred* Deferred;
+	#endif
 };
 
 
@@ -48101,6 +48444,7 @@ struct xrt_channel_select_state {
 /* 每个 case 通过侵入节点挂入对应 Channel 的等待链。 */
 struct xrt_channel_select_waiter {
 	xrt_channel_select_waiter* Next;
+	xrt_channel_select_waiter* Previous;
 	xrt_channel_select_state* Select;
 	xchannel* Channel;
 	ptr Value;
@@ -48134,11 +48478,17 @@ typedef struct xrt_channel_impl {
 	size_t ReadWaiters;
 	size_t WriteWaiters;
 	#if defined(XRT_INTERNAL_CHANNEL_WAIT)
+		/* Circular intrusive FIFO: receives precede sends. SendWaiters is the
+		 * segment boundary, not another owner. Each segment retains FIFO order. */
 		xrt_channel_select_waiter* SelectWaiters;
+		xrt_channel_select_waiter* SelectSendWaiters;
 	#else
 		ptr SelectWaiters;
 	#endif
-	uint64 Epoch;
+	#if defined(XRT_FEATURE_CHANNEL_SUBSCRIBE)
+		xrt_channel_deferred* DeferredHead;
+		xrt_channel_deferred* DeferredTail;
+	#endif
 } xrt_channel_impl;
 
 
@@ -48194,6 +48544,19 @@ xchannelresult __xrtChannelTryRecvLocked(
 
 
 #if defined(XRT_INTERNAL_CHANNEL_WAIT)
+
+/* Shared split-phase engine: subscriptions own their nodes and private output
+ * until physical unlink; synchronous drivers alone use stack waiters. */
+bool __xrtChannelSelectCasesValid(const xchannelcase*,size_t);
+size_t __xrtChannelSelectStartIndex(size_t);
+xchannelselectresult __xrtChannelSelectTryCases(const xchannelcase*,size_t,size_t);
+bool __xrtChannelSelectRegister(xrt_channel_select_waiter*);
+void __xrtChannelSelectUnregisterAll(xrt_channel_select_waiter*,size_t);
+void __xrtChannelSelectTryWaiters(xrt_channel_select_waiter*,size_t,size_t);
+bool __xrtChannelSelectStop(xrt_channel_select_state*,xwaitresult);
+#if defined(XRT_FEATURE_CHANNEL_SUBSCRIBE)
+void __xrtChannelSubscriptionWakeLocked(xrt_channel_impl*,xrt_channel_deferred*);
+#endif
 
 /* 用调用方提供的等待驱动完成一次同步或协程 Select。 */
 xchannelselectresult __xrtChannelSelectWait(
@@ -50410,29 +50773,33 @@ void __xrtChaCha20Block(
 
 
 /* ========================================================================== */
+/* internal: src/internal/xrt_crc32.h */
+/* ========================================================================== */
+
+#if defined(XRT_FEATURE_CRC32) || \
+	defined(XRT_FEATURE_VFS_PACK)
+#ifndef XRT_INTERNAL_CRC32_H
+#define XRT_INTERNAL_CRC32_H
+
+#if defined(XRT_FEATURE_CRC32) || defined(XRT_FEATURE_INFLATE) || \
+	defined(XRT_FEATURE_DEFLATE) || defined(XRT_FEATURE_VFS_PACK)
+/* Internal unchecked accumulator: initialized to UINT32_MAX, complemented on
+ * completion. Only trusted, already validated ranges may reach this entry. */
+uint32 __xrtCrc32UpdateRaw(uint32 iCrc, const void* pData, size_t iSize);
+#endif
+#endif
+#endif
+
+
+/* ========================================================================== */
 /* internal: src/internal/xrt_compress.h */
 /* ========================================================================== */
 
 #if defined(XRT_FEATURE_INFLATE) || \
-	defined(XRT_FEATURE_DEFLATE) || \
-	defined(XRT_FEATURE_VFS_PACK)
+	defined(XRT_FEATURE_DEFLATE)
 #ifndef XRT_INTERNAL_COMPRESS_H
 #define XRT_INTERNAL_COMPRESS_H
 
-
-
-
-#if defined(XRT_FEATURE_INFLATE) || defined(XRT_FEATURE_DEFLATE) || \
-	defined(XRT_FEATURE_VFS_PACK)
-
-/* 使用共享小表更新未取反的 CRC32 状态。 */
-uint32 __xrtCompressCrc32Update(
-	uint32 iCrc,
-	const void* pData,
-	size_t iSize
-);
-
-#endif
 
 
 
@@ -61987,6 +62354,9 @@ bool __xrtSignalPlatformRaise(uint32 iSlot, int* pSystemCode);
 struct xprocess {
 	volatile int32 RefCount;
 	volatile int32 UserRefs;
+	const void* OwnershipClaim;
+	bool OwnershipPublishing;
+	bool OwnershipCleared;
 	xmutex Lock;
 	xcond Changed;
 	xthread* Waiter;
@@ -92111,6 +92481,38 @@ static const xrtownershipops __xrtCancelWatchOwnershipOps = {
 	__xrtCancelWatchOwnershipCount, __xrtCancelWatchOwnershipTrace
 };
 
+/* Read only under whole-graph freeze. These native execution flags are not
+ * lifecycle admission: an idle legacy/unknown observer still fails closed. */
+static bool __xrtCancelWatchOwnershipBusy(const void* pData)
+{
+	const xcancelwatch* pWatch = pData;
+	return pWatch && !pWatch->OwnershipCleared && (pWatch->CallbackActive ||
+		pWatch->Dispatching || pWatch->DeferredRelease);
+}
+static bool __xrtCancelOwnershipBusy(const void* pData)
+{
+	const xcancel* pCancel = pData;
+	if (!pCancel || pCancel->OwnershipCleared) return false;
+	if (pCancel->ActiveRequests) return true;
+	/* The list borrows native Watch storage, not its user Data. Do not call
+	 * any observer policy, Count or Trace merely to recognize its dispatch. */
+	for (const xcancelnode* pNode = pCancel->WatchHead; pNode; pNode = pNode->Next)
+		if (__xrtCancelWatchOwnershipBusy(pNode->Watch)) return true;
+	return false;
+}
+XRT_API const xrtownershipquiescencev1* xrtCancelOwnershipQuiescenceV1Get(void)
+{
+	static const xrtownershipquiescencev1 Policy = {sizeof(Policy),
+		&__xrtCancelOwnershipOps, __xrtCancelOwnershipBusy};
+	return &Policy;
+}
+XRT_API const xrtownershipquiescencev1* xrtCancelWatchOwnershipQuiescenceV1Get(void)
+{
+	static const xrtownershipquiescencev1 Policy = {sizeof(Policy),
+		&__xrtCancelWatchOwnershipOps, __xrtCancelWatchOwnershipBusy};
+	return &Policy;
+}
+
 XRT_API xrtownershipref xrtCancelWatchOwnership(const xcancelwatch* pWatch)
 {
 	xrtownershipref Result = {pWatch, pWatch != NULL ? &__xrtCancelWatchOwnershipOps : NULL};
@@ -92165,7 +92567,7 @@ static bool __xrtCancelWatchIsCallbackThread(const xcancelwatch* pWatch)
 static xcancelproc __xrtCancelWatchStart(xcancelwatch* pWatch, ptr* ppData)
 {
 	if (
-		pWatch->Destroying || !pWatch->Armed ||
+		pWatch->Destroying || pWatch->OwnershipCleared || !pWatch->Armed ||
 		(__xrtAtomicRefLoad(&pWatch->Triggered) == 0) ||
 		pWatch->CallbackStarted
 	) {
@@ -92556,19 +92958,19 @@ static void __xrtCancelUnlinkNode(xcancelnode* pNode)
 
 
 /* 注销监听，并针对回调自身注销采用返回后延迟回收。 */
-XRT_API void xrtCancelUnwatch(xcancelwatch* pWatch)
+static bool __xrtCancelUnwatchChecked(xcancelwatch* pWatch)
 {
-	bool bSelf, bFirst;
+	bool bSelf, bFirst, bDone;
 	xrtownershipscope Mutation = {0};
 
 	if ( pWatch == NULL ) {
-		return;
+		return true;
 	}
-	if (!xrtOwnershipMutationBegin(&Mutation)) return;
+	if (!xrtOwnershipMutationBegin(&Mutation)) return false;
 	if ( xrtRefRetain(&pWatch->RefCount) < 0 ) {
 		if (!xrtOwnershipScopeEnd(&Mutation)) abort();
 		__xrtErrorSetInvalidArgument();
-		return;
+		return false;
 	}
 	(void)xrtMutexLock(&pWatch->Lock);
 	bFirst = !pWatch->Destroying;
@@ -92587,7 +92989,7 @@ XRT_API void xrtCancelUnwatch(xcancelwatch* pWatch)
 		(void)xrtMutexUnlock(&pWatch->Lock);
 		if (!xrtOwnershipScopeEnd(&Mutation)) abort();
 		__xrtCancelWatchRelease(pWatch);
-		return;
+		return true;
 	}
 	(void)xrtMutexUnlock(&pWatch->Lock);
 	if (!xrtOwnershipScopeEnd(&Mutation)) abort();
@@ -92596,10 +92998,17 @@ XRT_API void xrtCancelUnwatch(xcancelwatch* pWatch)
 	while ( pWatch->CallbackActive && !bSelf ) {
 		(void)xrtCondWait(&pWatch->Idle, &pWatch->Lock);
 	}
+	bDone = pWatch->UnwatchDone;
 	(void)xrtMutexUnlock(&pWatch->Lock);
 	__xrtCancelWatchRelease(pWatch);
 	if (bFirst) __xrtCancelWatchRelease(pWatch);
+	return bDone;
 }
+
+XRT_API bool xrtCancelUnwatchChecked(xcancelwatch* pWatch)
+{ return __xrtCancelUnwatchChecked(pWatch); }
+XRT_API void xrtCancelUnwatch(xcancelwatch* pWatch)
+{ (void)__xrtCancelUnwatchChecked(pWatch); }
 
 /* Policy admission is deliberately separate from trace. Observers are not
  * strong token slots: only their actual owners may make the Watch reachable. */
@@ -92754,6 +93163,93 @@ XRT_API const xrtownershipadapterv1* xrtCancelOwnershipAdapterV2(xrtownershipref
 			pNode->Watch->Destroying || !__xrtCancelWatchPolicyKnown(pNode->Watch, pPolicies, iPolicyCount)) return NULL;
 	}
 	*ppPreparation = &Preparation; return &Adapter;
+}
+
+/* A retired owner keeps its registration and all physical slots until its
+ * own Finish consumes Unwatch. Disabling notification under the same freeze
+ * closes the gap between global Clear and that eventual owner duty. */
+static void __xrtCancelWatchClearV2(const void* pData, const void* pToken)
+{
+	xcancelwatch* pWatch = (xcancelwatch*)pData;
+	if (!pToken || pWatch->OwnershipClaim != pToken || !__xrtCancelWatchStable(pWatch)) abort();
+	pWatch->OwnershipCleared = true;
+}
+static xrtownershipfinishresult __xrtCancelWatchFinishV2(const void* pData, const void* pToken)
+{
+	xcancelwatch* pWatch = (xcancelwatch*)pData; bool bReady;
+	xrtownershipscope Mutation = {0};
+	if (!xrtOwnershipMutationBegin(&Mutation)) return XRT_OWNERSHIP_FINISH_BUSY;
+	if (!pToken || pWatch->OwnershipClaim != pToken || !pWatch->OwnershipCleared) abort();
+	(void)xrtMutexLock(&pWatch->Lock);
+	bReady = __xrtCancelWatchPrepared(pData);
+	(void)xrtMutexUnlock(&pWatch->Lock);
+	if (!xrtOwnershipScopeEnd(&Mutation)) abort();
+	if (!bReady) return XRT_OWNERSHIP_FINISH_BUSY;
+	/* UnwatchDone is published after every list unlink. With no dispatch or
+	 * callback left, readiness cannot regress; the collector serializes Step. */
+	return __xrtCancelWatchAdapterFinish(pData, pToken)
+		? XRT_OWNERSHIP_FINISH_READY : XRT_OWNERSHIP_FINISH_FAILED;
+}
+static bool __xrtCancelWatchFinishV2Bool(const void* pData, const void* pToken)
+{ return __xrtCancelWatchFinishV2(pData, pToken) == XRT_OWNERSHIP_FINISH_READY; }
+XRT_API const xrtownershipadapterv1* xrtCancelWatchOwnershipAdapterV2(xrtownershipref Reference,
+	const xcancelwatchownershipv1* const* pPolicies, size_t iPolicyCount,
+	const xrtownershipfinishv1** ppCompletion)
+{
+	static const xrtownershipadapterv1 Adapter = {sizeof(Adapter), __xrtCancelWatchAdapterHold,
+		__xrtCancelWatchAdapterDrop, __xrtCancelWatchAdapterClaim, __xrtCancelWatchAdapterRestore,
+		NULL, __xrtCancelWatchClearV2, __xrtCancelWatchFinishV2Bool};
+	static const xrtownershipfinishv1 Completion = {sizeof(Completion), &Adapter, __xrtCancelWatchFinishV2};
+	const xcancelwatch* pWatch;
+	if (Reference.Ops != &__xrtCancelWatchOwnershipOps || !Reference.Data || !ppCompletion ||
+		(iPolicyCount && !pPolicies)) return NULL;
+	pWatch = Reference.Data;
+	if (!__xrtCancelWatchStable(pWatch) || __xrtAtomicRefLoad(&pWatch->RefCount) <= 0 ||
+		!__xrtCancelWatchPolicyKnown(pWatch, pPolicies, iPolicyCount)) return NULL;
+	*ppCompletion = &Completion; return &Adapter;
+}
+static void __xrtCancelClearV3(const void* pData, const void* pToken)
+{
+	xcancel* pCancel = (xcancel*)pData;
+	if (!pToken || pCancel->OwnershipClaim != pToken || pCancel->OwnershipCleared || pCancel->ActiveRequests) abort();
+	pCancel->OwnershipCleared = true;
+}
+static xrtownershipfinishresult __xrtCancelFinishV3(const void* pData, const void* pToken)
+{
+	xcancel* pCancel = (xcancel*)pData; xcancel* pParent; xrtownershipscope Mutation = {0};
+	if (!xrtOwnershipMutationBegin(&Mutation)) return XRT_OWNERSHIP_FINISH_BUSY;
+	if (!pToken || pCancel->OwnershipClaim != pToken || !pCancel->OwnershipCleared) abort();
+	(void)xrtMutexLock(&pCancel->Lock);
+	if (pCancel->WatchHead || pCancel->ActiveRequests) {
+		(void)xrtMutexUnlock(&pCancel->Lock);
+		if (!xrtOwnershipScopeEnd(&Mutation)) abort();
+		return XRT_OWNERSHIP_FINISH_BUSY;
+	}
+	pParent = pCancel->Parent; pCancel->Parent = NULL;
+	(void)xrtMutexUnlock(&pCancel->Lock);
+	if (!xrtOwnershipScopeEnd(&Mutation)) abort();
+	xrtCancelDestroy(pParent); return XRT_OWNERSHIP_FINISH_READY;
+}
+static bool __xrtCancelFinishV3Bool(const void* pData, const void* pToken)
+{ return __xrtCancelFinishV3(pData, pToken) == XRT_OWNERSHIP_FINISH_READY; }
+XRT_API const xrtownershipadapterv1* xrtCancelOwnershipAdapterV3(xrtownershipref Reference,
+	const xcancelwatchownershipv1* const* pPolicies, size_t iPolicyCount,
+	const xrtownershipfinishv1** ppCompletion)
+{
+	static const xrtownershipadapterv1 Adapter = {sizeof(Adapter), __xrtCancelAdapterHold,
+		__xrtCancelAdapterDrop, __xrtCancelAdapterClaimV2, __xrtCancelAdapterRestoreV2,
+		NULL, __xrtCancelClearV3, __xrtCancelFinishV3Bool};
+	static const xrtownershipfinishv1 Completion = {sizeof(Completion), &Adapter, __xrtCancelFinishV3};
+	const xcancel* pCancel;
+	if (Reference.Ops != &__xrtCancelOwnershipOps || !Reference.Data || !ppCompletion ||
+		(iPolicyCount && !pPolicies)) return NULL;
+	pCancel = Reference.Data;
+	if (pCancel->OwnershipCleared || pCancel->ActiveRequests || __xrtAtomicRefLoad(&pCancel->RefCount) <= 0) return NULL;
+	for (const xcancelnode* pNode = pCancel->WatchHead; pNode; pNode = pNode->Next) {
+		if (!pNode->Linked || pNode->Cancel != pCancel || !__xrtCancelWatchStable(pNode->Watch) ||
+			pNode->Watch->Destroying || !__xrtCancelWatchPolicyKnown(pNode->Watch, pPolicies, iPolicyCount)) return NULL;
+	}
+	*ppCompletion = &Completion; return &Adapter;
 }
 
 #endif
@@ -92961,6 +93457,19 @@ static const xrtownershipops __xrtFutureOwnershipOps = {
 	__xrtFutureOwnershipCount, __xrtFutureOwnershipTrace
 };
 
+static bool __xrtFutureOwnershipBusy(const void* pData)
+{
+	const xfuture* pFuture = pData;
+	return pFuture && !pFuture->OwnershipCleared && (pFuture->Completing ||
+		xrtCancelOwnershipQuiescenceV1Get()->Busy(pFuture->Cancel));
+}
+XRT_API const xrtownershipquiescencev1* xrtFutureOwnershipQuiescenceV1Get(void)
+{
+	static const xrtownershipquiescencev1 Policy = {sizeof(Policy),
+		&__xrtFutureOwnershipOps, __xrtFutureOwnershipBusy};
+	return &Policy;
+}
+
 XRT_API xrtownershipref xrtFutureOwnership(const xfuture* pFuture)
 {
 	xrtownershipref Result = {pFuture, pFuture != NULL ? &__xrtFutureOwnershipOps : NULL};
@@ -93102,7 +93611,7 @@ static const xrtownershipadapterv1* __xrtFutureAdapterQuery(xrtownershipref Refe
 	const xfuturepayloadownershipv1* const* pPolicies, size_t iPolicyCount,
 	const xfutureproducerownershipv1* const* pProducerPolicies, size_t iProducerPolicyCount,
 	const xfuturewatchownershipv1* const* pWatchPolicies, size_t iWatchPolicyCount,
-	const xfutureownershipadmissionv1* pAdmission)
+	const xfutureownershipadmissionv1* pAdmission, bool bPostClear)
 {
 	const xfuture* pFuture;
 	if (Reference.Ops != &__xrtFutureOwnershipOps || Reference.Data == NULL ||
@@ -93116,8 +93625,11 @@ static const xrtownershipadapterv1* __xrtFutureAdapterQuery(xrtownershipref Refe
 	if (pFuture->Completing || pFuture->OwnershipCleared || __xrtAtomicRefLoad(&pFuture->RefCount) <= 0) return NULL;
 	if (pAdmission) {
 		const xrtownershippreparationv1* pPreparation = NULL;
-		if (!xrtCancelOwnershipAdapterV2(xrtCancelOwnership(pFuture->Cancel), pAdmission->CancelWatchPolicies,
-			pAdmission->CancelWatchPolicyCount, &pPreparation)) return NULL;
+		const xrtownershipfinishv1* pCompletion = NULL;
+		if (!(bPostClear ? xrtCancelOwnershipAdapterV3(xrtCancelOwnership(pFuture->Cancel),
+			pAdmission->CancelWatchPolicies, pAdmission->CancelWatchPolicyCount, &pCompletion) :
+			xrtCancelOwnershipAdapterV2(xrtCancelOwnership(pFuture->Cancel), pAdmission->CancelWatchPolicies,
+			pAdmission->CancelWatchPolicyCount, &pPreparation))) return NULL;
 	} else if (!xrtCancelOwnershipAdapterV1(xrtCancelOwnership(pFuture->Cancel))) return NULL;
 	const xrt_future_waiter* pLast = NULL;
 	for (const xrt_future_waiter* pWaiter = pFuture->Waiters; pWaiter != NULL; pWaiter = pWaiter->Next) {
@@ -93165,7 +93677,7 @@ static const xrtownershipadapterv1* __xrtFutureAdapterQuery(xrtownershipref Refe
 XRT_API const xrtownershipadapterv1* xrtFutureOwnershipAdapterV2(xrtownershipref Reference,
 	const xfuturepayloadownershipv1* const* pPolicies, size_t iPolicyCount,
 	const xfutureproducerownershipv1* const* pProducerPolicies, size_t iProducerPolicyCount)
-{ return __xrtFutureAdapterQuery(Reference, pPolicies, iPolicyCount, pProducerPolicies, iProducerPolicyCount, NULL, 0, NULL); }
+{ return __xrtFutureAdapterQuery(Reference, pPolicies, iPolicyCount, pProducerPolicies, iProducerPolicyCount, NULL, 0, NULL, false); }
 XRT_API const xrtownershipadapterv1* xrtFutureOwnershipAdapterV3(xrtownershipref Reference,
 	const xfuturepayloadownershipv1* const* pPolicies, size_t iPolicyCount,
 	const xfutureproducerownershipv1* const* pProducerPolicies, size_t iProducerPolicyCount,
@@ -93175,7 +93687,7 @@ XRT_API const xrtownershipadapterv1* xrtFutureOwnershipAdapterV3(xrtownershipref
 	const xrtownershipadapterv1* pAdapter;
 	if (ppPreparation == NULL) return NULL;
 	pAdapter = __xrtFutureAdapterQuery(Reference, pPolicies, iPolicyCount,
-		pProducerPolicies, iProducerPolicyCount, pWatchPolicies, iWatchPolicyCount, NULL);
+		pProducerPolicies, iProducerPolicyCount, pWatchPolicies, iWatchPolicyCount, NULL, false);
 	if (pAdapter != NULL) *ppPreparation = &__xrtFuturePreparation;
 	return pAdapter;
 }
@@ -93186,7 +93698,7 @@ XRT_API const xrtownershipadapterv1* xrtFutureOwnershipAdapterV4(xrtownershipref
 	if (!pAdmission || pAdmission->size != sizeof(*pAdmission) || !ppPreparation) return NULL;
 	pAdapter = __xrtFutureAdapterQuery(Reference, pAdmission->PayloadPolicies, pAdmission->PayloadPolicyCount,
 		pAdmission->ProducerPolicies, pAdmission->ProducerPolicyCount,
-		pAdmission->WatchPolicies, pAdmission->WatchPolicyCount, pAdmission);
+		pAdmission->WatchPolicies, pAdmission->WatchPolicyCount, pAdmission, false);
 	if (pAdapter) *ppPreparation = &__xrtFuturePreparation;
 	return pAdapter;
 }
@@ -93194,6 +93706,41 @@ XRT_API const xrtownershipadapterv1* xrtFutureOwnershipAdapterV1(xrtownershipref
 	const xfuturepayloadownershipv1* const* pPolicies, size_t iPolicyCount)
 {
 	return xrtFutureOwnershipAdapterV2(Reference, pPolicies, iPolicyCount, NULL, 0);
+}
+
+/* No preparation notification: the registration's actual owner retires it
+ * only after every semantic finalizer and the exclusive global Clear. */
+static void __xrtFutureClearV5(const void* pData, const void* pToken)
+{
+	xfuture* pFuture = (xfuture*)pData;
+	if (!pToken || pFuture->OwnershipClaim != pToken || pFuture->OwnershipCleared || pFuture->Completing) abort();
+	pFuture->State = XFUTURE_CLOSED; pFuture->OwnershipCleared = true;
+}
+static xrtownershipfinishresult __xrtFutureFinishV5(const void* pData, const void* pToken)
+{
+	xfuture* pFuture = (xfuture*)pData; xrtownershipscope Scope = {0}; bool bReady;
+	if (!xrtOwnershipMutationBegin(&Scope)) return XRT_OWNERSHIP_FINISH_FAILED;
+	if (!pToken || pFuture->OwnershipClaim != pToken || !pFuture->OwnershipCleared) abort();
+	(void)xrtMutexLock(&pFuture->Lock);
+	bReady = !pFuture->Waiters && !pFuture->WaitersTail && !pFuture->Completing;
+	(void)xrtMutexUnlock(&pFuture->Lock);
+	if (!xrtOwnershipScopeEnd(&Scope)) abort();
+	if (!bReady) return XRT_OWNERSHIP_FINISH_BUSY;
+	return __xrtFutureAdapterFinish(pData,pToken) ? XRT_OWNERSHIP_FINISH_READY : XRT_OWNERSHIP_FINISH_FAILED;
+}
+static bool __xrtFutureFinishV5Bool(const void* pData, const void* pToken)
+{ return __xrtFutureFinishV5(pData,pToken) == XRT_OWNERSHIP_FINISH_READY; }
+XRT_API const xrtownershipadapterv1* xrtFutureOwnershipAdapterV5(xrtownershipref Reference,
+	const xfutureownershipadmissionv1* pAdmission, const xrtownershipfinishv1** ppCompletion)
+{
+	static const xrtownershipadapterv1 Adapter = {sizeof(Adapter), __xrtFutureAdapterHold, __xrtFutureAdapterDrop,
+		__xrtFutureAdapterClaim, __xrtFutureAdapterRestore, NULL, __xrtFutureClearV5, __xrtFutureFinishV5Bool};
+	static const xrtownershipfinishv1 Completion = {sizeof(Completion), &Adapter, __xrtFutureFinishV5};
+	if (!pAdmission || pAdmission->size != sizeof(*pAdmission) || !ppCompletion) return NULL;
+	if (!__xrtFutureAdapterQuery(Reference,pAdmission->PayloadPolicies,pAdmission->PayloadPolicyCount,
+		pAdmission->ProducerPolicies,pAdmission->ProducerPolicyCount,pAdmission->WatchPolicies,
+		pAdmission->WatchPolicyCount,pAdmission,true)) return NULL;
+	*ppCompletion = &Completion; return &Adapter;
 }
 
 /* 同一执行上下文中的完成通知使用迭代队列，避免 Future 链递归耗尽线程栈。 */
@@ -95698,23 +96245,85 @@ static bool __xrtFutureCombineFinish(const void* data, const void* token)
     if (!token || group->Claim != token || !group->Cleared) abort();
     __xrtFutureCombineDisposeSlots(group); return true;
 }
+static bool __xrtFutureCombineAdmitted(xrtownershipref ref,
+    const xfuturecombineownershipv1* const* policies, size_t policyCount)
+{
+    const xrt_future_combine* group; size_t count; bool known = false;
+    if (ref.Ops != &__xrtFutureCombineOwnershipOps || !ref.Data || (policyCount && !policies)) return false;
+    group = ref.Data;
+    if (!__xrtFutureCombineOwnershipCount(group, &count)) return false;
+    if (group->MapAccepted) {
+        for (size_t i = 0; i < policyCount; ++i) if (policies[i] && policies[i] == group->MapPolicy) { known = true; break; }
+        if (!known || group->MapPolicy->size != sizeof(xfuturecombineownershipv1) || !group->MapPolicy->Drop ||
+            !group->MapPolicy->Ops || !group->MapPolicy->Ops->Count || !group->MapPolicy->Ops->Trace ||
+            (group->Mode == XRT_FUTURE_COMBINE_ALL ? group->AllMap != group->MapPolicy->AllMap : group->PickMap != group->MapPolicy->PickMap)) return false;
+    }
+    return true;
+}
 XRT_API const xrtownershipadapterv1* xrtFutureCombineOwnershipAdapterV1(xrtownershipref ref,
     const xfuturecombineownershipv1* const* policies, size_t policyCount, const xrtownershippreparationv1** preparation)
 {
     static const xrtownershipadapterv1 adapter = {sizeof(adapter), __xrtFutureCombineHold, __xrtFutureCombineProducerDrop,
         __xrtFutureCombineClaim, __xrtFutureCombineRestore, NULL, __xrtFutureCombineClear, __xrtFutureCombineFinish};
     static const xrtownershippreparationv1 prepare = {sizeof(prepare), &adapter, __xrtFutureCombinePrepared, __xrtFutureCombinePrepare};
-    const xrt_future_combine* group; size_t count; bool known = false;
-    if (ref.Ops != &__xrtFutureCombineOwnershipOps || !ref.Data || !preparation || (policyCount && !policies)) return NULL;
-    group = ref.Data;
-    if (!__xrtFutureCombineOwnershipCount(group, &count)) return NULL;
-    if (group->MapAccepted) {
-        for (size_t i = 0; i < policyCount; ++i) if (policies[i] && policies[i] == group->MapPolicy) { known = true; break; }
-        if (!known || group->MapPolicy->size != sizeof(xfuturecombineownershipv1) || !group->MapPolicy->Drop ||
-            !group->MapPolicy->Ops || !group->MapPolicy->Ops->Count || !group->MapPolicy->Ops->Trace ||
-            (group->Mode == XRT_FUTURE_COMBINE_ALL ? group->AllMap != group->MapPolicy->AllMap : group->PickMap != group->MapPolicy->PickMap)) return NULL;
-    }
+    if (!preparation || !__xrtFutureCombineAdmitted(ref,policies,policyCount)) return NULL;
     *preparation = &prepare; return &adapter;
+}
+
+static void __xrtFutureCombineClearV2(const void* data, const void* token)
+{
+    xrt_future_combine* group = (xrt_future_combine*)data; size_t count;
+    if (!token || group->Claim != token || !__xrtFutureCombineOwnershipCount(group,&count)) abort();
+    group->Cleared = true; group->Completed = true;
+}
+static xrtownershipfinishresult __xrtFutureCombineFinishV2(const void* data, const void* token)
+{
+    xrt_future_combine* group = (xrt_future_combine*)data;
+    xrtownershipscope freeze = {0}, scope = {0}; xpromise* promise;
+    /* Preflight every embedded registration under ONE exclusive freeze.
+     * Callback tails update Owned under Mutation; a queued callback keeps
+     * Calling set. No partial detach is ever reported as BUSY. */
+    if (!xrtOwnershipFreezeTryBegin(&freeze)) return XRT_OWNERSHIP_FINISH_BUSY;
+    if (!token || group->Claim != token || !group->Cleared) abort();
+    bool busy = group->Publishing || group->Active;
+    for (size_t i = 0; i < group->Count && !busy; ++i) {
+        const xrt_future_waiter* waiter = &__xrtFutureWatchImpl(&group->Items[i].Watch)->Waiter;
+        busy = waiter->Calling || group->Items[i].Owned != waiter->Linked;
+    }
+    if (busy) {
+        if (!xrtOwnershipScopeEnd(&freeze)) abort();
+        return XRT_OWNERSHIP_FINISH_BUSY;
+    }
+    for (size_t i = 0; i < group->Count; ++i) {
+        if (group->Items[i].Owned && !xrtFutureWatchDetach(group->Sources[i],&group->Items[i].Watch)) {
+            if (!xrtOwnershipScopeEnd(&freeze)) abort();
+            return XRT_OWNERSHIP_FINISH_FAILED;
+        }
+    }
+    /* Global Clear has suppressed this owned observer before Step. Native
+     * registration/Data releases here are nonterminal because ALL nodes have
+     * actual plan pins; foreign mapper Data is released only after freeze. */
+    if (group->Watch && !xrtCancelUnwatchChecked(group->Watch)) {
+        if (!xrtOwnershipScopeEnd(&freeze)) abort();
+        return XRT_OWNERSHIP_FINISH_FAILED;
+    }
+    __xrtFutureCombineBegin(group,&scope);
+    group->Watch = NULL; promise = group->Promise; group->Promise = NULL;
+    __xrtFutureCombineEnd(group,&scope);
+    if (!xrtOwnershipScopeEnd(&freeze)) abort();
+    xrtPromiseDestroy(promise); __xrtFutureCombineDisposeSlots(group);
+    return XRT_OWNERSHIP_FINISH_READY;
+}
+static bool __xrtFutureCombineFinishV2Bool(const void* data, const void* token)
+{ return __xrtFutureCombineFinishV2(data,token) == XRT_OWNERSHIP_FINISH_READY; }
+XRT_API const xrtownershipadapterv1* xrtFutureCombineOwnershipAdapterV2(xrtownershipref ref,
+    const xfuturecombineownershipv1* const* policies, size_t policyCount, const xrtownershipfinishv1** completion)
+{
+    static const xrtownershipadapterv1 adapter = {sizeof(adapter), __xrtFutureCombineHold, __xrtFutureCombineProducerDrop,
+        __xrtFutureCombineClaim, __xrtFutureCombineRestore, NULL, __xrtFutureCombineClearV2, __xrtFutureCombineFinishV2Bool};
+    static const xrtownershipfinishv1 completed = {sizeof(completed), &adapter, __xrtFutureCombineFinishV2};
+    if (!completion || !__xrtFutureCombineAdmitted(ref,policies,policyCount)) return NULL;
+    *completion = &completed; return &adapter;
 }
 XRT_API bool xrtFutureCombineWaitV1(xrtownershipref ref, const void* token, xfuturecombinewaitv1* wait)
 {
@@ -114867,8 +115476,14 @@ static bool __xrtTaskPoolOwnershipCount(const void* pData, size_t* pCount)
 		if (!pPool->Workers || pPool->StartedThreads != pPool->ThreadCount) return false;
 		for (uint32 i = 0; i < pPool->StartedThreads; ++i) {
 			const xrt_task_worker* pWorker = &pPool->Workers[i];
+			/* Freeze prevents the next worker mutation. An idle worker may
+			 * not have entered its first iteration, or be between iterations;
+			 * neither requires Parked. Running/finalizer counters above cover
+			 * every callback and cleanup tail. Keep the terminal consistency
+			 * checks: an exited worker cannot be parked, and Joined requires
+			 * every worker to have exited. No worker reference is fabricated. */
 			if (pWorker->Pool != pPool || !pWorker->Thread ||
-				(pWorker->Exited ? pWorker->Parked : (!pWorker->Parked || pPool->Joined))) return false;
+				(pWorker->Exited ? pWorker->Parked : pPool->Joined)) return false;
 		}
 	}
 	size_t iJobs = 0; const xrt_task_job* pTail = NULL;
@@ -114893,6 +115508,18 @@ static bool __xrtTaskPoolOwnershipTrace(const void* pData, xrtownershipvisitor p
 static const xrtownershipops __xrtTaskPoolOwnershipOps = {
 	__xrtTaskPoolOwnershipCount, __xrtTaskPoolOwnershipTrace
 };
+static bool __xrtTaskPoolOwnershipBusy(const void* pData)
+{
+	const xtaskpool* pPool = pData;
+	if (!pPool || !pPool->Initialized || !pPool->References || pPool->OwnershipCleared || pPool->Retired) return false;
+	return pPool->Entries || pPool->Joining || pPool->Destroying || pPool->Retiring ||
+		pPool->Running || pPool->FinalizerQueued || pPool->FinalizerRunning;
+}
+XRT_API const xrtownershipquiescencev1* xrtTaskPoolOwnershipQuiescenceV1Get(void)
+{
+	static const xrtownershipquiescencev1 Policy = {sizeof(Policy), &__xrtTaskPoolOwnershipOps, __xrtTaskPoolOwnershipBusy};
+	return &Policy;
+}
 XRT_API xrtownershipref xrtTaskPoolOwnership(const xtaskpool* pPool)
 { return (xrtownershipref){pPool, pPool ? &__xrtTaskPoolOwnershipOps : NULL}; }
 static bool __xrtTaskPoolHold(const void* pData)
@@ -127748,7 +128375,21 @@ xrt_channel_impl* __xrtChannelLock(xchannel* pChannel)
 /* 解锁已经验证的 Channel。 */
 void __xrtChannelUnlock(xrt_channel_impl* pImpl)
 {
+	#if defined(XRT_FEATURE_CHANNEL_SUBSCRIBE)
+		xrt_channel_deferred* pWork=pImpl->DeferredHead;
+		pImpl->DeferredHead=NULL;
+		pImpl->DeferredTail=NULL;
+	#endif
 	(void)xrtMutexUnlock(&pImpl->Mutex);
+	#if defined(XRT_FEATURE_CHANNEL_SUBSCRIBE)
+		/* Dispatch may destroy a now-idle Channel; do not access pImpl again. */
+		while(pWork) {
+			xrt_channel_deferred* pNext=pWork->Next;
+			pWork->Next=NULL;
+			pWork->Dispatch(pWork);
+			pWork=pNext;
+		}
+	#endif
 }
 
 
@@ -127873,7 +128514,6 @@ static bool __xrtChannelOffer(
 	} else {
 		pImpl->Flags &= ~XRT_CHANNEL_FLAG_COMMITTED;
 	}
-	pImpl->Epoch++;
 	(void)xrtCondSignal(&pImpl->Readable);
 	#if defined(XRT_INTERNAL_CHANNEL_WAIT)
 		__xrtChannelNotifySelectLocked(pImpl);
@@ -127894,7 +128534,6 @@ static void __xrtChannelTakePending(
 	pImpl->CompletedGeneration = pImpl->NextGeneration;
 	pImpl->Flags &=
 		~(XRT_CHANNEL_FLAG_PENDING | XRT_CHANNEL_FLAG_COMMITTED);
-	pImpl->Epoch++;
 
 	/* 同时唤醒值的发送者和等待发布下一个值的发送者。 */
 	(void)xrtCondBroadcast(&pImpl->Writable);
@@ -127911,7 +128550,6 @@ static void __xrtChannelWithdraw(xrt_channel_impl* pImpl)
 	pImpl->Pending = NULL;
 	pImpl->Flags &=
 		~(XRT_CHANNEL_FLAG_PENDING | XRT_CHANNEL_FLAG_COMMITTED);
-	pImpl->Epoch++;
 	(void)xrtCondBroadcast(&pImpl->Writable);
 	#if defined(XRT_INTERNAL_CHANNEL_WAIT)
 		__xrtChannelNotifySelectLocked(pImpl);
@@ -127930,7 +128568,8 @@ static bool __xrtChannelMatchSelectRecvLocked(
 {
 	xrt_channel_select_waiter* pWaiter = pImpl->SelectWaiters;
 
-	while ( pWaiter != NULL ) {
+	if ( pWaiter == NULL || pWaiter->Operation != XCHANNEL_OP_RECV ) return false;
+	do {
 		if (
 			(pWaiter->Operation == XCHANNEL_OP_RECV) &&
 			__xrtChannelSelectClaim(pWaiter)
@@ -127940,7 +128579,7 @@ static bool __xrtChannelMatchSelectRecvLocked(
 			return true;
 		}
 		pWaiter = pWaiter->Next;
-	}
+	} while ( pWaiter != pImpl->SelectWaiters && pWaiter->Operation == XCHANNEL_OP_RECV );
 	return false;
 }
 
@@ -127952,9 +128591,10 @@ static bool __xrtChannelMatchSelectSendLocked(
 	ptr* pItem
 )
 {
-	xrt_channel_select_waiter* pWaiter = pImpl->SelectWaiters;
+	xrt_channel_select_waiter* pWaiter = pImpl->SelectSendWaiters;
 
-	while ( pWaiter != NULL ) {
+	if ( pWaiter == NULL ) return false;
+	do {
 		if (
 			(pWaiter->Operation == XCHANNEL_OP_SEND) &&
 			__xrtChannelSelectClaim(pWaiter)
@@ -127964,7 +128604,7 @@ static bool __xrtChannelMatchSelectSendLocked(
 			return true;
 		}
 		pWaiter = pWaiter->Next;
-	}
+	} while ( pWaiter != pImpl->SelectSendWaiters && pWaiter->Operation == XCHANNEL_OP_SEND );
 	return false;
 }
 
@@ -127995,7 +128635,6 @@ xchannelresult __xrtChannelTrySendLocked(
 		}
 		#if defined(XRT_INTERNAL_CHANNEL_WAIT)
 			if ( __xrtChannelMatchSelectRecvLocked(pImpl, pItem) ) {
-				pImpl->Epoch++;
 				__xrtChannelNotifySelectLocked(pImpl);
 				return XCHANNEL_OK;
 			}
@@ -128010,7 +128649,6 @@ xchannelresult __xrtChannelTrySendLocked(
 	pImpl->Items[pImpl->Tail] = pItem;
 	pImpl->Tail = __xrtChannelNext(pImpl->Tail, pImpl->Capacity);
 	pImpl->Count++;
-	pImpl->Epoch++;
 	(void)xrtCondSignal(&pImpl->Readable);
 	#if defined(XRT_INTERNAL_CHANNEL_WAIT)
 		__xrtChannelNotifySelectLocked(pImpl);
@@ -128038,7 +128676,6 @@ xchannelresult __xrtChannelTryRecvLocked(
 			(pImpl->Capacity == 0) &&
 			__xrtChannelMatchSelectSendLocked(pImpl, pItem)
 		) {
-			pImpl->Epoch++;
 			__xrtChannelNotifySelectLocked(pImpl);
 			return XCHANNEL_OK;
 		}
@@ -128048,7 +128685,6 @@ xchannelresult __xrtChannelTryRecvLocked(
 		pImpl->Items[pImpl->Head] = NULL;
 		pImpl->Head = __xrtChannelNext(pImpl->Head, pImpl->Capacity);
 		pImpl->Count--;
-		pImpl->Epoch++;
 		(void)xrtCondSignal(&pImpl->Writable);
 		#if defined(XRT_INTERNAL_CHANNEL_WAIT)
 			__xrtChannelNotifySelectLocked(pImpl);
@@ -128103,14 +128739,24 @@ static xwaitresult __xrtChannelStop(
 
 /* 等待指定条件变量，并保留锁内重新检查谓词的机会。 */
 static xwaitresult __xrtChannelWaitCondition(
+	xrt_channel_impl* pImpl,
 	xcond* pCond,
-	xmutex* pMutex,
 	double iDeadline
 )
 {
+	#if defined(XRT_FEATURE_CHANNEL_SUBSCRIBE)
+		/* An offer/reader registration can make a subscription ready. Dispatch
+		 * it BEFORE sleeping: cond-wait's implicit unlock cannot drain our
+		 * queue. Recheck the predicate after reacquiring, never sleep on a
+		 * notification already delivered by that synchronous dispatch. */
+		if(pImpl->DeferredHead) {
+			__xrtChannelUnlock(pImpl);
+			return xrtMutexLock(&pImpl->Mutex) ? XWAIT_OK : XWAIT_ERROR;
+		}
+	#endif
 	return iDeadline == INFINITY ?
-		xrtCondWait(pCond, pMutex) :
-		__xrtCondWaitUntil(pCond, pMutex, iDeadline);
+		xrtCondWait(pCond, &pImpl->Mutex) :
+		__xrtCondWaitUntil(pCond, &pImpl->Mutex, iDeadline);
 }
 
 
@@ -128213,8 +128859,8 @@ static xwaitresult __xrtChannelSendWait(
 			}
 		}
 		iResult = __xrtChannelWaitCondition(
+			pImpl,
 			&pImpl->Writable,
-			&pImpl->Mutex,
 			iDeadline
 		);
 		if ( iResult == XWAIT_ERROR ) {
@@ -128282,8 +128928,8 @@ static xwaitresult __xrtChannelRecvWait(
 			break;
 		}
 		iResult = __xrtChannelWaitCondition(
+			pImpl,
 			&pImpl->Readable,
-			&pImpl->Mutex,
 			iDeadline
 		);
 		if ( iResult == XWAIT_ERROR ) {
@@ -128871,7 +129517,6 @@ XRT_API void xrtChannelClose(xchannel* pChannel)
 		) {
 			__xrtChannelWithdraw(pImpl);
 		}
-		pImpl->Epoch++;
 		(void)xrtCondBroadcast(&pImpl->Readable);
 		(void)xrtCondBroadcast(&pImpl->Writable);
 		#if defined(XRT_INTERNAL_CHANNEL_WAIT)
@@ -128970,7 +129615,6 @@ XRT_API bool xrtChannelReset(xchannel* pChannel)
 	pImpl->Pending = NULL;
 	pImpl->NextGeneration = 0;
 	pImpl->CompletedGeneration = 0;
-	pImpl->Epoch++;
 	if ( pImpl->Capacity != 0 ) {
 		memset(
 			pImpl->Items,
@@ -129323,6 +129967,43 @@ XRT_API bool xrtEventReset(xevent* pEvent)
 /* 全局轮转票据避免固定从第一个 case 开始造成长期偏置。 */
 static xatomic32 __xrtChannelSelectTicket = XRT_ATOMIC32_INIT(0);
 
+size_t __xrtChannelSelectStartIndex(size_t iCount)
+{
+	return iCount==1u ? 0 : xrtAtomic32FetchAdd(
+		&__xrtChannelSelectTicket,1u,XMEMORY_RELAXED)%iCount;
+}
+
+static void __xrtChannelSelectNotifyLocked(xrt_channel_impl* pImpl,
+	xrt_channel_select_state* pSelect)
+{
+	#if defined(XRT_FEATURE_CHANNEL_SUBSCRIBE)
+		if(pSelect->Deferred) {
+			__xrtChannelSubscriptionWakeLocked(pImpl,pSelect->Deferred);
+			return;
+		}
+	#else
+		(void)pImpl;
+	#endif
+	pSelect->Wake(pSelect->WakeData);
+}
+
+/* A rendezvous candidate whose state was temporarily CLAIMING becomes
+ * eligible again on abort. Wake only opposite, different selections; waking
+ * self/same-operation idle cases would turn an empty wait into a busy loop. */
+static void __xrtChannelSelectNotifyPeersLocked(xrt_channel_impl* pImpl,
+	const xrt_channel_select_waiter* pChanged)
+{
+	xrt_channel_select_waiter* pOther=pChanged->Operation==XCHANNEL_OP_RECV ?
+		pImpl->SelectSendWaiters : pImpl->SelectWaiters;
+	xrt_channel_select_waiter* pFirst=pOther;
+	if(!pOther || pOther->Operation==pChanged->Operation) return;
+	do {
+		if(pOther->Select!=pChanged->Select)
+			__xrtChannelSelectNotifyLocked(pImpl,pOther->Select);
+		pOther=pOther->Next;
+	} while(pOther!=pFirst && pOther->Operation!=pChanged->Operation);
+}
+
 
 
 /* 构造一个没有 case 被选中的结果。 */
@@ -129369,7 +130050,7 @@ static uint32 __xrtChannelSelectWinner(
 
 
 /* 把未提交的 Select 固定为超时、取消或平台错误。 */
-static bool __xrtChannelSelectStop(
+bool __xrtChannelSelectStop(
 	xrt_channel_select_state* pSelect,
 	xwaitresult iResult
 )
@@ -129422,7 +130103,7 @@ static xwaitresult __xrtChannelSelectStopReason(
 
 
 /* 检查 case 数组、操作、对象、输出和跨 Channel 别名。 */
-static bool __xrtChannelSelectCasesValid(
+bool __xrtChannelSelectCasesValid(
 	const xchannelcase* pCases,
 	size_t iCount
 )
@@ -129568,7 +130249,7 @@ static xchannelresult __xrtChannelSelectTryCase(
 
 
 /* 按轮转起点尝试全部未注册 case。 */
-static xchannelselectresult __xrtChannelSelectTryCases(
+xchannelselectresult __xrtChannelSelectTryCases(
 	const xchannelcase* pCases,
 	size_t iCount,
 	size_t iStart
@@ -129595,25 +130276,40 @@ static xchannelselectresult __xrtChannelSelectTryCases(
 
 
 /* 把一个等待节点追加到 Channel，保持同类选择者的注册顺序。 */
-static bool __xrtChannelSelectRegister(
+bool __xrtChannelSelectRegister(
 	xrt_channel_select_waiter* pWaiter
 )
 {
 	xrt_channel_impl* pImpl = __xrtChannelLock(pWaiter->Channel);
-	xrt_channel_select_waiter** ppLink;
+	xrt_channel_select_waiter* pBefore;
 
 	if ( pImpl == NULL ) {
 		return false;
 	}
-	ppLink = &pImpl->SelectWaiters;
-	while ( *ppLink != NULL ) {
-		ppLink = &(*ppLink)->Next;
+	if ( pImpl->SelectWaiters == NULL ) {
+		pWaiter->Next = pWaiter;
+		pWaiter->Previous = pWaiter;
+		pImpl->SelectWaiters = pWaiter;
+	} else {
+		pBefore = pWaiter->Operation == XCHANNEL_OP_RECV && pImpl->SelectSendWaiters ?
+			pImpl->SelectSendWaiters : pImpl->SelectWaiters;
+		pWaiter->Next = pBefore;
+		pWaiter->Previous = pBefore->Previous;
+		pBefore->Previous->Next = pWaiter;
+		pBefore->Previous = pWaiter;
+		if ( pWaiter->Operation == XCHANNEL_OP_RECV &&
+			pImpl->SelectWaiters == pImpl->SelectSendWaiters )
+			pImpl->SelectWaiters = pWaiter;
 	}
-	*ppLink = pWaiter;
+	if ( pWaiter->Operation == XCHANNEL_OP_SEND && !pImpl->SelectSendWaiters )
+		pImpl->SelectSendWaiters = pWaiter;
 	pWaiter->Registered = true;
 
-	/* 新的对端 case 可能让另一个无缓冲 Select 立即可提交。 */
-	__xrtChannelNotifySelectLocked(pImpl);
+	/* Registration changes no buffered readiness. Only the opposite rendezvous
+	 * segment can gain a peer: never rescan/wake N same-direction idle cases. */
+	if ( pImpl->Capacity == 0 ) {
+		__xrtChannelSelectNotifyPeersLocked(pImpl,pWaiter);
+	}
 	__xrtChannelUnlock(pImpl);
 	return true;
 }
@@ -129626,7 +130322,6 @@ static void __xrtChannelSelectUnregister(
 )
 {
 	xrt_channel_impl* pImpl;
-	xrt_channel_select_waiter** ppLink;
 
 	if ( !pWaiter->Registered ) {
 		return;
@@ -129635,23 +130330,29 @@ static void __xrtChannelSelectUnregister(
 	if ( pImpl == NULL ) {
 		return;
 	}
-	ppLink = &pImpl->SelectWaiters;
-	while ( (*ppLink != NULL) && (*ppLink != pWaiter) ) {
-		ppLink = &(*ppLink)->Next;
+	if ( pWaiter->Next == pWaiter ) {
+		pImpl->SelectWaiters = NULL;
+		pImpl->SelectSendWaiters = NULL;
+	} else {
+		if ( pImpl->SelectWaiters == pWaiter ) pImpl->SelectWaiters = pWaiter->Next;
+		if ( pImpl->SelectSendWaiters == pWaiter )
+			pImpl->SelectSendWaiters = pWaiter->Next->Operation == XCHANNEL_OP_SEND ?
+				pWaiter->Next : NULL;
+		pWaiter->Previous->Next = pWaiter->Next;
+		pWaiter->Next->Previous = pWaiter->Previous;
 	}
-	if ( *ppLink == pWaiter ) {
-		*ppLink = pWaiter->Next;
-		pWaiter->Next = NULL;
-		pWaiter->Registered = false;
-		__xrtChannelNotifySelectLocked(pImpl);
-	}
+	pWaiter->Next = NULL;
+	pWaiter->Previous = NULL;
+	pWaiter->Registered = false;
+	/* Removing an unavailable/terminal case cannot create readiness. A committed
+	 * transfer already delivered its state-change notification under the lock. */
 	__xrtChannelUnlock(pImpl);
 }
 
 
 
 /* 依次移除当前 Select 已经注册的全部节点。 */
-static void __xrtChannelSelectUnregisterAll(
+void __xrtChannelSelectUnregisterAll(
 	xrt_channel_select_waiter* pWaiters,
 	size_t iCount
 )
@@ -129717,7 +130418,7 @@ static void __xrtChannelSelectTryWaiter(
 
 
 /* 按轮转起点尝试全部已注册 case。 */
-static void __xrtChannelSelectTryWaiters(
+void __xrtChannelSelectTryWaiters(
 	xrt_channel_select_waiter* pWaiters,
 	size_t iCount,
 	size_t iStart
@@ -129791,12 +130492,7 @@ xchannelselectresult __xrtChannelSelectWait(
 	if ( !__xrtChannelSelectCasesValid(pCases, iCount) ) {
 		return __xrtChannelSelectEmpty(XWAIT_ERROR);
 	}
-	iStart = iCount == 1u ? 0 :
-		xrtAtomic32FetchAdd(
-			&__xrtChannelSelectTicket,
-			1u,
-			XMEMORY_RELAXED
-		) % iCount;
+	iStart=__xrtChannelSelectStartIndex(iCount);
 	tTry = __xrtChannelSelectTryCases(
 		pCases,
 		iCount,
@@ -129975,10 +130671,11 @@ void __xrtChannelNotifySelectLocked(xrt_channel_impl* pImpl)
 		return;
 	}
 	pWaiter = pImpl->SelectWaiters;
-	while ( pWaiter != NULL ) {
-		pWaiter->Select->Wake(pWaiter->Select->WakeData);
+	if ( pWaiter == NULL ) return;
+	do {
+		__xrtChannelSelectNotifyLocked(pImpl,pWaiter->Select);
 		pWaiter = pWaiter->Next;
-	}
+	} while ( pWaiter != pImpl->SelectWaiters );
 }
 
 
@@ -130013,7 +130710,7 @@ void __xrtChannelSelectCommit(
 		pWaiter->Index,
 		XMEMORY_RELEASE
 	);
-	pWaiter->Select->Wake(pWaiter->Select->WakeData);
+	__xrtChannelSelectNotifyLocked((xrt_channel_impl*)pWaiter->Channel,pWaiter->Select);
 }
 
 
@@ -130026,6 +130723,7 @@ void __xrtChannelSelectAbort(xrt_channel_select_waiter* pWaiter)
 		XRT_CHANNEL_SELECT_NONE,
 		XMEMORY_RELEASE
 	);
+	__xrtChannelSelectNotifyPeersLocked((xrt_channel_impl*)pWaiter->Channel,pWaiter);
 }
 
 
@@ -130077,12 +130775,7 @@ static xchannelselectresult __xrtChannelSelectTry(
 	if ( !__xrtChannelSelectCasesValid(pCases, iCount) ) {
 		return __xrtChannelSelectEmpty(XWAIT_ERROR);
 	}
-	iStart = iCount == 1u ? 0 :
-		xrtAtomic32FetchAdd(
-			&__xrtChannelSelectTicket,
-			1u,
-			XMEMORY_RELAXED
-		) % iCount;
+	iStart=__xrtChannelSelectStartIndex(iCount);
 	return __xrtChannelSelectTryCases(
 		pCases,
 		iCount,
@@ -130280,6 +130973,531 @@ XRT_API xchannelselectresult xrtChannelSelectForCancel(
 {
     return __xrtChannelSelectUntilCancel(pCases, iCount, __xrtWaitAfter(iTimeout), pCancel);
 }
+#endif
+#endif
+
+
+/* ========================================================================== */
+/* source: src/concurrency/channel_subscribe.c */
+/* ========================================================================== */
+
+#if defined(XRT_FEATURE_CHANNEL_SUBSCRIBE)
+
+#if defined(XRT_FEATURE_CHANNEL_SUBSCRIBE)
+
+#define XRT_CHANNEL_SUB_DRIVER 1u
+#define XRT_CHANNEL_SUB_DIRTY 2u
+
+struct xchannelsubscription {
+	/* External refs and admitted public calls leave two credits for the one
+	 * registration and the one coalesced dispatcher. Never wrap a counter. */
+	xatomic32 References;
+	xatomic32 External;
+	xatomic32 Started;
+	xatomic32 Ready;
+	xatomic32 Stop;
+	xatomic32 Dispatch;
+	xrt_channel_deferred Work;
+	xrt_channel_select_state Select;
+	size_t Count;
+	size_t Start;
+	ptr Received;
+	ptr Data;
+	const xchannelsubscribepolicyv1* Policy;
+	const xchannelsubscribeownershipv1* OwnedPolicy;
+	const void* Claim;
+	bool Cleared;
+	bool DataLive;
+	xchannelselectresult Result;
+	xrt_channel_select_waiter Waiters[];
+};
+
+static void __xrtChannelSubscriptionDrive(xchannelsubscription* pSubscription);
+
+static void __xrtChannelSubscriptionMutationBegin(xrtownershipscope* pScope)
+{ if(!xrtOwnershipMutationBegin(pScope)) abort(); }
+static void __xrtChannelSubscriptionMutationEnd(xrtownershipscope* pScope)
+{ if(!xrtOwnershipScopeEnd(pScope)) abort(); }
+
+/* The caller owns a mutation scope or the complete graph freeze. This exact
+ * counter primitive is also used by adapter Hold: no diagnostics (even static
+ * errors may call the installed handler), allocation or callback is allowed. */
+static bool __xrtChannelSubscriptionTryRetain(xchannelsubscription* pSubscription,
+	uint32 iReserve)
+{
+	uint32 iRefs=xrtAtomic32Load(&pSubscription->References,XMEMORY_RELAXED);
+	while(iRefs && iRefs<UINT32_MAX-iReserve) {
+		if(xrtAtomic32CompareExchange(&pSubscription->References,&iRefs,iRefs+1u,
+			XMEMORY_RELAXED,XMEMORY_RELAXED)) return true;
+	}
+	return false;
+}
+
+static void __xrtChannelSubscriptionRelease(xchannelsubscription* pSubscription)
+{
+	xrtownershipscope tMutation={0};
+	ptr pData=NULL;
+	void (*pDrop)(const void*)=NULL;
+	__xrtChannelSubscriptionMutationBegin(&tMutation);
+	bool bLast=xrtAtomic32FetchSub(&pSubscription->References,1u,XMEMORY_ACQ_REL)==1u;
+	if(bLast && pSubscription->DataLive) {
+		pSubscription->DataLive=false;
+		pData=pSubscription->Data;
+		pSubscription->Data=NULL;
+		pDrop=pSubscription->OwnedPolicy ? pSubscription->OwnedPolicy->Drop : pSubscription->Policy->Drop;
+	}
+	__xrtChannelSubscriptionMutationEnd(&tMutation);
+	if(bLast) {
+		/* Storage/code remain valid through Drop, but no API-owned mutation or
+		 * Channel lock crosses that callback. Finish may already have consumed it. */
+		if(pDrop) pDrop(pData);
+		xrtFree(pSubscription);
+	}
+}
+
+/* Claim a single dispatcher before publishing its intrusive node. All wakes
+ * during registration/dispatch only set DIRTY; the final CAS closes the lost-
+ * wake window. The caller already owns a registration or external credit. */
+static bool __xrtChannelSubscriptionSchedule(xchannelsubscription* pSubscription)
+{
+	xrtownershipscope tMutation={0};
+	__xrtChannelSubscriptionMutationBegin(&tMutation);
+	if(pSubscription->Cleared) {
+		__xrtChannelSubscriptionMutationEnd(&tMutation);
+		return false;
+	}
+	uint32 iFlags=xrtAtomic32FetchOr(&pSubscription->Dispatch,
+		XRT_CHANNEL_SUB_DIRTY,XMEMORY_ACQ_REL)|XRT_CHANNEL_SUB_DIRTY;
+	while(!(iFlags&XRT_CHANNEL_SUB_DRIVER)) {
+		if(xrtAtomic32CompareExchange(&pSubscription->Dispatch,&iFlags,
+			iFlags|XRT_CHANNEL_SUB_DRIVER,XMEMORY_ACQ_REL,XMEMORY_ACQUIRE)) {
+			/* Reserved internal credit: at most one dispatcher per subscription. */
+			if(!__xrtChannelSubscriptionTryRetain(pSubscription,0u)) abort();
+			__xrtChannelSubscriptionMutationEnd(&tMutation);
+			return true;
+		}
+	}
+	__xrtChannelSubscriptionMutationEnd(&tMutation);
+	return false;
+}
+
+static xchannelsubscription* __xrtChannelSubscriptionFromWork(xrt_channel_deferred* pWork)
+{
+	return (xchannelsubscription*)((uint8*)pWork-
+		offsetof(xchannelsubscription,Work));
+}
+
+static void __xrtChannelSubscriptionDispatch(xrt_channel_deferred* pWork)
+{
+	xchannelsubscription* pSubscription=__xrtChannelSubscriptionFromWork(pWork);
+	__xrtChannelSubscriptionDrive(pSubscription);
+	__xrtChannelSubscriptionRelease(pSubscription);
+}
+
+void __xrtChannelSubscriptionWakeLocked(xrt_channel_impl* pImpl,
+	xrt_channel_deferred* pWork)
+{
+	xchannelsubscription* pSubscription=__xrtChannelSubscriptionFromWork(pWork);
+	if(!__xrtChannelSubscriptionSchedule(pSubscription)) return;
+	pWork->Next=NULL;
+	if(pImpl->DeferredTail) pImpl->DeferredTail->Next=pWork;
+	else pImpl->DeferredHead=pWork;
+	pImpl->DeferredTail=pWork;
+}
+
+static void __xrtChannelSubscriptionWake(ptr pData)
+{
+	xchannelsubscription* pSubscription=(xchannelsubscription*)pData;
+	if(__xrtChannelSubscriptionSchedule(pSubscription))
+		__xrtChannelSubscriptionDispatch(&pSubscription->Work);
+}
+
+static void __xrtChannelSubscriptionComplete(xchannelsubscription* pSubscription,
+	uint32 iWinner)
+{
+	__xrtChannelSelectUnregisterAll(pSubscription->Waiters,pSubscription->Count);
+	pSubscription->Result.Index=XCHANNEL_SELECT_NONE;
+	pSubscription->Result.Result=XCHANNEL_ERROR;
+	if(iWinner<=XRT_CHANNEL_SELECT_MAX_INDEX) {
+		pSubscription->Result.Index=iWinner;
+		pSubscription->Result.Result=pSubscription->Waiters[iWinner].Result;
+		pSubscription->Result.Wait=pSubscription->Result.Result==XCHANNEL_ERROR ?
+			XWAIT_ERROR : XWAIT_OK;
+	} else pSubscription->Result.Wait=pSubscription->Select.StopResult;
+	xrtAtomic32Store(&pSubscription->Ready,1u,XMEMORY_RELEASE);
+	/* Return the physical registration credit before Notify; the dispatcher
+	 * still protects the complete object, including reentrant last Destroy. */
+	__xrtChannelSubscriptionRelease(pSubscription);
+	if(pSubscription->OwnedPolicy)
+		pSubscription->OwnedPolicy->Notify(pSubscription,pSubscription->Data);
+	else pSubscription->Policy->Notify(pSubscription,pSubscription->Data);
+}
+
+static void __xrtChannelSubscriptionDrive(xchannelsubscription* pSubscription)
+{
+	for(;;) {
+		uint32 iExpected;
+		xrtownershipscope tMutation={0};
+		xrtAtomic32FetchAnd(&pSubscription->Dispatch,~XRT_CHANNEL_SUB_DIRTY,
+			XMEMORY_ACQ_REL);
+		if(!xrtAtomic32Load(&pSubscription->Ready,XMEMORY_ACQUIRE)) {
+			uint32 iWinner=xrtAtomic32Load(&pSubscription->Select.Winner,XMEMORY_ACQUIRE);
+			if(iWinner==XRT_CHANNEL_SELECT_NONE) {
+				uint32 iStop;
+				/* A currently ready/closed case gets the same first chance as in
+				 * synchronous Select, before a cancellation/deadline request. */
+				__xrtChannelSelectTryWaiters(pSubscription->Waiters,pSubscription->Count,
+					pSubscription->Start);
+				iStop=xrtAtomic32Load(&pSubscription->Stop,XMEMORY_ACQUIRE);
+				if(iStop) (void)__xrtChannelSelectStop(&pSubscription->Select,
+					(xwaitresult)(int32)iStop);
+				iWinner=xrtAtomic32Load(&pSubscription->Select.Winner,XMEMORY_ACQUIRE);
+			}
+			/* CLAIMING is owned by a live committer. Its release publication
+			 * always wakes us; never spin or overwrite an in-flight transfer. */
+			if(iWinner!=XRT_CHANNEL_SELECT_NONE && iWinner!=XRT_CHANNEL_SELECT_CLAIMING)
+				__xrtChannelSubscriptionComplete(pSubscription,iWinner);
+		}
+		iExpected=XRT_CHANNEL_SUB_DRIVER;
+		__xrtChannelSubscriptionMutationBegin(&tMutation);
+		bool bIdle=xrtAtomic32CompareExchange(&pSubscription->Dispatch,&iExpected,0u,
+			XMEMORY_RELEASE,XMEMORY_RELAXED);
+		__xrtChannelSubscriptionMutationEnd(&tMutation);
+		if(bIdle) return;
+	}
+}
+
+static xchannelsubscription* __xrtChannelSubscribeCreate(
+	const xchannelsubscribecase* pCases,size_t iCount,
+	ptr pData,const xchannelsubscribepolicyv1* pPolicy,
+	const xchannelsubscribeownershipv1* pOwnedPolicy)
+{
+	xchannelsubscription* pSubscription;
+	xchannelcase* pValidation;
+	size_t iBytes;
+	if((pOwnedPolicy ? !pData || pOwnedPolicy->size!=sizeof(*pOwnedPolicy) ||
+		!pOwnedPolicy->Notify || !pOwnedPolicy->Drop || !pOwnedPolicy->Ops ||
+		!pOwnedPolicy->Ops->Count || !pOwnedPolicy->Ops->Trace :
+		!pPolicy || pPolicy->size!=sizeof(*pPolicy) || !pPolicy->Notify || !pPolicy->Drop) ||
+		!pCases || !iCount ||
+		((uintptr_t)pCases&(sizeof(ptr)-1u)) ||
+		iCount>((size_t)XRT_CHANNEL_SELECT_MAX_INDEX+1u) ||
+		iCount>(SIZE_MAX-sizeof(*pSubscription))/sizeof(xrt_channel_select_waiter) ||
+		iCount>SIZE_MAX/sizeof(xchannelcase) ||
+		(uintptr_t)pCases>UINTPTR_MAX-iCount*sizeof(*pCases)) {
+		__xrtErrorSetInvalidArgument();
+		return NULL;
+	}
+	iBytes=sizeof(*pSubscription)+iCount*sizeof(xrt_channel_select_waiter);
+	pSubscription=(xchannelsubscription*)xrtMalloc(iBytes);
+	if(!pSubscription) return NULL;
+	memset(pSubscription,0,iBytes);
+	pValidation=(xchannelcase*)xrtMalloc(iCount*sizeof(xchannelcase));
+	if(!pValidation) { xrtFree(pSubscription); return NULL; }
+	for(size_t i=0;i<iCount;i++) {
+		pValidation[i].Channel=pCases[i].Channel;
+		pValidation[i].Operation=pCases[i].Operation;
+		pValidation[i].Value=pCases[i].Value;
+		pValidation[i].Output=&pSubscription->Received;
+	}
+	if(!__xrtChannelSelectCasesValid(pValidation,iCount)) {
+		xrtFree(pValidation);
+		xrtFree(pSubscription);
+		return NULL;
+	}
+	for(size_t i=0;i<iCount;i++) {
+		xrt_channel_select_waiter* pWaiter=&pSubscription->Waiters[i];
+		pWaiter->Select=&pSubscription->Select;
+		pWaiter->Channel=pValidation[i].Channel;
+		pWaiter->Value=pValidation[i].Value;
+		pWaiter->Output=&pSubscription->Received;
+		pWaiter->Index=(uint32)i;
+		pWaiter->Operation=pValidation[i].Operation;
+		pWaiter->Result=XCHANNEL_ERROR;
+	}
+	xrtFree(pValidation);
+	xrtAtomic32Init(&pSubscription->References,1u);
+	xrtAtomic32Init(&pSubscription->External,1u);
+	xrtAtomic32Init(&pSubscription->Started,0u);
+	xrtAtomic32Init(&pSubscription->Ready,0u);
+	xrtAtomic32Init(&pSubscription->Stop,0u);
+	/* Start owns the dormant dispatcher; no partially registered set can run. */
+	xrtAtomic32Init(&pSubscription->Dispatch,XRT_CHANNEL_SUB_DRIVER);
+	xrtAtomic32Init(&pSubscription->Select.Winner,XRT_CHANNEL_SELECT_NONE);
+	pSubscription->Select.Wake=__xrtChannelSubscriptionWake;
+	pSubscription->Select.WakeData=pSubscription;
+	pSubscription->Select.Deferred=&pSubscription->Work;
+	pSubscription->Select.StopResult=XWAIT_ERROR;
+	pSubscription->Work.Dispatch=__xrtChannelSubscriptionDispatch;
+	pSubscription->Count=iCount;
+	pSubscription->Start=__xrtChannelSelectStartIndex(iCount);
+	pSubscription->Data=pData;
+	pSubscription->Policy=pPolicy;
+	pSubscription->OwnedPolicy=pOwnedPolicy;
+	pSubscription->DataLive=true;
+	return pSubscription;
+}
+
+XRT_API xchannelsubscription* xrtChannelSubscribeCreateV1(
+	const xchannelsubscribecase* pCases,size_t iCount,
+	ptr pData,const xchannelsubscribepolicyv1* pPolicy)
+{ return __xrtChannelSubscribeCreate(pCases,iCount,pData,pPolicy,NULL); }
+
+XRT_API xchannelsubscription* xrtChannelSubscribeCreateOwnedV1(
+	const xchannelsubscribecase* pCases,size_t iCount,
+	ptr pData,const xchannelsubscribeownershipv1* pPolicy)
+{
+	if(!pPolicy) { __xrtErrorSetInvalidArgument(); return NULL; }
+	return __xrtChannelSubscribeCreate(pCases,iCount,pData,NULL,pPolicy);
+}
+
+XRT_API bool xrtChannelSubscribeStart(xchannelsubscription* pSubscription)
+{
+	uint32 iExpected=0u;
+	xrtownershipscope tMutation={0};
+	if(!pSubscription) { __xrtErrorSetInvalidArgument(); return false; }
+	__xrtChannelSubscriptionMutationBegin(&tMutation);
+	if(pSubscription->Cleared || pSubscription->Claim) {
+		__xrtChannelSubscriptionMutationEnd(&tMutation);
+		__xrtErrorSetInvalidState(); return false;
+	}
+	if(!__xrtChannelSubscriptionTryRetain(pSubscription,2u)) {
+		__xrtChannelSubscriptionMutationEnd(&tMutation);
+		__xrtErrorSetSizeOverflow(); return false;
+	}
+	if(!xrtAtomic32CompareExchange(&pSubscription->Started,&iExpected,1u,
+		XMEMORY_ACQ_REL,XMEMORY_ACQUIRE)) {
+		__xrtChannelSubscriptionMutationEnd(&tMutation);
+		__xrtChannelSubscriptionRelease(pSubscription);
+		__xrtErrorSetInvalidState();
+		return false;
+	}
+	/* The admitted call reserved this independent registration credit. */
+	if(!__xrtChannelSubscriptionTryRetain(pSubscription,1u)) abort();
+	__xrtChannelSubscriptionMutationEnd(&tMutation);
+	for(size_t i=0;i<pSubscription->Count;i++) {
+		uint32 iWinner;
+		if(!__xrtChannelSelectRegister(&pSubscription->Waiters[i])) {
+			(void)__xrtChannelSelectStop(&pSubscription->Select,XWAIT_ERROR);
+			break;
+		}
+		iWinner=xrtAtomic32Load(&pSubscription->Select.Winner,XMEMORY_ACQUIRE);
+		if(iWinner!=XRT_CHANNEL_SELECT_NONE) break;
+	}
+	/* The admitted Start call's credit serves as the initial dispatch credit. */
+	__xrtChannelSubscriptionDispatch(&pSubscription->Work);
+	return true;
+}
+
+XRT_API xchannelsubscription* xrtChannelSubscribeRef(xchannelsubscription* pSubscription)
+{
+	xrtownershipscope tMutation={0};
+	if(!pSubscription) { __xrtErrorSetInvalidArgument(); return NULL; }
+	__xrtChannelSubscriptionMutationBegin(&tMutation);
+	if(pSubscription->Cleared || pSubscription->Claim) {
+		__xrtChannelSubscriptionMutationEnd(&tMutation);
+		__xrtErrorSetInvalidState(); return NULL;
+	}
+	if(!__xrtChannelSubscriptionTryRetain(pSubscription,4u)) {
+		__xrtChannelSubscriptionMutationEnd(&tMutation);
+		__xrtErrorSetSizeOverflow(); return NULL;
+	}
+	xrtAtomic32FetchAdd(&pSubscription->External,1u,XMEMORY_RELAXED);
+	__xrtChannelSubscriptionMutationEnd(&tMutation);
+	return pSubscription;
+}
+
+XRT_API void xrtChannelSubscribeDestroy(xchannelsubscription* pSubscription)
+{
+	xrtownershipscope tMutation={0};
+	bool bWake=false;
+	if(!pSubscription) return;
+	__xrtChannelSubscriptionMutationBegin(&tMutation);
+	if(xrtAtomic32FetchSub(&pSubscription->External,1u,XMEMORY_ACQ_REL)==1u) {
+		uint32 iExpected=0u;
+		(void)xrtAtomic32CompareExchange(&pSubscription->Stop,&iExpected,
+			(uint32)XWAIT_CANCELLED,XMEMORY_ACQ_REL,XMEMORY_ACQUIRE);
+		bWake=!pSubscription->Cleared && xrtAtomic32Load(&pSubscription->Started,XMEMORY_ACQUIRE);
+	}
+	__xrtChannelSubscriptionMutationEnd(&tMutation);
+	if(bWake) __xrtChannelSubscriptionWake(pSubscription);
+	__xrtChannelSubscriptionRelease(pSubscription);
+}
+
+XRT_API bool xrtChannelSubscribeStop(xchannelsubscription* pSubscription,xwaitresult iReason)
+{
+	uint32 iExpected=0u;
+	bool bRecorded;
+	bool bStarted;
+	xrtownershipscope tMutation={0};
+	if(!pSubscription || (iReason!=XWAIT_CANCELLED && iReason!=XWAIT_TIMEOUT &&
+		iReason!=XWAIT_ERROR)) {
+		__xrtErrorSetInvalidArgument();
+		return false;
+	}
+	__xrtChannelSubscriptionMutationBegin(&tMutation);
+	if(pSubscription->Cleared || pSubscription->Claim) {
+		__xrtChannelSubscriptionMutationEnd(&tMutation);
+		__xrtErrorSetInvalidState(); return false;
+	}
+	if(!__xrtChannelSubscriptionTryRetain(pSubscription,2u)) {
+		__xrtChannelSubscriptionMutationEnd(&tMutation);
+		__xrtErrorSetSizeOverflow(); return false;
+	}
+	bRecorded=xrtAtomic32CompareExchange(&pSubscription->Stop,&iExpected,
+		(uint32)iReason,XMEMORY_ACQ_REL,XMEMORY_ACQUIRE);
+	bStarted=xrtAtomic32Load(&pSubscription->Started,XMEMORY_ACQUIRE)!=0;
+	__xrtChannelSubscriptionMutationEnd(&tMutation);
+	if(bStarted) __xrtChannelSubscriptionWake(pSubscription);
+	__xrtChannelSubscriptionRelease(pSubscription);
+	return bRecorded;
+}
+
+XRT_API bool xrtChannelSubscribeResult(const xchannelsubscription* pSubscription,
+	xchannelselectresult* pResult,ptr* pValue)
+{
+	size_t iBytes;
+	if(!pSubscription || !pResult || !pValue ||
+		((uintptr_t)pResult&(sizeof(size_t)-1u)) ||
+		((uintptr_t)pValue&(sizeof(ptr)-1u))) {
+		__xrtErrorSetInvalidArgument();
+		return false;
+	}
+	iBytes=sizeof(*pSubscription)+pSubscription->Count*sizeof(xrt_channel_select_waiter);
+	if((uintptr_t)pResult>UINTPTR_MAX-sizeof(*pResult) ||
+		(uintptr_t)pValue>UINTPTR_MAX-sizeof(*pValue) ||
+		__xrtRangesOverlap(pResult,sizeof(*pResult),pValue,sizeof(*pValue)) ||
+		__xrtRangesOverlap(pSubscription,iBytes,pResult,sizeof(*pResult)) ||
+		__xrtRangesOverlap(pSubscription,iBytes,pValue,sizeof(*pValue))) {
+		__xrtErrorSetInvalidArgument();
+		return false;
+	}
+	if(!xrtAtomic32Load(&pSubscription->Ready,XMEMORY_ACQUIRE)) return false;
+	*pResult=pSubscription->Result;
+	*pValue=pSubscription->Received;
+	return true;
+}
+
+/* Inspection is read-only under the caller's whole-graph freeze. The native
+ * registration/driver credits are real references; never turn borrowed cases
+ * into incoming edges or subtract pending accepted work from Count. */
+static bool __xrtChannelSubscriptionBusy(const void* pData)
+{
+	const xchannelsubscription* pSubscription=pData;
+	return pSubscription && xrtAtomic32Load(&pSubscription->Started,XMEMORY_ACQUIRE) &&
+		(xrtAtomic32Load(&pSubscription->Dispatch,XMEMORY_ACQUIRE)&XRT_CHANNEL_SUB_DRIVER);
+}
+
+static bool __xrtChannelSubscriptionCount(const void* pData,size_t* pCount)
+{
+	const xchannelsubscription* pSubscription=pData;
+	if(!pSubscription || !pCount || !pSubscription->OwnedPolicy ||
+		pSubscription->Cleared || __xrtChannelSubscriptionBusy(pSubscription)) return false;
+	uint32 iRefs=xrtAtomic32Load(&pSubscription->References,XMEMORY_ACQUIRE);
+	if(!iRefs) return false;
+	*pCount=(size_t)iRefs;
+	return true;
+}
+
+static bool __xrtChannelSubscriptionTrace(const void* pData,xrtownershipvisitor pVisit,ptr pContext)
+{
+	const xchannelsubscription* pSubscription=pData;
+	size_t iRefs;
+	if(!pVisit || !__xrtChannelSubscriptionCount(pSubscription,&iRefs)) return false;
+	return !pSubscription->DataLive || pVisit(
+		(xrtownershipref){pSubscription->Data,pSubscription->OwnedPolicy->Ops},pContext);
+}
+
+static const xrtownershipops __xrtChannelSubscriptionOps={
+	__xrtChannelSubscriptionCount,__xrtChannelSubscriptionTrace
+};
+
+XRT_API xrtownershipref xrtChannelSubscribeOwnership(const xchannelsubscription* pSubscription)
+{
+	return (xrtownershipref){pSubscription,pSubscription ? &__xrtChannelSubscriptionOps : NULL};
+}
+
+XRT_API const xrtownershipquiescencev1* xrtChannelSubscribeOwnershipQuiescenceV1Get(void)
+{
+	static const xrtownershipquiescencev1 tQuiescence={sizeof(tQuiescence),
+		&__xrtChannelSubscriptionOps,__xrtChannelSubscriptionBusy};
+	return &tQuiescence;
+}
+
+static bool __xrtChannelSubscriptionHold(const void* pData)
+{
+	xchannelsubscription* pSubscription=(xchannelsubscription*)pData;
+	return !pSubscription->Cleared && __xrtChannelSubscriptionTryRetain(pSubscription,2u);
+}
+
+static void __xrtChannelSubscriptionDropHold(const void* pData)
+{ __xrtChannelSubscriptionRelease((xchannelsubscription*)pData); }
+
+static bool __xrtChannelSubscriptionClaim(const void* pData,const void* pToken)
+{
+	xchannelsubscription* pSubscription=(xchannelsubscription*)pData;
+	if(!pToken || pSubscription->Cleared || (pSubscription->Claim && pSubscription->Claim!=pToken) ||
+		__xrtChannelSubscriptionBusy(pSubscription) ||
+		(xrtAtomic32Load(&pSubscription->Started,XMEMORY_ACQUIRE) &&
+		 !xrtAtomic32Load(&pSubscription->Ready,XMEMORY_ACQUIRE))) return false;
+	pSubscription->Claim=pToken;
+	return true;
+}
+
+static void __xrtChannelSubscriptionRestore(const void* pData,const void* pToken)
+{
+	xchannelsubscription* pSubscription=(xchannelsubscription*)pData;
+	if(!pToken || pSubscription->Claim!=pToken || pSubscription->Cleared) abort();
+	pSubscription->Claim=NULL;
+}
+
+static void __xrtChannelSubscriptionClear(const void* pData,const void* pToken)
+{
+	xchannelsubscription* pSubscription=(xchannelsubscription*)pData;
+	if(!pToken || pSubscription->Claim!=pToken || pSubscription->Cleared ||
+		__xrtChannelSubscriptionBusy(pSubscription) ||
+		(xrtAtomic32Load(&pSubscription->Started,XMEMORY_ACQUIRE) &&
+		 !xrtAtomic32Load(&pSubscription->Ready,XMEMORY_ACQUIRE))) abort();
+	pSubscription->Cleared=true;
+}
+
+static bool __xrtChannelSubscriptionFinish(const void* pData,const void* pToken)
+{
+	xchannelsubscription* pSubscription=(xchannelsubscription*)pData;
+	xrtownershipscope tMutation={0};
+	ptr pOwnedData=NULL;
+	void (*pDrop)(const void*)=NULL;
+	__xrtChannelSubscriptionMutationBegin(&tMutation);
+	if(!pToken || pSubscription->Claim!=pToken || !pSubscription->Cleared) abort();
+	if(pSubscription->DataLive) {
+		pOwnedData=pSubscription->Data;
+		pSubscription->Data=NULL;
+		pSubscription->DataLive=false;
+		pDrop=pSubscription->OwnedPolicy->Drop;
+	}
+	__xrtChannelSubscriptionMutationEnd(&tMutation);
+	if(pDrop) pDrop(pOwnedData);
+	return true;
+}
+
+XRT_API const xrtownershipadapterv1* xrtChannelSubscribeOwnershipAdapterV1(
+	xrtownershipref tReference,const xchannelsubscribeownershipv1* const* pPolicies,size_t iPolicyCount)
+{
+	static const xrtownershipadapterv1 tAdapter={sizeof(tAdapter),
+		__xrtChannelSubscriptionHold,__xrtChannelSubscriptionDropHold,
+		__xrtChannelSubscriptionClaim,__xrtChannelSubscriptionRestore,NULL,
+		__xrtChannelSubscriptionClear,__xrtChannelSubscriptionFinish};
+	const xchannelsubscription* pSubscription=tReference.Data;
+	size_t iRefs;
+	if(tReference.Ops!=&__xrtChannelSubscriptionOps || !pSubscription ||
+		!pSubscription->OwnedPolicy || iPolicyCount>SIZE_MAX/sizeof(*pPolicies) ||
+		(iPolicyCount && (!pPolicies || ((uintptr_t)pPolicies&(sizeof(ptr)-1u)) ||
+		 (uintptr_t)pPolicies>UINTPTR_MAX-iPolicyCount*sizeof(*pPolicies)))) return NULL;
+	for(size_t i=0;i<iPolicyCount;i++) if(pPolicies[i]==pSubscription->OwnedPolicy)
+		return __xrtChannelSubscriptionCount(pSubscription,&iRefs) ? &tAdapter : NULL;
+	return NULL;
+}
+
 #endif
 #endif
 
@@ -149248,24 +150466,16 @@ XRT_API bool xrtWsDeflateDirection(
 
 
 /* ========================================================================== */
-/* source: src/compress/checksum.c */
+/* source: src/hash/crc32.c */
 /* ========================================================================== */
 
-#if defined(XRT_FEATURE_INFLATE) || \
-	defined(XRT_FEATURE_DEFLATE) || \
-	defined(XRT_FEATURE_VFS_PACK)
+#if defined(XRT_FEATURE_CRC32)
 
+#if defined(XRT_FEATURE_CRC32) || defined(XRT_FEATURE_INFLATE) || \
+	defined(XRT_FEATURE_DEFLATE) || defined(XRT_FEATURE_VFS_PACK)
 
-
-#if defined(XRT_FEATURE_INFLATE) || defined(XRT_FEATURE_DEFLATE) || \
-	defined(XRT_FEATURE_VFS_PACK)
-
-/* Inflate 与 Deflate 共用 16 项小表，避免在两个裁剪模块中重复常量和逻辑。 */
-uint32 __xrtCompressCrc32Update(
-	uint32 iCrc,
-	const void* pData,
-	size_t iSize
-)
+/* One read-only 64-byte table, shared by public CRC32, gzip and VFS pack. */
+uint32 __xrtCrc32UpdateRaw(uint32 iCrc, const void* pData, size_t iSize)
 {
 	static const uint32 Table[16] = {
 		UINT32_C(0x00000000), UINT32_C(0x1DB71064),
@@ -149279,7 +150489,6 @@ uint32 __xrtCompressCrc32Update(
 	};
 	const uint8* pBytes = (const uint8*)pData;
 	size_t i;
-
 	for ( i = 0; i < iSize; i++ ) {
 		iCrc ^= pBytes[i];
 		iCrc = (iCrc >> 4u) ^ Table[iCrc & 15u];
@@ -149288,6 +150497,19 @@ uint32 __xrtCompressCrc32Update(
 	return iCrc;
 }
 
+XRT_API uint32 xrtCrc32Update(uint32 iCrc, const void* pData, size_t iSize)
+{
+	if ( !__xrtRangeValid(pData, iSize) ) {
+		__xrtErrorSetInvalidArgument();
+		return 0;
+	}
+	return __xrtCrc32UpdateRaw(iCrc ^ UINT32_MAX, pData, iSize) ^ UINT32_MAX;
+}
+
+XRT_API uint32 xrtCrc32(const void* pData, size_t iSize)
+{
+	return xrtCrc32Update(0, pData, iSize);
+}
 #endif
 #endif
 
@@ -150194,7 +151416,7 @@ static bool __xrtInflateEmit(
 		return false;
 	}
 	if ( pInflate->Config.Format == XINFLATE_GZIP ) {
-		pInflate->GzipDataCrc = __xrtCompressCrc32Update(
+		pInflate->GzipDataCrc = __xrtCrc32UpdateRaw(
 			pInflate->GzipDataCrc,
 			pData,
 			iSize
@@ -150450,7 +151672,7 @@ static bool __xrtInflateGzipHeaderByte(
 		return false;
 	}
 	pInflate->GzipHeaderBytes++;
-	pInflate->GzipHeaderCrc = __xrtCompressCrc32Update(
+	pInflate->GzipHeaderCrc = __xrtCrc32UpdateRaw(
 		pInflate->GzipHeaderCrc,
 		&iByte,
 		1
@@ -153627,7 +154849,7 @@ XRT_API bool xrtDeflateWrite(
 		return false;
 	}
 	if ( pDeflate->Config.Format == XDEFLATE_GZIP ) {
-		pDeflate->GzipCrc = __xrtCompressCrc32Update(
+		pDeflate->GzipCrc = __xrtCrc32UpdateRaw(
 			pDeflate->GzipCrc,
 			Input.Data,
 			Input.Size
@@ -229000,7 +230222,7 @@ cleanup:
 
 
 /* 先以常量时间验证标签，成功后才写入明文。 */
-XRT_API bool xrtChaCha20Poly1305Decrypt(
+static bool __xrtChaCha20Poly1305Decrypt(
 	const void* pKey,
 	const void* pNonce,
 	const void* pAad,
@@ -229008,7 +230230,8 @@ XRT_API bool xrtChaCha20Poly1305Decrypt(
 	const void* pCipher,
 	size_t iCipherSize,
 	const void* pTag,
-	void* pPlain
+	void* pPlain,
+	bool bReportAuthentication
 )
 {
 	uint8 Tag[XRT_CHACHA20_POLY1305_TAG_SIZE];
@@ -229032,7 +230255,7 @@ XRT_API bool xrtChaCha20Poly1305Decrypt(
 		goto cleanup;
 	}
 	if ( !xrtConstTimeEqual(Tag, pTag, sizeof(Tag)) ) {
-		__xrtChaCha20Poly1305AuthError();
+		if ( bReportAuthentication ) __xrtChaCha20Poly1305AuthError();
 		goto cleanup;
 	}
 	bResult = xrtChaCha20(
@@ -229042,6 +230265,15 @@ XRT_API bool xrtChaCha20Poly1305Decrypt(
 cleanup:
 	xrtSecureZero(Tag, sizeof(Tag));
 	return bResult;
+}
+
+XRT_API bool xrtChaCha20Poly1305Decrypt(
+	const void* pKey, const void* pNonce, const void* pAad, size_t iAadSize,
+	const void* pCipher, size_t iCipherSize, const void* pTag, void* pPlain
+)
+{
+	return __xrtChaCha20Poly1305Decrypt(pKey, pNonce, pAad, iAadSize,
+		pCipher, iCipherSize, pTag, pPlain, true);
 }
 
 
@@ -229088,7 +230320,7 @@ XRT_API bool xrtChaCha20Poly1305Seal(
 
 
 /* 分离连续输入末尾标签，并复用认证后写入的 detached 解密路径。 */
-XRT_API bool xrtChaCha20Poly1305Open(
+static bool __xrtChaCha20Poly1305Open(
 	const void* pKey,
 	const void* pNonce,
 	const void* pAad,
@@ -229096,7 +230328,8 @@ XRT_API bool xrtChaCha20Poly1305Open(
 	const void* pInput,
 	size_t iInputSize,
 	void* pPlain,
-	size_t iPlainSize
+	size_t iPlainSize,
+	bool bReportAuthentication
 )
 {
 	size_t iCipherSize;
@@ -229106,7 +230339,7 @@ XRT_API bool xrtChaCha20Poly1305Open(
 		return false;
 	}
 	if ( iInputSize < XRT_CHACHA20_POLY1305_OVERHEAD ) {
-		__xrtChaCha20Poly1305AuthError();
+		if ( bReportAuthentication ) __xrtChaCha20Poly1305AuthError();
 		return false;
 	}
 	iCipherSize = iInputSize - XRT_CHACHA20_POLY1305_OVERHEAD;
@@ -229118,7 +230351,7 @@ XRT_API bool xrtChaCha20Poly1305Open(
 		__xrtErrorSetRange();
 		return false;
 	}
-	return xrtChaCha20Poly1305Decrypt(
+	return __xrtChaCha20Poly1305Decrypt(
 		pKey,
 		pNonce,
 		pAad,
@@ -229126,8 +230359,27 @@ XRT_API bool xrtChaCha20Poly1305Open(
 		pInput,
 		iCipherSize,
 		(const uint8*)pInput + iCipherSize,
-		pPlain
+		pPlain,
+		bReportAuthentication
 	);
+}
+
+XRT_API bool xrtChaCha20Poly1305Open(
+	const void* pKey, const void* pNonce, const void* pAad, size_t iAadSize,
+	const void* pInput, size_t iInputSize, void* pPlain, size_t iPlainSize
+)
+{
+	return __xrtChaCha20Poly1305Open(pKey, pNonce, pAad, iAadSize,
+		pInput, iInputSize, pPlain, iPlainSize, true);
+}
+
+XRT_API bool xrtChaCha20Poly1305TryOpen(
+	const void* pKey, const void* pNonce, const void* pAad, size_t iAadSize,
+	const void* pInput, size_t iInputSize, void* pPlain, size_t iPlainSize
+)
+{
+	return __xrtChaCha20Poly1305Open(pKey, pNonce, pAad, iAadSize,
+		pInput, iInputSize, pPlain, iPlainSize, false);
 }
 
 #endif
@@ -235996,6 +237248,9 @@ struct xrt_task_group_item {
 	size_t Index;
 	bool ClosePosted;
 	bool CancelPosted;
+	bool Listed;
+	bool OwnershipCleared;
+	const void* OwnershipClaim;
 };
 
 
@@ -236025,14 +237280,106 @@ struct xtaskgroup {
 	xerror* FirstError;
 	bool Closed;
 	bool Cancelling;
+	size_t Busy;
+	bool OwnershipCleared;
+	const void* OwnershipClaim;
 };
+
+/* Every physical count/edge transition participates in whole-graph freeze.
+ * Callback execution and endpoint release stay outside these short scopes. */
+static void __xrtTaskGroupBegin(const xtaskgroup* pGroup, xrtownershipscope* pScope)
+{
+	if (!xrtOwnershipMutationBegin(pScope) || !xrtMutexLock((xmutex*)&pGroup->Lock)) abort();
+}
+static void __xrtTaskGroupEnd(const xtaskgroup* pGroup, xrtownershipscope* pScope)
+{
+	if (!xrtMutexUnlock((xmutex*)&pGroup->Lock) || !xrtOwnershipScopeEnd(pScope)) abort();
+}
+static bool __xrtTaskGroupOwnershipCount(const void* pData, size_t* pCount)
+{
+	const xtaskgroup* pGroup = pData; int32 iCount;
+	if (!pGroup || !pCount || pGroup->Busy || pGroup->Reserved || pGroup->OwnershipCleared) return false;
+	iCount = __xrtAtomicRefLoad(&pGroup->RefCount);
+	if (iCount <= 0) return false;
+	*pCount = (size_t)iCount; return true;
+}
+static bool __xrtTaskGroupItemOwnershipCount(const void* pData, size_t* pCount)
+{
+	const xrt_task_group_item* pItem = pData; size_t iGroupCount; int32 iCount;
+	if (!pItem || !pCount || pItem->OwnershipCleared || !pItem->Future ||
+		pItem->Listed != pItem->Waiter.Linked || pItem->Waiter.Calling ||
+		!__xrtTaskGroupOwnershipCount(pItem->Group, &iGroupCount)) return false;
+	iCount = __xrtAtomicRefLoad(&pItem->RefCount);
+	if (iCount <= 0) return false;
+	*pCount = (size_t)iCount; return true;
+}
+static bool __xrtTaskGroupOwnershipTrace(const void*, xrtownershipvisitor, ptr);
+static bool __xrtTaskGroupItemOwnershipTrace(const void*, xrtownershipvisitor, ptr);
+static const xrtownershipops __xrtTaskGroupOwnershipOps = {
+	__xrtTaskGroupOwnershipCount, __xrtTaskGroupOwnershipTrace
+};
+static const xrtownershipops __xrtTaskGroupItemOwnershipOps = {
+	__xrtTaskGroupItemOwnershipCount, __xrtTaskGroupItemOwnershipTrace
+};
+static bool __xrtTaskGroupOwnershipBusy(const void* pData)
+{
+	const xtaskgroup* pGroup = pData;
+	return pGroup && !pGroup->OwnershipCleared && (pGroup->Busy || pGroup->Reserved);
+}
+static bool __xrtTaskGroupItemOwnershipBusy(const void* pData)
+{
+	const xrt_task_group_item* pItem = pData;
+	return pItem && !pItem->OwnershipCleared && (pItem->Waiter.Calling ||
+		__xrtTaskGroupOwnershipBusy(pItem->Group));
+}
+XRT_API const xrtownershipquiescencev1* xrtTaskGroupOwnershipQuiescenceV1Get(void)
+{
+	static const xrtownershipquiescencev1 Policy = {sizeof(Policy),
+		&__xrtTaskGroupOwnershipOps, __xrtTaskGroupOwnershipBusy};
+	return &Policy;
+}
+XRT_API const xrtownershipquiescencev1* xrtTaskGroupItemOwnershipQuiescenceV1Get(void)
+{
+	static const xrtownershipquiescencev1 Policy = {sizeof(Policy),
+		&__xrtTaskGroupItemOwnershipOps, __xrtTaskGroupItemOwnershipBusy};
+	return &Policy;
+}
+XRT_API xrtownershipref xrtTaskGroupOwnership(const xtaskgroup* pGroup)
+{ return (xrtownershipref){pGroup, pGroup ? &__xrtTaskGroupOwnershipOps : NULL}; }
+static bool __xrtTaskGroupItemOwnershipTrace(const void* pData, xrtownershipvisitor pVisit, ptr pContext)
+{
+	const xrt_task_group_item* pItem = pData; size_t iCount;
+	if (!pVisit || !__xrtTaskGroupItemOwnershipCount(pData, &iCount)) return false;
+	return pVisit(xrtTaskGroupOwnership(pItem->Group), pContext) &&
+		(!pItem->Child || pVisit(xrtTaskGroupOwnership(pItem->Child), pContext)) &&
+		pVisit(xrtFutureOwnership(pItem->Future), pContext);
+}
+static bool __xrtTaskGroupOwnershipTrace(const void* pData, xrtownershipvisitor pVisit, ptr pContext)
+{
+	const xtaskgroup* pGroup = pData; const xrt_task_group_item* pPrevious = NULL; size_t iCount, iItems = 0;
+	if (!pVisit || !__xrtTaskGroupOwnershipCount(pData, &iCount)) return false;
+	if (pGroup->Cancel && !pVisit(xrtCancelOwnership(pGroup->Cancel), pContext)) return false;
+	if (pGroup->Watch && !pVisit(xrtCancelWatchOwnership(pGroup->Watch), pContext)) return false;
+	if (pGroup->Future && !pVisit(xrtFutureOwnership(pGroup->Future), pContext)) return false;
+	if (pGroup->Promise && !pVisit(xrtPromiseOwnership(pGroup->Promise), pContext)) return false;
+	if (pGroup->FirstError && !pVisit(xrtErrorOwnership(pGroup->FirstError), pContext)) return false;
+	for (const xrt_task_group_item* pItem = pGroup->Head; pItem; pItem = pItem->Next) {
+		if (++iItems > pGroup->Active || !pItem->Listed || pItem->Group != pGroup ||
+			pItem->Previous != pPrevious || !pVisit((xrtownershipref){pItem, &__xrtTaskGroupItemOwnershipOps}, pContext)) return false;
+		pPrevious = pItem;
+	}
+	return iItems == pGroup->Active;
+}
 
 
 
 /* 增加任务组内部引用；达到计数上限时拒绝继续接纳活动项。 */
 static bool __xrtTaskGroupRef(xtaskgroup* pGroup)
 {
-	return xrtRefRetain(&pGroup->RefCount) >= 0;
+	xrtownershipscope Scope = {0}; bool bHeld;
+	__xrtTaskGroupBegin(pGroup, &Scope);
+	bHeld = !pGroup->OwnershipCleared && xrtRefRetain(&pGroup->RefCount) >= 0;
+	__xrtTaskGroupEnd(pGroup, &Scope); return bHeld;
 }
 
 
@@ -236040,17 +237387,23 @@ static bool __xrtTaskGroupRef(xtaskgroup* pGroup)
 /* 释放任务组内部引用，并在全部活动项退出后回收公共状态。 */
 static void __xrtTaskGroupRelease(xtaskgroup* pGroup)
 {
-	if ( xrtRefRelease(&pGroup->RefCount) == 0 ) {
-		if ( pGroup->Watch != NULL ) {
-			xrtCancelUnwatch(pGroup->Watch);
-		}
-		xrtPromiseDestroy(pGroup->Promise);
-		xrtFutureDestroy(pGroup->Future);
-		xrtCancelDestroy(pGroup->Cancel);
-		xrtErrorFree(pGroup->FirstError);
-		(void)xrtMutexUnit(&pGroup->Lock);
-		xrtFree(pGroup);
+	xrtownershipscope Scope = {0}; int32 iLeft;
+	xpromise* pPromise = NULL; xfuture* pFuture = NULL; xcancel* pCancel = NULL; xerror* pError = NULL;
+	__xrtTaskGroupBegin(pGroup, &Scope); iLeft = xrtRefRelease(&pGroup->RefCount);
+	if (iLeft == 0) {
+		if (pGroup->Watch || pGroup->Head || pGroup->Active || pGroup->Reserved || pGroup->Busy) abort();
+		pPromise = pGroup->Promise; pGroup->Promise = NULL;
+		pFuture = pGroup->Future; pGroup->Future = NULL;
+		pCancel = pGroup->Cancel; pGroup->Cancel = NULL;
+		pError = pGroup->FirstError; pGroup->FirstError = NULL;
 	}
+	__xrtTaskGroupEnd(pGroup, &Scope);
+	if (iLeft < 0) abort();
+	if (iLeft != 0) return;
+	xrtPromiseDestroy(pPromise); xrtFutureDestroy(pFuture); xrtCancelDestroy(pCancel); xrtErrorFree(pError);
+	if (!xrtOwnershipMutationBegin(&Scope)) abort();
+	(void)xrtMutexUnit(&pGroup->Lock); xrtFree(pGroup);
+	if (!xrtOwnershipScopeEnd(&Scope)) abort();
 }
 
 
@@ -236058,7 +237411,7 @@ static void __xrtTaskGroupRelease(xtaskgroup* pGroup)
 /* 增加活动项引用，供锁外关闭或取消传播使用。 */
 static void __xrtTaskGroupItemRef(xrt_task_group_item* pItem)
 {
-	(void)xrtRefRetain(&pItem->RefCount);
+	if (xrtRefRetain(&pItem->RefCount) < 0) abort();
 }
 
 
@@ -236066,14 +237419,20 @@ static void __xrtTaskGroupItemRef(xrt_task_group_item* pItem)
 /* 释放活动项及其源、子组和父组引用。 */
 static void __xrtTaskGroupItemRelease(xrt_task_group_item* pItem)
 {
-	if ( xrtRefRelease(&pItem->RefCount) == 0 ) {
-		xrtFutureDestroy(pItem->Future);
-		if ( pItem->Child != NULL ) {
-			__xrtTaskGroupRelease(pItem->Child);
-		}
-		__xrtTaskGroupRelease(pItem->Group);
-		xrtFree(pItem);
+	xrtownershipscope Scope = {0}; int32 iLeft; xtaskgroup *pGroup = NULL, *pChild = NULL; xfuture* pFuture = NULL;
+	if (!xrtOwnershipMutationBegin(&Scope)) abort();
+	iLeft = xrtRefRelease(&pItem->RefCount);
+	if (iLeft == 0) {
+		if (pItem->Listed || pItem->Waiter.Linked || pItem->Waiter.Calling) abort();
+		pGroup = pItem->Group; pChild = pItem->Child; pFuture = pItem->Future;
+		pItem->Group = NULL; pItem->Child = NULL; pItem->Future = NULL; xrtFree(pItem);
 	}
+	if (!xrtOwnershipScopeEnd(&Scope)) abort();
+	if (iLeft < 0) abort();
+	if (iLeft != 0) return;
+	xrtFutureDestroy(pFuture);
+	if (pChild) __xrtTaskGroupRelease(pChild);
+	if (pGroup) __xrtTaskGroupRelease(pGroup);
 }
 
 
@@ -236084,6 +237443,7 @@ static void __xrtTaskGroupItemRemoveLocked(
 	xrt_task_group_item* pItem
 )
 {
+	if (!pItem->Listed) abort();
 	if ( pItem->Previous != NULL ) {
 		pItem->Previous->Next = pItem->Next;
 	} else if ( pGroup->Head == pItem ) {
@@ -236094,6 +237454,7 @@ static void __xrtTaskGroupItemRemoveLocked(
 	}
 	pItem->Previous = NULL;
 	pItem->Next = NULL;
+	pItem->Listed = false;
 }
 
 
@@ -236102,6 +237463,42 @@ static void __xrtTaskGroupItemRemoveLocked(
 static void __xrtTaskGroupWaiterRelease(ptr pData)
 {
 	__xrtTaskGroupItemRelease((xrt_task_group_item*)pData);
+}
+
+static void __xrtTaskGroupSourceDone(ptr pData);
+static void __xrtTaskGroupCancelled(ptr pData);
+static void __xrtTaskGroupCancelDrop(const void* pData)
+{ __xrtTaskGroupRelease((xtaskgroup*)pData); }
+/* Pending Done owns a distinct, real producer right. Returning it is strictly
+ * mechanical: closing/cancelling accepted work belongs to the group owner. */
+static const xfutureproducerownershipv1 __xrtTaskGroupProducerPolicy = {
+	sizeof(xfutureproducerownershipv1), __xrtTaskGroupCancelDrop
+};
+static const xfuturewatchownershipv1 __xrtTaskGroupWatchPolicy = {
+	sizeof(xfuturewatchownershipv1), __xrtTaskGroupSourceDone,
+	__xrtTaskGroupWaiterRelease, &__xrtTaskGroupItemOwnershipOps
+};
+static const xcancelwatchownershipv1 __xrtTaskGroupCancelPolicy = {
+	sizeof(xcancelwatchownershipv1), __xrtTaskGroupCancelled,
+	__xrtTaskGroupCancelDrop, &__xrtTaskGroupOwnershipOps
+};
+XRT_API const xfuturewatchownershipv1* xrtTaskGroupWatchPolicyV1Get(void)
+{ return &__xrtTaskGroupWatchPolicy; }
+XRT_API const xcancelwatchownershipv1* xrtTaskGroupCancelPolicyV1Get(void)
+{ return &__xrtTaskGroupCancelPolicy; }
+XRT_API const xfutureproducerownershipv1* xrtTaskGroupProducerPolicyV1Get(void)
+{ return &__xrtTaskGroupProducerPolicy; }
+
+/* Construction has not published the group. Break the pending endpoint's
+ * producer right before returning the creator right, preserving the failure. */
+static void __xrtTaskGroupCreateFailed(xtaskgroup* pGroup)
+{
+	xerror* pError = xrtTakeError();
+	xpromise* pPromise = pGroup->Promise; pGroup->Promise = NULL;
+	pGroup->Busy = 0;
+	xrtPromiseDestroy(pPromise);
+	__xrtTaskGroupRelease(pGroup);
+	xrtClearError(); xrtSetErrorTake(pError);
 }
 
 
@@ -236181,6 +237578,7 @@ static bool __xrtTaskGroupShouldCancel(
 /* 一个源完成后从活动链摘除，并更新累计结果和组完成条件。 */
 static void __xrtTaskGroupSourceDone(ptr pData)
 {
+	xrtownershipscope Scope = {0};
 	xrt_task_group_item* pItem = (xrt_task_group_item*)pData;
 	xtaskgroup* pGroup = pItem->Group;
 	xfuturestate State;
@@ -236188,6 +237586,7 @@ static void __xrtTaskGroupSourceDone(ptr pData)
 	xpromise* pPromise;
 	bool bCancel;
 
+	__xrtTaskGroupBegin(pGroup, &Scope); ++pGroup->Busy; __xrtTaskGroupEnd(pGroup, &Scope);
 	if ( pItem->Child != NULL ) {
 		State = __xrtTaskGroupChildState(pItem->Child, &pError);
 	} else {
@@ -236199,7 +237598,7 @@ static void __xrtTaskGroupSourceDone(ptr pData)
 		}
 	}
 
-	(void)xrtMutexLock(&pGroup->Lock);
+	__xrtTaskGroupBegin(pGroup, &Scope);
 	__xrtTaskGroupItemRemoveLocked(pGroup, pItem);
 	pGroup->Active--;
 	pGroup->Completed++;
@@ -236223,13 +237622,16 @@ static void __xrtTaskGroupSourceDone(ptr pData)
 	bCancel = !pGroup->Cancelling &&
 		__xrtTaskGroupShouldCancel(pGroup, State);
 	pPromise = __xrtTaskGroupTakePromise(pGroup);
-	(void)xrtMutexUnlock(&pGroup->Lock);
+	__xrtTaskGroupEnd(pGroup, &Scope);
 
 	xrtErrorFree(pError);
 	if ( bCancel ) {
 		(void)xrtCancelRequest(pGroup->Cancel);
 	}
 	__xrtTaskGroupResolve(pPromise);
+	/* Discharge the list's right separately from the completion callback. */
+	__xrtTaskGroupItemRelease(pItem);
+	__xrtTaskGroupBegin(pGroup, &Scope); --pGroup->Busy; __xrtTaskGroupEnd(pGroup, &Scope);
 }
 
 
@@ -236237,15 +237639,16 @@ static void __xrtTaskGroupSourceDone(ptr pData)
 /* 取消一个已经提交的活动项；预留项在提交时补发取消。 */
 static void __xrtTaskGroupItemCancel(xrt_task_group_item* pItem)
 {
+	xrtownershipscope Scope = {0};
 	if ( pItem->Child != NULL ) {
 		(void)xrtTaskGroupCancel(pItem->Child);
 	} else {
 		xfuture* pFuture;
 
-		(void)xrtMutexLock(&pItem->Group->Lock);
+		__xrtTaskGroupBegin(pItem->Group, &Scope);
 		pFuture = pItem->Future != NULL ?
 			xrtFutureRef(pItem->Future) : NULL;
-		(void)xrtMutexUnlock(&pItem->Group->Lock);
+		__xrtTaskGroupEnd(pItem->Group, &Scope);
 		if ( pFuture != NULL ) {
 			(void)xrtFutureCancel(pFuture);
 			xrtFutureDestroy(pFuture);
@@ -236258,11 +237661,13 @@ static void __xrtTaskGroupItemCancel(xrt_task_group_item* pItem)
 /* 组取消令牌命中后关闭接纳，并无分配地快照全部活动项。 */
 static void __xrtTaskGroupCancelled(ptr pData)
 {
+	xrtownershipscope Scope = {0};
 	xtaskgroup* pGroup = (xtaskgroup*)pData;
 	xrt_task_group_item* pList = NULL;
 	xpromise* pPromise;
 
-	(void)xrtMutexLock(&pGroup->Lock);
+	__xrtTaskGroupBegin(pGroup, &Scope);
+	++pGroup->Busy;
 	if ( !pGroup->Cancelling ) {
 		pGroup->Cancelling = true;
 		pGroup->Closed = true;
@@ -236277,7 +237682,7 @@ static void __xrtTaskGroupCancelled(ptr pData)
 		}
 	}
 	pPromise = __xrtTaskGroupTakePromise(pGroup);
-	(void)xrtMutexUnlock(&pGroup->Lock);
+	__xrtTaskGroupEnd(pGroup, &Scope);
 
 	while ( pList != NULL ) {
 		xrt_task_group_item* pItem = pList;
@@ -236288,6 +237693,7 @@ static void __xrtTaskGroupCancelled(ptr pData)
 		__xrtTaskGroupItemRelease(pItem);
 	}
 	__xrtTaskGroupResolve(pPromise);
+	__xrtTaskGroupBegin(pGroup, &Scope); --pGroup->Busy; __xrtTaskGroupEnd(pGroup, &Scope);
 }
 
 
@@ -236298,13 +237704,14 @@ static xrt_task_group_item* __xrtTaskGroupItemCreate(
 	xtaskgroup* pChild
 )
 {
+	xrtownershipscope Scope = {0};
 	xrt_task_group_item* pItem;
 
 	pItem = (xrt_task_group_item*)xrtCalloc(1, sizeof(xrt_task_group_item));
 	if ( pItem == NULL ) {
-		(void)xrtMutexLock(&pGroup->Lock);
+		__xrtTaskGroupBegin(pGroup, &Scope);
 		pGroup->Rejected++;
-		(void)xrtMutexUnlock(&pGroup->Lock);
+		__xrtTaskGroupEnd(pGroup, &Scope);
 		return NULL;
 	}
 	pItem->RefCount = 1;
@@ -236314,20 +237721,23 @@ static xrt_task_group_item* __xrtTaskGroupItemCreate(
 	pItem->Waiter.PublicWatch = true;
 	pItem->Waiter.Release = __xrtTaskGroupWaiterRelease;
 	pItem->Waiter.Data = pItem;
+	pItem->Waiter.Phased = true;
+	pItem->Waiter.Certified = 1;
+	pItem->Waiter.OwnershipPolicy = &__xrtTaskGroupWatchPolicy;
 	if ( !__xrtTaskGroupRef(pGroup) ) {
 		xrtFree(pItem);
-		(void)xrtMutexLock(&pGroup->Lock);
+		__xrtTaskGroupBegin(pGroup, &Scope);
 		pGroup->Rejected++;
-		(void)xrtMutexUnlock(&pGroup->Lock);
+		__xrtTaskGroupEnd(pGroup, &Scope);
 		__xrtErrorSetSizeOverflow();
 		return NULL;
 	}
 	if ( (pChild != NULL) && !__xrtTaskGroupRef(pChild) ) {
 		__xrtTaskGroupRelease(pGroup);
 		xrtFree(pItem);
-		(void)xrtMutexLock(&pGroup->Lock);
+		__xrtTaskGroupBegin(pGroup, &Scope);
 		pGroup->Rejected++;
-		(void)xrtMutexUnlock(&pGroup->Lock);
+		__xrtTaskGroupEnd(pGroup, &Scope);
 		__xrtErrorSetSizeOverflow();
 		return NULL;
 	}
@@ -236342,6 +237752,7 @@ static xrt_task_group_item* __xrtTaskGroupReserve(
 	xtaskgroup* pChild
 )
 {
+	xrtownershipscope Scope = {0};
 	xrt_task_group_item* pItem;
 	bool bClosed;
 	bool bLimited;
@@ -236351,12 +237762,16 @@ static xrt_task_group_item* __xrtTaskGroupReserve(
 		__xrtErrorSetInvalidArgument();
 		return NULL;
 	}
+	__xrtTaskGroupBegin(pGroup, &Scope);
+	bool bRetired = pGroup->OwnershipCleared;
+	__xrtTaskGroupEnd(pGroup, &Scope);
+	if (bRetired) { __xrtErrorSetInvalidState(); return NULL; }
 	pItem = __xrtTaskGroupItemCreate(pGroup, pChild);
 	if ( pItem == NULL ) {
 		return NULL;
 	}
 
-	(void)xrtMutexLock(&pGroup->Lock);
+	__xrtTaskGroupBegin(pGroup, &Scope);
 	bClosed = pGroup->Closed;
 	bLimited = (pGroup->Limit != 0) && (pGroup->Active >= pGroup->Limit);
 	bOverflow = (pGroup->Added >= (uint64)SIZE_MAX) ||
@@ -236369,10 +237784,12 @@ static xrt_task_group_item* __xrtTaskGroupReserve(
 			pGroup->Head->Previous = pItem;
 		}
 		pGroup->Head = pItem;
+		pItem->Listed = true;
+		__xrtTaskGroupItemRef(pItem);
 		pGroup->Active++;
 		pGroup->Reserved++;
 	}
-	(void)xrtMutexUnlock(&pGroup->Lock);
+	__xrtTaskGroupEnd(pGroup, &Scope);
 	if ( bClosed || bLimited || bOverflow ) {
 		__xrtTaskGroupItemRelease(pItem);
 		if ( bClosed ) {
@@ -236392,18 +237809,20 @@ static xrt_task_group_item* __xrtTaskGroupReserve(
 /* 回滚未能启动 Future 的预留项，并重新检查组完成条件。 */
 static void __xrtTaskGroupAbort(xrt_task_group_item* pItem)
 {
+	xrtownershipscope Scope = {0};
 	xtaskgroup* pGroup = pItem->Group;
 	xpromise* pPromise;
 
-	(void)xrtMutexLock(&pGroup->Lock);
+	__xrtTaskGroupBegin(pGroup, &Scope);
 	__xrtTaskGroupItemRemoveLocked(pGroup, pItem);
 	pGroup->Active--;
 	pGroup->Reserved--;
 	pGroup->Rejected++;
 	pPromise = __xrtTaskGroupTakePromise(pGroup);
-	(void)xrtMutexUnlock(&pGroup->Lock);
+	__xrtTaskGroupEnd(pGroup, &Scope);
 	__xrtTaskGroupResolve(pPromise);
 	__xrtTaskGroupItemRelease(pItem);
+	__xrtTaskGroupItemRelease(pItem); /* List and untransferred creator. */
 }
 
 
@@ -236414,6 +237833,7 @@ static bool __xrtTaskGroupCommit(
 	xfuture* pFuture
 )
 {
+	xrtownershipscope Scope = {0};
 	xtaskgroup* pGroup = pItem->Group;
 	xfuture* pTracked;
 	bool bCancel;
@@ -236428,14 +237848,23 @@ static bool __xrtTaskGroupCommit(
 		__xrtTaskGroupAbort(pItem);
 		return false;
 	}
+	/* Completion may synchronously call an observer which destroys the public
+	 * group owner. This operation needs its own real right through Busy exit. */
+	if (!__xrtTaskGroupRef(pGroup)) {
+		xrtFutureDestroy(pTracked); __xrtTaskGroupAbort(pItem); return false;
+	}
 
-	(void)xrtMutexLock(&pGroup->Lock);
+	__xrtTaskGroupBegin(pGroup, &Scope);
 	pItem->Future = pTracked;
 	pItem->Index = (size_t)pGroup->Added;
 	pGroup->Added++;
 	pGroup->Reserved--;
+	/* A published Future is not yet linked to its waiter. Describe that real
+	 * commit operation explicitly rather than interpreting a list mismatch as
+	 * BUSY (which would also hide a permanently invalid graph). */
+	++pGroup->Busy;
 	bCancel = pItem->CancelPosted;
-	(void)xrtMutexUnlock(&pGroup->Lock);
+	__xrtTaskGroupEnd(pGroup, &Scope);
 
 	if ( bCancel ) {
 		__xrtTaskGroupItemCancel(pItem);
@@ -236444,6 +237873,8 @@ static bool __xrtTaskGroupCommit(
 		__xrtTaskGroupSourceDone(pItem);
 		__xrtTaskGroupItemRelease(pItem);
 	}
+	__xrtTaskGroupBegin(pGroup, &Scope); --pGroup->Busy; __xrtTaskGroupEnd(pGroup, &Scope);
+	__xrtTaskGroupRelease(pGroup);
 	return true;
 }
 
@@ -236478,6 +237909,7 @@ static bool __xrtTaskGroupAdd(
 /* 创建结构化任务组及其取消源和稳定 Done Future。 */
 XRT_API xtaskgroup* xrtTaskGroupCreate(const xtaskgroupconfig* pConfig)
 {
+	xrtownershipscope Scope = {0};
 	xtaskgroup* pGroup;
 	xcancel* pParent = pConfig != NULL ? pConfig->Cancel : NULL;
 	uint32 iCancelOn = pConfig != NULL ? pConfig->CancelOn : 0;
@@ -236491,6 +237923,7 @@ XRT_API xtaskgroup* xrtTaskGroupCreate(const xtaskgroupconfig* pConfig)
 		return NULL;
 	}
 	pGroup->RefCount = 1;
+	pGroup->Busy = 1; /* Owned observer can synchronously notify during construction. */
 	pGroup->Limit = pConfig != NULL ? pConfig->Limit : 0;
 	pGroup->CancelOn = iCancelOn;
 	pGroup->FirstIndex = SIZE_MAX;
@@ -236512,19 +237945,24 @@ XRT_API xtaskgroup* xrtTaskGroupCreate(const xtaskgroupconfig* pConfig)
 		xrtFree(pGroup);
 		return NULL;
 	}
-	pGroup->Watch = xrtCancelWatch(
-		pGroup->Cancel,
-		__xrtTaskGroupCancelled,
-		pGroup
-	);
+	if (!__xrtTaskGroupRef(pGroup)) {
+		__xrtErrorSetSizeOverflow(); __xrtTaskGroupCreateFailed(pGroup); return NULL;
+	}
+	if (!xrtPromiseProducerBindTakeV1(pGroup->Promise, xrtTaskGroupOwnership(pGroup),
+		&__xrtTaskGroupProducerPolicy)) {
+		__xrtTaskGroupRelease(pGroup); /* Bind failure consumes nothing. */
+		__xrtTaskGroupCreateFailed(pGroup); return NULL;
+	}
+	if (!__xrtTaskGroupRef(pGroup)) {
+		__xrtErrorSetSizeOverflow(); __xrtTaskGroupCreateFailed(pGroup); return NULL;
+	}
+	pGroup->Watch = xrtCancelWatchOwnedV1(pGroup->Cancel, pGroup, &__xrtTaskGroupCancelPolicy);
 	if ( pGroup->Watch == NULL ) {
-		xrtPromiseDestroy(pGroup->Promise);
-		xrtFutureDestroy(pGroup->Future);
-		xrtCancelDestroy(pGroup->Cancel);
-		(void)xrtMutexUnit(&pGroup->Lock);
-		xrtFree(pGroup);
+		__xrtTaskGroupRelease(pGroup); /* Constructor failure did not consume Data. */
+		__xrtTaskGroupCreateFailed(pGroup);
 		return NULL;
 	}
+	__xrtTaskGroupBegin(pGroup, &Scope); --pGroup->Busy; __xrtTaskGroupEnd(pGroup, &Scope);
 	return pGroup;
 }
 
@@ -236614,6 +238052,7 @@ XRT_API xfuture* xrtTaskGroupStart(
 /* 停止接纳，并把关闭动作传播到当前嵌套子组。 */
 XRT_API bool xrtTaskGroupClose(xtaskgroup* pGroup)
 {
+	xrtownershipscope Scope = {0};
 	xrt_task_group_item* pList = NULL;
 	xpromise* pPromise;
 	bool bClosed;
@@ -236622,7 +238061,10 @@ XRT_API bool xrtTaskGroupClose(xtaskgroup* pGroup)
 		__xrtErrorSetInvalidArgument();
 		return false;
 	}
-	(void)xrtMutexLock(&pGroup->Lock);
+	__xrtTaskGroupBegin(pGroup, &Scope);
+	if (pGroup->OwnershipCleared) {
+		__xrtTaskGroupEnd(pGroup, &Scope); __xrtErrorSetInvalidState(); return false;
+	}
 	bClosed = pGroup->Closed;
 	if ( !bClosed ) {
 		pGroup->Closed = true;
@@ -236637,7 +238079,7 @@ XRT_API bool xrtTaskGroupClose(xtaskgroup* pGroup)
 		}
 	}
 	pPromise = __xrtTaskGroupTakePromise(pGroup);
-	(void)xrtMutexUnlock(&pGroup->Lock);
+	__xrtTaskGroupEnd(pGroup, &Scope);
 
 	while ( pList != NULL ) {
 		xrt_task_group_item* pItem = pList;
@@ -236656,11 +238098,18 @@ XRT_API bool xrtTaskGroupClose(xtaskgroup* pGroup)
 /* 请求组取消；取消监听负责统一关闭和锁外传播。 */
 XRT_API bool xrtTaskGroupCancel(xtaskgroup* pGroup)
 {
+	xrtownershipscope Scope = {0}; xcancel* pCancel; bool bResult;
 	if ( pGroup == NULL ) {
 		__xrtErrorSetInvalidArgument();
 		return false;
 	}
-	return xrtCancelRequest(pGroup->Cancel);
+	__xrtTaskGroupBegin(pGroup, &Scope);
+	if (pGroup->OwnershipCleared) {
+		__xrtTaskGroupEnd(pGroup, &Scope); __xrtErrorSetInvalidState(); return false;
+	}
+	pCancel = xrtCancelRef(pGroup->Cancel); __xrtTaskGroupEnd(pGroup, &Scope);
+	if (!pCancel) return false;
+	bResult = xrtCancelRequest(pCancel); xrtCancelDestroy(pCancel); return bResult;
 }
 
 
@@ -236668,11 +238117,16 @@ XRT_API bool xrtTaskGroupCancel(xtaskgroup* pGroup)
 /* 返回稳定 Done Future 的新增引用。 */
 XRT_API xfuture* xrtTaskGroupFuture(const xtaskgroup* pGroup)
 {
+	xrtownershipscope Scope = {0}; xfuture* pFuture;
 	if ( pGroup == NULL ) {
 		__xrtErrorSetInvalidArgument();
 		return NULL;
 	}
-	return xrtFutureRef(pGroup->Future);
+	__xrtTaskGroupBegin(pGroup, &Scope);
+	if (pGroup->OwnershipCleared) {
+		__xrtTaskGroupEnd(pGroup, &Scope); __xrtErrorSetInvalidState(); return NULL;
+	}
+	pFuture = xrtFutureRef(pGroup->Future); __xrtTaskGroupEnd(pGroup, &Scope); return pFuture;
 }
 
 
@@ -236743,11 +238197,15 @@ XRT_API bool xrtTaskGroupGet(
 	xtaskgroupstats* pStats
 )
 {
+	xrtownershipscope Scope = {0};
 	if ( (pGroup == NULL) || (pStats == NULL) ) {
 		__xrtErrorSetInvalidArgument();
 		return false;
 	}
-	(void)xrtMutexLock((xmutex*)&pGroup->Lock);
+	__xrtTaskGroupBegin(pGroup, &Scope);
+	if (pGroup->OwnershipCleared) {
+		__xrtTaskGroupEnd(pGroup, &Scope); __xrtErrorSetInvalidState(); return false;
+	}
 	pStats->Active = pGroup->Active;
 	pStats->Added = pGroup->Added;
 	pStats->Completed = pGroup->Completed;
@@ -236760,7 +238218,7 @@ XRT_API bool xrtTaskGroupGet(
 	pStats->FirstState = pGroup->FirstState;
 	pStats->Accepting = !pGroup->Closed;
 	pStats->Cancelling = pGroup->Cancelling;
-	(void)xrtMutexUnlock((xmutex*)&pGroup->Lock);
+	__xrtTaskGroupEnd(pGroup, &Scope);
 	return true;
 }
 
@@ -236769,15 +238227,19 @@ XRT_API bool xrtTaskGroupGet(
 /* 返回任务组保留的首个失败错误。 */
 XRT_API const xerror* xrtTaskGroupError(const xtaskgroup* pGroup)
 {
+	xrtownershipscope Scope = {0};
 	const xerror* pError;
 
 	if ( pGroup == NULL ) {
 		__xrtErrorSetInvalidArgument();
 		return NULL;
 	}
-	(void)xrtMutexLock((xmutex*)&pGroup->Lock);
+	__xrtTaskGroupBegin(pGroup, &Scope);
+	if (pGroup->OwnershipCleared) {
+		__xrtTaskGroupEnd(pGroup, &Scope); __xrtErrorSetInvalidState(); return NULL;
+	}
 	pError = pGroup->FirstError;
-	(void)xrtMutexUnlock((xmutex*)&pGroup->Lock);
+	__xrtTaskGroupEnd(pGroup, &Scope);
 	return pError;
 }
 
@@ -236786,11 +238248,16 @@ XRT_API const xerror* xrtTaskGroupError(const xtaskgroup* pGroup)
 /* 返回组取消令牌的新增引用。 */
 XRT_API xcancel* xrtTaskGroupCancelToken(const xtaskgroup* pGroup)
 {
+	xrtownershipscope Scope = {0}; xcancel* pCancel;
 	if ( pGroup == NULL ) {
 		__xrtErrorSetInvalidArgument();
 		return NULL;
 	}
-	return xrtCancelRef(pGroup->Cancel);
+	__xrtTaskGroupBegin(pGroup, &Scope);
+	if (pGroup->OwnershipCleared) {
+		__xrtTaskGroupEnd(pGroup, &Scope); __xrtErrorSetInvalidState(); return NULL;
+	}
+	pCancel = xrtCancelRef(pGroup->Cancel); __xrtTaskGroupEnd(pGroup, &Scope); return pCancel;
 }
 
 
@@ -236798,19 +238265,241 @@ XRT_API xcancel* xrtTaskGroupCancelToken(const xtaskgroup* pGroup)
 /* 关闭并取消仍活动的项，最终回收由活动监听引用计数驱动。 */
 XRT_API void xrtTaskGroupDestroy(xtaskgroup* pGroup)
 {
+	xrtownershipscope Scope = {0};
 	bool bActive;
+	xcancelwatch* pWatch;
 
 	if ( pGroup == NULL ) {
 		return;
 	}
+	__xrtTaskGroupBegin(pGroup, &Scope); bool bRetired = pGroup->OwnershipCleared;
+	__xrtTaskGroupEnd(pGroup, &Scope);
+	if (bRetired) { __xrtTaskGroupRelease(pGroup); return; }
 	(void)xrtTaskGroupClose(pGroup);
-	(void)xrtMutexLock(&pGroup->Lock);
+	__xrtTaskGroupBegin(pGroup, &Scope);
 	bActive = pGroup->Active != 0;
-	(void)xrtMutexUnlock(&pGroup->Lock);
+	__xrtTaskGroupEnd(pGroup, &Scope);
 	if ( bActive ) {
 		(void)xrtTaskGroupCancel(pGroup);
 	}
+	/* Consume only the public owner's registration right. Watch's Data ref is
+	 * independent and may return later when a real callback/dispatch retires. */
+	__xrtTaskGroupBegin(pGroup, &Scope); pWatch = pGroup->Watch; pGroup->Watch = NULL;
+	__xrtTaskGroupEnd(pGroup, &Scope); xrtCancelUnwatch(pWatch);
 	__xrtTaskGroupRelease(pGroup);
+}
+
+/* The collector keeps one real pin on EVERY node until all completion
+ * duties settle. No semantic notification or unlink occurs before Clear. */
+static bool __xrtTaskGroupAdapterHold(const void* pData)
+{ return __xrtTaskGroupRef((xtaskgroup*)pData); }
+static void __xrtTaskGroupAdapterDrop(const void* pData)
+{ __xrtTaskGroupRelease((xtaskgroup*)pData); }
+static bool __xrtTaskGroupAdapterClaim(const void* pData, const void* pToken)
+{
+	xtaskgroup* pGroup = (xtaskgroup*)pData; size_t iCount;
+	if (!pToken || !__xrtTaskGroupOwnershipCount(pData,&iCount) ||
+		(pGroup->OwnershipClaim && pGroup->OwnershipClaim != pToken)) return false;
+	pGroup->OwnershipClaim = pToken; return true;
+}
+static void __xrtTaskGroupAdapterRestore(const void* pData, const void* pToken)
+{
+	xtaskgroup* pGroup = (xtaskgroup*)pData;
+	if (!pToken || pGroup->OwnershipClaim != pToken || pGroup->OwnershipCleared) abort();
+	pGroup->OwnershipClaim = NULL;
+}
+static void __xrtTaskGroupAdapterClear(const void* pData, const void* pToken)
+{
+	xtaskgroup* pGroup = (xtaskgroup*)pData;
+	if (!pToken || pGroup->OwnershipClaim != pToken || pGroup->OwnershipCleared || pGroup->Busy || pGroup->Reserved) abort();
+	pGroup->OwnershipCleared = true; pGroup->Closed = true;
+}
+static xrtownershipfinishresult __xrtTaskGroupAdapterFinish(const void* pData, const void* pToken)
+{
+	xtaskgroup* pGroup = (xtaskgroup*)pData; xrtownershipscope Scope = {0};
+	xcancelwatch* pWatch; xpromise* pPromise; xfuture* pFuture; xcancel* pCancel; xerror* pError;
+	__xrtTaskGroupBegin(pGroup,&Scope);
+	if (!pToken || pGroup->OwnershipClaim != pToken || !pGroup->OwnershipCleared) abort();
+	pWatch = pGroup->Watch;
+	__xrtTaskGroupEnd(pGroup,&Scope);
+	if (pWatch) {
+		if (!xrtCancelUnwatchChecked(pWatch)) return XRT_OWNERSHIP_FINISH_FAILED;
+		__xrtTaskGroupBegin(pGroup,&Scope); pGroup->Watch = NULL; __xrtTaskGroupEnd(pGroup,&Scope);
+	}
+	for (;;) {
+		__xrtTaskGroupBegin(pGroup,&Scope); xrt_task_group_item* pItem = pGroup->Head;
+		if (pItem) { __xrtTaskGroupItemRemoveLocked(pGroup,pItem); --pGroup->Active; }
+		__xrtTaskGroupEnd(pGroup,&Scope);
+		if (!pItem) break;
+		__xrtTaskGroupItemRelease(pItem); /* Only the real list-owned right. */
+	}
+	__xrtTaskGroupBegin(pGroup,&Scope); pPromise = pGroup->Promise; pFuture = pGroup->Future;
+	__xrtTaskGroupEnd(pGroup,&Scope);
+	/* A separately rooted Done Future is not cleared with this group. It still
+	 * receives normal successful completion, outside freeze and mutation. */
+	if (pPromise && !xrtFutureDone(pFuture) && !xrtPromiseResolve(pPromise,NULL))
+		return XRT_OWNERSHIP_FINISH_FAILED;
+	__xrtTaskGroupBegin(pGroup,&Scope);
+	pPromise = pGroup->Promise; pGroup->Promise = NULL; pFuture = pGroup->Future; pGroup->Future = NULL;
+	pCancel = pGroup->Cancel; pGroup->Cancel = NULL; pError = pGroup->FirstError; pGroup->FirstError = NULL;
+	__xrtTaskGroupEnd(pGroup,&Scope);
+	xrtPromiseDestroy(pPromise); xrtFutureDestroy(pFuture); xrtCancelDestroy(pCancel); xrtErrorFree(pError);
+	return XRT_OWNERSHIP_FINISH_READY;
+}
+static bool __xrtTaskGroupAdapterFinishBool(const void* pData, const void* pToken)
+{ return __xrtTaskGroupAdapterFinish(pData,pToken) == XRT_OWNERSHIP_FINISH_READY; }
+static bool __xrtTaskGroupItemAdapterHold(const void* pData)
+{
+	xrt_task_group_item* pItem = (xrt_task_group_item*)pData; xrtownershipscope Scope = {0}; bool bHeld;
+	if (!xrtOwnershipMutationBegin(&Scope)) return false;
+	bHeld = !pItem->OwnershipCleared && xrtRefRetain(&pItem->RefCount) > 0;
+	if (!xrtOwnershipScopeEnd(&Scope)) abort();
+	return bHeld;
+}
+static void __xrtTaskGroupItemAdapterDrop(const void* pData)
+{ __xrtTaskGroupItemRelease((xrt_task_group_item*)pData); }
+static bool __xrtTaskGroupItemAdapterClaim(const void* pData, const void* pToken)
+{
+	xrt_task_group_item* pItem = (xrt_task_group_item*)pData; size_t iCount;
+	if (!pToken || !__xrtTaskGroupItemOwnershipCount(pData,&iCount) ||
+		(pItem->OwnershipClaim && pItem->OwnershipClaim != pToken)) return false;
+	pItem->OwnershipClaim = pToken; return true;
+}
+static void __xrtTaskGroupItemAdapterRestore(const void* pData, const void* pToken)
+{
+	xrt_task_group_item* pItem = (xrt_task_group_item*)pData;
+	if (!pToken || pItem->OwnershipClaim != pToken || pItem->OwnershipCleared) abort();
+	pItem->OwnershipClaim = NULL;
+}
+static void __xrtTaskGroupItemAdapterClear(const void* pData, const void* pToken)
+{
+	xrt_task_group_item* pItem = (xrt_task_group_item*)pData;
+	if (!pToken || pItem->OwnershipClaim != pToken || pItem->OwnershipCleared || pItem->Waiter.Calling) abort();
+	pItem->OwnershipCleared = true;
+}
+static xrtownershipfinishresult __xrtTaskGroupItemAdapterFinish(const void* pData, const void* pToken)
+{
+	xrt_task_group_item* pItem = (xrt_task_group_item*)pData; xrtownershipscope Scope = {0};
+	xtaskgroup *pGroup, *pChild; xfuture* pFuture; bool bListed;
+	if (!xrtOwnershipMutationBegin(&Scope)) return XRT_OWNERSHIP_FINISH_FAILED;
+	if (!pToken || pItem->OwnershipClaim != pToken || !pItem->OwnershipCleared) abort();
+	pGroup = pItem->Group; pFuture = pItem->Future;
+	if (!xrtOwnershipScopeEnd(&Scope)) abort();
+	if (!pGroup) return XRT_OWNERSHIP_FINISH_READY;
+	(void)__xrtFutureWaiterDetach(pFuture,&pItem->Waiter);
+	__xrtTaskGroupBegin(pGroup,&Scope);
+	if (pItem->Waiter.Linked || pItem->Waiter.Calling) {
+		__xrtTaskGroupEnd(pGroup,&Scope); return XRT_OWNERSHIP_FINISH_FAILED;
+	}
+	bListed = pItem->Listed;
+	if (bListed) { __xrtTaskGroupItemRemoveLocked(pGroup,pItem); --pGroup->Active; }
+	pChild = pItem->Child; pItem->Child = NULL; pItem->Group = NULL; pItem->Future = NULL;
+	__xrtTaskGroupEnd(pGroup,&Scope);
+	if (bListed) __xrtTaskGroupItemRelease(pItem);
+	xrtFutureDestroy(pFuture); if (pChild) __xrtTaskGroupRelease(pChild); __xrtTaskGroupRelease(pGroup);
+	return XRT_OWNERSHIP_FINISH_READY;
+}
+static bool __xrtTaskGroupItemAdapterFinishBool(const void* pData, const void* pToken)
+{ return __xrtTaskGroupItemAdapterFinish(pData,pToken) == XRT_OWNERSHIP_FINISH_READY; }
+XRT_API const xrtownershipadapterv1* xrtTaskGroupOwnershipAdapterV1(xrtownershipref Reference,
+	const xrtownershipfinishv1** ppCompletion)
+{
+	static const xrtownershipadapterv1 Group = {sizeof(Group), __xrtTaskGroupAdapterHold, __xrtTaskGroupAdapterDrop,
+		__xrtTaskGroupAdapterClaim, __xrtTaskGroupAdapterRestore, NULL, __xrtTaskGroupAdapterClear, __xrtTaskGroupAdapterFinishBool};
+	static const xrtownershipadapterv1 Item = {sizeof(Item), __xrtTaskGroupItemAdapterHold, __xrtTaskGroupItemAdapterDrop,
+		__xrtTaskGroupItemAdapterClaim, __xrtTaskGroupItemAdapterRestore, NULL, __xrtTaskGroupItemAdapterClear, __xrtTaskGroupItemAdapterFinishBool};
+	static const xrtownershipfinishv1 GroupFinish = {sizeof(GroupFinish), &Group, __xrtTaskGroupAdapterFinish};
+	static const xrtownershipfinishv1 ItemFinish = {sizeof(ItemFinish), &Item, __xrtTaskGroupItemAdapterFinish};
+	size_t iCount;
+	if (!Reference.Data || !ppCompletion) return NULL;
+	if (Reference.Ops == &__xrtTaskGroupOwnershipOps && __xrtTaskGroupOwnershipCount(Reference.Data,&iCount)) {
+		*ppCompletion = &GroupFinish; return &Group;
+	}
+	if (Reference.Ops == &__xrtTaskGroupItemOwnershipOps &&
+		((const xrt_task_group_item*)Reference.Data)->Listed && __xrtTaskGroupItemOwnershipCount(Reference.Data,&iCount)) {
+		*ppCompletion = &ItemFinish; return &Item;
+	}
+	return NULL;
+}
+
+/* Preparation is normal structured shutdown, not physical Clear. It closes
+ * admission, lets every accepted item publish normally, then retires the
+ * group's own cancellation registration. No source is cancelled or skipped. */
+static bool __xrtTaskGroupPrepared(const void* pData)
+{
+	const xtaskgroup* pGroup = pData;
+	return pGroup->Closed && !pGroup->Active && !pGroup->Reserved && !pGroup->Busy &&
+		!pGroup->Promise && !pGroup->Watch;
+}
+static void __xrtTaskGroupClearV2(const void* pData, const void* pToken)
+{
+	if (!__xrtTaskGroupPrepared(pData)) abort();
+	__xrtTaskGroupAdapterClear(pData,pToken);
+}
+static xrtownershipprepareresult __xrtTaskGroupPrepare(const void* pData, const void* pToken)
+{
+	xtaskgroup* pGroup = (xtaskgroup*)pData; xrtownershipscope Scope = {0}; xcancelwatch* pWatch;
+	__xrtTaskGroupBegin(pGroup,&Scope);
+	if (!pToken || pGroup->OwnershipClaim != pToken || pGroup->OwnershipCleared) abort();
+	bool bBusy = pGroup->Busy || pGroup->Reserved;
+	__xrtTaskGroupEnd(pGroup,&Scope);
+	if (bBusy) return XRT_OWNERSHIP_PREPARE_BUSY;
+	/* Close returns false for an already closed group, not just an error.
+	 * A normal source/cancellation callback can win that transition. */
+	(void)xrtTaskGroupClose(pGroup);
+	__xrtTaskGroupBegin(pGroup,&Scope);
+	if (!pGroup->Closed) { __xrtTaskGroupEnd(pGroup,&Scope); return XRT_OWNERSHIP_PREPARE_FAILED; }
+	bBusy = pGroup->Active || pGroup->Reserved || pGroup->Busy || pGroup->Promise;
+	pWatch = pGroup->Watch;
+	__xrtTaskGroupEnd(pGroup,&Scope);
+	if (bBusy) return XRT_OWNERSHIP_PREPARE_BUSY;
+	if (pWatch) {
+		if (!xrtCancelUnwatchChecked(pWatch)) return XRT_OWNERSHIP_PREPARE_FAILED;
+		__xrtTaskGroupBegin(pGroup,&Scope); pGroup->Watch = NULL; __xrtTaskGroupEnd(pGroup,&Scope);
+	}
+	__xrtTaskGroupBegin(pGroup,&Scope); bool bReady = __xrtTaskGroupPrepared(pGroup); __xrtTaskGroupEnd(pGroup,&Scope);
+	return bReady ? XRT_OWNERSHIP_PREPARE_READY : XRT_OWNERSHIP_PREPARE_BUSY;
+}
+XRT_API const xrtownershipadapterv1* xrtTaskGroupOwnershipAdapterV2(xrtownershipref Reference,
+	const xrtownershippreparationv1** ppPreparation, const xrtownershipfinishv1** ppCompletion)
+{
+	static const xrtownershipadapterv1 Group = {sizeof(Group), __xrtTaskGroupAdapterHold, __xrtTaskGroupAdapterDrop,
+		__xrtTaskGroupAdapterClaim, __xrtTaskGroupAdapterRestore, NULL, __xrtTaskGroupClearV2, __xrtTaskGroupAdapterFinishBool};
+	static const xrtownershipadapterv1 Item = {sizeof(Item), __xrtTaskGroupItemAdapterHold, __xrtTaskGroupItemAdapterDrop,
+		__xrtTaskGroupItemAdapterClaim, __xrtTaskGroupItemAdapterRestore, NULL, __xrtTaskGroupItemAdapterClear, __xrtTaskGroupItemAdapterFinishBool};
+	static const xrtownershippreparationv1 Preparation = {sizeof(Preparation), &Group, __xrtTaskGroupPrepared, __xrtTaskGroupPrepare};
+	static const xrtownershipfinishv1 GroupFinish = {sizeof(GroupFinish), &Group, __xrtTaskGroupAdapterFinish};
+	static const xrtownershipfinishv1 ItemFinish = {sizeof(ItemFinish), &Item, __xrtTaskGroupItemAdapterFinish};
+	size_t iCount;
+	if (!Reference.Data || !ppPreparation || !ppCompletion) return NULL;
+	if (Reference.Ops == &__xrtTaskGroupOwnershipOps && __xrtTaskGroupOwnershipCount(Reference.Data,&iCount)) {
+		*ppPreparation = &Preparation; *ppCompletion = &GroupFinish; return &Group;
+	}
+	if (Reference.Ops == &__xrtTaskGroupItemOwnershipOps && __xrtTaskGroupItemOwnershipCount(Reference.Data,&iCount)) {
+		*ppPreparation = NULL; *ppCompletion = &ItemFinish; return &Item;
+	}
+	return NULL;
+}
+XRT_API bool xrtTaskGroupWaitV1(xrtownershipref Reference, const void* pToken,
+	xtaskgroupwaitv1* pWait, xtaskgroupwaitvisitorv1 pVisit, ptr pContext)
+{
+	const xtaskgroup* pGroup; const xrt_task_group_item* pPrevious = NULL; size_t iCount, iItems = 0;
+	if (Reference.Ops != &__xrtTaskGroupOwnershipOps || !Reference.Data || !pToken || !pWait) return false;
+	pGroup = Reference.Data;
+	if (pGroup->OwnershipClaim != pToken || !__xrtTaskGroupOwnershipCount(pGroup,&iCount) ||
+		!pGroup->Closed || !pGroup->Active || !pGroup->Promise || xrtPromiseDone(pGroup->Promise)) return false;
+	/* Validate the WHOLE list before visiting any borrowed source. A normally
+ * retired item can still be a physical plan anchor, but is not a group wait. */
+	for (const xrt_task_group_item* pItem = pGroup->Head; pItem; pItem = pItem->Next) {
+		if (iItems == pGroup->Active || !pItem->Listed || !pItem->Waiter.Linked || pItem->Waiter.Calling ||
+			pItem->OwnershipCleared || pItem->OwnershipClaim != pToken || pItem->Group != pGroup ||
+			pItem->Previous != pPrevious || !pItem->Future || xrtFutureState(pItem->Future) != XFUTURE_PENDING) return false;
+		++iItems; pPrevious = pItem;
+	}
+	if (iItems != pGroup->Active) return false;
+	if (pVisit) for (const xrt_task_group_item* pItem = pGroup->Head; pItem; pItem = pItem->Next)
+		if (!pVisit(pItem->Future,pContext)) return false;
+	*pWait = (xtaskgroupwaitv1){sizeof(*pWait),pGroup->Promise,iItems}; return true;
 }
 
 #endif
@@ -277937,14 +279626,14 @@ static bool __xrtVfsPackAdd(uint64 iLeft, uint64 iRight, uint64* pOutput)
 
 static uint32 __xrtVfsPackCrc(const void* pData, size_t iSize)
 {
-	return __xrtCompressCrc32Update(UINT32_MAX, pData, iSize) ^ UINT32_MAX;
+	return __xrtCrc32UpdateRaw(UINT32_MAX, pData, iSize) ^ UINT32_MAX;
 }
 
 static uint32 __xrtVfsPackCrcPair(const void* pFirst, size_t iFirst,
 	const void* pSecond, size_t iSecond)
 {
-	uint32 iCrc = __xrtCompressCrc32Update(UINT32_MAX, pFirst, iFirst);
-	iCrc = __xrtCompressCrc32Update(iCrc, pSecond, iSecond);
+	uint32 iCrc = __xrtCrc32UpdateRaw(UINT32_MAX, pFirst, iFirst);
+	iCrc = __xrtCrc32UpdateRaw(iCrc, pSecond, iSecond);
 	return iCrc ^ UINT32_MAX;
 }
 
@@ -309970,10 +311659,14 @@ static void __xrtProcessFree(xprocess* pProcess)
 /* 释放一个内部或外部共享引用。 */
 static void __xrtProcessRelease(xprocess* pProcess)
 {
-	if ( (pProcess != NULL) &&
-		(xrtRefRelease(&pProcess->RefCount) == 0) ) {
-		__xrtProcessFree(pProcess);
-	}
+	xrtownershipscope Mutation = {0}; int32 iLeft;
+	if ( pProcess == NULL ) return;
+	if (!xrtOwnershipMutationBegin(&Mutation)) abort();
+	iLeft = xrtRefRelease(&pProcess->RefCount);
+	if (iLeft < 0 || !xrtOwnershipScopeEnd(&Mutation)) abort();
+	/* Zero-count storage cannot be admitted. No outer mutation is held over
+	 * native close or the release of independently owned callback payloads. */
+	if (iLeft == 0) __xrtProcessFree(pProcess);
 }
 
 
@@ -309985,6 +311678,7 @@ static int32 __xrtProcessWaiter(ptr pData)
 	xprocessstatus Status;
 	xerror* pError = NULL;
 	bool bOk;
+	xrtownershipscope Mutation = {0};
 
 	memset(&Status, 0, sizeof(Status));
 	bOk = __xrtProcessPlatformWait(pProcess, &Status);
@@ -309993,6 +311687,7 @@ static int32 __xrtProcessWaiter(ptr pData)
 		Status.Kind = XPROCESS_EXIT_LOST;
 		Status.Code = -1;
 	}
+	if (!xrtOwnershipMutationBegin(&Mutation)) abort();
 	(void)__xrtProcessPlatformClose(pProcess, XPROCESS_STDIN);
 
 	(void)xrtMutexLock(&pProcess->Lock);
@@ -310002,6 +311697,7 @@ static int32 __xrtProcessWaiter(ptr pData)
 	pProcess->Error = pError;
 	(void)xrtCondBroadcast(&pProcess->Changed);
 	(void)xrtMutexUnlock(&pProcess->Lock);
+	if (!xrtOwnershipScopeEnd(&Mutation)) abort();
 	#if defined(XRT_FEATURE_PROCESS_FUTURE)
 		__xrtProcessFutureComplete(pProcess);
 	#endif
@@ -310056,7 +311752,7 @@ XRT_API bool xrtProcessShellConfigInit(
 
 
 /* 分配对象、启动平台进程并建立唯一后台等待者。 */
-XRT_API xprocess* xrtProcessSpawn(const xprocessconfig* pConfig)
+static xprocess* __xrtOwnershipBody_ProcessSpawn(const xprocessconfig* pConfig)
 {
 	xprocess* pProcess;
 	xprocessstatus Status;
@@ -310070,6 +311766,7 @@ XRT_API xprocess* xrtProcessSpawn(const xprocessconfig* pConfig)
 	}
 	pProcess->RefCount = 1;
 	pProcess->UserRefs = 1;
+	pProcess->OwnershipPublishing = true;
 	pProcess->State = XPROCESS_RUNNING;
 	pProcess->Status.Kind = XPROCESS_EXIT_NONE;
 	pProcess->Status.Code = -1;
@@ -310124,6 +311821,7 @@ XRT_API xprocess* xrtProcessSpawn(const xprocessconfig* pConfig)
 		}
 		goto fail_running;
 	}
+	pProcess->OwnershipPublishing = false;
 	return pProcess;
 
 fail_running:
@@ -310143,15 +311841,20 @@ fail_running:
 	}
 }
 
+XRT_API xprocess* xrtProcessSpawn(const xprocessconfig* pConfig)
+{
+	XRT_OWNERSHIP_MUTATION_RETURN(xprocess*, NULL, __xrtOwnershipBody_ProcessSpawn(pConfig));
+}
+
 
 
 /* 同时增加外部引用计数和对象总引用计数。 */
-XRT_API xprocess* xrtProcessRef(xprocess* pProcess)
+static xprocess* __xrtOwnershipBody_ProcessRef(xprocess* pProcess)
 {
 	if ( pProcess == NULL ) {
 		return NULL;
 	}
-	if ( xrtRefRetain(&pProcess->RefCount) < 0 ) {
+	if ( pProcess->OwnershipCleared || xrtRefRetain(&pProcess->RefCount) < 0 ) {
 		return NULL;
 	}
 	if ( xrtRefRetain(&pProcess->UserRefs) < 0 ) {
@@ -310161,17 +311864,25 @@ XRT_API xprocess* xrtProcessRef(xprocess* pProcess)
 	return pProcess;
 }
 
+XRT_API xprocess* xrtProcessRef(xprocess* pProcess)
+{
+	XRT_OWNERSHIP_MUTATION_RETURN(xprocess*, NULL, __xrtOwnershipBody_ProcessRef(pProcess));
+}
+
 
 
 /* 最后一个调用方引用关闭父端管道，后台等待引用继续负责回收。 */
 XRT_API void xrtProcessDestroy(xprocess* pProcess)
 {
 	int32 iUsers;
+	xrtownershipscope Mutation = {0};
 
 	if ( pProcess == NULL ) {
 		return;
 	}
+	if (!xrtOwnershipMutationBegin(&Mutation)) abort();
 	iUsers = xrtRefRelease(&pProcess->UserRefs);
+	if (!xrtOwnershipScopeEnd(&Mutation)) abort();
 	if ( iUsers < 0 ) {
 		return;
 	}
@@ -310181,6 +311892,93 @@ XRT_API void xrtProcessDestroy(xprocess* pProcess)
 		(void)__xrtProcessPlatformClose(pProcess, XPROCESS_STDERR);
 	}
 	__xrtProcessRelease(pProcess);
+}
+
+static bool __xrtProcessOwnershipCount(const void* pData, size_t* pCount)
+{
+	const xprocess* pProcess = pData; int32 iCount;
+	if (!pProcess || !pCount || pProcess->OwnershipPublishing || pProcess->OwnershipCleared) return false;
+	iCount = __xrtAtomicRefLoad(&pProcess->RefCount);
+	if (iCount <= 0) return false;
+	*pCount = (size_t)iCount; return true;
+}
+static bool __xrtProcessOwnershipTrace(const void* pData, xrtownershipvisitor Visit, ptr pContext)
+{
+	const xprocess* pProcess = pData; size_t iCount;
+	if (!Visit || !__xrtProcessOwnershipCount(pData, &iCount)) return false;
+	if (pProcess->Error && !Visit(xrtErrorOwnership(pProcess->Error), pContext)) return false;
+	#if defined(XRT_FEATURE_PROCESS_FUTURE)
+		if (pProcess->WaitFuture && !Visit(xrtFutureOwnership(pProcess->WaitFuture), pContext)) return false;
+		if (pProcess->WaitPromise && !Visit(xrtPromiseOwnership(pProcess->WaitPromise), pContext)) return false;
+	#endif
+	/* Waiter owns a native thread handle with no owning callback data. Its
+	 * process argument has its own real RefCount slot, an external root until
+	 * the callback AND publication tail have released it. Never subtract it. */
+	return true;
+}
+static const xrtownershipops __xrtProcessOwnershipOps = {__xrtProcessOwnershipCount, __xrtProcessOwnershipTrace};
+XRT_API xrtownershipref xrtProcessOwnership(const xprocess* pProcess)
+{ return (xrtownershipref){pProcess, pProcess ? &__xrtProcessOwnershipOps : NULL}; }
+static bool __xrtProcessOwnershipHold(const void* pData)
+{
+	xprocess* pProcess = (xprocess*)pData; xrtownershipscope Mutation = {0}; bool bHeld;
+	if (!xrtOwnershipMutationBegin(&Mutation)) return false;
+	bHeld = !pProcess->OwnershipCleared && xrtRefRetain(&pProcess->RefCount) > 0;
+	if (!xrtOwnershipScopeEnd(&Mutation)) abort();
+	return bHeld;
+}
+static void __xrtProcessOwnershipDrop(const void* pData)
+{ __xrtProcessRelease((xprocess*)pData); }
+static bool __xrtProcessOwnershipClaim(const void* pData, const void* pToken)
+{
+	xprocess* pProcess = (xprocess*)pData; size_t iCount;
+	if (!pToken || !__xrtProcessOwnershipCount(pData, &iCount) ||
+		(pProcess->OwnershipClaim && pProcess->OwnershipClaim != pToken)) return false;
+	pProcess->OwnershipClaim = pToken; return true;
+}
+static void __xrtProcessOwnershipRestore(const void* pData, const void* pToken)
+{
+	xprocess* pProcess = (xprocess*)pData;
+	if (!pToken || pProcess->OwnershipClaim != pToken || pProcess->OwnershipCleared) abort();
+	pProcess->OwnershipClaim = NULL;
+}
+static void __xrtProcessOwnershipClear(const void* pData, const void* pToken)
+{
+	xprocess* pProcess = (xprocess*)pData;
+	if (!pToken || pProcess->OwnershipClaim != pToken || pProcess->OwnershipCleared) abort();
+	/* Retired owning slots remain actual references until Finish. No close,
+	 * native wait or callback is permitted under the graph freeze. */
+	pProcess->OwnershipCleared = true;
+}
+static bool __xrtProcessOwnershipFinish(const void* pData, const void* pToken)
+{
+	xprocess* pProcess = (xprocess*)pData; xrtownershipscope Mutation = {0}; xerror* pError;
+	#if defined(XRT_FEATURE_PROCESS_FUTURE)
+		xfuture* pFuture; xpromise* pPromise; xprocessstatus* pStatus;
+	#endif
+	if (!xrtOwnershipMutationBegin(&Mutation)) abort();
+	if (!pToken || pProcess->OwnershipClaim != pToken || !pProcess->OwnershipCleared) abort();
+	pError = pProcess->Error; pProcess->Error = NULL;
+	#if defined(XRT_FEATURE_PROCESS_FUTURE)
+		pFuture = pProcess->WaitFuture; pProcess->WaitFuture = NULL;
+		pPromise = pProcess->WaitPromise; pProcess->WaitPromise = NULL;
+		pStatus = pProcess->WaitStatus; pProcess->WaitStatus = NULL;
+	#endif
+	if (!xrtOwnershipScopeEnd(&Mutation)) abort();
+	xrtErrorFree(pError);
+	#if defined(XRT_FEATURE_PROCESS_FUTURE)
+		xrtPromiseDestroy(pPromise); xrtFutureDestroy(pFuture); xrtFree(pStatus);
+	#endif
+	return true;
+}
+XRT_API const xrtownershipadapterv1* xrtProcessOwnershipAdapterV1(xrtownershipref Reference)
+{
+	static const xrtownershipadapterv1 Adapter = {sizeof(Adapter), __xrtProcessOwnershipHold,
+		__xrtProcessOwnershipDrop, __xrtProcessOwnershipClaim, __xrtProcessOwnershipRestore,
+		NULL, __xrtProcessOwnershipClear, __xrtProcessOwnershipFinish};
+	size_t iCount;
+	return Reference.Ops == &__xrtProcessOwnershipOps &&
+		__xrtProcessOwnershipCount(Reference.Data, &iCount) ? &Adapter : NULL;
 }
 
 
@@ -310267,7 +312065,7 @@ XRT_API bool xrtProcessStatus(
 
 
 /* 增加后台错误引用后在锁外返回。 */
-XRT_API xerror* xrtProcessError(const xprocess* pProcess)
+static xerror* __xrtOwnershipBody_ProcessError(const xprocess* pProcess)
 {
 	xerror* pError;
 
@@ -310278,6 +312076,11 @@ XRT_API xerror* xrtProcessError(const xprocess* pProcess)
 	pError = xrtErrorRef(pProcess->Error);
 	(void)xrtMutexUnlock((xmutex*)&pProcess->Lock);
 	return pError;
+}
+
+XRT_API xerror* xrtProcessError(const xprocess* pProcess)
+{
+	XRT_OWNERSHIP_MUTATION_RETURN(xerror*, NULL, __xrtOwnershipBody_ProcessError(pProcess));
 }
 
 
@@ -315718,6 +317521,18 @@ static void __xrtProcessFutureStatusFree(ptr pValue, ptr pData)
 	xrtFree(pValue);
 }
 
+static bool __xrtProcessFutureStatusTrace(const void* pValue, const void* pData,
+	xrtownershipvisitor Visit, ptr pContext)
+{
+	(void)pContext;
+	return pValue != NULL && pData == NULL && Visit != NULL;
+}
+static const xfuturepayloadownershipv1 __xrtProcessFutureStatusPolicy = {
+	sizeof(xfuturepayloadownershipv1), __xrtProcessFutureStatusFree, __xrtProcessFutureStatusTrace
+};
+XRT_API const xfuturepayloadownershipv1* xrtProcessFuturePayloadPolicyV1Get(void)
+{ return &__xrtProcessFutureStatusPolicy; }
+
 
 
 /* 把已发布的 Process 终态写入等待 Future。 */
@@ -315727,7 +317542,9 @@ void __xrtProcessFutureComplete(xprocess* pProcess)
 	xprocessstatus* pStatus = NULL;
 	xerror* pError = NULL;
 	bool bCompleted;
+	xrtownershipscope Mutation = {0};
 
+	if (!xrtOwnershipMutationBegin(&Mutation)) abort();
 	(void)xrtMutexLock(&pProcess->Lock);
 	if ( (pProcess->State == XPROCESS_EXITED) &&
 		(pProcess->WaitPromise != NULL) ) {
@@ -315741,6 +317558,7 @@ void __xrtProcessFutureComplete(xprocess* pProcess)
 		}
 	}
 	(void)xrtMutexUnlock(&pProcess->Lock);
+	if (!xrtOwnershipScopeEnd(&Mutation)) abort();
 	if ( pPromise == NULL ) {
 		return;
 	}
@@ -315749,11 +317567,10 @@ void __xrtProcessFutureComplete(xprocess* pProcess)
 		xrtErrorFree(pError);
 		xrtFree(pStatus);
 	} else {
-		bCompleted = xrtPromiseResolveOwned(
+		bCompleted = xrtPromiseResolveOwnedPolicyV1(
 			pPromise,
 			pStatus,
-			__xrtProcessFutureStatusFree,
-			NULL
+			&__xrtProcessFutureStatusPolicy
 		);
 		if ( !bCompleted ) {
 			xrtFree(pStatus);
@@ -315772,6 +317589,7 @@ XRT_API xfuture* xrtProcessWaitAsync(xprocess* pProcess)
 	xpromise* pPromise = NULL;
 	xprocessstatus* pStatus = NULL;
 	bool bComplete = false;
+	xrtownershipscope Mutation = {0};
 
 	if ( pProcess == NULL ) {
 		__xrtProcessErrorSet(
@@ -315783,13 +317601,22 @@ XRT_API xfuture* xrtProcessWaitAsync(xprocess* pProcess)
 		);
 		return NULL;
 	}
+	if (!xrtOwnershipMutationBegin(&Mutation)) return NULL;
 	(void)xrtMutexLock(&pProcess->Lock);
+	if (pProcess->OwnershipCleared) {
+		(void)xrtMutexUnlock(&pProcess->Lock);
+		if (!xrtOwnershipScopeEnd(&Mutation)) abort();
+		__xrtErrorSetInvalidState(); return NULL;
+	}
 	if ( pProcess->WaitFuture != NULL ) {
 		pFuture = xrtFutureRef(pProcess->WaitFuture);
 		(void)xrtMutexUnlock(&pProcess->Lock);
+		if (!xrtOwnershipScopeEnd(&Mutation)) abort();
 		return pFuture;
 	}
 	(void)xrtMutexUnlock(&pProcess->Lock);
+	if (!xrtOwnershipScopeEnd(&Mutation)) abort();
+	memset(&Mutation, 0, sizeof(Mutation));
 
 	pStatus = (xprocessstatus*)xrtMalloc(sizeof(xprocessstatus));
 	if ( pStatus == NULL ) {
@@ -315801,7 +317628,14 @@ XRT_API xfuture* xrtProcessWaitAsync(xprocess* pProcess)
 		return NULL;
 	}
 
+	if (!xrtOwnershipMutationBegin(&Mutation)) abort();
 	(void)xrtMutexLock(&pProcess->Lock);
+	if (pProcess->OwnershipCleared) {
+		(void)xrtMutexUnlock(&pProcess->Lock);
+		if (!xrtOwnershipScopeEnd(&Mutation)) abort();
+		xrtPromiseDestroy(pPromise); xrtFutureDestroy(pCandidate); xrtFree(pStatus);
+		__xrtErrorSetInvalidState(); return NULL;
+	}
 	if ( pProcess->WaitFuture == NULL ) {
 		pProcess->WaitFuture = pCandidate;
 		pProcess->WaitPromise = pPromise;
@@ -315813,6 +317647,7 @@ XRT_API xfuture* xrtProcessWaitAsync(xprocess* pProcess)
 	}
 	pFuture = xrtFutureRef(pProcess->WaitFuture);
 	(void)xrtMutexUnlock(&pProcess->Lock);
+	if (!xrtOwnershipScopeEnd(&Mutation)) abort();
 
 	xrtPromiseDestroy(pPromise);
 	xrtFutureDestroy(pCandidate);

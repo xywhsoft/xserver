@@ -2,8 +2,9 @@
 
 python tools/test_extensions_runtime.py --exe release/xs.exe sqlite xtp
 Only temporary scripts/configs and short-lived child processes are used.
-The custom probe explicitly exits its own process after completing checks;
-it does not create a listener or touch any running xs instance.
+The custom probe explicitly exits its own process after completing checks.
+The xrudp probe creates temporary loopback UDP endpoints and its own Engine;
+it never touches any running xs instance or connects to an external address.
 """
 from __future__ import annotations
 
@@ -18,6 +19,23 @@ from xs_extensions import ROOT, select_extensions
 
 
 PROTOCOL_PROBES = {
+    "xrudp": """
+        xrudppunch punch;
+        xrudpaddress target = {4, 42000, 0, {127, 0, 0, 1}}, offered;
+        unsigned char packet[28];
+        size_t size;
+        uint64_t due;
+        uint32_t index;
+        xrudpstunmessage message;
+        REQUIRE(xrtRudpPunchInit(&punch, &target, 1, 0, 1000) == XRUDP_OK);
+        REQUIRE(xrtRudpPunchNext(&punch, 0, packet, sizeof(packet), &size, &offered, &index, &due) == XRUDP_OK);
+        REQUIRE(size == 28 && offered.Port == target.Port && index == 0);
+        REQUIRE(xrtRudpStunDecode(packet, size, &message) == XRUDP_OK && message.Type == XRUDP_STUN_BINDING_INDICATION);
+        REQUIRE(xrtRudpPunchSent(&punch, index, 0) == XRUDP_OK);
+        REQUIRE(xrtRudpPunchCancel(&punch) == XRUDP_CANCELLED);
+        CheckXrudpNative(XNET_FAMILY_IPV4);
+        CheckXrudpNative(XNET_FAMILY_IPV6);
+    """,
     "xhttp": """
         xurl url;
         REQUIRE(xrtUrlParse(XRT_STR_LITERAL("https://example.com/a?q=1"), &url));
@@ -89,6 +107,8 @@ def check_public_sdk(exe: Path, selected: dict, directory: Path) -> None:
         code += (ROOT / entry["symbols"]).read_text(encoding="utf-8") + "\n"
         code += f"#undef {macro}\n"
     code += "NULL };\n"
+    if "xrudp" in selected:
+        code += (ROOT / "tools/fixtures/xrudp_native_sdk.c").read_text(encoding="utf-8") + "\n"
     code += "void CheckSDK(void) { size_t i;\n"
     code += "for (i = 0; i + 1 < sizeof(exports)/sizeof(exports[0]); ++i) REQUIRE(exports[i] != NULL);\n"
     for name, body in PROTOCOL_PROBES.items():
@@ -108,6 +128,12 @@ def check_public_sdk(exe: Path, selected: dict, directory: Path) -> None:
     count = re.search(r"\[sdk\] outer \+ nested ok exports=(\d+)", proc.stdout)
     if count is None:
         raise RuntimeError(f"public SDK export count missing:\n{proc.stdout}")
+    if "xrudp" in selected:
+        for family in (4, 6):
+            marker = f"[sdk] xrudp native family={family} Noise+reliable+FIN+cancel+closed-handles ok"
+            if proc.stdout.count(marker) != 2:
+                raise RuntimeError(f"xrudp native outer/nested evidence missing:\n{proc.stdout}{proc.stderr}")
+        print("PASS xrudp native: IPv4/IPv6, pinned Noise, reliable bytes+FIN, cancellation and CLOSED handles, outer + nested TCC", flush=True)
     print(f"PASS public SDK: {len(selected)} extensions, {count[1]} exports, outer + nested TCC", flush=True)
 
 PROBE = r'''
@@ -768,6 +794,8 @@ def check(exe: Path, names: list[str]) -> None:
                                f"{version.stdout}{version.stderr}")
         print(f"PASS version banner + --version: {expected_list}", flush=True)
         absent = {
+            "xrudp": ("xrudp.h", "extern void xrtRudpEndpointConfigInit(void*);",
+                       "xrtRudpEndpointConfigInit(0)"),
             "xhttp": ("xhttp.h", "extern int xrtUrlParse(void*, void*);",
                       "xrtUrlParse(0, 0)"),
             "xhttp-policy": ("xhttp-policy.h", "extern void xrtCookieJarConfigInit(void*);",

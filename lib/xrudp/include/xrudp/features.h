@@ -1,0 +1,242 @@
+/* 此文件由 tools/generate_extension_features.py 生成，请勿直接修改。 */
+#ifndef XRUDP_FEATURES_H
+#define XRUDP_FEATURES_H
+
+/* rudp_endpoint 及其直接依赖。 */
+#if defined(XRUDP_MODULE_ALL) || defined(XRUDP_MODULE_RUDP_ENDPOINT)
+#ifndef XRUDP_FEATURE_RUDP_ENDPOINT
+#define XRUDP_FEATURE_RUDP_ENDPOINT
+#endif
+#ifndef XRUDP_MODULE_RUDP_SESSION
+#define XRUDP_MODULE_RUDP_SESSION
+#endif
+#ifndef XRT_MODULE_NET_UDP
+#define XRT_MODULE_NET_UDP
+#endif
+#ifndef XRT_MODULE_ATOMIC
+#define XRT_MODULE_ATOMIC
+#endif
+#ifndef XRT_MODULE_TIME
+#define XRT_MODULE_TIME
+#endif
+#ifndef XRUDP_MODULE_RUDP_DISCOVERY
+#define XRUDP_MODULE_RUDP_DISCOVERY
+#endif
+#ifndef XRUDP_MODULE_RUDP_PUNCH
+#define XRUDP_MODULE_RUDP_PUNCH
+#endif
+#endif
+
+/* rudp_session 及其直接依赖。 */
+#if defined(XRUDP_MODULE_ALL) || defined(XRUDP_MODULE_RUDP_SESSION)
+#ifndef XRUDP_FEATURE_RUDP_SESSION
+#define XRUDP_FEATURE_RUDP_SESSION
+#endif
+#ifndef XRUDP_MODULE_RUDP_HANDSHAKE
+#define XRUDP_MODULE_RUDP_HANDSHAKE
+#endif
+#ifndef XRUDP_MODULE_RUDP_CONGESTION
+#define XRUDP_MODULE_RUDP_CONGESTION
+#endif
+#ifndef XRUDP_MODULE_RUDP_TIMING
+#define XRUDP_MODULE_RUDP_TIMING
+#endif
+#ifndef XRUDP_MODULE_RUDP_TRANSMIT
+#define XRUDP_MODULE_RUDP_TRANSMIT
+#endif
+#ifndef XRUDP_MODULE_RUDP_RECEIVE
+#define XRUDP_MODULE_RUDP_RECEIVE
+#endif
+#ifndef XRUDP_MODULE_RUDP_MESSAGE
+#define XRUDP_MODULE_RUDP_MESSAGE
+#endif
+#ifndef XRUDP_MODULE_RUDP_DATAGRAM
+#define XRUDP_MODULE_RUDP_DATAGRAM
+#endif
+#endif
+
+/* rudp_message 及其直接依赖。 */
+#if defined(XRUDP_MODULE_ALL) || defined(XRUDP_MODULE_RUDP_MESSAGE)
+#ifndef XRUDP_FEATURE_RUDP_MESSAGE
+#define XRUDP_FEATURE_RUDP_MESSAGE
+#endif
+#ifndef XRUDP_MODULE_RUDP_TRANSMIT
+#define XRUDP_MODULE_RUDP_TRANSMIT
+#endif
+#endif
+
+/* rudp_handshake 及其直接依赖。 */
+#if defined(XRUDP_MODULE_ALL) || defined(XRUDP_MODULE_RUDP_HANDSHAKE)
+#ifndef XRUDP_FEATURE_RUDP_HANDSHAKE
+#define XRUDP_FEATURE_RUDP_HANDSHAKE
+#endif
+#ifndef XRUDP_MODULE_RUDP_NOISE
+#define XRUDP_MODULE_RUDP_NOISE
+#endif
+#ifndef XRUDP_MODULE_RUDP_COOKIE
+#define XRUDP_MODULE_RUDP_COOKIE
+#endif
+#endif
+
+/* rudp_datagram 及其直接依赖。 */
+#if defined(XRUDP_MODULE_ALL) || defined(XRUDP_MODULE_RUDP_DATAGRAM)
+#ifndef XRUDP_FEATURE_RUDP_DATAGRAM
+#define XRUDP_FEATURE_RUDP_DATAGRAM
+#endif
+#ifndef XRUDP_MODULE_RUDP_WIRE
+#define XRUDP_MODULE_RUDP_WIRE
+#endif
+#endif
+
+/* rudp_transmit 及其直接依赖。 */
+#if defined(XRUDP_MODULE_ALL) || defined(XRUDP_MODULE_RUDP_TRANSMIT)
+#ifndef XRUDP_FEATURE_RUDP_TRANSMIT
+#define XRUDP_FEATURE_RUDP_TRANSMIT
+#endif
+#ifndef XRUDP_MODULE_RUDP_WIRE
+#define XRUDP_MODULE_RUDP_WIRE
+#endif
+#endif
+
+/* rudp_receive 及其直接依赖。 */
+#if defined(XRUDP_MODULE_ALL) || defined(XRUDP_MODULE_RUDP_RECEIVE)
+#ifndef XRUDP_FEATURE_RUDP_RECEIVE
+#define XRUDP_FEATURE_RUDP_RECEIVE
+#endif
+#ifndef XRUDP_MODULE_RUDP_WIRE
+#define XRUDP_MODULE_RUDP_WIRE
+#endif
+#endif
+
+/* rudp_congestion 及其直接依赖。 */
+#if defined(XRUDP_MODULE_ALL) || defined(XRUDP_MODULE_RUDP_CONGESTION)
+#ifndef XRUDP_FEATURE_RUDP_CONGESTION
+#define XRUDP_FEATURE_RUDP_CONGESTION
+#endif
+#ifndef XRUDP_MODULE_RUDP_SENT
+#define XRUDP_MODULE_RUDP_SENT
+#endif
+#endif
+
+/* rudp_sent 及其直接依赖。 */
+#if defined(XRUDP_MODULE_ALL) || defined(XRUDP_MODULE_RUDP_SENT)
+#ifndef XRUDP_FEATURE_RUDP_SENT
+#define XRUDP_FEATURE_RUDP_SENT
+#endif
+#ifndef XRUDP_MODULE_RUDP_ACK
+#define XRUDP_MODULE_RUDP_ACK
+#endif
+#endif
+
+/* rudp_timing 及其直接依赖。 */
+#if defined(XRUDP_MODULE_ALL) || defined(XRUDP_MODULE_RUDP_TIMING)
+#ifndef XRUDP_FEATURE_RUDP_TIMING
+#define XRUDP_FEATURE_RUDP_TIMING
+#endif
+#ifndef XRUDP_MODULE_RUDP_WIRE
+#define XRUDP_MODULE_RUDP_WIRE
+#endif
+#endif
+
+/* rudp_ack 及其直接依赖。 */
+#if defined(XRUDP_MODULE_ALL) || defined(XRUDP_MODULE_RUDP_ACK)
+#ifndef XRUDP_FEATURE_RUDP_ACK
+#define XRUDP_FEATURE_RUDP_ACK
+#endif
+#ifndef XRUDP_MODULE_RUDP_WIRE
+#define XRUDP_MODULE_RUDP_WIRE
+#endif
+#endif
+
+/* rudp_cookie 及其直接依赖。 */
+#if defined(XRUDP_MODULE_ALL) || defined(XRUDP_MODULE_RUDP_COOKIE)
+#ifndef XRUDP_FEATURE_RUDP_COOKIE
+#define XRUDP_FEATURE_RUDP_COOKIE
+#endif
+#ifndef XRUDP_MODULE_RUDP_WIRE
+#define XRUDP_MODULE_RUDP_WIRE
+#endif
+#ifndef XRT_MODULE_CRYPTO_HMAC_SHA256
+#define XRT_MODULE_CRYPTO_HMAC_SHA256
+#endif
+#endif
+
+/* rudp_noise 及其直接依赖。 */
+#if defined(XRUDP_MODULE_ALL) || defined(XRUDP_MODULE_RUDP_NOISE)
+#ifndef XRUDP_FEATURE_RUDP_NOISE
+#define XRUDP_FEATURE_RUDP_NOISE
+#endif
+#ifndef XRUDP_MODULE_RUDP_CRYPTO
+#define XRUDP_MODULE_RUDP_CRYPTO
+#endif
+#ifndef XRT_MODULE_CRYPTO_X25519
+#define XRT_MODULE_CRYPTO_X25519
+#endif
+#ifndef XRT_MODULE_CRYPTO_HKDF_SHA256
+#define XRT_MODULE_CRYPTO_HKDF_SHA256
+#endif
+#ifndef XRT_MODULE_RANDOM_SECURE
+#define XRT_MODULE_RANDOM_SECURE
+#endif
+#endif
+
+/* rudp_crypto 及其直接依赖。 */
+#if defined(XRUDP_MODULE_ALL) || defined(XRUDP_MODULE_RUDP_CRYPTO)
+#ifndef XRUDP_FEATURE_RUDP_CRYPTO
+#define XRUDP_FEATURE_RUDP_CRYPTO
+#endif
+#ifndef XRUDP_MODULE_RUDP_WIRE
+#define XRUDP_MODULE_RUDP_WIRE
+#endif
+#ifndef XRT_MODULE_CRYPTO_CHACHA20_POLY1305
+#define XRT_MODULE_CRYPTO_CHACHA20_POLY1305
+#endif
+#endif
+
+/* rudp_punch 及其直接依赖。 */
+#if defined(XRUDP_MODULE_ALL) || defined(XRUDP_MODULE_RUDP_PUNCH)
+#ifndef XRUDP_FEATURE_RUDP_PUNCH
+#define XRUDP_FEATURE_RUDP_PUNCH
+#endif
+#ifndef XRUDP_MODULE_RUDP_STUN
+#define XRUDP_MODULE_RUDP_STUN
+#endif
+#ifndef XRT_MODULE_RANDOM_SECURE
+#define XRT_MODULE_RANDOM_SECURE
+#endif
+#endif
+
+/* rudp_discovery 及其直接依赖。 */
+#if defined(XRUDP_MODULE_ALL) || defined(XRUDP_MODULE_RUDP_DISCOVERY)
+#ifndef XRUDP_FEATURE_RUDP_DISCOVERY
+#define XRUDP_FEATURE_RUDP_DISCOVERY
+#endif
+#ifndef XRUDP_MODULE_RUDP_STUN
+#define XRUDP_MODULE_RUDP_STUN
+#endif
+#ifndef XRT_MODULE_RANDOM_SECURE
+#define XRT_MODULE_RANDOM_SECURE
+#endif
+#endif
+
+/* rudp_stun 及其直接依赖。 */
+#if defined(XRUDP_MODULE_ALL) || defined(XRUDP_MODULE_RUDP_STUN)
+#ifndef XRUDP_FEATURE_RUDP_STUN
+#define XRUDP_FEATURE_RUDP_STUN
+#endif
+#ifndef XRUDP_MODULE_RUDP_WIRE
+#define XRUDP_MODULE_RUDP_WIRE
+#endif
+#ifndef XRT_MODULE_CRC32
+#define XRT_MODULE_CRC32
+#endif
+#endif
+
+/* rudp_wire 及其直接依赖。 */
+#if defined(XRUDP_MODULE_ALL) || defined(XRUDP_MODULE_RUDP_WIRE)
+#ifndef XRUDP_FEATURE_RUDP_WIRE
+#define XRUDP_FEATURE_RUDP_WIRE
+#endif
+#endif
+
+#endif /* XRUDP_FEATURES_H */

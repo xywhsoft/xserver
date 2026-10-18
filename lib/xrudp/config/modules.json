@@ -1,0 +1,1130 @@
+{
+  "schema": 1,
+  "product": "xrudp",
+  "module_prefix": "XRUDP_MODULE_",
+  "single_header": "single/extlibs/xrudp.h",
+  "declaration_header": "single/extlibs/xrudp_decl.h",
+  "implementation_macro": "XRUDP_IMPLEMENTATION",
+  "implementation_once_macro": "XRUDP_IMPLEMENTATION_ONCE",
+  "single_guard": "XRUDP_SINGLE_HEADER_H",
+  "single_marker": "XRUDP_SINGLE_HEADER",
+  "declaration_guard": "XRUDP_DECLARATIONS_H",
+  "declaration_marker": "XRUDP_DECLARATIONS",
+  "package_consumer": "extlibs/xrudp/tests/package/test_consumer.c",
+  "product_root": "extlibs/xrudp",
+  "scope": {
+    "product": "xrudp",
+    "external_integrations": [],
+    "systems": [
+      {
+        "name": "rudp",
+        "state": "retained",
+        "source_roots": [
+          "wire",
+          "crypto",
+          "recovery",
+          "stream",
+          "network"
+        ]
+      }
+    ]
+  },
+  "api_reference": {
+    "title": "xrudp public API reference",
+    "function_prefix": "xrt",
+    "constant_prefix": "XRUDP_",
+    "type_prefix": "xrudp",
+    "guide": "../../README.md",
+    "output": "extlibs/xrudp/docs/api/reference.md"
+  },
+  "features_guard": "XRUDP_FEATURES_H",
+  "features_header": "extlibs/xrudp/include/xrudp/features.h",
+  "include_dirs": [
+    "extlibs/xrudp/include"
+  ],
+  "header_roots": [
+    "extlibs/xrudp/include",
+    "extlibs/xrudp/src/internal"
+  ],
+  "modules": [
+    {
+      "name": "rudp_wire",
+      "state": "implemented",
+      "feature": "XRUDP_FEATURE_RUDP_WIRE",
+      "depends": [
+        "core"
+      ],
+      "public_headers": [
+        "extlibs/xrudp/include/xrudp.h",
+        "extlibs/xrudp/include/xrudp/features.h",
+        "extlibs/xrudp/include/xrudp/export.h",
+        "extlibs/xrudp/include/xrudp/wire.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xrudp/src/wire/rudp_wire.c",
+        "extlibs/xrudp/src/wire/rudp_replay.c"
+      ],
+      "tests": [
+        "extlibs/xrudp/tests/test_wire.c",
+        "extlibs/xrudp/tests/test_replay.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_wire.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/README.md",
+        "extlibs/xrudp/docs/protocol.md",
+        "extlibs/xrudp/docs/implementation-status.md",
+        "extlibs/xrudp/docs/api/reference.md"
+      ]
+    },
+    {
+      "name": "rudp_stun",
+      "state": "implemented",
+      "feature": "XRUDP_FEATURE_RUDP_STUN",
+      "depends": [
+        "rudp_wire",
+        "crc32"
+      ],
+      "public_headers": [
+        "extlibs/xrudp/include/xrudp/stun.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xrudp/src/wire/rudp_stun.c"
+      ],
+      "tests": [
+        "extlibs/xrudp/tests/test_stun.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_stun.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/README.md",
+        "extlibs/xrudp/docs/protocol.md",
+        "extlibs/xrudp/docs/implementation-status.md"
+      ]
+    },
+    {
+      "name": "rudp_discovery",
+      "state": "implemented",
+      "feature": "XRUDP_FEATURE_RUDP_DISCOVERY",
+      "depends": [
+        "rudp_stun",
+        "random_secure"
+      ],
+      "public_headers": [
+        "extlibs/xrudp/include/xrudp/discovery.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xrudp/src/network/rudp_discovery.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/README.md",
+        "extlibs/xrudp/docs/protocol.md",
+        "extlibs/xrudp/docs/implementation-status.md"
+      ],
+      "tests": [],
+      "single_tests": []
+    },
+    {
+      "name": "rudp_discovery_tests",
+      "state": "implemented",
+      "depends": [
+        "rudp_discovery",
+        "memory_debug"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xrudp/tests/test_discovery.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_discovery.c",
+        "extlibs/xrudp/tests/single/test_single_discovery_entropy.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/docs/implementation-status.md"
+      ]
+    },
+    {
+      "name": "rudp_punch",
+      "state": "implemented",
+      "feature": "XRUDP_FEATURE_RUDP_PUNCH",
+      "depends": ["rudp_stun", "random_secure"],
+      "public_headers": ["extlibs/xrudp/include/xrudp/punch.h"],
+      "internal_headers": [],
+      "sources": ["extlibs/xrudp/src/network/rudp_punch.c"],
+      "tests": [],
+      "single_tests": [],
+      "examples": [],
+      "benchmarks": [],
+      "docs": ["extlibs/xrudp/README.md", "extlibs/xrudp/docs/protocol.md", "extlibs/xrudp/docs/implementation-status.md"]
+    },
+    {
+      "name": "rudp_punch_tests",
+      "state": "implemented",
+      "depends": ["rudp_punch", "memory_debug"],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": ["extlibs/xrudp/tests/test_punch.c"],
+      "single_tests": ["extlibs/xrudp/tests/single/test_single_punch.c", "extlibs/xrudp/tests/single/test_single_punch_entropy.c"],
+      "examples": [],
+      "benchmarks": [],
+      "docs": ["extlibs/xrudp/docs/implementation-status.md"]
+    },
+    {
+      "name": "rudp_crypto",
+      "state": "implemented",
+      "feature": "XRUDP_FEATURE_RUDP_CRYPTO",
+      "depends": [
+        "rudp_wire",
+        "crypto_chacha20_poly1305"
+      ],
+      "public_headers": [
+        "extlibs/xrudp/include/xrudp/crypto.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xrudp/src/crypto/rudp_cipher.c"
+      ],
+      "tests": [
+        "extlibs/xrudp/tests/test_cipher.c",
+        "extlibs/xrudp/tests/test_cipher_memory.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_crypto.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/README.md",
+        "extlibs/xrudp/docs/protocol.md"
+      ]
+    },
+    {
+      "name": "rudp_noise",
+      "state": "implemented",
+      "feature": "XRUDP_FEATURE_RUDP_NOISE",
+      "depends": [
+        "rudp_crypto",
+        "crypto_x25519",
+        "crypto_hkdf_sha256",
+        "random_secure"
+      ],
+      "public_headers": [
+        "extlibs/xrudp/include/xrudp/noise.h"
+      ],
+      "internal_headers": [
+        "extlibs/xrudp/src/internal/xrudp_noise.h"
+      ],
+      "sources": [
+        "extlibs/xrudp/src/crypto/rudp_noise.c"
+      ],
+      "tests": [
+        "extlibs/xrudp/tests/test_noise.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_noise.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/README.md",
+        "extlibs/xrudp/docs/protocol.md"
+      ]
+    },
+    {
+      "name": "rudp_cookie",
+      "state": "implemented",
+      "feature": "XRUDP_FEATURE_RUDP_COOKIE",
+      "depends": [
+        "rudp_wire",
+        "crypto_hmac_sha256"
+      ],
+      "public_headers": [
+        "extlibs/xrudp/include/xrudp/cookie.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xrudp/src/crypto/rudp_cookie.c"
+      ],
+      "tests": [
+        "extlibs/xrudp/tests/test_cookie.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_cookie.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/README.md",
+        "extlibs/xrudp/docs/protocol.md"
+      ]
+    },
+    {
+      "name": "rudp_ack",
+      "state": "implemented",
+      "feature": "XRUDP_FEATURE_RUDP_ACK",
+      "depends": [
+        "rudp_wire"
+      ],
+      "public_headers": [
+        "extlibs/xrudp/include/xrudp/ack.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xrudp/src/recovery/rudp_ack.c"
+      ],
+      "tests": [
+        "extlibs/xrudp/tests/test_ack.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_ack.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/README.md",
+        "extlibs/xrudp/docs/protocol.md"
+      ]
+    },
+    {
+      "name": "rudp_timing",
+      "state": "implemented",
+      "feature": "XRUDP_FEATURE_RUDP_TIMING",
+      "depends": [
+        "rudp_wire"
+      ],
+      "public_headers": [
+        "extlibs/xrudp/include/xrudp/timing.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xrudp/src/recovery/rudp_timing.c"
+      ],
+      "tests": [
+        "extlibs/xrudp/tests/test_timing.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_timing.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/README.md",
+        "extlibs/xrudp/docs/protocol.md"
+      ]
+    },
+    {
+      "name": "rudp_sent",
+      "state": "implemented",
+      "feature": "XRUDP_FEATURE_RUDP_SENT",
+      "depends": [
+        "rudp_ack"
+      ],
+      "public_headers": [
+        "extlibs/xrudp/include/xrudp/sent.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xrudp/src/recovery/rudp_sent.c"
+      ],
+      "tests": [
+        "extlibs/xrudp/tests/test_sent.c",
+        "extlibs/xrudp/tests/test_sent_memory.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_sent.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/README.md",
+        "extlibs/xrudp/docs/protocol.md"
+      ]
+    },
+    {
+      "name": "rudp_congestion",
+      "state": "implemented",
+      "feature": "XRUDP_FEATURE_RUDP_CONGESTION",
+      "depends": [
+        "rudp_sent"
+      ],
+      "public_headers": [
+        "extlibs/xrudp/include/xrudp/congestion.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xrudp/src/recovery/rudp_congestion.c"
+      ],
+      "tests": [
+        "extlibs/xrudp/tests/test_congestion.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_congestion.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/README.md",
+        "extlibs/xrudp/docs/protocol.md"
+      ]
+    },
+    {
+      "name": "rudp_receive",
+      "state": "implemented",
+      "feature": "XRUDP_FEATURE_RUDP_RECEIVE",
+      "depends": [
+        "rudp_wire"
+      ],
+      "public_headers": [
+        "extlibs/xrudp/include/xrudp/receive.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xrudp/src/stream/rudp_receive.c"
+      ],
+      "tests": [
+        "extlibs/xrudp/tests/test_receive.c",
+        "extlibs/xrudp/tests/test_receive_memory.c",
+        "extlibs/xrudp/tests/test_receive_stop.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_receive.c",
+        "extlibs/xrudp/tests/single/test_single_receive_stop.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/README.md",
+        "extlibs/xrudp/docs/protocol.md"
+      ]
+    },
+    {
+      "name": "rudp_transmit",
+      "state": "implemented",
+      "feature": "XRUDP_FEATURE_RUDP_TRANSMIT",
+      "depends": [
+        "rudp_wire"
+      ],
+      "public_headers": [
+        "extlibs/xrudp/include/xrudp/transmit.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xrudp/src/stream/rudp_transmit.c"
+      ],
+      "tests": [
+        "extlibs/xrudp/tests/test_transmit.c",
+        "extlibs/xrudp/tests/test_transmit_memory.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_transmit.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/README.md",
+        "extlibs/xrudp/docs/protocol.md"
+      ]
+    },
+    {
+      "name": "rudp_datagram",
+      "state": "implemented",
+      "feature": "XRUDP_FEATURE_RUDP_DATAGRAM",
+      "depends": [
+        "rudp_wire"
+      ],
+      "public_headers": [
+        "extlibs/xrudp/include/xrudp/datagram.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xrudp/src/stream/rudp_datagram.c"
+      ],
+      "tests": [],
+      "single_tests": [],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/README.md",
+        "extlibs/xrudp/docs/protocol.md"
+      ]
+    },
+    {
+      "name": "rudp_datagram_tests",
+      "state": "implemented",
+      "depends": [
+        "rudp_datagram",
+        "memory_debug"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xrudp/tests/test_datagram.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_datagram.c",
+        "extlibs/xrudp/tests/single/test_single_datagram_limits.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/docs/implementation-status.md"
+      ]
+    },
+    {
+      "name": "rudp_game_tests",
+      "state": "implemented",
+      "depends": [
+        "rudp_session",
+        "memory_debug"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xrudp/tests/test_session_datagrams.c",
+        "extlibs/xrudp/tests/test_multi_datagrams.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_session_datagrams.c",
+        "extlibs/xrudp/tests/single/test_single_multi_datagrams.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/docs/implementation-status.md"
+      ]
+    },
+    {
+      "name": "rudp_game_native_tests",
+      "state": "implemented",
+      "depends": [
+        "rudp_endpoint",
+        "memory_debug"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xrudp/tests/test_endpoint_datagrams.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_endpoint_datagrams.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_datagrams_timeout.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/docs/implementation-status.md"
+      ]
+    },
+    {
+      "name": "rudp_message",
+      "state": "implemented",
+      "feature": "XRUDP_FEATURE_RUDP_MESSAGE",
+      "depends": [
+        "rudp_transmit"
+      ],
+      "public_headers": [
+        "extlibs/xrudp/include/xrudp/message.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xrudp/src/stream/rudp_message.c"
+      ],
+      "tests": [
+        "extlibs/xrudp/tests/test_message.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_message.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/README.md",
+        "extlibs/xrudp/docs/protocol.md"
+      ]
+    },
+    {
+      "name": "rudp_message_fault_tests",
+      "state": "implemented",
+      "depends": [
+        "rudp_message",
+        "memory_debug"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xrudp/tests/test_message_fault.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_message_fault.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/docs/implementation-status.md"
+      ]
+    },
+    {
+      "name": "rudp_message_transport_tests",
+      "state": "implemented",
+      "depends": [
+        "rudp_message",
+        "rudp_session",
+        "memory_debug"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xrudp/tests/test_message_transport.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_message_transport.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/docs/implementation-status.md"
+      ]
+    },
+    {
+      "name": "rudp_path_tests",
+      "state": "implemented",
+      "depends": [
+        "rudp_endpoint",
+        "memory_debug"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xrudp/tests/test_session_path.c",
+        "extlibs/xrudp/tests/test_endpoint_path.c",
+        "extlibs/xrudp/tests/test_multi_path.c",
+        "extlibs/xrudp/tests/test_multi_return.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_session_path.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_path.c",
+        "extlibs/xrudp/tests/single/test_single_multi_path.c",
+        "extlibs/xrudp/tests/single/test_single_multi_return.c",
+        "extlibs/xrudp/tests/single/test_single_path_entropy.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/docs/implementation-status.md"
+      ]
+    },
+    {
+      "name": "rudp_shutdown_tests",
+      "state": "implemented",
+      "depends": [
+        "rudp_endpoint",
+        "memory_debug"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xrudp/tests/test_session_shutdown.c",
+        "extlibs/xrudp/tests/test_endpoint_shutdown.c",
+        "extlibs/xrudp/tests/test_endpoint_message_shutdown.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_session_shutdown.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_shutdown.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_message_shutdown.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/docs/implementation-status.md"
+      ]
+    },
+    {
+      "name": "rudp_stop_tests",
+      "state": "implemented",
+      "depends": [
+        "rudp_endpoint",
+        "memory_debug"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xrudp/tests/test_session_stop.c",
+        "extlibs/xrudp/tests/test_multi_stop.c",
+        "extlibs/xrudp/tests/test_endpoint_stop.c",
+        "extlibs/xrudp/tests/test_endpoint_message_stop.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_session_stop.c",
+        "extlibs/xrudp/tests/single/test_single_multi_stop.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_stop.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_message_stop.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/docs/implementation-status.md"
+      ]
+    },
+    {
+      "name": "rudp_session_message_tests",
+      "state": "implemented",
+      "depends": [
+        "rudp_session",
+        "memory_debug"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xrudp/tests/test_session_messages.c",
+        "extlibs/xrudp/tests/test_session_message_validation.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_session_messages.c",
+        "extlibs/xrudp/tests/single/test_single_session_message_validation.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/docs/implementation-status.md"
+      ]
+    },
+    {
+      "name": "rudp_endpoint_message_tests",
+      "state": "implemented",
+      "depends": [
+        "rudp_endpoint",
+        "memory_debug"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xrudp/tests/test_endpoint_messages.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_endpoint_messages.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/docs/implementation-status.md"
+      ]
+    },
+    {
+      "name": "rudp_transport_tests",
+      "state": "implemented",
+      "depends": [
+        "rudp_transmit",
+        "rudp_receive",
+        "rudp_congestion",
+        "rudp_timing",
+        "rudp_handshake"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xrudp/tests/test_transport_sim.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_transport_sim.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/docs/implementation-status.md"
+      ]
+    },
+    {
+      "name": "rudp_handshake",
+      "state": "implemented",
+      "feature": "XRUDP_FEATURE_RUDP_HANDSHAKE",
+      "depends": [
+        "rudp_noise",
+        "rudp_cookie"
+      ],
+      "public_headers": [
+        "extlibs/xrudp/include/xrudp/handshake.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xrudp/src/crypto/rudp_handshake.c"
+      ],
+      "tests": [
+        "extlibs/xrudp/tests/test_handshake.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_handshake.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/README.md",
+        "extlibs/xrudp/docs/protocol.md"
+      ]
+    },
+    {
+      "name": "rudp_handshake_fault_tests",
+      "state": "implemented",
+      "depends": [
+        "rudp_handshake",
+        "memory_debug"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xrudp/tests/test_handshake_fault.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_handshake_fault.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/docs/implementation-status.md"
+      ]
+    },
+    {
+      "name": "rudp_endpoint",
+      "state": "implemented",
+      "feature": "XRUDP_FEATURE_RUDP_ENDPOINT",
+      "depends": [
+        "rudp_session",
+        "net_udp",
+        "atomic",
+        "time",
+        "rudp_discovery",
+        "rudp_punch"
+      ],
+      "public_headers": [
+        "extlibs/xrudp/include/xrudp/endpoint.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xrudp/src/network/rudp_endpoint.c"
+      ],
+      "tests": [
+        "extlibs/xrudp/tests/test_endpoint.c",
+        "extlibs/xrudp/tests/test_endpoint_stream.c",
+        "extlibs/xrudp/tests/test_endpoint_multi.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_endpoint.c",
+        "extlibs/xrudp/tests/single/test_single_all_profile.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_stream.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_multi.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/README.md",
+        "extlibs/xrudp/docs/protocol.md"
+      ]
+    },
+    {
+      "name": "rudp_endpoint_iocp_tests",
+      "asset_platforms": [
+        "windows"
+      ],
+      "state": "implemented",
+      "depends": [
+        "rudp_endpoint",
+        "net_port_iocp",
+        "memory_debug"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xrudp/tests/test_endpoint_iocp.c",
+        "extlibs/xrudp/tests/test_endpoint_stream_iocp.c",
+        "extlibs/xrudp/tests/test_endpoint_multi_iocp.c",
+        "extlibs/xrudp/tests/test_endpoint_discovery_iocp.c",
+        "extlibs/xrudp/tests/test_endpoint_punch_iocp.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_endpoint_multi_iocp.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_fair_iocp.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_messages_iocp.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_datagrams_iocp.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_stop_iocp.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_message_stop_iocp.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_shutdown_iocp.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_message_shutdown_iocp.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_path_iocp.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_mtu_iocp.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_discovery_iocp.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_punch_iocp.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/docs/implementation-status.md"
+      ]
+    },
+    {
+      "name": "rudp_endpoint_epoll_tests",
+      "asset_platforms": [
+        "linux"
+      ],
+      "state": "implemented",
+      "depends": [
+        "rudp_endpoint",
+        "net_port_epoll",
+        "memory_debug"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xrudp/tests/test_endpoint_epoll.c",
+        "extlibs/xrudp/tests/test_endpoint_stream_epoll.c",
+        "extlibs/xrudp/tests/test_endpoint_multi_epoll.c",
+        "extlibs/xrudp/tests/test_endpoint_discovery_epoll.c",
+        "extlibs/xrudp/tests/test_endpoint_punch_epoll.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_endpoint_multi_epoll.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_fair_epoll.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_messages_epoll.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_datagrams_epoll.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_stop_epoll.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_message_stop_epoll.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_shutdown_epoll.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_message_shutdown_epoll.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_path_epoll.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_mtu_epoll.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_discovery_epoll.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_punch_epoll.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/docs/implementation-status.md"
+      ]
+    },
+    {
+      "name": "rudp_endpoint_fault_tests",
+      "state": "implemented",
+      "depends": [
+        "rudp_endpoint",
+        "memory_debug"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xrudp/tests/test_endpoint_fault.c",
+        "extlibs/xrudp/tests/test_endpoint_stream_fault.c",
+        "extlibs/xrudp/tests/test_endpoint_multi_fault.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_endpoint_fault.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_pending.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_stream_fault.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_multi_fault.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_fair.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/docs/implementation-status.md"
+      ]
+    },
+    {
+      "name": "rudp_session",
+      "state": "implemented",
+      "feature": "XRUDP_FEATURE_RUDP_SESSION",
+      "depends": [
+        "rudp_handshake",
+        "rudp_congestion",
+        "rudp_timing",
+        "rudp_transmit",
+        "rudp_receive",
+        "rudp_message",
+        "rudp_datagram"
+      ],
+      "public_headers": [
+        "extlibs/xrudp/include/xrudp/session.h"
+      ],
+      "internal_headers": [
+        "extlibs/xrudp/src/internal/xrudp_path.h"
+      ],
+      "sources": [
+        "extlibs/xrudp/src/network/rudp_session.c",
+        "extlibs/xrudp/src/network/rudp_path.c"
+      ],
+      "tests": [
+        "extlibs/xrudp/tests/test_session.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_session.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/README.md",
+        "extlibs/xrudp/docs/protocol.md"
+      ]
+    },
+    {
+      "name": "rudp_session_fault_tests",
+      "state": "implemented",
+      "depends": [
+        "rudp_session",
+        "memory_debug"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xrudp/tests/test_session_fault.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_session_fault.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/docs/implementation-status.md"
+      ]
+    },
+    {
+      "name": "rudp_multi_tests",
+      "state": "implemented",
+      "depends": [
+        "rudp_session"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xrudp/tests/test_multi.c",
+        "extlibs/xrudp/tests/test_multi_protocol.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_multi.c",
+        "extlibs/xrudp/tests/single/test_single_multi_protocol.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/docs/implementation-status.md"
+      ]
+    },
+    {
+      "name": "rudp_multi_fault_tests",
+      "state": "implemented",
+      "depends": [
+        "rudp_session",
+        "memory_debug"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xrudp/tests/test_multi_fault.c",
+        "extlibs/xrudp/tests/test_multi_protocol_fault.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_multi_fault.c",
+        "extlibs/xrudp/tests/single/test_single_multi_protocol_fault.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/docs/implementation-status.md"
+      ]
+    },
+    {
+      "name": "rudp_mtu_tests",
+      "state": "implemented",
+      "depends": [
+        "rudp_endpoint",
+        "memory_debug"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xrudp/tests/test_mtu_ledger.c",
+        "extlibs/xrudp/tests/test_session_mtu.c",
+        "extlibs/xrudp/tests/test_endpoint_mtu.c",
+        "extlibs/xrudp/tests/test_multi_mtu.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_mtu_ledger.c",
+        "extlibs/xrudp/tests/single/test_single_session_mtu.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_mtu.c",
+        "extlibs/xrudp/tests/single/test_single_multi_mtu.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/docs/implementation-status.md"
+      ]
+    },
+    {
+      "name": "rudp_punch_native_tests",
+      "state": "implemented",
+      "depends": ["rudp_endpoint", "memory_debug"],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": ["extlibs/xrudp/tests/test_endpoint_punch.c"],
+      "single_tests": ["extlibs/xrudp/tests/single/test_single_endpoint_punch.c", "extlibs/xrudp/tests/single/test_single_endpoint_punch_fault.c"],
+      "examples": [],
+      "benchmarks": [],
+      "docs": ["extlibs/xrudp/docs/implementation-status.md"]
+    },
+    {
+      "name": "rudp_discovery_native_tests",
+      "state": "implemented",
+      "depends": [
+        "rudp_endpoint",
+        "memory_debug"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xrudp/tests/test_endpoint_discovery.c"
+      ],
+      "single_tests": [
+        "extlibs/xrudp/tests/single/test_single_endpoint_discovery.c",
+        "extlibs/xrudp/tests/single/test_single_endpoint_discovery_fault.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xrudp/docs/implementation-status.md"
+      ]
+    }
+  ]
+}

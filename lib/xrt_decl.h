@@ -71,6 +71,9 @@
 #if !defined(XRT_FEATURE_CHANNEL_SELECT_CANCEL)
 #define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_CHANNEL_SELECT_CANCEL 1
 #endif
+#if !defined(XRT_FEATURE_CHANNEL_SUBSCRIBE)
+#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_CHANNEL_SUBSCRIBE 1
+#endif
 #if !defined(XRT_FEATURE_CHARSET)
 #define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_CHARSET 1
 #endif
@@ -109,6 +112,9 @@
 #endif
 #if !defined(XRT_FEATURE_COROUTINE_SCHEDULER)
 #define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_COROUTINE_SCHEDULER 1
+#endif
+#if !defined(XRT_FEATURE_CRC32)
+#define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_CRC32 1
 #endif
 #if !defined(XRT_FEATURE_CRYPTO_AES)
 #define XRT_DECLARATIONS_RESTORE_XRT_FEATURE_CRYPTO_AES 1
@@ -1232,6 +1238,9 @@
 #if !defined(XRT_MODULE_CHANNEL_SELECT_CANCEL)
 #define XRT_DECLARATIONS_RESTORE_XRT_MODULE_CHANNEL_SELECT_CANCEL 1
 #endif
+#if !defined(XRT_MODULE_CHANNEL_SUBSCRIBE)
+#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_CHANNEL_SUBSCRIBE 1
+#endif
 #if !defined(XRT_MODULE_CHARSET)
 #define XRT_DECLARATIONS_RESTORE_XRT_MODULE_CHARSET 1
 #endif
@@ -1270,6 +1279,9 @@
 #endif
 #if !defined(XRT_MODULE_COROUTINE_SCHEDULER)
 #define XRT_DECLARATIONS_RESTORE_XRT_MODULE_COROUTINE_SCHEDULER 1
+#endif
+#if !defined(XRT_MODULE_CRC32)
+#define XRT_DECLARATIONS_RESTORE_XRT_MODULE_CRC32 1
 #endif
 #if !defined(XRT_MODULE_CRYPTO_AES)
 #define XRT_DECLARATIONS_RESTORE_XRT_MODULE_CRYPTO_AES 1
@@ -3375,6 +3387,9 @@
 #endif
 #ifndef XRT_MODULE_COND
 #define XRT_MODULE_COND
+#endif
+#ifndef XRT_MODULE_CRC32
+#define XRT_MODULE_CRC32
 #endif
 #endif
 
@@ -6110,6 +6125,9 @@
 #ifndef XRT_FEATURE_DEFLATE
 #define XRT_FEATURE_DEFLATE
 #endif
+#ifndef XRT_MODULE_CRC32
+#define XRT_MODULE_CRC32
+#endif
 #endif
 
 /* websocket_inflater 及其直接依赖。 */
@@ -6129,6 +6147,16 @@
 #if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_INFLATE)
 #ifndef XRT_FEATURE_INFLATE
 #define XRT_FEATURE_INFLATE
+#endif
+#ifndef XRT_MODULE_CRC32
+#define XRT_MODULE_CRC32
+#endif
+#endif
+
+/* crc32 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRC32)
+#ifndef XRT_FEATURE_CRC32
+#define XRT_FEATURE_CRC32
 #endif
 #endif
 
@@ -6422,6 +6450,16 @@
 #endif
 #ifndef XRT_MODULE_CANCEL
 #define XRT_MODULE_CANCEL
+#endif
+#endif
+
+/* channel_subscribe 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CHANNEL_SUBSCRIBE)
+#ifndef XRT_FEATURE_CHANNEL_SUBSCRIBE
+#define XRT_FEATURE_CHANNEL_SUBSCRIBE
+#endif
+#ifndef XRT_MODULE_CHANNEL_SELECT
+#define XRT_MODULE_CHANNEL_SELECT
 #endif
 #endif
 
@@ -7351,6 +7389,16 @@ struct xrtownershipops {
 	bool (*Count)(const void* pData, size_t* pCount);
 	bool (*Trace)(const void* pData, xrtownershipvisitor pVisit, ptr pContext);
 };
+/* Independent resident capability for a known participant's transient native
+ * execution. Call Busy only under the entire graph's ownership freeze, after
+ * exact Ops identity admission. It is read-only: no Count/Trace, user code,
+ * allocation, locking or reference changes. true defers snapshot admission;
+ * false is NOT lifecycle certification and never admits an opaque resource. */
+typedef struct xrtownershipquiescencev1 {
+	size_t size;
+	const xrtownershipops* Ops;
+	bool (*Busy)(const void* pData);
+} xrtownershipquiescencev1;
 /* Separate, explicitly admitted lifecycle protocol. Never read an extension
  * past xrtownershipops: existing native descriptors contain only two entries.
  * The resolver certifies complete mutation-domain participation, including
@@ -7403,6 +7451,25 @@ typedef struct xrtownershippreparationv1 {
 	bool (*Ready)(const void* pData);
 	xrtownershipprepareresult (*Prepare)(const void* pData, const void* pToken);
 } xrtownershippreparationv1;
+
+/* Optional completion after Clear, distinct from semantic preparation.
+ * Exact Adapter identity and permanent code are admitted with this descriptor.
+ * Step runs outside freeze/mutation with all plan pins retained. BUSY makes
+ * no owning-edge change or semantic notification and never waits for another
+ * participant: the collector must try other duties, then retry. READY is
+ * idempotent; FAILED is explicit even without an allocated diagnostic.
+ * A consumer of this descriptor MUST use Step, not the V1 bool Finish slot,
+ * to distinguish an unfinished dependency from a cleanup failure. */
+typedef enum xrtownershipfinishresult {
+	XRT_OWNERSHIP_FINISH_FAILED = -1,
+	XRT_OWNERSHIP_FINISH_BUSY = 0,
+	XRT_OWNERSHIP_FINISH_READY = 1
+} xrtownershipfinishresult;
+typedef struct xrtownershipfinishv1 {
+	size_t size;
+	const xrtownershipadapterv1* Adapter;
+	xrtownershipfinishresult (*Step)(const void* pData, const void* pToken);
+} xrtownershipfinishv1;
 typedef struct xrtownershipresult {
 	size_t NodeCount;
 	size_t EdgeCount;
@@ -9469,6 +9536,10 @@ XRT_API void xrtCancelDestroy(xcancel* pCancel);
  * Watch-list links borrow registration storage and are not strong references.
  * Caller provides whole-graph quiescence and code residency. */
 XRT_API xrtownershipref xrtCancelOwnership(const xcancel* pCancel);
+/* Exact native dispatch state under whole-graph freeze. false never admits
+ * an unknown observer; neither query invokes policies or changes rights. */
+XRT_API const xrtownershipquiescencev1* xrtCancelOwnershipQuiescenceV1Get(void);
+XRT_API const xrtownershipquiescencev1* xrtCancelWatchOwnershipQuiescenceV1Get(void);
 
 /* Explicit native adapter, queried under whole-graph freeze. Registered
  * observers are refused before Trace, not treated as empty owning slots.
@@ -9516,6 +9587,23 @@ XRT_API const xrtownershipadapterv1* xrtCancelWatchOwnershipAdapterV1(xrtownersh
 	const xcancelwatchownershipv1* const* pPolicies, size_t iPolicyCount,
 	const xrtownershippreparationv1** ppPreparation);
 
+/* Post-Clear owner-driven retirement. Unlike the earlier adapters, these do
+ * not require or perform Unwatch before semantic finalization. Whole-graph
+ * freeze admits the same closed owned-policy set and rejects active/unknown
+ * observers. Clear prevents new notification without dropping any slot.
+ * The actual registration owner must detach and Unwatch during its Finish;
+ * Watch completion stays BUSY until that right is consumed and dispatch tails
+ * retire. Token completion stays BUSY while linked registrations remain.
+ * The returned completion is mandatory and must be admitted by exact Adapter
+ * identity; refusal leaves its output unchanged. No legacy observer is opted
+ * in, no request is delivered or undone, and abort leaves registration armed. */
+XRT_API const xrtownershipadapterv1* xrtCancelWatchOwnershipAdapterV2(xrtownershipref Reference,
+	const xcancelwatchownershipv1* const* pPolicies, size_t iPolicyCount,
+	const xrtownershipfinishv1** ppCompletion);
+XRT_API const xrtownershipadapterv1* xrtCancelOwnershipAdapterV3(xrtownershipref Reference,
+	const xcancelwatchownershipv1* const* pPolicies, size_t iPolicyCount,
+	const xrtownershipfinishv1** ppCompletion);
+
 
 
 /* 查询监听是否已命中取消。 */
@@ -9533,6 +9621,15 @@ XRT_API xrtownershipref xrtCancelWatchOwnership(const xcancelwatch* pWatch);
 
 /* 注销并释放监听；从其他线程调用时等待正在执行的回调返回。 */
 XRT_API void xrtCancelUnwatch(xcancelwatch* pWatch);
+
+/* Consume the same registration right, reporting whether unlink/retirement
+ * was accepted even when no diagnostic can be allocated. NULL succeeds.
+ * False leaves the owner's right unconsumed; retry while storage is valid.
+ * Self-unwatch succeeds with its physical release deferred until callback
+ * return. Success does not imply that all dispatcher references have left.
+ * Repeated calls require an independent real lifetime pin; never reuse a
+ * pointer whose last right was consumed by an earlier call. */
+XRT_API bool xrtCancelUnwatchChecked(xcancelwatch* pWatch);
 
 
 
@@ -9811,6 +9908,9 @@ XRT_API bool xrtFutureDebugSetNameN(xfuture* pFuture, cstr Name, size_t Size);
  * Whole-graph quiescence through any later commit and callback code residency
  * remain the caller's responsibility; this API does not establish either. */
 XRT_API xrtownershipref xrtFutureOwnership(const xfuture* pFuture);
+/* Same physical Future/Promise identity. Only native completion reservation
+ * and cancellation dispatch defer admission; unknown payloads stay refused. */
+XRT_API const xrtownershipquiescencev1* xrtFutureOwnershipQuiescenceV1Get(void);
 XRT_API xrtownershipref xrtPromiseOwnership(const xpromise* pPromise);
 
 /* Publish an explicitly certified owned result atomically. Failure does not
@@ -9859,6 +9959,15 @@ XRT_API bool xrtFutureWatchInitOwnershipV2(xfuturewatch* pWatch, ptr pData,
 XRT_API const xrtownershipadapterv1* xrtFutureOwnershipAdapterV4(xrtownershipref Reference,
 	const xfutureownershipadmissionv1* pAdmission,
 	const xrtownershippreparationv1** ppPreparation);
+
+/* Explicit post-Clear registration retirement. No preparation closes the
+ * pending Future before finalizers. Clear never notifies and preserves all
+ * physical slots; actual owners detach registrations in Finish. Step stays
+ * BUSY without edge changes until waiters retire, then releases slots outside
+ * mutation. Use the exact mandatory completion, not bool Finish. Unknown or
+ * legacy policies and transitive nodes remain independently unadmitted. */
+XRT_API const xrtownershipadapterv1* xrtFutureOwnershipAdapterV5(xrtownershipref Reference,
+	const xfutureownershipadmissionv1* pAdmission, const xrtownershipfinishv1** ppCompletion);
 
 /* Atomically publish value, destructor, context and non-NULL ownership trace.
  * Success transfers the same ownership as ResolveOwned. Failure (including
@@ -10147,6 +10256,21 @@ XRT_API const xfuturepayloadownershipv1* xrtFutureCombinePickPayloadPolicyV1Get(
 XRT_API const xrtownershipadapterv1* xrtFutureCombineOwnershipAdapterV1(xrtownershipref Reference,
 	const xfuturecombineownershipv1* const* pPolicies, size_t iPolicyCount,
 	const xrtownershippreparationv1** ppPreparation);
+
+/* Post-Clear physical retirement, with no eager input completion, mapper or
+ * cancellation. Use Future V5, Watch V2 and Token V3 for the transitive graph.
+ * Clear suppresses new completion/map work and keeps every strong slot.
+ * Step first obtains a short exclusive freeze: an active/queued callback or
+ * a busy freeze yields BUSY with no owning-edge changes. Stable registrations
+ * are then detached; context and endpoint rights are dropped outside freeze.
+ * All physical plan pins outlive every duty, including dispatch tails. Map
+ * Data still needs independent semantic finalization/admission. This protocol
+ * does not replace the old preparation contract or authorize skipping an
+ * accepted language callback. Mandatory completion output is unchanged on
+ * refusal; unknown/legacy mapped policies remain unadmitted. */
+XRT_API const xrtownershipadapterv1* xrtFutureCombineOwnershipAdapterV2(xrtownershipref Reference,
+	const xfuturecombineownershipv1* const* pPolicies, size_t iPolicyCount,
+	const xrtownershipfinishv1** ppCompletion);
 
 typedef enum xfuturewaitrulev1 {
 	XFUTURE_WAIT_ALL_TERMINAL = 1,
@@ -17006,6 +17130,60 @@ XRT_API xcancel* xrtTaskGroupCancelToken(const xtaskgroup* pGroup);
 /* 关闭并取消仍活动的项，随后以延迟回收方式释放任务组。 */
 XRT_API void xrtTaskGroupDestroy(xtaskgroup* pGroup);
 
+/* Borrowed physical graph, requiring whole-graph freeze and resident code.
+ * Counts include the owned cancel observer, active-list rights, Future
+ * registrations and every real temporary pin. Busy callbacks/reservations
+ * refuse inspection. This view alone grants no collection or unload right. */
+XRT_API xrtownershipref xrtTaskGroupOwnership(const xtaskgroup* pGroup);
+/* Exact resident group/item operations, including private Start reservation
+ * and waiter publication. Whole-graph freeze only; no Count/Trace or callback.
+ * These descriptors do not weaken the physical views or lifecycle adapters. */
+XRT_API const xrtownershipquiescencev1* xrtTaskGroupOwnershipQuiescenceV1Get(void);
+XRT_API const xrtownershipquiescencev1* xrtTaskGroupItemOwnershipQuiescenceV1Get(void);
+XRT_API const xfuturewatchownershipv1* xrtTaskGroupWatchPolicyV1Get(void);
+XRT_API const xcancelwatchownershipv1* xrtTaskGroupCancelPolicyV1Get(void);
+/* Pending Done owns one actual group producer reference, released exactly
+ * once before terminal notification. Dropping Done does not cancel the group.
+ * Admit this identity explicitly when inspecting/collecting that Future. */
+XRT_API const xfutureproducerownershipv1* xrtTaskGroupProducerPolicyV1Get(void);
+
+/* Group and real active-item lifecycle admission under whole-graph freeze.
+ * No early close, cancel or Unwatch. All semantic finalizers precede Clear;
+ * the mandatory exact completion detaches only actual owned rights afterward.
+ * Use with Future V5 and Cancel Watch V2/Token V3, and independently admit every
+ * transitive node. Unknown references leave the completion output unchanged. */
+XRT_API const xrtownershipadapterv1* xrtTaskGroupOwnershipAdapterV1(xrtownershipref Reference,
+	const xrtownershipfinishv1** ppCompletion);
+
+/* V2 adds normal Close/drain preparation, without cancellation or invented
+ * completion. A normally completed item remains an honest physical anchor
+ * while a plan pin owns it; V1 keeps its active-item refusal boundary.
+ * Prepare runs outside freeze, with the whole graph independently admitted,
+ * claimed unreachable and pinned. Semantic callbacks/finally finish normally
+ * before Clear; completion still requires all transitive pins until READY.
+ * Both mandatory outputs are unchanged on refusal. Group/Item identities
+ * are distinct from V1; never replace descriptors in an existing plan. */
+XRT_API const xrtownershipadapterv1* xrtTaskGroupOwnershipAdapterV2(xrtownershipref Reference,
+	const xrtownershippreparationv1** ppPreparation, const xrtownershipfinishv1** ppCompletion);
+
+typedef struct xtaskgroupwaitv1 {
+	size_t size;
+	xpromise* Output;
+	size_t Count;
+} xtaskgroupwaitv1;
+typedef bool (*xtaskgroupwaitvisitorv1)(xfuture* pSource, ptr pContext);
+/* Borrowed ALL-terminal dependencies of a closed, stable, pending group.
+ * Caller holds the entire physical graph's exclusive freeze and one same
+ * unreachable claim on the group AND every active item. Ordered duplicate
+ * sources are visited once per real item, without allocation or new refs.
+ * A NULL visitor queries metadata only. The visitor is collector code: no
+ * mutation, retain, semantic callback, waiting or reentrant group operations;
+ * private analysis scratch is allowed. Invalid state is checked before any
+ * visit; visitor refusal leaves output unchanged (its own scratch may change).
+ * This fact neither proves a cycle nor grants cancellation/collection. */
+XRT_API bool xrtTaskGroupWaitV1(xrtownershipref Reference, const void* pToken,
+	xtaskgroupwaitv1* pWait, xtaskgroupwaitvisitorv1 pVisit, ptr pContext);
+
 
 
 XRT_EXTERN_C_END
@@ -17080,6 +17258,10 @@ XRT_API xrtownershipref xrtTaskPoolOwnership(const xtaskpool* pPool);
  * caller's owner reference. ppPreparation changes only on success. */
 XRT_API const xrtownershipadapterv1* xrtTaskPoolOwnershipAdapterV1(
     xrtownershipref Reference, const xrtownershippreparationv1** ppPreparation);
+/* Exact native transition capability; does not relax Count/Trace admission.
+ * Queued opaque jobs and retained resources still require their own policies.
+ * The immutable descriptor and callback reside with this XRT instance. */
+XRT_API const xrtownershipquiescencev1* xrtTaskPoolOwnershipQuiescenceV1Get(void);
 
 
 
@@ -21388,6 +21570,113 @@ XRT_EXTERN_C_END
 
 
 /* ========================================================================== */
+/* public: include/xrt/channel_subscribe.h */
+/* ========================================================================== */
+
+#ifndef XRT_CHANNEL_SUBSCRIBE_H
+#define XRT_CHANNEL_SUBSCRIBE_H
+
+
+#if defined(XRT_FEATURE_CHANNEL_SUBSCRIBE) && !defined(XRT_FEATURE_CHANNEL_SELECT)
+	#error "XRT_FEATURE_CHANNEL_SUBSCRIBE requires XRT_FEATURE_CHANNEL_SELECT"
+#endif
+
+#if defined(XRT_FEATURE_CHANNEL_SUBSCRIBE)
+
+typedef struct xchannelsubscription xchannelsubscription;
+
+/* Copied at Create: no caller output address is retained. Channel and payload
+ * remain caller-owned, as for ChannelSelect. Keep every Channel alive until
+ * completion and until all concurrent originating Channel calls have returned. */
+typedef struct xchannelsubscribecase {
+	xchannel* Channel;
+	xchannelop Operation;
+	ptr Value;
+} xchannelsubscribecase;
+
+/* Success consumes ONE real Data reference, failure none. Notify borrows it
+ * and runs exactly once, after physical unlink, on Start/Stop or a Channel
+ * caller's thread, OUTSIDE all Channel locks. It may reenter and release the
+ * subscription's external reference. Drop returns Data exactly once, after all
+ * dispatch/call tails and the last external reference retire. Policy and code
+ * must outlive that Drop. This raw observer is opaque to ownership collection;
+ * merely registering it does not certify its context or invent graph edges. */
+typedef struct xchannelsubscribepolicyv1 {
+	size_t size;
+	void (*Notify)(xchannelsubscription* pSubscription, ptr pData);
+	void (*Drop)(const void* pData);
+} xchannelsubscribepolicyv1;
+
+/* Explicit resident ownership contract, not an extension of the raw policy.
+ * ONE real Data reference is consumed on success. Ops describes that same
+ * physical owner and all its owning children; no trace-only callback is opted
+ * in. Drop mechanically returns that reference, without starting a new semantic
+ * finalizer after graph Clear. Notify/Drop coordinate their own mutation/code
+ * lifetime and must return normally. Both execute outside API-owned scopes.
+ * Channels and messages remain BORROWED, never synthetic graph edges. */
+typedef struct xchannelsubscribeownershipv1 {
+	size_t size;
+	void (*Notify)(xchannelsubscription* pSubscription, ptr pData);
+	void (*Drop)(const void* pData);
+	const xrtownershipops* Ops;
+} xchannelsubscribeownershipv1;
+
+XRT_EXTERN_C_BEGIN
+
+/* All storage and case validation precede publication. No Channel operation,
+ * callback, worker, coroutine stack or timer is started here. */
+XRT_API xchannelsubscription* xrtChannelSubscribeCreateV1(
+	const xchannelsubscribecase* pCases, size_t iCount,
+	ptr pData, const xchannelsubscribepolicyv1* pPolicy);
+
+XRT_API xchannelsubscription* xrtChannelSubscribeCreateOwnedV1(
+	const xchannelsubscribecase* pCases, size_t iCount,
+	ptr pData, const xchannelsubscribeownershipv1* pPolicy);
+
+/* Read-only physical views under independently held whole-graph freeze.
+ * A live registration owns ONE execution credit in addition to external
+ * handles. It is an actual pending-work root, not an incoming edge invented
+ * for each borrowed Channel/case. No collection API cancels accepted work.
+ * Raw-policy contexts are refused. Adapter admission matches the exact policy
+ * identity before reading it; its Data remains independently admitted.
+ * Active dispatch/publication refuses inspection. Clear is legal only before
+ * Start or after completion; Finish returns the Data reference outside freeze.
+ * Ref/Start/Stop quarantine new admission while claimed, Restore reopens it. */
+XRT_API xrtownershipref xrtChannelSubscribeOwnership(const xchannelsubscription* pSubscription);
+XRT_API const xrtownershipquiescencev1* xrtChannelSubscribeOwnershipQuiescenceV1Get(void);
+XRT_API const xrtownershipadapterv1* xrtChannelSubscribeOwnershipAdapterV1(
+	xrtownershipref Reference,
+	const xchannelsubscribeownershipv1* const* pPolicies, size_t iPolicyCount);
+
+/* Admit once. May complete and notify inline before returning. On success no
+ * allocation is needed to wait, wake, select, stop or unlink. */
+XRT_API bool xrtChannelSubscribeStart(xchannelsubscription* pSubscription);
+
+XRT_API xchannelsubscription* xrtChannelSubscribeRef(xchannelsubscription* pSubscription);
+
+/* Consume one external reference. Last release requests cancellation of a
+ * pending operation, but does not undo a committed send/receive. Never waits
+ * for a callback; internal dispatch credits delay physical destruction. */
+XRT_API void xrtChannelSubscribeDestroy(xchannelsubscription* pSubscription);
+
+/* Record the first CANCELLED/TIMEOUT/ERROR stop request; true means recorded,
+ * not that it beat a ready case. Can be requested before Start. Runtime timers
+ * call this API: this module does not allocate a per-wait timer/worker/thread. */
+XRT_API bool xrtChannelSubscribeStop(xchannelsubscription* pSubscription, xwaitresult iReason);
+
+/* false while pending; outputs remain unchanged. After Ready, copies the
+ * immutable result and received raw pointer (NULL also is a valid message).
+ * Output addresses are used only during this call, never retained. */
+XRT_API bool xrtChannelSubscribeResult(const xchannelsubscription* pSubscription,
+	xchannelselectresult* pResult, ptr* pValue);
+
+XRT_EXTERN_C_END
+
+#endif
+#endif
+
+
+/* ========================================================================== */
 /* public: include/xrt/memory_stats.h */
 /* ========================================================================== */
 
@@ -24408,6 +24697,20 @@ XRT_API bool xrtChaCha20Poly1305Open(
 	size_t iPlainSize
 );
 
+/* 与 Open 相同，但标签不匹配或输入短于标签是正常 false 结果：不分配、
+ * 不改变线程错误且不修改输出。其他本地参数错误仍报告普通诊断。
+ * 用于处理不可信网络数据报，避免认证失败触发每包错误对象分配。 */
+XRT_API bool xrtChaCha20Poly1305TryOpen(
+	const void* pKey,
+	const void* pNonce,
+	const void* pAad,
+	size_t iAadSize,
+	const void* pInput,
+	size_t iInputSize,
+	void* pPlain,
+	size_t iPlainSize
+);
+
 #endif
 
 
@@ -26706,6 +27009,34 @@ XRT_API bool xrtWsKeyGenerate(
 
 XRT_EXTERN_C_END
 
+#endif
+
+
+/* ========================================================================== */
+/* public: include/xrt/crc32.h */
+/* ========================================================================== */
+
+#ifndef XRT_CRC32_H
+#define XRT_CRC32_H
+
+
+#if defined(XRT_FEATURE_CRC32) || defined(XRT_FEATURE_INFLATE) || \
+	defined(XRT_FEATURE_DEFLATE) || defined(XRT_FEATURE_VFS_PACK)
+
+XRT_EXTERN_C_BEGIN
+
+/* CRC-32/ISO-HDLC (ZIP/gzip), not CRC32C and not an authentication hash.
+ * Empty input is zero. NULL is valid only for empty input. Invalid ranges
+ * publish XERR_ARGUMENT and return zero; success preserves the current error.
+ * No allocation, initialization table, shared mutable state or alignment need. */
+XRT_API uint32 xrtCrc32(const void* pData, size_t iSize);
+
+/* Extend a FINALIZED CRC returned by either public function. Start with zero;
+ * an empty update returns iCrc unchanged. Callers never complement the state. */
+XRT_API uint32 xrtCrc32Update(uint32 iCrc, const void* pData, size_t iSize);
+
+XRT_EXTERN_C_END
+#endif
 #endif
 
 
@@ -43300,6 +43631,15 @@ XRT_API xprocess* xrtProcessRef(xprocess* pProcess);
 */
 XRT_API void xrtProcessDestroy(xprocess* pProcess);
 
+/* Physical process control block. Count includes ALL real references: user
+ * endpoints, the native waiter's independent lifetime and collector pins.
+ * Trace exposes the owned Error and (when selected) shared Future/Promise.
+ * Queries require graph Freeze; all children need independent admission.
+ * Clear retires slots without closing pipes; Finish releases them outside
+ * Freeze. Holds are NOT user endpoints and never postpone last-user EOF. */
+XRT_API xrtownershipref xrtProcessOwnership(const xprocess* pProcess);
+XRT_API const xrtownershipadapterv1* xrtProcessOwnershipAdapterV1(xrtownershipref Reference);
+
 
 
 /* 返回进程状态快照。 */
@@ -43656,6 +43996,10 @@ XRT_EXTERN_C_BEGIN
 
 /* Future 成功值是由 Future 自身拥有的只读 xprocessstatus 快照。 */
 XRT_API xfuture* xrtProcessWaitAsync(xprocess* pProcess);
+
+/* Exact policy for the immutable, owned xprocessstatus terminal snapshot.
+ * This does not certify arbitrary Future payloads, observers or producers. */
+XRT_API const xfuturepayloadownershipv1* xrtProcessFuturePayloadPolicyV1Get(void);
 
 
 
@@ -45371,6 +45715,10 @@ XRT_EXTERN_C_END
 #undef XRT_FEATURE_CHANNEL_SELECT_CANCEL
 #undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_CHANNEL_SELECT_CANCEL
 #endif
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_CHANNEL_SUBSCRIBE)
+#undef XRT_FEATURE_CHANNEL_SUBSCRIBE
+#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_CHANNEL_SUBSCRIBE
+#endif
 #if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_CHARSET)
 #undef XRT_FEATURE_CHARSET
 #undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_CHARSET
@@ -45422,6 +45770,10 @@ XRT_EXTERN_C_END
 #if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_COROUTINE_SCHEDULER)
 #undef XRT_FEATURE_COROUTINE_SCHEDULER
 #undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_COROUTINE_SCHEDULER
+#endif
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_CRC32)
+#undef XRT_FEATURE_CRC32
+#undef XRT_DECLARATIONS_RESTORE_XRT_FEATURE_CRC32
 #endif
 #if defined(XRT_DECLARATIONS_RESTORE_XRT_FEATURE_CRYPTO_AES)
 #undef XRT_FEATURE_CRYPTO_AES
@@ -46919,6 +47271,10 @@ XRT_EXTERN_C_END
 #undef XRT_MODULE_CHANNEL_SELECT_CANCEL
 #undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_CHANNEL_SELECT_CANCEL
 #endif
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_CHANNEL_SUBSCRIBE)
+#undef XRT_MODULE_CHANNEL_SUBSCRIBE
+#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_CHANNEL_SUBSCRIBE
+#endif
 #if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_CHARSET)
 #undef XRT_MODULE_CHARSET
 #undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_CHARSET
@@ -46970,6 +47326,10 @@ XRT_EXTERN_C_END
 #if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_COROUTINE_SCHEDULER)
 #undef XRT_MODULE_COROUTINE_SCHEDULER
 #undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_COROUTINE_SCHEDULER
+#endif
+#if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_CRC32)
+#undef XRT_MODULE_CRC32
+#undef XRT_DECLARATIONS_RESTORE_XRT_MODULE_CRC32
 #endif
 #if defined(XRT_DECLARATIONS_RESTORE_XRT_MODULE_CRYPTO_AES)
 #undef XRT_MODULE_CRYPTO_AES
@@ -49434,6 +49794,9 @@ XRT_EXTERN_C_END
 #endif
 #ifndef XRT_MODULE_COND
 #define XRT_MODULE_COND
+#endif
+#ifndef XRT_MODULE_CRC32
+#define XRT_MODULE_CRC32
 #endif
 #endif
 
@@ -52169,6 +52532,9 @@ XRT_EXTERN_C_END
 #ifndef XRT_FEATURE_DEFLATE
 #define XRT_FEATURE_DEFLATE
 #endif
+#ifndef XRT_MODULE_CRC32
+#define XRT_MODULE_CRC32
+#endif
 #endif
 
 /* websocket_inflater 及其直接依赖。 */
@@ -52188,6 +52554,16 @@ XRT_EXTERN_C_END
 #if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_INFLATE)
 #ifndef XRT_FEATURE_INFLATE
 #define XRT_FEATURE_INFLATE
+#endif
+#ifndef XRT_MODULE_CRC32
+#define XRT_MODULE_CRC32
+#endif
+#endif
+
+/* crc32 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CRC32)
+#ifndef XRT_FEATURE_CRC32
+#define XRT_FEATURE_CRC32
 #endif
 #endif
 
@@ -52481,6 +52857,16 @@ XRT_EXTERN_C_END
 #endif
 #ifndef XRT_MODULE_CANCEL
 #define XRT_MODULE_CANCEL
+#endif
+#endif
+
+/* channel_subscribe 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_CHANNEL_SUBSCRIBE)
+#ifndef XRT_FEATURE_CHANNEL_SUBSCRIBE
+#define XRT_FEATURE_CHANNEL_SUBSCRIBE
+#endif
+#ifndef XRT_MODULE_CHANNEL_SELECT
+#define XRT_MODULE_CHANNEL_SELECT
 #endif
 #endif
 

@@ -185,6 +185,26 @@ class ExtensionTests(unittest.TestCase):
         self.assertEqual(len(symbols), len(set(symbols)))
         self.assertEqual(set(symbols), apis)
 
+    def test_xrudp_native_objects_vfs_and_exports_are_complete(self):
+        from sync_xrt import public_functions
+        entry = load_registry()["xrudp"]
+        selected = select_extensions(["xrudp"])
+        self.assertEqual(list(selected), ["xrudp"])
+        self.assertEqual(entry["macro"], "XS_USE_XRUDP")
+        self.assertIn("XRUDP_MODULE_ALL", entry["feature_macro"])
+        actual = {p.relative_to(ROOT).as_posix() for p in (ROOT / "lib/xrudp/src").rglob("*.c")}
+        self.assertEqual({p["path"] for p in entry["sources"]}, actual)
+        self.assertFalse(any("single" in path for path in actual))
+        self.assertIn("xs/xrudp.h", dict(vfs.collect(selected)))
+        imports = (ROOT / entry["symbols"]).read_text(encoding="utf-8")
+        symbols = re.findall(r"XS_XRUDP_SYMBOL\((\w+)\)", imports)
+        apis = public_functions([ROOT / p for p in entry["headers"].values()], "xrt")
+        self.assertGreaterEqual(len(symbols), 213)
+        self.assertEqual(len(symbols), len(set(symbols)))
+        self.assertEqual(set(symbols), set(apis))
+        self.assertTrue({"xrtRudpEndpointBind", "xrtRudpEndpointDiscover", "xrtRudpEndpointPunch",
+                         "xrtRudpPeerMessageWrite", "xrtRudpPeerDatagramWrite"} <= set(symbols))
+
     def test_requires_expands_dependencies(self):
         self.assertEqual(list(select_extensions(["xsmtp"])), ["xmail", "xsmtp"])
         self.assertEqual(list(select_extensions(["xsmtp", "xpop3", "ximap"])),
