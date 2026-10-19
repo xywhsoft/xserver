@@ -70,14 +70,14 @@ Cancel/成功/终结错误擦除内部事务与请求。只读 State 不包含�
 无连接时也可发现；四个内置任务不占握手/peer 槽。每个任务恰好一次延迟回调，关闭先
 结算发现再通知端点 Close；回调可释放自有引用、关闭、取消或新增任务，不递归调用。
 同一队列按实际受理交替给 peer/发现优先机会，发现仍至多每 50ms 一包，局部错误不关闭 peer。
-双机打洞协调仍待接入，不能把单独获得映射当成直连已建立。
+账号协调、双族选择和完整打洞已在 mdo 接入；单独获得映射不表示直连已建立。
 
 `rudp_punch` 已提供打洞出站预热核心：可信应用给定至多八个目的地址，每个至多六份独立
 的 STUN Binding indication，全任务至少 50ms 发包间隔、默认 8 秒绝对期限。
 无输入回应、地址学习、端口扫描或认证旁路；硬路由错误只撤销该候选，本地背压不消耗次数。
 Init 之外无需随机源或分配，完成只表示本机 UDP 受理。原生 EndpointPunch/PunchCancel 使用
 同套接字、固定双任务槽，与映射发现共用全局 50ms 门并公平服务 peer，关闭前异步结算回调。
-设备直连必须通过 Noise 公钥/域/上下文与账户权限验证，授权协调与候选优选仍待接入。
+设备直连必须通过 Noise 公钥/域/上下文与账户权限验证；mdo 已接入授权协调和双族候选选择。
 模块 rudp_noise 增加 X25519、HKDF-SHA256 与系统安全随机源。
 模块 rudp_handshake 提供固定协议的完整握手状态机；不自行创建套接字或执行应用请求。
 模块 rudp_endpoint 在调用方现有 XRT Engine Worker 上创建 IPv4 或 IPv6 UDP 端点，
@@ -174,6 +174,9 @@ Changed 提供 DATAGRAM_READ_READY/WRITE_READY；PeerDatagramPeek/Read 读取完
 模块 rudp_session 是单所有者的双向多流会话，消费握手晋升后的唯一密码器，
 组合整包 ACK/STREAM/RESET/额度预检、实际输出受理后的发送提交、恢复/流控/换钥与有限截止。
 固定数据环、引用和事件空间预先分配，Poll 最多输出 8 包，通过回调复制交给 UDP；
+持续拥塞只使用已有 RTT 样本之后的真实网络丢失区间，超过三倍基础 PTO 才收缩到最小窗口；
+新元数据环计入 SessionAllocationSize 和端点预算，迟到 ACK、MTU 及本地背压不产生虚假证据。
+SessionState.PersistentCongestion 可查询已证明区间次数；单次 PTO 不触发此计数。
 不自行创建套接字、线程或 Engine，由 rudp_endpoint 驱动并映射字节流的业务读写接口。
 StreamCapacity=N 预留 2*N-1 对固定环（默认 N=1），OPEN/读写/FIN/RESET/退休均不新增分配。
 额外流使用单调奇偶 ID；退休且所有包副本排空后复用存储，不复用 ID。
@@ -184,6 +187,15 @@ SessionStreamNextEvent 提供远端开流、读写及退休边缘提示；原生
 single/extlibs/xrudp.h 与 single/extlibs/xrudp_decl.h。
 
 协议草案见 docs/protocol.md；生产验收与跨仓库进度见 docs/implementation-status.md。
+
+跨状态流控制模型可独立运行（显式 SDK 的核心单头须匹配当前已提交 XRT）：
+
+    python tools/test_xrudp_stream_model.py --sdk ../xserver --compiler gcc
+    python tools/test_xrudp_stream_model.py --sdk ../xserver --compiler clang --sanitize
+
+默认 32 个固定种子，每个 20,000 步；覆盖开流、消息、STOP/RESET、退休复用、
+丢失/重复/乱序与临时输出失败，并核对独立内容/偏移模型和固定资源上限。
+这是虚拟时钟的公开 API 状态探索，不替代独立线路实现、原生 I/O 或 72 小时长稳。
 
 原生端点默认启用路径 MTU 探测，使用 XRT 的 UDP PMTU_PROBE 禁止 IP 分片。
 低层 Session 的 DiscoverMtu 默认关闭；只有传输适配器能保证不分片时才启用。
