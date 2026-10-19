@@ -15,6 +15,7 @@ from pathlib import Path
 
 import gen_tcc_resources as vfs
 from build_provenance import source_digest, write_metadata
+from compiler_paths import linux_tcc_triplet
 from xs_extensions import ROOT, host_header, load_registry, select_extensions
 
 
@@ -128,8 +129,7 @@ def build(args: argparse.Namespace, selected: dict) -> Path:
         flags.append(f'-DXS_BUILD_DATE="{time.strftime("%Y-%m-%d")}"')
         flags.append(f'-DXS_BUILD_PLATFORM="{platform}"')
     if platform == "linux":
-        triplet = "<compiler-triplet>" if args.dry_run else subprocess.check_output(
-            [args.cc, "-dumpmachine"], text=True, cwd=ROOT).strip()
+        triplet = "<compiler-triplet>" if args.dry_run else linux_tcc_triplet(args.cc)
         flags.append(f'-DCONFIG_TRIPLET="{triplet}"')
     objects: list[str] = []
 

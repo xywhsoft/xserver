@@ -12,6 +12,7 @@ from pathlib import Path
 SOURCE_INPUTS = (
     "main.c", "src", "lib", "tcc", "res",
     "tools/build.py", "tools/build_provenance.py", "tools/extensions.json",
+    "tools/compiler_paths.py",
     "tools/gen_tcc_resources.py", "tools/xs_extensions.py",
     "tools/tcc_include_closure.py", "tools/tcc_vfs_lzma_pack.c",
 )
