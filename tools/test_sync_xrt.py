@@ -2,6 +2,7 @@
 from __future__ import annotations
 import contextlib
 import io
+import json
 from pathlib import Path
 import subprocess
 import tempfile
@@ -11,6 +12,41 @@ import sync_xrt as sync
 
 
 class CommitSnapshotTests(unittest.TestCase):
+    def test_one_library_refresh_preserves_core_and_uses_committed_bytes(self):
+        with tempfile.TemporaryDirectory(prefix="xs library SDK ") as directory:
+            base=Path(directory); upstream, _, _=self.repository(base)
+            header=upstream/"extlibs/demo/include/demo.h"
+            header.write_bytes(b"DEMO_API void demoRun(void);\n")
+            manifest={"api_reference":{"function_prefix":"demo"},"module_prefix":"DEMO_MODULE_",
+                      "modules":[{"name":"demo","feature":"DEMO_FEATURE_DEMO","sources":["extlibs/demo/src/demo.c"]}]}
+            (upstream/"extlibs/demo/config/modules.json").write_text(json.dumps(manifest))
+            self.git(upstream,"add","--all")
+            self.git(upstream,"-c","user.name=Fixture","-c","user.email=fixture@example.invalid","commit","--quiet","-m","library fixture")
+            commit=self.git(upstream,"rev-parse","HEAD").decode().strip()
+            header.write_bytes(b"dirty header must not ship\n")
+            (upstream/"single/xrt.h").write_bytes(b"dirty core must not ship\n")
+            vendor=base/"vendor";vendor.mkdir()
+            registry={"demo":{"macro":"XS_USE_DEMO","symbols":"src/script/import_demo.inc","symbol_macro":"XS_DEMO_SYMBOL"}}
+            retained={"lib/xrt.h":b"retained older core ABI\n","lib/other/UPSTREAM.txt":b"retained companion ABI\n"}
+            record={"schema":1,"upstream_commit":"1"*40,"upstream_working_tree":False,"files":{}}
+            for name,data in retained.items():
+                p=vendor/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(data)
+                record["files"][name]={"sha256":sync.digest(data)}
+            lock=vendor/"lib/xrt_sources.lock.json";lock.write_text(json.dumps(record))
+            validate=sync.check_lock
+            status=self.git(upstream,"status","--porcelain")
+            with patch.object(sync,"ROOT",vendor),patch.object(sync,"LOCK",lock),patch.object(sync,"REGISTRY",vendor/"tools/extensions.json"), \
+                 patch.object(sync,"load_registry",return_value=registry),patch.object(sync,"check_lock",side_effect=lambda:validate(vendor,lock)), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                sync.refresh_library_commit(upstream,commit,"demo")
+            self.assertEqual((vendor/"lib/demo/include/demo.h").read_bytes(),b"DEMO_API void demoRun(void);\n")
+            for name,data in retained.items():self.assertEqual((vendor/name).read_bytes(),data)
+            actual=json.loads(lock.read_text());self.assertEqual(actual["upstream_commit"],"1"*40)
+            self.assertEqual(actual["library_commits"],{"demo":commit})
+            self.assertEqual(actual["files"]["lib/demo/include/demo.h"]["upstream_commit"],commit)
+            self.assertEqual(self.git(upstream,"status","--porcelain"),status)
+            self.assertIn("XS_DEMO_SYMBOL(demoRun)",(vendor/"src/script/import_demo.inc").read_text())
+
     def git(self, directory, *arguments):
         return subprocess.check_output(["git", "-c", "core.autocrlf=false", *arguments], cwd=directory)
 
