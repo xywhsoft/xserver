@@ -1,4 +1,4 @@
 Source: xrt extlibs/xrudp
-Snapshot: e9d4d055d8625d7e689c487803f3b61e84e163d1
+Snapshot: 0c46aca7519c5513c51b15de61d73d90ebca79b6
 Byte-for-byte committed extension snapshot; core and other libraries retain their own pins.
 Per-file source commits and SHA256 are recorded in ../xrt_sources.lock.json.
