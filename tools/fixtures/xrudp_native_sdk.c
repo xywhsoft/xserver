@@ -10,7 +10,7 @@ struct xs_rudp_sdk_test {
     xrudppeer* Peer[2];
     xrudpendpointinfo Info[2];
     xs_rudp_sdk_side Side[2];
-    xatomic32 Ready, Confirmed, ReadDone, Closed, PunchDone;
+    xatomic32 Ready, Confirmed, ReadDone, Closed, PunchDone, ExtraStream;
     unsigned char Private[2][32], Public[2][32];
     size_t Read[2];
     uint64_t Punch;
@@ -85,9 +85,18 @@ static void xs_rudp_sdk_closed(xrudpendpoint* e, xrudpresult reason,
     const xerror* error, void* context)
 {
     xs_rudp_sdk_side* s = context;
-    (void)e;
+    xrudpasyncstate state;
+    REQUIRE(xrtRudpEndpointAsyncState(e, &state) == XRUDP_OK && state.Pending == 0);
     REQUIRE(reason == XRUDP_CANCELLED && error == NULL);
     xrtAtomic32FetchOr(&s->Test->Closed, 1u << s->Id, XMEMORY_RELEASE);
+}
+static void xs_rudp_sdk_stream_changed(xrudpendpoint* e, xrudppeer* p,
+    const xrudpstreamevent* event, void* context)
+{
+    xs_rudp_sdk_side* s = context;
+    (void)e; (void)p;
+    if (s->Id == 0 && (event->Events & XRUDP_STREAM_OPENED))
+        xrtAtomic32Store(&s->Test->ExtraStream, event->Id, XMEMORY_RELEASE);
 }
 static void xs_rudp_sdk_bind(xnetworker* worker, ptr context)
 {
@@ -101,12 +110,45 @@ static void xs_rudp_sdk_bind(xnetworker* worker, ptr context)
     config.PeerPublic = t->Public[1 - s->Id];
     config.Listen = s->Id == 0;
     config.MaxPeers = config.MaxHalfOpen = 2;
+    config.AsyncOperations = 8; config.AsyncBytes = 65536;
+    config.Session.StreamCapacity = config.Session.Local.MaxStreams = 2;
+    config.Session.Local.MaxMessageSize = 4096;
     REQUIRE(xrtNetAddrLoopback(&local, t->Family, 0));
     events.Open = xs_rudp_sdk_open;
     events.Confirmed = xs_rudp_sdk_confirmed;
     events.Close = xs_rudp_sdk_closed;
     events.Changed = xs_rudp_sdk_changed;
+    events.StreamChanged = xs_rudp_sdk_stream_changed;
     REQUIRE(xrtRudpEndpointBind(worker, &local, &config, &events, s, &t->Endpoint[s->Id]) == XRUDP_OK);
+}
+static xfuture* xs_rudp_sdk_future_message(xs_rudp_sdk_test* t)
+{
+    xrudpoperation operation;
+    xfuture *opened, *read, *write;
+    const xrudpoperationresult* result;
+    char bytes[] = "xs future";
+    uint32_t stream;
+    double deadline;
+    xrtRudpOperationInit(&operation); operation.Kind = XRUDP_OPERATION_STREAM_OPEN;
+    xrtRudpStreamConfigInit(&operation.StreamConfig); operation.StreamConfig.Kind = XRUDP_STREAM_MESSAGES;
+    opened = xrtRudpPeerSubmitAsync(t->Peer[1], &operation);
+    REQUIRE(opened && xrtFutureWaitFor(opened, 8000) == XWAIT_OK && xrtFutureState(opened) == XFUTURE_RESOLVED);
+    result = (const xrudpoperationresult*)xrtFutureValue(opened);
+    REQUIRE(result && result->Result == XRUDP_OK); stream = result->Stream; xrtFutureDestroy(opened);
+    deadline = xrtTimer() + 8;
+    while (xrtAtomic32Load(&t->ExtraStream, XMEMORY_ACQUIRE) != stream) { REQUIRE(xrtTimer() < deadline); xrtThreadYield(); }
+    xrtRudpOperationInit(&operation); operation.Kind = XRUDP_OPERATION_MESSAGE_READ;
+    operation.Stream = stream; operation.Capacity = 64; operation.TimeoutMs = 4000;
+    read = xrtRudpPeerSubmitAsync(t->Peer[0], &operation); REQUIRE(read);
+    operation.Kind = XRUDP_OPERATION_MESSAGE_WRITE; operation.Data = bytes; operation.Size = sizeof(bytes) - 1;
+    write = xrtRudpPeerSubmitAsync(t->Peer[1], &operation); REQUIRE(write); memset(bytes, 0, sizeof(bytes));
+    REQUIRE(xrtFutureWaitFor(write, 8000) == XWAIT_OK && xrtFutureState(write) == XFUTURE_RESOLVED);
+    result = (const xrudpoperationresult*)xrtFutureValue(write);
+    REQUIRE(result && result->Result == XRUDP_OK && result->Size == 9); xrtFutureDestroy(write);
+    REQUIRE(xrtFutureWaitFor(read, 8000) == XWAIT_OK && xrtFutureState(read) == XFUTURE_RESOLVED);
+    result = (const xrudpoperationresult*)xrtFutureValue(read);
+    REQUIRE(result && result->Result == XRUDP_OK && result->Size == 9 && !memcmp(result->Data, "xs future", 9));
+    return read;
 }
 static void xs_rudp_sdk_connect(xnetworker* worker, ptr context)
 {
@@ -122,6 +164,7 @@ static void CheckXrudpNative(xnetfamily family)
     xs_rudp_sdk_test t;
     xnetengineconfig config;
     uint32_t i, j;
+    xfuture* retained;
     memset(&t, 0, sizeof(t));
     t.Family = family;
     for (i = 0; i < 2; ++i) {
@@ -139,9 +182,20 @@ static void CheckXrudpNative(xnetfamily family)
     xs_rudp_sdk_wait(&t, &t.Confirmed, 3);
     xs_rudp_sdk_wait(&t, &t.ReadDone, 3);
     xs_rudp_sdk_wait(&t, &t.PunchDone, 1);
+    retained = xs_rudp_sdk_future_message(&t);
     for (i = 0; i < 2; ++i) REQUIRE(xrtRudpEndpointClose(t.Endpoint[i]) == XRUDP_OK);
     xs_rudp_sdk_wait(&t, &t.Closed, 3);
     REQUIRE(xrtNetEngineStop(t.Engine) && xrtNetEngineDestroy(t.Engine));
+    {
+        xrudpoperation operation; xrudpasyncstate state;
+        const xrudpoperationresult* result = (const xrudpoperationresult*)xrtFutureValue(retained);
+        REQUIRE(result && result->Size == 9 && !memcmp(result->Data, "xs future", 9));
+        REQUIRE(xrtRudpEndpointAsyncState(t.Endpoint[0], &state) == XRUDP_OK && state.Pending == 0 && state.Retained == 1);
+        xrtRudpOperationInit(&operation);
+        REQUIRE(xrtRudpPeerSubmitAsync(t.Peer[0], &operation) == NULL && xrtErrorKind(xrtGetError()) == XERR_CLOSED);
+        xrtClearError(); xrtFutureDestroy(retained);
+        REQUIRE(xrtRudpEndpointAsyncState(t.Endpoint[0], &state) == XRUDP_OK && state.Retained == 0 && state.RetainedBytes == 0);
+    }
     for (i = 0; i < 2; ++i) {
         xrudpendpointinfo info;
         REQUIRE(xrtRudpEndpointInfo(t.Endpoint[i], &info) == XRUDP_OK && !info.Peers && !info.Punches);
@@ -150,4 +204,5 @@ static void CheckXrudpNative(xnetfamily family)
         xrtRudpEndpointDestroy(t.Endpoint[i]);
     }
     printf("[sdk] xrudp native family=%u Noise+reliable+FIN+cancel+closed-handles ok\n", (unsigned)family);
+    printf("[sdk] xrudp Future family=%u copied-message+Engine-safe-result ok\n", (unsigned)family);
 }

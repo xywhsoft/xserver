@@ -1,5 +1,5 @@
 Source: xrt extlibs/xllm
-Snapshot: ccd6390eb913f7689e7d34551d33cc1d7553f442
+Snapshot: b093114d3d78d9700a113518d9030ffe836c7602
 Upstream source bytes and SHA256 are recorded in ../xrt_sources.lock.json.
 Native sources, public headers and module configuration are vendored.
 Native module sources compile separately; single-header implementations are not used.

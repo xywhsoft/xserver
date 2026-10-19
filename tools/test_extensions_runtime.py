@@ -133,7 +133,11 @@ def check_public_sdk(exe: Path, selected: dict, directory: Path) -> None:
             marker = f"[sdk] xrudp native family={family} Noise+reliable+FIN+cancel+closed-handles ok"
             if proc.stdout.count(marker) != 2:
                 raise RuntimeError(f"xrudp native outer/nested evidence missing:\n{proc.stdout}{proc.stderr}")
+            future = f"[sdk] xrudp Future family={family} copied-message+Engine-safe-result ok"
+            if proc.stdout.count(future) != 2:
+                raise RuntimeError(f"xrudp Future outer/nested evidence missing:\n{proc.stdout}{proc.stderr}")
         print("PASS xrudp native: IPv4/IPv6, pinned Noise, reliable bytes+FIN, cancellation and CLOSED handles, outer + nested TCC", flush=True)
+        print("PASS xrudp Future: IPv4/IPv6, copied messages and results after Engine destruction, outer + nested TCC", flush=True)
     print(f"PASS public SDK: {len(selected)} extensions, {count[1]} exports, outer + nested TCC", flush=True)
 
 PROBE = r'''
