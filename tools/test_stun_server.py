@@ -147,6 +147,8 @@ def limits(exe, global_limit):
 def main():
     parser=argparse.ArgumentParser(description=__doc__); parser.add_argument('--exe',required=True,type=Path); args=parser.parse_args()
     exe=args.exe.resolve(); assert subprocess.run([str(exe),'--help'],capture_output=True).returncode==0
+    version=subprocess.run([str(exe),'--version'],capture_output=True,text=True,timeout=5)
+    assert version.returncode==0 and re.fullmatch(r'xrudp-stun xs=[0-9a-f]{40} xrudp=[0-9a-f]{40} core=[0-9a-f]{40}\s*',version.stdout),version.stdout
     for flags in (['--port','-1'],['--port','65536'],['--port','1x'],['--rate','0'],['--no-v4','--no-v6'],
                   ['--rate','1','--per-source','2'],['--no-v4','--no-v4'],['--bind4','attacker.example']):
         result=subprocess.run([str(exe),*flags],capture_output=True,timeout=5); assert result.returncode==2,flags

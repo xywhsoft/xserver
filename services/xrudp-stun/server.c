@@ -12,6 +12,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef XRUDP_STUN_BUILD_XS
+#define XRUDP_STUN_BUILD_XS "unknown"
+#endif
+#ifndef XRUDP_STUN_BUILD_XRUDP
+#define XRUDP_STUN_BUILD_XRUDP "unknown"
+#endif
+#ifndef XRUDP_STUN_BUILD_CORE
+#define XRUDP_STUN_BUILD_CORE "unknown"
+#endif
 
 #define STUN_RATE_SETS 256u
 #define STUN_RATE_WAYS 4u
@@ -192,6 +201,9 @@ static bool Parse(int Count, char** Args, StunConfig* C)
 int main(int Count, char** Args)
 {
     if (Count==2 && !strcmp(Args[1],"--help")) { Usage(); return 0; }
+    if (Count==2 && !strcmp(Args[1],"--version")) {
+        printf("xrudp-stun xs=%s xrudp=%s core=%s\n",XRUDP_STUN_BUILD_XS,XRUDP_STUN_BUILD_XRUDP,XRUDP_STUN_BUILD_CORE); return 0;
+    }
     StunServer* S=&Server;
     if (!Parse(Count,Args,&S->Config)) { Usage(); return 2; }
     if (!xrtSecureRandom(&S->HashKey,sizeof(S->HashKey))) return 1;

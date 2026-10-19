@@ -20,6 +20,9 @@ def main():
     args=parser.parse_args()
     if args.static and (args.sanitize or os.name=='nt'): parser.error('--static requires a nonsanitized Linux build')
     sync_xrt.check_lock()
+    snapshot=json.loads((ROOT/'lib/xrt_sources.lock.json').read_text(encoding='utf-8'))
+    revision=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
+    xrudp_revision=snapshot.get('library_commits',{}).get('xrudp',snapshot['upstream_commit'])
     source=ROOT/'services/xrudp-stun/server.c'
     wire=ROOT/'lib/xrudp/src/wire/rudp_stun.c'
     paths=[Path(__file__).resolve(),source,wire,ROOT/'services/xrudp-stun/xrudp-stun.service',
@@ -29,6 +32,8 @@ def main():
     hashes={p.relative_to(ROOT).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
     output=args.output.resolve(); output.parent.mkdir(parents=True,exist_ok=True)
     flags=['-std=gnu11','-O2','-Wall','-Wextra','-Werror','-ffunction-sections','-fdata-sections',
+           f'-DXRUDP_STUN_BUILD_XS="{revision}"',f'-DXRUDP_STUN_BUILD_XRUDP="{xrudp_revision}"',
+           f'-DXRUDP_STUN_BUILD_CORE="{snapshot["upstream_commit"]}"',
            '-DXRUDP_MODULE_RUDP_STUN=1','-I',str(ROOT/'lib'),'-I',str(ROOT/'lib/xrudp/include'),'-I',str(ROOT/'lib/xrtshim')]
     if args.sanitize: flags+=['-g','-fno-omit-frame-pointer','-fsanitize=address,undefined','-fno-sanitize-recover=all']
     if args.static: flags+=['-static']
@@ -40,11 +45,9 @@ def main():
         for relative,digest in hashes.items():
             if hashlib.sha256((ROOT/relative).read_bytes()).hexdigest()!=digest: raise RuntimeError('source changed during build: '+relative)
         os.replace(staged,output)
-    snapshot=json.loads((ROOT/'lib/xrt_sources.lock.json').read_text(encoding='utf-8'))
-    revision=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
     dirty=bool(subprocess.check_output(['git','status','--porcelain'],cwd=ROOT).strip())
     version=subprocess.check_output([args.cc,'--version'],text=True).splitlines()[0]
-    receipt={'schema':1,'xs_commit':revision,'xs_worktree_dirty':dirty,'xrt_commit':snapshot['upstream_commit'],
+    receipt={'schema':1,'xs_commit':revision,'xs_worktree_dirty':dirty,'xrt_commit':snapshot['upstream_commit'],'xrudp_commit':xrudp_revision,
              'source_hashes':hashes,'compiler':args.cc,'compiler_version':version,'compile_flags':flags,'link_flags':links,
              'static':args.static,'sanitize':args.sanitize,'sha256':hashlib.sha256(output.read_bytes()).hexdigest(),'bytes':output.stat().st_size}
     output.with_name(output.name+'.build.json').write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8',newline='\n')

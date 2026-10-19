@@ -19,6 +19,9 @@ python tools/test_stun_server.py --exe .build/xrudp-stun-asan/xrudp-stun
 
 Windows 省略 `--static`，使用 MinGW GCC。构建先校验 xs 的原始上游快照，结束前再次核对编译输入，输出附带源文件及二进制哈希的收据。Python 只用于构建与独立网络测试，运行服务只需要原生可执行文件。
 
+`xrudp-stun --version` 不创建监听，直接报告构建时的 XS、XRUDP 扩展和 XRT 核心提交。
+单独升级扩展时保留核心的独立版本，部署核验应同时比对该输出与构建收据，不能把扩展提交当成核心提交。
+
 `--bind4`/`--bind6` 只接受数值地址；`--port 0` 可用于隔离测试，实际端口从启动输出获取。`--no-v4`/`--no-v6` 可关闭一个地址族。`--rate`/`--per-source` 范围为 1..4096，来源配额不能大于全局配额。`--run-ms` 提供最长十分钟的有限诊断运行；正常服务不设置此选项。SIGINT/SIGTERM 取消 UDP 并等待 Engine 退出；启动绑定冲突会失败，不占用已有服务。
 
 提供的 systemd 用户单元将可执行文件放在 `~/.local/libexec/xrudp-stun`，不使用 root，限制内存、CPU、线程和句柄，失败时有限重启。需要用户管理器和已启用的 linger 才能在系统重启后自动运行。启用前核对端口、旧单元/可执行文件哈希，原子安装并保留旧版本；不要替换网站宿主。公网需要允许 UDP 3478，IPv6 还需要可路由的 IPv6 地址。
