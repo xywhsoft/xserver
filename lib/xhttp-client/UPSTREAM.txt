@@ -1,5 +1,5 @@
 Source: xrt extlibs/xhttp-client
-Snapshot: 3d55ec41e13f0884ffe840d44a57a0189d9310f3
+Snapshot: dd57ac4d9538a3d7819ef9e93ca5955eca9f786e
 Upstream source bytes and SHA256 are recorded in ../xrt_sources.lock.json.
 Native sources, public headers and module configuration are vendored.
 Native module sources compile separately; single-header implementations are not used.
