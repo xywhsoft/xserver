@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "upstream_commit": "dd57ac4d9538a3d7819ef9e93ca5955eca9f786e",
+  "upstream_commit": "803501226fd91ccbcbd39d2b52faccf593146a68",
   "upstream_working_tree": false,
   "files": {
     "lib/xacme/README.md": {
@@ -2245,15 +2245,15 @@
     },
     "lib/xrt.h": {
       "source": "single/xrt.h",
-      "sha256": "795a6d62e8934fc0133bd5257eef252868f4703e995ebfd8814b0abf7d3ac900"
+      "sha256": "f489e1984687c3fd615325b61fb625a3851d344cbd8674df9d4d95f0c430014d"
     },
     "lib/xrt_decl.h": {
       "source": "single/xrt_decl.h",
-      "sha256": "37a23076508b98190898126c7f5b5040b454890a114ba8e4b8a4f3b00af0d3b0"
+      "sha256": "cfc1c4bf57d6981ecc5f46de84d2e21e79c48364131d84962d5d927401907f04"
     },
     "lib/xrtshim/xrt/detail/wait.h": {
       "source": "include/xrt/detail/wait.h",
-      "sha256": "f43ec448234fe5155744a832b0bea13c691ab7e369fc23977444eb3d72e56924"
+      "sha256": "5bb75cbad71ec10ccbbc1278bf2458dfc58948c7a33cf4daf11404bf84ed59cd"
     },
     "lib/xrudp/LICENSE": {
       "source": "extlibs/xrudp/LICENSE",
@@ -3405,55 +3405,55 @@
     },
     "lib/xacme/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "3f3893706ecbdbb75b846447995caf66da8dd5c7d4db73816c761fda6987ca1e"
+      "sha256": "45a109feef8a5c702ac956dc10f36ac395d4f0779a18f57d510dbe1d155c5a21"
     },
     "lib/xhttp-client/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "4b24bb14fae90f2ec8337d5735fb70edf97fe812594a4f37281bc723db43db5b"
+      "sha256": "171c91ceb5541290f8d0a8d543e74aa85b9da299ae34e502f66c2406912eabba"
     },
     "lib/xhttp-policy/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "3fcaff07a5c573fe0b8d870c656cc71f1046077d75c290bb0f43936ddc5f3fc1"
+      "sha256": "9cfcdebf80e109d85630fa64f3490a24cde27d7a2489a91c5d33351ef7195f7e"
     },
     "lib/xhttp-server/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "625895018a99f54b609ef096045c90f96898a5fd67ee175fcd94c1d407559a2a"
+      "sha256": "6badfd806674701feabc7e4e8fda6cd3dc6aaf6cfae118e8b70a8e9cffb03b62"
     },
     "lib/xhttp/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "8bec1384081f8e47f84a9306f653354b8df538949c6d46f7a936e03b679279dc"
+      "sha256": "21f545e851f2f380920f6abd72cd66b23270c066719c1a57d5f94229902299bd"
     },
     "lib/ximap/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "126279ccb791d9a3acbdeeeed34f1b8fedf33f7c99cf68e3bc4229ea584c7ffc"
+      "sha256": "0e171e72e8ce2f516967ceb15ccf97fe0b5f43e643d5a0401fb95b631d301c29"
     },
     "lib/xjwt/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "8f0f27f8a4528a54230d14077257f65a65c0b9a9c0a4a330402f493eb579e35f"
+      "sha256": "3d2b502e7a7227ac22cd695b204da14164fcc36b9277cd3c049f5486e332e09e"
     },
     "lib/xllm-session/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "479bcde2108e8719e375cff74ec6bebb18adcda2332d2cb60eea50ad5c531ff0"
+      "sha256": "b265c65b1365af3fc532f230de6abe72a495f8caf60f3795bd1a84c13ee79859"
     },
     "lib/xllm/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "093f3c08b81a900a93c175f4c1ddaf0417cbc71e2f281ef158410d0f365b1b76"
+      "sha256": "9dd545133aa99eba91916506893631b170f07027d3fa9931c1d3479abccc7a5e"
     },
     "lib/xmail/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "9df4a9160cae3fa4fd12ac2d70a8293b0619d2cbcdd14790bace8e0dc1d0eb8f"
+      "sha256": "57360539857e916a8bfc926e8a0820fba7a90725e5ab822246644014671ba3ca"
     },
     "lib/xoauth2/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "cdd2fcd2d2a6d037d5e3dc5e5d3587f770a58b1842f69b8ef3cf12369f7f34f9"
+      "sha256": "c822d10b96d697714f8ee494e009fcc0b7a1098c7f5e6a61e90e7e136854c1f2"
     },
     "lib/xpop3/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "a4e2b4bf1a1e433e0f2d5a7a81ec5e45ece2b92f7fb228577f67822a733ec7f0"
+      "sha256": "82f2a9a5c8a9aa458248d08000c0b8eded403d1562734b4c94291f44ecc4479b"
     },
     "lib/xrt_version.txt": {
       "generated": true,
-      "sha256": "309596fb6de22c0f69e116a0d590f4b1935628df4dac7eeaee1312d5b09caeec"
+      "sha256": "b425a796131a97d5b8432d23ffb5adcca9387148d521ffb4a8caaf5a9e9fd4b2"
     },
     "lib/xrtshim/xrt/array.h": {
       "generated": true,
@@ -3655,6 +3655,10 @@
       "generated": true,
       "sha256": "1f4698ca65fb57d5e3fabd999234771bfd9d34486ae7c8e69d3d1e40940dd42f"
     },
+    "lib/xrtshim/xrt/net_file_future.h": {
+      "generated": true,
+      "sha256": "1f4698ca65fb57d5e3fabd999234771bfd9d34486ae7c8e69d3d1e40940dd42f"
+    },
     "lib/xrtshim/xrt/net_frame.h": {
       "generated": true,
       "sha256": "1f4698ca65fb57d5e3fabd999234771bfd9d34486ae7c8e69d3d1e40940dd42f"
@@ -3849,35 +3853,35 @@
     },
     "lib/xrudp/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "f437db9f206ab940414b64c87fa8b1f6194ea22ac2609068ef08b8bd1d7cb53f"
+      "sha256": "f211225b66fd1f7f40041ce02cca16f4888752fbb4a891fe362d562d64a43c41"
     },
     "lib/xsmtp/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "38282e47ced30e991f18bfa56f523bb7424f4aa808acef0a0576f26d04439c56"
+      "sha256": "254fa04427b7155ef9a4a24921f7d28993bcf17cda123ad13426ed0dc3b2dcd0"
     },
     "lib/xssh/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "bf6ea60e5d3ce6b16461ac64685cfed89a6131957a2e75636aac9b538f3f3196"
+      "sha256": "95c929872b48ff281e8723be7607b2631a39b5c2ed0098df5ee402501855f121"
     },
     "lib/xwork/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "96dd9144f678fbef576d4b34336c0b4962b76847c2265b7b56b74b179b9792c7"
+      "sha256": "b3bfb895ad3829deb9ce7cbe698f4f20b6aa896358ccb20f838a85d9e0ed58ae"
     },
     "lib/xws-client/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "a93021b273fbd53e89a6465bb798b98f05be1bd6b659e8455b572a78062859d6"
+      "sha256": "52de547502c5c90f5387e4c6a7c88bc58f95210c04f09bed1e5943426a51b60f"
     },
     "lib/xws-group/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "6f59de09deca7c9aef94da40596a9290f1a3bf55891ec8835bb42481acc465ca"
+      "sha256": "9b348712e2c971054431d8fdbb817a5c7671aa5fa17d57b2bd7dc6354aff327c"
     },
     "lib/xws-server/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "ee20c97008b264780fc4c8e7f4a929e5189575868efa9d02bb29abe6749df90a"
+      "sha256": "3dc6231ba8ff208c917433e6d94960525d04421412796d8f3561541ccc6c07c4"
     },
     "lib/xws/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "8666d68657f8551beea68019ebd33055dfb42dfff39553120efa1a59afac43f9"
+      "sha256": "c75e78eedfacef18d9a0de36a3efd264eb47681f80f3254520c95e6f2c7b7da4"
     },
     "src/script/import_xacme.inc": {
       "generated": true,
@@ -3929,7 +3933,7 @@
     },
     "src/script/import_xrt.inc": {
       "generated": true,
-      "sha256": "87236461a1805f394f8360a679a3d36a8a01cc7b859303491cb13ca6adaf2b7c"
+      "sha256": "50e35e54d2df3da47a702caec71e857e22f78f62a4b8ae2b264515f91d0c4318"
     },
     "src/script/import_xrudp.inc": {
       "generated": true,
