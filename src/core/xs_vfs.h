@@ -71,6 +71,7 @@ int XS_VfsEntryCount(void);
 #define XS_VFS_TRAILER_SIZE 24u
 #define XS_VFS_HEADER_SIZE  64u
 #define XS_VFS_MAX_ENTRIES  100000u
+#define XS_VFS_MAX_PATH_BYTES 4096u
 #define XS_VFS_MAX_ENTRY_ORIG_SIZE  UINT64_C(1024 * 1024 * 1024)
 
 static const uint8_t XS_VFS_TRAILER_MAGIC[8] = { 'X','S','V','P','A','C','K',0 };
@@ -174,13 +175,34 @@ static bool XS_VfsReadAt(uint64_t uOffset, void* pBuffer, size_t iSize)
 /* 路径规范：拒绝绝对/反斜杠/.. 段；压缩重复斜杠；返回 malloc 副本或 NULL */
 /* ------------------------------------------------------------------ */
 
+/* Archive entries must already be canonical. Validate a bounded byte span
+ * without allocating or requiring a trailing NUL; all producers/readers share it. */
+static bool XS_VfsArchivePathValid(const char* sPath, size_t iLength)
+{
+	size_t iSegment = 0;
+	if ( iLength == 0 || !XS_TextValid(sPath, iLength, XS_VFS_MAX_PATH_BYTES) )
+		return false;
+	for ( size_t i = 0; i <= iLength; i++ ) {
+		if ( i < iLength && sPath[i] == '\\' ) return false;
+		if ( i == iLength || sPath[i] == '/' ) {
+			size_t n = i - iSegment;
+			if ( n == 0 ||
+			     (n == 1 && sPath[iSegment] == '.') ||
+			     (n == 2 && sPath[iSegment] == '.' && sPath[iSegment + 1] == '.') )
+				return false;
+			iSegment = i + 1;
+		}
+	}
+	return true;
+}
+
 static char* XS_VfsNormalizePath(const char* sPath, uint32_t* pLen)
 {
 	size_t n = sPath != NULL ? strlen(sPath) : 0;
 	char* sOut;
 	size_t j = 0;
 
-	if ( n == 0 || n > 4096 ) return NULL;
+	if ( n == 0 || n > XS_VFS_MAX_PATH_BYTES ) return NULL;
 	sOut = (char*)xrtMalloc(n + 1);
 	if ( sOut == NULL ) return NULL;
 	for ( size_t i = 0; i < n; i++ ) {
@@ -349,21 +371,11 @@ bool XS_VfsBootstrap(void)
 			uPathLen = XS_VfsRd16(pIndex + iPos);
 			iPos += 2;
 			if ( uPathLen == 0 || iPos + uPathLen + 26 > (size_t)uLen ) goto fail;
+			if ( !XS_VfsArchivePathValid((const char*)pIndex + iPos, uPathLen) ) goto fail;
 			pE->sPath = (char*)xrtMalloc(uPathLen + 1);
 			if ( pE->sPath == NULL ) goto fail;
 			memcpy(pE->sPath, pIndex + iPos, uPathLen);
 			pE->sPath[uPathLen] = 0;
-			/* 打包侧已规范；装载侧再做逃逸防御 */
-			{
-				uint32_t uCheck = 0;
-				char* sNorm = XS_VfsNormalizePath(pE->sPath, &uCheck);
-				if ( sNorm == NULL || uCheck != uPathLen ||
-				     strcmp(sNorm, pE->sPath) != 0 ) {
-					xrtFree(sNorm);
-					goto fail;
-				}
-				xrtFree(sNorm);
-			}
 			pE->PathLen = uPathLen;
 			iPos += uPathLen;
 			pE->Method = pIndex[iPos];

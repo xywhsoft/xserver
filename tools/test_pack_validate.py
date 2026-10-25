@@ -47,9 +47,10 @@ def check(name: str, cond: bool, detail: str = "") -> None:
         print(f"  FAIL: {name} {detail}")
 
 
-def run_xs(exe: Path, *args: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
+def run_xs(exe: Path, *args: str, cwd: Path | None = None,
+           timeout: float = 120) -> subprocess.CompletedProcess:
     return subprocess.run([str(exe), *args], capture_output=True, text=True,
-                          encoding="utf-8", errors="replace", timeout=120,
+                          encoding="utf-8", errors="replace", timeout=timeout,
                           cwd=str(cwd or ROOT))
 
 
@@ -224,7 +225,7 @@ def main() -> int:
               (out / "wwwroot" / "a.txt").read_text(encoding="utf-8")
               == "hello-pack-validate\n")
 
-        def malicious(name: str, mutate, err_hint: str) -> None:
+        def malicious(name: str, mutate, err_hint: str, *, boot: bool = False) -> None:
             data = bytearray(packed.read_bytes())
             arc = Archive(data)
             mutate(arc)
@@ -239,6 +240,17 @@ def main() -> int:
                   err_hint in (r.stdout + r.stderr), r.stdout + r.stderr)
             written = list(outdir.rglob('*')) if outdir.exists() else []
             check(f"{name}: nothing extracted", not written, str(written[:5]))
+            if boot:
+                bad.chmod(bad.stat().st_mode | 0o111)
+                try:
+                    r = run_xs(bad, cwd=tmp_path, timeout=5)
+                except subprocess.TimeoutExpired:
+                    check(f'{name}: runtime rejects archive before startup', False,
+                          'invalid archive did not stop startup within 5 seconds')
+                else:
+                    check(f'{name}: runtime rejects archive before startup',
+                          r.returncode != 0 and 'app pack invalid' in r.stdout,
+                          r.stdout + r.stderr)
 
         def swap_escape_path(a: Archive) -> None:
             e = next(e for e in a.entries() if e["path"] == "wwwroot/a.txt")
@@ -246,6 +258,16 @@ def main() -> int:
 
         # ---- 条目路径逃逸(等长替换,CRC 自洽) ----
         malicious("escape", swap_escape_path, "unsafe entry path")
+
+        for name, path in [
+                ('backslash-path', b'wwwroot\\a.txt'),
+                ('absolute-path', b'/wwroot/a.txt'),
+                ('trailing-slash', b'wwwroot/a.tx/'),
+                ('duplicate-slash', b'wwwroot//.txt'),
+                ('dot-segment', b'wwwroot/./txt')]:
+            malicious(name, lambda a, path=path: a.patch_path(
+                next(e for e in a.entries() if e['path'] == 'wwwroot/a.txt'), path),
+                'unsafe entry path', boot=True)
 
         # ---- 条目数据范围越界:DataOffset 指到索引区之外 ----
         malicious("range",
@@ -302,6 +324,19 @@ def main() -> int:
         r = run_xs(exe, 'pack', str(tmp_path/'absent-site'), '-o', str(preserved))
         check('failed pack preserves destination', r.returncode != 0 and
               preserved.read_bytes() == b'previous valid output')
+        if os.name != 'nt':
+            unsafe_site = tmp_path/'unsafe-site'
+            unsafe_site.mkdir()
+            (unsafe_site/'xs.json').write_text('{}', encoding='utf-8')
+            (unsafe_site/'bad\\name.txt').write_text('payload', encoding='utf-8')
+            unsafe_output = tmp_path/'unsafe-output.exe'
+            unsafe_output.write_bytes(b'previous valid output')
+            r = run_xs(exe, 'pack', str(unsafe_site), '-o', str(unsafe_output))
+            check('source path rejected by archive readers cannot be published',
+                  r.returncode != 0 and 'unsafe entry path' in r.stdout and
+                  unsafe_output.read_bytes() == b'previous valid output', r.stdout + r.stderr)
+            check('unsafe source path fails before compression',
+                  'compressing' not in r.stdout, r.stdout + r.stderr)
         oversized = tmp_path/'oversized-site'
         oversized.mkdir()
         (oversized/'xs.json').write_text('{}', encoding='utf-8')

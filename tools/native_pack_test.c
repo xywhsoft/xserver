@@ -186,10 +186,35 @@ static void check_read(void)
 	read_fails(3);
 }
 
+static void check_paths(void)
+{
+	static const char* valid[] = {
+		"a", "a/b.txt", ".hidden", "a/.well-known/key", "a/.../b", "a/..suffix"
+	};
+	static const char* invalid[] = {
+		"", "/a", "a/", "a//b", ".", "..", "./a", "../a", "a/./b", "a/../b", "a\\b"
+	};
+	const char bounded[] = {'a', '/', 'b'};
+	const char embedded_nul[] = {'a', 0, 'b'};
+	char long_path[XS_VFS_MAX_PATH_BYTES + 1u];
+	for ( size_t i = 0; i < sizeof(valid) / sizeof(valid[0]); i++ )
+		assert(XS_VfsArchivePathValid(valid[i], strlen(valid[i])));
+	for ( size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); i++ )
+		assert(!XS_VfsArchivePathValid(invalid[i], strlen(invalid[i])));
+	assert(!XS_VfsArchivePathValid(NULL, 0));
+	assert(!XS_VfsArchivePathValid(NULL, 1));
+	assert(XS_VfsArchivePathValid(bounded, sizeof(bounded)));
+	assert(!XS_VfsArchivePathValid(embedded_nul, sizeof(embedded_nul)));
+	memset(long_path, 'a', sizeof(long_path));
+	assert(XS_VfsArchivePathValid(long_path, XS_VFS_MAX_PATH_BYTES));
+	assert(!XS_VfsArchivePathValid(long_path, sizeof(long_path)));
+}
+
 int main(void)
 {
 	check_walk();
 	check_read();
-	puts("PASS native pack I/O boundaries");
+	check_paths();
+	puts("PASS native pack I/O and canonical path boundaries");
 	return 0;
 }

@@ -519,22 +519,9 @@ static bool XS_PackParse(const char* sExe, bool bRequireArchive,
 			}
 			memcpy(pOut->pEntries[i].sPath, pIndex + iPos, nRel);
 			pOut->pEntries[i].sPath[nRel] = 0;
-			/* 路径规范化校验（拒绝 ../、反斜杠、首/尾/重复斜杠等
-			 * 逃逸形态），与运行时 XS_VfsLoad 相同：规范化结果须与
-			 * 原文完全一致，否则 extract 会写到目标目录之外 */
-			{
-				uint32_t uNormLen = 0;
-				char* sNorm = XS_VfsNormalizePath(
-					pOut->pEntries[i].sPath, &uNormLen);
-
-				if ( sNorm == NULL || uNormLen != nRel ||
-				     strcmp(sNorm, pOut->pEntries[i].sPath) != 0 ) {
-					xrtFree(sNorm);
-					snprintf(sErr, iErrCap, "unsafe entry path: %s",
-						pOut->pEntries[i].sPath);
-					goto malformed;
-				}
-				xrtFree(sNorm);
+			if ( !XS_VfsArchivePathValid(pOut->pEntries[i].sPath, nRel) ) {
+				snprintf(sErr, iErrCap, "unsafe entry path: %s", pOut->pEntries[i].sPath);
+				goto malformed;
 			}
 			iPos += nRel;
 			pOut->pEntries[i].Method = pIndex[iPos];
@@ -701,6 +688,9 @@ static int XS_PackDoPack(const char* sSiteDir, const char* sOut)
 	iIndexCap = 64;
 	for ( i = 0; i < tList.nCount; i++ ) {
 		size_t nRel = strlen(tList.pFiles[i].sRel);
+		if ( !XS_VfsArchivePathValid(tList.pFiles[i].sRel, nRel) ) {
+			printf("[pack] unsafe entry path: %s\n", tList.pFiles[i].sRel); goto done;
+		}
 		if ( nRel > UINT16_MAX || !XS_SizeAdd(iIndexCap, 40u + nRel, &iIndexCap) ||
 		     iIndexCap > (64u << 20) ) {
 			printf("[pack] index or entry path over limit\n"); goto done;
