@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
 import socket
 import struct
 import subprocess
@@ -68,6 +70,61 @@ def make_site(dir_: Path) -> None:
                    "host_default": {"enabled": True, "name": "h", "host": "h.local",
                                     "path": "wwwroot", "devlang": "c",
                                     "devfile": "main.c"}}]}), encoding="utf-8")
+
+
+def check_unicode_paths(exe: Path, tmp: Path) -> None:
+    base = tmp / '中文路径-🌍'
+    base.mkdir()
+    local_exe = base / ('工具.exe' if os.name == 'nt' else '工具')
+    shutil.copy2(exe, local_exe)
+    site = base / '站点'
+    make_site(site)
+    (site/'wwwroot'/'a.txt').rename(site/'wwwroot'/'内容-🌍.txt')
+    (site/'空文件').write_bytes(b'')
+    (site/'压缩内容.txt').write_bytes(b'compressed content\n' * 1024)
+    packed = base/'归档.exe'
+    result = run_xs(local_exe, 'pack', str(site), '-o', str(packed))
+    check('Unicode executable, site and entry paths pack successfully',
+          result.returncode == 0, result.stdout + result.stderr)
+    if result.returncode != 0:
+        return
+    result = run_xs(local_exe, 'pack', '--list', str(packed))
+    check('Unicode archive path lists successfully', result.returncode == 0 and
+          '内容-🌍.txt' in result.stdout, result.stdout + result.stderr)
+    extracted = base/'解包'
+    result = run_xs(local_exe, 'pack', '--extract', str(packed), '-d', str(extracted))
+    check('Unicode extract preserves empty, stored and compressed files',
+          result.returncode == 0 and all(
+              (extracted/path.relative_to(site)).read_bytes() == path.read_bytes()
+              for path in site.rglob('*') if path.is_file()), result.stdout + result.stderr)
+    stripped = base/'剥包.exe'
+    result = run_xs(local_exe, 'pack', '--strip', str(packed), '-o', str(stripped))
+    check('Unicode strip restores exact original executable', result.returncode == 0 and
+          stripped.read_bytes() == exe.read_bytes(), result.stdout + result.stderr)
+    repacked = base/'再次打包.exe'
+    packed.chmod(packed.stat().st_mode | 0o111)
+    result = run_xs(packed, 'pack', str(site), '-o', str(repacked))
+    check('Unicode packed executable replaces its previous archive', result.returncode == 0 and
+          Archive(bytearray(repacked.read_bytes())).header_off == exe.stat().st_size,
+          result.stdout + result.stderr)
+
+
+def make_sparse_file(path: Path, size: int) -> None:
+    with path.open('wb') as stream:
+        if os.name == 'nt':
+            import ctypes
+            import msvcrt
+            from ctypes import wintypes
+            ioctl = ctypes.WinDLL('kernel32', use_last_error=True).DeviceIoControl
+            ioctl.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPVOID,
+                              wintypes.DWORD, wintypes.LPVOID, wintypes.DWORD,
+                              ctypes.POINTER(wintypes.DWORD), wintypes.LPVOID]
+            ioctl.restype = wintypes.BOOL
+            returned = wintypes.DWORD()
+            if not ioctl(msvcrt.get_osfhandle(stream.fileno()), 0x900C4,
+                         None, 0, None, 0, ctypes.byref(returned), None):
+                raise ctypes.WinError(ctypes.get_last_error())
+        stream.truncate(size)
 
 
 class Archive:
@@ -157,6 +214,7 @@ def main() -> int:
         check("wwwroot/a.txt is STORE method",
               by_path.get("wwwroot/a.txt", {}).get("method") == 0,
               str(by_path))
+        check_unicode_paths(exe, tmp_path)
 
         # ---- 正向:校验不误伤合法归档 ----
         out = tmp_path / "out-good"
@@ -244,6 +302,18 @@ def main() -> int:
         r = run_xs(exe, 'pack', str(tmp_path/'absent-site'), '-o', str(preserved))
         check('failed pack preserves destination', r.returncode != 0 and
               preserved.read_bytes() == b'previous valid output')
+        oversized = tmp_path/'oversized-site'
+        oversized.mkdir()
+        (oversized/'xs.json').write_text('{}', encoding='utf-8')
+        try:
+            make_sparse_file(oversized/'large.bin', (1 << 30) + 1)
+        except OSError as error:
+            print(f'  SKIP: sparse file fixture unavailable: {error}')
+        else:
+            r = run_xs(exe, 'pack', str(oversized), '-o', str(preserved))
+            check('oversized source rejected before compression and preserves destination',
+                  r.returncode != 0 and 'entry size over limit' in r.stdout and
+                  preserved.read_bytes() == b'previous valid output', r.stdout + r.stderr)
         directory_target = tmp_path/'directory-target'
         directory_target.mkdir()
         (directory_target/'marker').write_text('preserved', encoding='utf-8')

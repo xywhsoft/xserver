@@ -164,29 +164,36 @@ static uint8_t* XS_PackUnlzma(const uint8_t* pSrc, size_t iSrcSize, uint64_t uOr
 	return pOut;
 }
 
-/* 文件整体读写（工具模式走 libc FILE*，路径全 ASCII/UTF-8 场景够用；
- * 自身 exe 路径来自系统 API，输出路径来自 argv——与 xrtOpen 等价的
- * UTF-8 处理依赖宿主平台 fopen 行为，Windows 10+ 默认 UTF-8 代码页场景成立；
- * 非 ASCII 输出路径在旧系统上可能失败，文档建议输出路径用 ASCII） */
-static uint8_t* XS_PackReadWhole(const char* sPath, size_t* pSize)
+/* UTF-8 paths and 64-bit sizes share the runtime file contract. Keep libc
+ * allocation ownership, and reject oversized/changing inputs before publishing. */
+static uint8_t* XS_PackReadWhole(const char* sPath, uint64_t uLimit, size_t* pSize)
 {
-	FILE* f = fopen(sPath, "rb");
-	uint8_t* pData;
-	long n;
+	xfile hFile = xrtOpen(sPath, XFILE_READ);
+	uint8_t* pData = NULL;
+	uint8_t uExtra;
+	uint64 uSize = 0, uFinalSize = 0;
+	size_t iRead = 0;
+	bool bOk = false;
 
-	if ( f == NULL ) return NULL;
-	if ( fseek(f, 0, SEEK_END) != 0 || (n = ftell(f)) < 0 || fseek(f, 0, SEEK_SET) != 0 ) {
-		fclose(f);
-		return NULL;
-	}
-	pData = (uint8_t*)malloc((size_t)n + 1);
-	if ( pData == NULL || (n > 0 && fread(pData, 1, (size_t)n, f) != (size_t)n) ) {
+	*pSize = 0;
+	if ( hFile == NULL ) return NULL;
+	if ( !xrtFileSize(hFile, &uSize) || uSize > uLimit || uSize > SIZE_MAX - 1u )
+		goto done;
+	pData = (uint8_t*)malloc((size_t)uSize + 1u);
+	if ( pData == NULL ) goto done;
+	if ( !xrtReadFull(hFile, pData, (size_t)uSize, &iRead) || iRead != (size_t)uSize ||
+	     !xrtRead(hFile, &uExtra, 1u, &iRead) || iRead != 0 ||
+	     !xrtFileSize(hFile, &uFinalSize) || uFinalSize != uSize )
+		goto done;
+	pData[(size_t)uSize] = 0;
+	bOk = true;
+done:
+	if ( !xrtClose(hFile) ) bOk = false;
+	if ( !bOk ) {
 		free(pData);
-		fclose(f);
 		return NULL;
 	}
-	fclose(f);
-	*pSize = (size_t)n;
+	*pSize = (size_t)uSize;
 	return pData;
 }
 
@@ -304,13 +311,14 @@ static bool XS_PackWalk(XS_PackList* pList, const char* sAbsDir, const char* sRe
 	}
 	xdir hDir = xrtDirOpen(sAbsDir, XDIR_STAT);
 	xdirentry tEntry;
+	xdirnext eNext;
 
 	if ( hDir == NULL ) {
 		snprintf(pList->sError, sizeof(pList->sError),
 			"cannot open directory: %s", sAbsDir);
 		return false;
 	}
-	while ( xrtDirNext(hDir, &tEntry) == XDIR_NEXT_ITEM ) {
+	while ( (eNext = xrtDirNext(hDir, &tEntry)) == XDIR_NEXT_ITEM ) {
 		char aName[XS_PATH_BYTES_LIMIT + 1u];
 		char* sAbs;
 		char* sRel2;
@@ -345,6 +353,12 @@ static bool XS_PackWalk(XS_PackList* pList, const char* sAbsDir, const char* sRe
 			if ( !bOk ) { xrtDirClose(hDir); return false; }
 		}
 		else if ( tEntry.Info.Type == XFILE_TYPE_FILE ) {
+			if ( tEntry.Info.Size > XS_VFS_MAX_ENTRY_ORIG_SIZE ) {
+				snprintf(pList->sError, sizeof(pList->sError), "entry size over limit: %s", sRel2);
+				free(sAbs); free(sRel2);
+				xrtDirClose(hDir);
+				return false;
+			}
 			bool bOk = XS_PackListAdd(pList, sRel2, sAbs);
 			free(sAbs); free(sRel2);
 			if ( !bOk ) {
@@ -357,7 +371,15 @@ static bool XS_PackWalk(XS_PackList* pList, const char* sAbsDir, const char* sRe
 			free(sAbs); free(sRel2);   /* 链接/socket 等跳过 */
 		}
 	}
-	xrtDirClose(hDir);
+	if ( eNext != XDIR_NEXT_END ) {
+		snprintf(pList->sError, sizeof(pList->sError), "cannot read directory: %s", sAbsDir);
+		xrtDirClose(hDir);
+		return false;
+	}
+	if ( !xrtDirClose(hDir) ) {
+		snprintf(pList->sError, sizeof(pList->sError), "cannot close directory: %s", sAbsDir);
+		return false;
+	}
 	return true;
 }
 
@@ -408,7 +430,7 @@ static bool XS_PackParse(const char* sExe, bool bRequireArchive,
 	uint32_t i;
 
 	memset(pOut, 0, sizeof(*pOut));
-	pOut->pWhole = XS_PackReadWhole(sExe, &pOut->iWholeSize);
+	pOut->pWhole = XS_PackReadWhole(sExe, SIZE_MAX - 1u, &pOut->iWholeSize);
 	if ( pOut->pWhole == NULL ) {
 		snprintf(sErr, iErrCap, "cannot read: %s", sExe);
 		return false;
@@ -697,7 +719,7 @@ static int XS_PackDoPack(const char* sSiteDir, const char* sOut)
 	for ( i = 0; i < tList.nCount; i++ ) {
 		XS_PackFile* pF = &tList.pFiles[i];
 		size_t iOrig = 0, iComp = 0;
-		uint8_t* pOrig = XS_PackReadWhole(pF->sAbs, &iOrig);
+		uint8_t* pOrig = XS_PackReadWhole(pF->sAbs, XS_VFS_MAX_ENTRY_ORIG_SIZE, &iOrig);
 		uint8_t* pComp = NULL;
 		uint8_t uMethod = 0;
 		uint32_t uCrc;

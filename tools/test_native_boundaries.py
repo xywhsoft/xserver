@@ -26,6 +26,13 @@ def main():
                         str(ROOT/'tcc/LzmaDec.c'),
                         '-o', str(exe), *libraries], cwd=ROOT, check=True)
         subprocess.run([str(exe)], cwd=ROOT, check=True, timeout=60)
+        # This probe replaces file/dir APIs with deterministic failure sources.
+        # Whole-program optimization removes the uncalled pack/VFS entry points.
+        pack_exe = exe.with_name('pack-' + exe.name)
+        subprocess.run([args.cc, *flags, '-O1', '-fwhole-program',
+                        str(ROOT/'tools/native_pack_test.c'), '-o', str(pack_exe)],
+                       cwd=ROOT, check=True)
+        subprocess.run([str(pack_exe)], cwd=ROOT, check=True, timeout=60)
     return 0
 
 
