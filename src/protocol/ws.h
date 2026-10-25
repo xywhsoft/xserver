@@ -20,6 +20,7 @@
 #include "../runtime/vhost.h"
 #include "../script/script.h"
 #include "http.h"
+#include "../runtime/byte_budget.h"
 
 #define XS_WS_MAX_FIELDS		16
 #define XS_WS_MESSAGE_RETAIN_LIMIT	(256 * 1024)
@@ -33,7 +34,8 @@ typedef struct XS_WsRuntime {
 	xhttp1limits		tLimits;
 	size_t			iReceiveLimit;	/* 握手期线路硬边界，防止 ReadLimit 满后永久 MORE */
 	str			sProtocol;	/* ws_protocol 旋钮（可空） */
-	uint64			iMessageLimit;	/* 0 = 内核默认 */
+	uint64			iMessageLimit;	/* effective limit shared with the native stream */
+	XS_ByteBudget		tMessageBudget;
 	uint64			iIdleMs;	/* 0 = 显式关闭；缺省 XS_IDLE_TIMEOUT_DEFAULT_MS */
 	XS_GenerationTimer	tSweepTimer;
 	struct XS_WsConn*	pConns;		/* 活动连接链（停机批量收口） */
@@ -109,6 +111,15 @@ static bool XS_WsConnRetain(XS_WsConn* pConn)
 	return pConn != NULL && xrtRefRetain(&pConn->iReferences) > 0;
 }
 
+static void XS_WsMessageFree(XS_WsConn* pConn)
+{
+	xrtFree(pConn->pMsg);
+	(void)XS_ByteBudgetRelease(&pConn->pRuntime->tMessageBudget, pConn->iMsgCap);
+	pConn->pMsg = NULL;
+	pConn->iMsgCap = 0;
+	pConn->iMsgSize = 0;
+}
+
 static void XS_WsConnRelease(XS_WsConn* pConn)
 {
 	XS_ScriptRuntime* pScript;
@@ -117,7 +128,7 @@ static void XS_WsConnRelease(XS_WsConn* pConn)
 	if ( pConn == NULL || xrtRefRelease(&pConn->iReferences) != 0 ) return;
 	pScript = pConn->pScript;
 	pGeneration = pConn->pGeneration;
-	xrtFree(pConn->pMsg);
+	XS_WsMessageFree(pConn);
 	xrtFree(pConn);
 	XS_ScriptRelease(pScript);
 	XS_GenerationConnectionRelease(pGeneration);
@@ -490,8 +501,16 @@ static void XS_WsOnMessageData(xwsstream* pStream, xbytesview Data, ptr pData)
 			}
 			iNewCap *= 2u;
 		}
+		if ( (uint64)iNewCap > iLimit ) iNewCap = (size_t)iLimit;
+		size_t iReservation = iNewCap - pConn->iMsgCap;
+		if ( !XS_ByteBudgetReserve(&pConn->pRuntime->tMessageBudget, iReservation) ) {
+			pConn->bMessageFailed = true;
+			(void)xrtWsStreamClose(pStream, 1013, XRT_STR_LITERAL("message memory budget"));
+			goto Done;
+		}
 		pNew = (unsigned char*)xrtRealloc(pConn->pMsg, iNewCap);
 		if ( pNew == NULL ) {
+			(void)XS_ByteBudgetRelease(&pConn->pRuntime->tMessageBudget, iReservation);
 			pConn->bMessageFailed = true;
 			(void)xrtWsStreamClose(pStream, 1011, XRT_STR_LITERAL("oom"));
 			goto Done;
@@ -531,9 +550,7 @@ static void XS_WsOnMessageEnd(xwsstream* pStream, ptr pData)
 	pConn->iMsgSize = 0;
 	/* 小/中等消息复用累积器；单次大消息的峰值不保留到连接终态。 */
 	if ( pConn->iMsgCap > XS_WS_MESSAGE_RETAIN_LIMIT ) {
-		xrtFree(pConn->pMsg);
-		pConn->pMsg = NULL;
-		pConn->iMsgCap = 0;
+		XS_WsMessageFree(pConn);
 	}
 	XS_WsStreamCallbackLeave(pConn, pStream);
 }
@@ -848,6 +865,20 @@ static bool XS_WsStartEx(
 	if ( !XS_CustomReadUInt(pServer->Custom, "ws_message_limit", &iVal,
 		sErr, iErrCap) ) return false;
 	pRuntime->iMessageLimit = iVal;
+	if ( pRuntime->iMessageLimit == 0 ) {
+		xwsstreamconfig tDefault;
+		xrtWsStreamConfigInit(&tDefault);
+		pRuntime->iMessageLimit = tDefault.MessageLimit;
+	}
+	if ( pRuntime->iMessageLimit > SIZE_MAX ) {
+		snprintf(sErr, iErrCap, "ws_message_limit exceeds addressable memory"); return false;
+	}
+	if ( !XS_CustomReadUIntDefault(pServer->Custom, "ws_memory_limit", &iVal,
+		XS_WS_MEMORY_LIMIT_DEFAULT, sErr, iErrCap) ) return false;
+	if ( iVal < pRuntime->iMessageLimit || iVal > SIZE_MAX ) {
+		snprintf(sErr, iErrCap, "ws_memory_limit must cover ws_message_limit and fit size_t"); return false;
+	}
+	XS_ByteBudgetInit(&pRuntime->tMessageBudget, iVal);
 	if ( !XS_CustomReadUIntDefault(pServer->Custom, "idle_timeout", &iVal,
 		XS_IDLE_TIMEOUT_DEFAULT_MS, sErr, iErrCap) ) return false;
 	pRuntime->iIdleMs = iVal;

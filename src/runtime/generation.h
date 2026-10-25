@@ -14,6 +14,13 @@
  */
 
 #include "../sdk/xsbase.h"
+#include "../core/limits.h"
+
+typedef enum XS_GenerationPublishState {
+	XS_GENERATION_PREPARING = 0,
+	XS_GENERATION_PUBLISHED = 1,
+	XS_GENERATION_DISCARDED = 2
+} XS_GenerationPublishState;
 
 typedef struct XS_ServerGeneration XS_ServerGeneration;
 typedef struct XS_GenerationTimer XS_GenerationTimer;
@@ -38,6 +45,7 @@ struct XS_ServerGeneration {
 	uint64			iCookie;	/* 进程内单调唯一；TLS 选择与 Accept 绑定 */
 	xatomic32		tRetired;	/* 0 active；1 正在发布终态；2 已完整发布 */
 	xatomic32		tConnections;	/* 仅用于状态/测试；安全性由引用决定 */
+	uint32			iConnectionLimit;
 	xatomic32		tActivities;	/* 会进入脚本的连接/UDP 回调/lifecycle timer */
 	xatomic32		tQuiesced;	/* 0 未排队，1 reaper 中，2 已通知 */
 	xmutex*			pTimerLock;
@@ -67,6 +75,14 @@ typedef struct XS_GenerationReaper {
 
 static XS_GenerationReaper g_XS_GenerationReaper;
 static xatomic64 g_XS_ServerGenerationCookie;
+static xatomic32 g_XS_RetiredGenerations;
+
+static bool XS_GenerationRetirementFits(uint32 iAdditional)
+{
+	uint32 iCurrent = xrtAtomic32Load(&g_XS_RetiredGenerations, XMEMORY_ACQUIRE);
+	return iCurrent <= XS_RETIRED_GENERATIONS_LIMIT &&
+		iAdditional <= XS_RETIRED_GENERATIONS_LIMIT - iCurrent;
+}
 
 static void XS_GenerationRelease(XS_ServerGeneration* pGeneration);
 
@@ -84,6 +100,7 @@ static void XS_GenerationReaperRun(
 		XS_GenerationRelease(pGeneration);
 	} else if ( iWork == XS_GENERATION_REAPER_FINALIZE ) {
 		pGeneration->procFinalize(pGeneration);
+		xrtAtomic32FetchSub(&g_XS_RetiredGenerations, 1, XMEMORY_ACQ_REL);
 	}
 }
 
@@ -133,6 +150,7 @@ static bool XS_GenerationReaperInit(void)
 {
 	memset(&g_XS_GenerationReaper, 0, sizeof(g_XS_GenerationReaper));
 	xrtAtomic64Init(&g_XS_ServerGenerationCookie, 0);
+	xrtAtomic32Init(&g_XS_RetiredGenerations, 0);
 	g_XS_GenerationReaper.pLock = xrtMutexCreate();
 	g_XS_GenerationReaper.pCond = xrtCondCreate();
 	if ( g_XS_GenerationReaper.pLock == NULL ||
@@ -227,6 +245,13 @@ static XS_ServerGeneration* XS_GenerationCreate(XS_ServerInfo* pServer)
 		return NULL;
 	}
 	pGeneration->iReferences = 1;
+	pGeneration->iConnectionLimit = XS_CONNECTIONS_LIMIT_DEFAULT;
+	if ( pServer->Custom != NULL ) {
+		xvalue* pLimit = xrtValueObjectGet(pServer->Custom, XRT_STR_LITERAL("connection_limit"));
+		int64 iLimit;
+		if ( pLimit != NULL && xrtValueGetInt(pLimit, &iLimit) && iLimit > 0 && iLimit <= UINT32_MAX )
+			pGeneration->iConnectionLimit = (uint32)iLimit;
+	}
 	pGeneration->iCookie = xrtAtomic64FetchAdd(
 		&g_XS_ServerGenerationCookie, 1, XMEMORY_RELAXED) + 1u;
 	/* 0 专门表示“没有选择 cookie”；仅理论上的 2^64 回绕需要跳过。 */
@@ -428,12 +453,20 @@ static void XS_GenerationTimerCancelOwner(XS_ServerGeneration* pGeneration, void
 
 static bool XS_GenerationConnectionAcquire(XS_ServerGeneration* pGeneration)
 {
-	if ( !XS_GenerationIsPublished(pGeneration) || !XS_GenerationRetain(pGeneration) ) {
-		return false;
+	bool bOk = false;
+	if ( pGeneration == NULL ) return false;
+	/* Admission and retirement share the timer/activity gate. A retiring
+	 * generation cannot observe zero activities before this acquire is visible. */
+	xrtMutexLock(pGeneration->pTimerLock);
+	if ( XS_GenerationIsPublished(pGeneration) && !XS_GenerationIsRetired(pGeneration) &&
+	     xrtAtomic32Load(&pGeneration->tConnections, XMEMORY_RELAXED) < pGeneration->iConnectionLimit &&
+	     XS_GenerationRetain(pGeneration) ) {
+		xrtAtomic32FetchAdd(&pGeneration->tConnections, 1, XMEMORY_RELAXED);
+		xrtAtomic32FetchAdd(&pGeneration->tActivities, 1, XMEMORY_ACQ_REL);
+		bOk = true;
 	}
-	xrtAtomic32FetchAdd(&pGeneration->tConnections, 1, XMEMORY_RELAXED);
-	xrtAtomic32FetchAdd(&pGeneration->tActivities, 1, XMEMORY_ACQ_REL);
-	return true;
+	xrtMutexUnlock(pGeneration->pTimerLock);
+	return bOk;
 }
 
 static void XS_GenerationConnectionRelease(XS_ServerGeneration* pGeneration)
@@ -466,10 +499,12 @@ static void XS_GenerationRetire(
 		return;
 	}
 	XS_GenerationDiscard(pGeneration);
+	xrtMutexLock(pGeneration->pTimerLock);
 	/* 先用 preparing 状态封住新 timer/activity，再发布全部终态字段。
 	 * MaybeQuiesce 只接受状态 2，因此不会并发读取尚未写完的回调指针。 */
 	if ( !xrtAtomic32CompareExchange(&pGeneration->tRetired, &iExpected, 1,
 	     XMEMORY_ACQ_REL, XMEMORY_ACQUIRE) ) {
+		xrtMutexUnlock(pGeneration->pTimerLock);
 		return;
 	}
 	pGeneration->pDriverRuntime = pDriverRuntime;
@@ -477,9 +512,9 @@ static void XS_GenerationRetire(
 	pGeneration->bFreeServer = bFreeServer;
 	pGeneration->procQuiesce = procQuiesce;
 	pGeneration->procFinalize = procFinalize;
+	xrtAtomic32FetchAdd(&g_XS_RetiredGenerations, 1, XMEMORY_ACQ_REL);
 	xrtAtomic32Store(&pGeneration->tRetired, 2, XMEMORY_RELEASE);
 	/* lifecycle timer 不属于要继续排空的连接；退役即请求其终态取消。 */
-	xrtMutexLock(pGeneration->pTimerLock);
 	{
 		XS_GenerationTimer* pTimer;
 

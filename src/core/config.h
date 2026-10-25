@@ -323,6 +323,13 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 		return false;
 	}
 	pServer->RecvLimit = (size_t)iVal;
+	{
+		xvalue* pLimit = xrtValueObjectGet(pObj, XRT_STR_LITERAL("connection_limit"));
+		if ( pLimit != NULL && (!xrtValueGetInt(pLimit, &iVal) || iVal < 1 || (uint64)iVal > UINT32_MAX) ) {
+			snprintf(sErr, iErrCap, "field 'connection_limit' expect integer in range 1..4294967295");
+			return false;
+		}
+	}
 	if ( strcmp(pServer->Class, "udp") == 0 && pServer->RecvLimit > 65535u ) {
 		snprintf(sErr, iErrCap, "field 'recv_limit' exceeds UDP datagram limit 65535");
 		return false;

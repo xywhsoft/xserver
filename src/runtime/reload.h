@@ -43,6 +43,7 @@ typedef struct XS_ReloadIntent {
 	char*				sHostName;
 	bytes				pConfigData;
 	size_t				iConfigSize;
+	size_t				iSnapshotBytes;	/* config + distinct cached script bytes */
 	XS_ReloadSourceFile*		pSources;
 	uint64				iRevision;
 	bool				bSuperseded;
@@ -165,7 +166,7 @@ static uint64 XS_ReloadHashBytes(uint64 iHash, const void* pData, size_t iSize)
 }
 
 /* 快照始终拥有缓冲；磁盘读取直接接管，VFS 借用视图复制后保存。 */
-static bytes XS_ReloadReadOwnedFile(const char* sPath, size_t* piSize)
+static bytes XS_ReloadReadOwnedFile(const char* sPath, size_t iLimit, size_t* piSize)
 {
 	bool bFromVfs = false;
 	bytes pData;
@@ -173,7 +174,7 @@ static bytes XS_ReloadReadOwnedFile(const char* sPath, size_t* piSize)
 
 	if ( piSize == NULL ) return NULL;
 	*piSize = 0;
-	pData = (bytes)XS_AppReadAll(sPath, piSize, &bFromVfs);
+	pData = (bytes)XS_AppReadAllLimit(sPath, iLimit, piSize, &bFromVfs);
 	if ( pData == NULL || !bFromVfs ) return pData;
 	pCopy = (bytes)xrtMalloc(*piSize > 0 ? *piSize : 1);
 	if ( pCopy != NULL && *piSize > 0 ) memcpy(pCopy, pData, *piSize);
@@ -192,10 +193,12 @@ static bytes XS_ReloadReadSourceSnapshot(const char* sPath, size_t* piSize, void
 		if ( strcmp(pSource->sPath, sPath) == 0 ) break;
 	}
 	if ( pSource == NULL ) {
+		size_t iRemaining = XS_RELOAD_SNAPSHOT_BYTES_LIMIT - pIntent->iSnapshotBytes;
+		size_t iLimit = iRemaining < XS_SCRIPT_BYTES_LIMIT ? iRemaining : XS_SCRIPT_BYTES_LIMIT;
 		pSource = (XS_ReloadSourceFile*)xrtCalloc(1, sizeof(XS_ReloadSourceFile));
 		if ( pSource == NULL ) return NULL;
 		pSource->sPath = xrtStrDup(sPath);
-		pSource->pData = XS_ReloadReadOwnedFile(sPath, &pSource->iSize);
+		pSource->pData = XS_ReloadReadOwnedFile(sPath, iLimit, &pSource->iSize);
 		if ( pSource->sPath == NULL || pSource->pData == NULL ) {
 			xrtFree(pSource->sPath);
 			xrtFree(pSource->pData);
@@ -204,6 +207,7 @@ static bytes XS_ReloadReadSourceSnapshot(const char* sPath, size_t* piSize, void
 		}
 		pSource->pNext = pIntent->pSources;
 		pIntent->pSources = pSource;
+		pIntent->iSnapshotBytes += pSource->iSize;
 		pIntent->iRevision = XS_ReloadHashBytes(pIntent->iRevision,
 			pSource->sPath, strlen(pSource->sPath));
 		pIntent->iRevision = XS_ReloadHashBytes(pIntent->iRevision,
@@ -251,7 +255,7 @@ static bool XS_ReloadCommitBegin(void)
 
 /* 所有可失败的编译、校验和 endpoint 预绑定完成后才越过此线性点。
  * 此后新期望状态排在本 intent 之后，不再取消已经开始产生副作用的 Init。 */
-static bool XS_ReloadStageBegin(void)
+static bool XS_ReloadStageBegin(uint32 iRetiring)
 {
 	XS_ReloadIntent* pIntent = g_XS_ReloadCurrent;
 	bool bOk = false;
@@ -260,8 +264,12 @@ static bool XS_ReloadStageBegin(void)
 	xrtMutexLock(g_XS_Reload.pLock);
 	if ( !g_XS_Reload.bStopping && g_XS_Reload.pActive == pIntent &&
 	     !pIntent->bSuperseded ) {
-		pIntent->bStaging = true;
-		bOk = true;
+		if ( XS_GenerationRetirementFits(iRetiring) ) {
+			pIntent->bStaging = true;
+			bOk = true;
+		} else {
+			XS_ReloadSetError("retired generation budget exceeded; old service unchanged");
+		}
 	}
 	xrtMutexUnlock(g_XS_Reload.pLock);
 	return bOk;
@@ -413,11 +421,14 @@ static bool XS_ReloadQueryResult(XS_ReloadId iId, XS_ReloadResult* pResult)
 
 static bool XS_ReloadSnapshotConfig(XS_ReloadIntent* pIntent)
 {
-	pIntent->pConfigData = XS_ReloadReadOwnedFile(g_XS_Reload.sConfigPath, &pIntent->iConfigSize);
+	pIntent->pConfigData = XS_ReloadReadOwnedFile(g_XS_Reload.sConfigPath,
+		XS_CONFIG_BYTES_LIMIT < XS_RELOAD_SNAPSHOT_BYTES_LIMIT ?
+		XS_CONFIG_BYTES_LIMIT : XS_RELOAD_SNAPSHOT_BYTES_LIMIT, &pIntent->iConfigSize);
 	if ( pIntent->pConfigData == NULL ) {
-		XS_ReloadSetError("config snapshot read failed");
+		XS_ReloadSetError("config snapshot read failed or exceeds byte limit");
 		return false;
 	}
+	pIntent->iSnapshotBytes = pIntent->iConfigSize;
 	pIntent->iRevision = XS_ReloadHashBytes(0,
 		g_XS_Reload.sConfigPath, strlen(g_XS_Reload.sConfigPath));
 	pIntent->iRevision = XS_ReloadHashBytes(pIntent->iRevision,
@@ -1015,7 +1026,7 @@ static bool XS_ReloadServerNow(XS_App* pApp, const char* sName)
 		XS_ReloadDiscardCandidate(pNew);
 		goto Done;
 	}
-	if ( !XS_ReloadStageBegin() ) {
+	if ( !XS_ReloadStageBegin(1) ) {
 		XS_ReloadDiscardCandidate(pNew);
 		goto Done;
 	}
@@ -1226,7 +1237,14 @@ static bool XS_ReloadAllAtomicNow(XS_App* pApp)
 		XS_ReloadSetError("listener preflight failed before script staging");
 		goto Done;
 	}
-	if ( !XS_ReloadStageBegin() ) goto Done;
+	{
+		uint32 iRetiring = 0;
+		for ( i = 0; i < iDesired; i++ )
+			if ( pPlan[i].pOld != NULL && !pPlan[i].bReuse ) iRetiring++;
+		for ( i = 0; i < iCurrent; i++ )
+			if ( !pCurrentUsed[i] ) iRetiring++;
+		if ( !XS_ReloadStageBegin(iRetiring) ) goto Done;
+	}
 	for ( i = 0; i < iDesired; i++ ) {
 		if ( !pPlan[i].bReuse ) {
 			XS_ReloadInitializeCandidateScripts(pPlan[i].pNew, pPlan[i].pOld);

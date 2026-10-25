@@ -24,6 +24,8 @@ extern "C" {
  * *pFromVfs 收来源（true = 借用指针，用 XS_AppFree 释放是安全的 no-op）。
  * 失败返回 NULL。 */
 void* XS_AppReadAll(const char* sRelPath, size_t* pSize, bool* pFromVfs);
+/* Check disk growth and VFS original size before allocating/decompressing. */
+void* XS_AppReadAllLimit(const char* sRelPath, size_t iLimit, size_t* pSize, bool* pFromVfs);
 
 /* 与 XS_AppReadAll 配对的释放：VFS 借用指针为 no-op，磁盘缓冲 xrtFree。 */
 void XS_AppFree(void* pData, bool bFromVfs);
@@ -34,9 +36,11 @@ extern bool g_XS_VfsDisabled;
 #ifdef __cplusplus
 }
 #endif
+#endif /* XS_APPFILE_H */
 
 /* ================================================================== */
-#ifdef XS_APPFILE_IMPLEMENTATION
+#if defined(XS_APPFILE_IMPLEMENTATION) && !defined(XS_APPFILE_IMPLEMENTED)
+#define XS_APPFILE_IMPLEMENTED
 
 #include "lib/xrt.h"
 
@@ -45,6 +49,9 @@ extern bool g_XS_VfsDisabled;
 /* VFS 契约（xs_vfs.h 已在 main.c 以实现宏包含，这里仅声明） */
 extern bool XS_VfsActive(void);
 extern const unsigned char* XS_VfsReadAll(const char* sRelPath, size_t* pSize);
+extern int XS_VfsLookup(const char* sRelPath);
+extern uint64_t XS_VfsEntrySize(int iEntry);
+extern const unsigned char* XS_VfsEntryData(int iEntry, size_t* pSize);
 
 /* 就地反斜杠→正斜杠（用于 VFS 查找键；磁盘路径两种都合法不归一） */
 static void XS_AppToForward(char* sPath)
@@ -54,26 +61,33 @@ static void XS_AppToForward(char* sPath)
 	}
 }
 
-void* XS_AppReadAll(const char* sRelPath, size_t* pSize, bool* pFromVfs)
+void* XS_AppReadAllLimit(const char* sRelPath, size_t iLimit, size_t* pSize, bool* pFromVfs)
 {
 	str sAbs;
 	void* pData;
 
 	if ( pFromVfs != NULL ) *pFromVfs = false;
+	if ( pSize != NULL ) *pSize = 0;
 	if ( sRelPath == NULL || sRelPath[0] == '\0' ) return NULL;
 
 	/* 1) 磁盘优先：appPath 相对路径解析（绝对路径原样） */
 	sAbs = xrtPathIsAbs(sRelPath) ? xrtStrDup(sRelPath)
 	                               : xrtPathJoin(XS_AppPath(), sRelPath);
-	if ( sAbs != NULL ) {
+	if ( sAbs == NULL ) return NULL;
+	{
 		size_t iSize = 0;
+		bool bPresent;
 
-		pData = xrtFileReadAll(sAbs, &iSize);
+		pData = xrtFileReadAllLimit(sAbs, iLimit, &iSize);
+		bPresent = pData == NULL && xrtPathExists(sAbs);
 		xrtFree(sAbs);
 		if ( pData != NULL ) {
 			if ( pSize != NULL ) *pSize = iSize;
 			return pData;                        /* 磁盘赢 */
 		}
+		/* A present but unreadable/oversized override must not reveal an older
+		 * packed source or certificate as if the disk file were absent. */
+		if ( bPresent ) return NULL;
 	}
 
 	/* 2) VFS 兜底：绝对路径剥 appPath 前缀，再归一反斜杠查包 */
@@ -95,7 +109,10 @@ void* XS_AppReadAll(const char* sRelPath, size_t* pSize, bool* pFromVfs)
 		XS_AppToForward(aKey);
 		{
 			size_t iSize = 0;
-			const unsigned char* pMem = XS_VfsReadAll(aKey, &iSize);
+			int iEntry = XS_VfsLookup(aKey);
+			const unsigned char* pMem;
+			if ( iEntry < 0 || XS_VfsEntrySize(iEntry) > iLimit ) return NULL;
+			pMem = XS_VfsEntryData(iEntry, &iSize);
 
 			if ( pMem == NULL ) return NULL;
 			if ( pSize != NULL ) *pSize = iSize;
@@ -105,6 +122,11 @@ void* XS_AppReadAll(const char* sRelPath, size_t* pSize, bool* pFromVfs)
 	}
 }
 
+void* XS_AppReadAll(const char* sRelPath, size_t* pSize, bool* pFromVfs)
+{
+	return XS_AppReadAllLimit(sRelPath, SIZE_MAX, pSize, pFromVfs);
+}
+
 void XS_AppFree(void* pData, bool bFromVfs)
 {
 	if ( pData == NULL ) return;
@@ -112,4 +134,3 @@ void XS_AppFree(void* pData, bool bFromVfs)
 }
 
 #endif /* XS_APPFILE_IMPLEMENTATION */
-#endif /* XS_APPFILE_H */

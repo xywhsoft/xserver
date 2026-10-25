@@ -11,6 +11,7 @@
 
 #include "../sdk/xsbase.h"
 #include "../runtime/generation.h"
+#include "../core/xs_appfile.h"
 #include "tcc_host.h"
 
 typedef struct XS_ScriptRuntime {
@@ -201,9 +202,15 @@ static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 	}
 	pData = g_XS_ScriptReadHook != NULL ?
 		g_XS_ScriptReadHook(sDevPath, &iSize, g_XS_ScriptReadContext) :
-		XS_AppReadAll(sDevPath, &iSize, &bFromVfs);
+		XS_AppReadAllLimit(sDevPath, XS_SCRIPT_BYTES_LIMIT, &iSize, &bFromVfs);
 	if ( pData == NULL ) {
 		printf("[xs] script read failed: %s\n", sDevPath);
+		xrtFree(sDevPath);
+		return NULL;
+	}
+	if ( !XS_TextValid((const char*)pData, iSize, XS_SCRIPT_BYTES_LIMIT) ) {
+		printf("[xs] script contains NUL or exceeds byte limit: %s\n", sDevPath);
+		XS_AppFree(pData, bFromVfs);
 		xrtFree(sDevPath);
 		return NULL;
 	}

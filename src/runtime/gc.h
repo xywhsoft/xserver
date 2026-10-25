@@ -24,6 +24,8 @@ static void XS_GenerationQuiesce(XS_ServerGeneration* pGeneration)
 	uint32 i;
 
 	if ( pServer == NULL ) return;
+	printf("[xs] generation quiesced: server '%s' cookie=%llu activities=0\n",
+		pServer->Name != NULL ? pServer->Name : "?", (unsigned long long)pGeneration->iCookie);
 	XS_ScriptRequestUnitHost(pServer->DefaultHost);
 	for ( i = 0; i < pServer->HostCount; i++ ) {
 		XS_ScriptRequestUnitHost(pServer->Hosts[i]);
@@ -38,9 +40,9 @@ static void XS_GenerationFinalize(XS_ServerGeneration* pGeneration)
 	bool bFreeServer = pGeneration->bFreeServer;
 	uint32 i;
 
-	printf("[xs] generation finalized: server '%s' (connections=%u)\n",
+	printf("[xs] generation finalized: server '%s' (connections=%u) cookie=%llu\n",
 		pServer != NULL && pServer->Name != NULL ? pServer->Name : "?",
-		XS_GenerationConnectionCount(pGeneration));
+		XS_GenerationConnectionCount(pGeneration), (unsigned long long)pGeneration->iCookie);
 
 	/* 所有异步资源均已终态：此后脚本 owner 引用可安全撤销。 */
 	if ( pServer != NULL ) {

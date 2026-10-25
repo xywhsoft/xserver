@@ -3,6 +3,8 @@
 #define XRT_IMPLEMENTATION
 #include "lib/xrt.h"
 #include "src/core/config.h"
+#include "src/runtime/generation.h"
+#include "src/runtime/byte_budget.h"
 #include <assert.h>
 
 static const char* XS_AppPath(void) { return "."; }
@@ -10,6 +12,98 @@ static const char* XS_AppPath(void) { return "."; }
 static const char* valid_config =
 	"{\"services\":[{\"class\":\"http\",\"name\":\"test\",\"port\":8080,"
 	"\"host_default\":{\"devfile\":\"main.c\",\"path\":\"www\"}}]}";
+
+static xatomic32 quiesced, finalized, ready, run_workers, admissions;
+static XS_ByteBudget shared_budget;
+
+static void test_quiesce(XS_ServerGeneration* generation)
+{
+	assert(xrtAtomic32Load(&generation->tActivities, XMEMORY_ACQUIRE) == 0);
+	xrtAtomic32FetchAdd(&quiesced, 1, XMEMORY_ACQ_REL);
+}
+
+static void test_finalize(XS_ServerGeneration* generation)
+{
+	assert(XS_GenerationConnectionCount(generation) == 0);
+	assert(xrtAtomic32Load(&generation->tActivities, XMEMORY_ACQUIRE) == 0);
+	xrtMutexDestroy(generation->pTimerLock);
+	xrtCondDestroy(generation->pPublishCond);
+	xrtMutexDestroy(generation->pPublishLock);
+	xrtFree(generation);
+	xrtAtomic32FetchAdd(&finalized, 1, XMEMORY_ACQ_REL);
+}
+
+static int32 race_acquire(ptr data)
+{
+	XS_ServerGeneration* generation = data;
+	xrtAtomic32FetchAdd(&ready, 1, XMEMORY_ACQ_REL);
+	while ( !xrtAtomic32Load(&run_workers, XMEMORY_ACQUIRE) ) xrtSleep(0);
+	for ( unsigned i = 0; i < 2000; i++ ) {
+		if ( XS_GenerationConnectionAcquire(generation) ) {
+			xrtAtomic32FetchAdd(&admissions, 1, XMEMORY_ACQ_REL);
+			xrtSleep(0);
+			XS_GenerationConnectionRelease(generation);
+		}
+		if ( XS_ByteBudgetReserve(&shared_budget, 3) ) {
+			assert(xrtAtomic64Load(&shared_budget.Used, XMEMORY_ACQUIRE) <= shared_budget.Limit);
+			assert(XS_ByteBudgetRelease(&shared_budget, 3));
+		}
+	}
+	return 0;
+}
+
+static void check_lifetimes(void)
+{
+	assert(XS_GenerationReaperInit());
+	XS_ByteBudgetInit(&shared_budget, 7);
+	assert(!XS_ByteBudgetReserve(&shared_budget, UINT64_MAX));
+	assert(!XS_ByteBudgetRelease(&shared_budget, 1));
+	for ( unsigned round = 0; round < 40; round++ ) {
+		XS_ServerInfo server = {0};
+		XS_ServerGeneration* generation = XS_GenerationCreate(&server);
+		xthread* threads[4];
+		assert(generation != NULL);
+		generation->iConnectionLimit = 2;
+		assert(!XS_GenerationConnectionAcquire(generation));
+		assert(XS_GenerationPublish(generation));
+		assert(XS_GenerationConnectionAcquire(generation));
+		assert(XS_GenerationConnectionAcquire(generation));
+		assert(!XS_GenerationConnectionAcquire(generation));
+		XS_GenerationConnectionRelease(generation);
+		/* Keep the test's own lease until all racing callers have left. */
+		assert(XS_GenerationRetain(generation));
+		xrtAtomic32Store(&ready, 0, XMEMORY_RELEASE);
+		xrtAtomic32Store(&run_workers, 0, XMEMORY_RELEASE);
+		xrtAtomic32Store(&admissions, 0, XMEMORY_RELEASE);
+		for ( unsigned i = 0; i < 4; i++ ) {
+			threads[i] = xrtThreadCreate(race_acquire, generation, 0);
+			assert(threads[i] != NULL);
+		}
+		while ( xrtAtomic32Load(&ready, XMEMORY_ACQUIRE) != 4 ) xrtSleep(1);
+		xrtAtomic32Store(&run_workers, 1, XMEMORY_RELEASE);
+		while ( xrtAtomic32Load(&admissions, XMEMORY_ACQUIRE) == 0 ) xrtSleep(0);
+		XS_GenerationRetire(generation, NULL, NULL, false, test_quiesce, test_finalize);
+		assert(!XS_GenerationConnectionAcquire(generation));
+		assert(xrtAtomic32Load(&quiesced, XMEMORY_ACQUIRE) == round);
+		XS_GenerationConnectionRelease(generation);
+		for ( unsigned i = 0; i < 4; i++ ) {
+			assert(xrtThreadWait(threads[i]) == XWAIT_OK);
+			xrtThreadDestroy(threads[i]);
+		}
+		XS_GenerationRelease(generation);
+		XS_GenerationReaperDrain();
+		assert(xrtAtomic32Load(&quiesced, XMEMORY_ACQUIRE) == round + 1);
+		assert(xrtAtomic32Load(&finalized, XMEMORY_ACQUIRE) == round + 1);
+		assert(xrtAtomic32Load(&g_XS_RetiredGenerations, XMEMORY_ACQUIRE) == 0);
+		assert(xrtAtomic64Load(&shared_budget.Used, XMEMORY_ACQUIRE) == 0);
+	}
+	xrtAtomic32Store(&g_XS_RetiredGenerations, XS_RETIRED_GENERATIONS_LIMIT, XMEMORY_RELEASE);
+	assert(!XS_GenerationRetirementFits(1));
+	assert(XS_GenerationRetirementFits(0));
+	xrtAtomic32Store(&g_XS_RetiredGenerations, 0, XMEMORY_RELEASE);
+	XS_GenerationReaperUnit();
+	puts("PASS 40 publication/retirement races, connection limits, exactly-once finalizers and byte budgets");
+}
 
 static void check_config(const char* text, bool expected, const char* message)
 {
@@ -60,5 +154,6 @@ int main(void)
 	}
 	assert(triggered > 20);
 	printf("PASS checked arithmetic/text, config NUL rejection and %u allocation failures without leaks\n", triggered);
+	check_lifetimes();
 	return 0;
 }

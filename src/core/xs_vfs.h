@@ -13,6 +13,7 @@
 
 #include "lib/xrt.h"
 #include "checked.h"
+#include "limits.h"
 
 #include <stdio.h>
 #include <stdint.h>
@@ -111,9 +112,9 @@ static struct {
 	uint64_t uArchiveStart;  /* 归档头绝对偏移 */
 	XS_VfsHeader Header;
 	XS_VfsEntry* pEntries;
-	/* 缓存填充互斥（索引只读，只有 pCached 需要锁；解压可能数十毫秒，
-	 * 自旋在冷启动首访竞争下可接受——站点文件就绪后全部走无锁快路径） */
-	xspinlock* pCacheLock;
+	/* Cache pointer publication and byte accounting share a sleeping mutex. */
+	xmutex* pCacheLock;
+	size_t iCachedBytes;
 } g_XS_Vfs;
 
 /* ------------------------------------------------------------------ */
@@ -385,7 +386,8 @@ bool XS_VfsBootstrap(void)
 	}
 
 	xrtFree(pIndex);
-	g_XS_Vfs.pCacheLock = xrtSpinCreate();
+	pIndex = NULL;
+	g_XS_Vfs.pCacheLock = xrtMutexCreate();
 	if ( g_XS_Vfs.pCacheLock == NULL ) goto fail;
 	g_XS_Vfs.bActive = true;
 	return true;
@@ -393,7 +395,7 @@ bool XS_VfsBootstrap(void)
 fail:
 	xrtFree(pIndex);
 	if ( g_XS_Vfs.pCacheLock != NULL ) {
-		xrtSpinDestroy(g_XS_Vfs.pCacheLock);
+		xrtMutexDestroy(g_XS_Vfs.pCacheLock);
 		g_XS_Vfs.pCacheLock = NULL;
 	}
 	if ( g_XS_Vfs.pEntries != NULL ) {
@@ -505,10 +507,12 @@ static const unsigned char* XS_VfsEntryDataLocked(int iEntry, size_t* pSize)
 	unsigned char* pComp = NULL;
 	unsigned char* pOut = NULL;
 
-	if ( pE->pCached != NULL ) {                              /* 双检快路径 */
+	if ( pE->pCached != NULL ) {                              /* protected by cache mutex */
 		*pSize = (size_t)pE->OrigSize;
 		return pE->pCached;
 	}
+	if ( !XS_U64Range(g_XS_Vfs.iCachedBytes, pE->OrigSize, XS_VFS_CACHE_BYTES_LIMIT) )
+		return NULL;
 	/* 读压缩区间 */
 	/* 空 STORE 条目也必须返回有效视图，不能与“未命中/读取失败”混淆。 */
 	pComp = (unsigned char*)xrtMalloc(pE->CompSize > 0 ? pE->CompSize : 1);
@@ -530,7 +534,8 @@ static const unsigned char* XS_VfsEntryDataLocked(int iEntry, size_t* pSize)
 		xrtFree(pOut);
 		return NULL;
 	}
-	pE->pCached = pOut;                                       /* 发布（指针写原子够用） */
+	pE->pCached = pOut;                                       /* published under cache mutex */
+	g_XS_Vfs.iCachedBytes += (size_t)pE->OrigSize;
 	*pSize = (size_t)pE->OrigSize;
 	return pOut;
 }
@@ -542,13 +547,9 @@ const unsigned char* XS_VfsEntryData(int iEntry, size_t* pSize)
 	if ( !g_XS_Vfs.bActive || iEntry < 0 ||
 	     (uint32_t)iEntry >= g_XS_Vfs.Header.EntryCount || pSize == NULL )
 		return NULL;
-	if ( g_XS_Vfs.pEntries[iEntry].pCached != NULL ) {         /* 无锁快路径 */
-		*pSize = (size_t)g_XS_Vfs.pEntries[iEntry].OrigSize;
-		return g_XS_Vfs.pEntries[iEntry].pCached;
-	}
-	xrtSpinLock(g_XS_Vfs.pCacheLock);
+	xrtMutexLock(g_XS_Vfs.pCacheLock);
 	pResult = XS_VfsEntryDataLocked(iEntry, pSize);
-	xrtSpinUnlock(g_XS_Vfs.pCacheLock);
+	xrtMutexUnlock(g_XS_Vfs.pCacheLock);
 	return pResult;
 }
 
