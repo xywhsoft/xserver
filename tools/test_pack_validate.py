@@ -179,8 +179,7 @@ def main() -> int:
                   f"rc={r.returncode} out={r.stdout}{r.stderr}")
             check(f"{name}: error message",
                   err_hint in (r.stdout + r.stderr), r.stdout + r.stderr)
-            written = [p for p in tmp_path.rglob("*")
-                       if p.is_file() and p.parent.name.startswith(f"out-{name}")]
+            written = list(outdir.rglob('*')) if outdir.exists() else []
             check(f"{name}: nothing extracted", not written, str(written[:5]))
 
         def swap_escape_path(a: Archive) -> None:
@@ -195,6 +194,19 @@ def main() -> int:
                   lambda a: a.patch_entry(a.entries()[0],
                                           doff=a.index_off + 4096),
                   "entry data out of range")
+        malicious("range-wrap",
+                  lambda a: a.patch_entry(a.entries()[0], doff=(1 << 64) - 4),
+                  "entry data out of range")
+
+        def nul_path(a: Archive) -> None:
+            e = next(e for e in a.entries() if e['path'] == 'wwwroot/a.txt')
+            a.patch_path(e, b'wwwroot/\x00.txt')
+        malicious('nul-path', nul_path, 'unsafe entry path')
+
+        def unsorted(a: Archive) -> None:
+            e = next(e for e in a.entries() if e['path'] == 'wwwroot/a.txt')
+            a.patch_path(e, b'aaaaaaaaaaaaa')
+        malicious('unsorted', unsorted, 'entry paths not strictly sorted')
 
         # ---- STORE 大小不一致(memcpy 长度与数据区脱钩) ----
         def bump_store(a: Archive) -> None:
@@ -206,6 +218,43 @@ def main() -> int:
         malicious("layout",
                   lambda a: a.patch_header(data_off=a.index_off + 8),
                   "archive layout invalid")
+
+        # A failed pack must preserve an existing destination, including failures
+        # before an output stream has been opened.
+        preserved = tmp_path / 'preserved.exe'
+        preserved.write_bytes(b'previous valid output')
+        broken_site = tmp_path / 'broken-site'
+        broken_site.mkdir()
+        (broken_site/'xs.json').write_text('{}', encoding='utf-8')
+        # Walking an overlong filename is platform-dependent; an absent input
+        # exercises an earlier failure without needing filesystem privileges.
+        r = run_xs(exe, 'pack', str(tmp_path/'absent-site'), '-o', str(preserved))
+        check('failed pack preserves destination', r.returncode != 0 and
+              preserved.read_bytes() == b'previous valid output')
+
+        for kind in ['directory', 'file']:
+            linked_out = tmp_path / ('out-link-' + kind)
+            linked_out.mkdir()
+            outside = tmp_path / ('outside-' + kind)
+            outside.mkdir()
+            sentinel = outside/'a.txt'
+            sentinel.write_text('outside preserved', encoding='utf-8')
+            link = linked_out/'wwwroot' if kind == 'directory' else linked_out/'wwwroot'/'a.txt'
+            if kind == 'file': link.parent.mkdir()
+            try:
+                link.symlink_to(outside if kind == 'directory' else sentinel,
+                                target_is_directory=kind == 'directory')
+            except OSError as error:
+                print(f'  SKIP: {kind} symlink creation unavailable: {error}')
+                continue
+            r = run_xs(exe, 'pack', '--extract', str(packed), '-d', str(linked_out))
+            check(f'{kind} link does not overwrite outside file',
+                  sentinel.read_text(encoding='utf-8') == 'outside preserved', r.stdout+r.stderr)
+            if kind == 'directory':
+                check('directory link escape rejected', r.returncode != 0, r.stdout+r.stderr)
+            else:
+                check('file link is replaced atomically or rejected',
+                      r.returncode != 0 or not link.is_symlink(), r.stdout+r.stderr)
 
     print(f"\n{PASSED} pass, {FAILED} fail")
     return 1 if FAILED > 0 else 0

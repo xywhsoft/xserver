@@ -18,6 +18,8 @@
 #include <string.h>
 
 #include "../sdk/xsbase.h"
+#include "checked.h"
+#include "limits.h"
 
 /* 宿主侧应用状态（契约结构体之外的装配信息，不进 ABI） */
 struct XS_AcmeConfig;				/* acme.h 稍后给出完整定义 */
@@ -48,28 +50,46 @@ static const char* XS_AppPath(void);
  * 文件系统路径归一化：相对路径按配置文件所在目录解析为绝对路径
  * ============================================================ */
 
-static void XS_ConfigResolveField(const char** psField, cstr sBaseDir)
+static bool XS_ConfigResolveField(const char** psField, cstr sBaseDir,
+	const char* sKey, char* sErr, size_t iErrCap)
 {
 	str sAbs;
 
-	if ( psField == NULL || *psField == NULL || (*psField)[0] == '\0' ) return;
-	if ( xrtPathIsAbs(*psField) ) return;
+	if ( psField == NULL || *psField == NULL || (*psField)[0] == '\0' ) return true;
+	if ( strlen(*psField) > XS_PATH_BYTES_LIMIT ) goto too_long;
+	if ( xrtPathIsAbs(*psField) ) return true;
 	sAbs = xrtPathJoin(sBaseDir, *psField);
-	if ( sAbs == NULL ) return;
+	if ( sAbs == NULL ) {
+		snprintf(sErr, iErrCap, "out of memory resolving field '%s'", sKey);
+		return false;
+	}
+	if ( strlen(sAbs) > XS_PATH_BYTES_LIMIT ) {
+		xrtFree(sAbs);
+		goto too_long;
+	}
 	xrtFree((void*)*psField);
 	*psField = sAbs;
+	return true;
+too_long:
+	snprintf(sErr, iErrCap, "field '%s' path too long", sKey);
+	return false;
 }
 
-static void XS_ConfigResolveHostPaths(XS_HostInfo* pHost, cstr sBaseDir)
+static bool XS_ConfigResolveHostPaths(XS_HostInfo* pHost, cstr sBaseDir,
+	char* sErr, size_t iErrCap)
 {
-	if ( pHost == NULL ) return;
-	XS_ConfigResolveField(&pHost->Path, sBaseDir);
-	XS_ConfigResolveField(&pHost->DevFile, sBaseDir);
-	XS_ConfigResolveField(&pHost->DevInc, sBaseDir);
-	XS_ConfigResolveField(&pHost->DevLib, sBaseDir);
-	XS_ConfigResolveField(&pHost->TlsCA, sBaseDir);
-	XS_ConfigResolveField(&pHost->TlsCert, sBaseDir);
-	XS_ConfigResolveField(&pHost->TlsKey, sBaseDir);
+	if ( pHost == NULL ) return true;
+#define XS_RESOLVE_FIELD(member, key) \
+	if ( !XS_ConfigResolveField(&pHost->member, sBaseDir, key, sErr, iErrCap) ) return false
+	XS_RESOLVE_FIELD(Path, "path");
+	XS_RESOLVE_FIELD(DevFile, "devfile");
+	XS_RESOLVE_FIELD(DevInc, "dev_inc");
+	XS_RESOLVE_FIELD(DevLib, "dev_lib");
+	XS_RESOLVE_FIELD(TlsCA, "tls_ca");
+	XS_RESOLVE_FIELD(TlsCert, "tls_cert");
+	XS_RESOLVE_FIELD(TlsKey, "tls_key");
+#undef XS_RESOLVE_FIELD
+	return true;
 }
 
 /* ============================================================
@@ -126,6 +146,10 @@ static bool XS_ConfigTakeString(xvalue* pObj, const char* sKey, const char** pOu
 	}
 	if ( !xrtValueGetString(pVal, &tView) ) {
 		snprintf(sErr, iErrCap, "field '%s' expect string", sKey);
+		return false;
+	}
+	if ( !XS_TextValid(tView.Data, tView.Size, XS_CONFIG_STRING_LIMIT) ) {
+		snprintf(sErr, iErrCap, "field '%s' string too long or contains NUL", sKey);
 		return false;
 	}
 	sCopy = xrtStrDupN(tView.Data, tView.Size);
@@ -269,7 +293,7 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 	if ( !XS_ConfigTakeBool(pObj, "enabled", &pServer->Enabled, sErr, iErrCap) ) return false;
 	if ( !XS_ConfigTakeString(pObj, "class", &pServer->Class, sErr, iErrCap) ) return false;
 	if ( !XS_ConfigClassValid(pServer->Class) ) {
-		snprintf(sErr, iErrCap, "field 'class' must be http/app/ws/tcp/udp/custom");
+		snprintf(sErr, iErrCap, "field 'class' must be http/app/ws/tcp/udp/xrudp/custom");
 		return false;
 	}
 	if ( !XS_ConfigTakeString(pObj, "name", &pServer->Name, sErr, iErrCap) ) return false;
@@ -281,6 +305,10 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 	/* app 为本地前端语义：未指定 ip 时缺省回环，而非 http 的 0.0.0.0 */
 	if ( pServer->IP == NULL && strcmp(pServer->Class, "app") == 0 ) {
 		pServer->IP = xrtStrDup("127.0.0.1");
+		if ( pServer->IP == NULL ) {
+			snprintf(sErr, iErrCap, "out of memory reading field 'ip'");
+			return false;
+		}
 	}
 	if ( !XS_ConfigTakeBool(pObj, "tls", &pServer->TLS, sErr, iErrCap) ) return false;
 	if ( !XS_ConfigTakeInt(pObj, "backlog", &iVal, sErr, iErrCap) ) return false;
@@ -397,7 +425,7 @@ static bool XS_ConfigParseServer(XS_App* pApp, xvalue* pObj, XS_ServerInfo* pSer
 			snprintf(sErr, iErrCap, "field 'hosts' expect array");
 			return false;
 		}
-		if ( xrtValueCount(pHosts) > (size_t)UINT32_MAX - 1u ) {
+		if ( xrtValueCount(pHosts) > XS_CONFIG_HOSTS_LIMIT ) {
 			snprintf(sErr, iErrCap, "field 'hosts' has too many entries");
 			return false;
 		}
@@ -530,7 +558,7 @@ static bool XS_ConfigBuild(const char* sSource, xvalue* pRoot, XS_App* pApp)
 		snprintf(pApp->ParseError, sizeof(pApp->ParseError), "field 'services' expect array");
 		return false;
 	}
-	if ( xrtValueCount(pServices) > (size_t)UINT32_MAX - 1u ) {
+	if ( xrtValueCount(pServices) > XS_CONFIG_SERVERS_LIMIT ) {
 		snprintf(pApp->ParseError, sizeof(pApp->ParseError), "field 'services' has too many entries");
 		return false;
 	}
@@ -572,7 +600,11 @@ static bool XS_ConfigBuild(const char* sSource, xvalue* pRoot, XS_App* pApp)
 	 * （demo 目录可整体搬移）。旧式"配置与可执行文件同目录"的写法两个
 	 * 基准重合，语义不变。归一化后消费侧不再回落可执行文件目录。 */
 	{
-		str sBase = sSource != NULL ? xrtPathParent(sSource) : NULL;
+		str sBase = sSource != NULL ? xrtPathParent(sSource) : xrtStrDup(XS_AppPath());
+		if ( sBase == NULL ) {
+			snprintf(pApp->ParseError, sizeof(pApp->ParseError), "out of memory resolving config directory");
+			return false;
+		}
 
 		if ( sBase == NULL || sBase[0] == '\0' ) {
 			xrtFree(sBase);
@@ -583,13 +615,19 @@ static bool XS_ConfigBuild(const char* sSource, xvalue* pRoot, XS_App* pApp)
 			xrtFree(sBase);
 			sBase = sAbs;
 		}
-		if ( sBase != NULL ) {
+		if ( sBase == NULL ) {
+			snprintf(pApp->ParseError, sizeof(pApp->ParseError), "out of memory resolving config directory");
+			return false;
+		}
+		{
 			for ( i = 0; i < pApp->ServerCount; i++ ) {
 				XS_ServerInfo* pServer = pApp->Servers[i];
 
-				XS_ConfigResolveHostPaths(pServer->DefaultHost, sBase);
+				if ( !XS_ConfigResolveHostPaths(pServer->DefaultHost, sBase,
+					pApp->ParseError, sizeof(pApp->ParseError)) ) { xrtFree(sBase); return false; }
 				for ( j = 0; j < pServer->HostCount; j++ ) {
-					XS_ConfigResolveHostPaths(pServer->Hosts[j], sBase);
+					if ( !XS_ConfigResolveHostPaths(pServer->Hosts[j], sBase,
+						pApp->ParseError, sizeof(pApp->ParseError)) ) { xrtFree(sBase); return false; }
 				}
 			}
 			xrtFree(sBase);
@@ -600,8 +638,20 @@ static bool XS_ConfigBuild(const char* sSource, xvalue* pRoot, XS_App* pApp)
 
 static bool XS_ConfigLoad(const char* sPath, XS_App* pApp)
 {
+	bytes pData;
+	size_t iSize = 0;
+	bool bOk;
 	if ( sPath == NULL || pApp == NULL ) return false;
-	return XS_ConfigBuild(sPath, xrtJsonParseFile(sPath), pApp);
+	memset(pApp, 0, sizeof(*pApp));
+	pData = xrtFileReadAllLimit(sPath, XS_CONFIG_BYTES_LIMIT, &iSize);
+	if ( pData == NULL ) {
+		snprintf(pApp->ParseError, sizeof(pApp->ParseError), "config read failed or exceeds byte limit");
+		return false;
+	}
+	bOk = XS_ConfigBuild(sPath, XS_TextValid((const char*)pData, iSize, XS_CONFIG_BYTES_LIMIT) ?
+		xrtJsonParse(xrtStrViewN((const char*)pData, iSize)) : NULL, pApp);
+	xrtFree(pData);
+	return bOk;
 }
 
 /* reload coordinator 先冻结文件字节，并让一个 intent 只解析出一个共享的
@@ -615,6 +665,11 @@ static bool XS_ConfigLoadMemory(
 	xstrview tText;
 
 	if ( pData == NULL || pApp == NULL ) return false;
+	if ( !XS_TextValid((const char*)pData, iSize, XS_CONFIG_BYTES_LIMIT) ) {
+		memset(pApp, 0, sizeof(*pApp));
+		snprintf(pApp->ParseError, sizeof(pApp->ParseError), "config contains NUL or exceeds byte limit");
+		return false;
+	}
 	tText = xrtStrViewN((const char*)pData, iSize);
 	return XS_ConfigBuild(sSource, xrtJsonParse(tText), pApp);
 }

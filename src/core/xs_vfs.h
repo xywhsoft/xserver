@@ -12,6 +12,7 @@
 #define XS_VFS_H
 
 #include "lib/xrt.h"
+#include "checked.h"
 
 #include <stdio.h>
 #include <stdint.h>
@@ -291,8 +292,8 @@ bool XS_VfsBootstrap(void)
 	if ( memcmp(aTrailer, XS_VFS_TRAILER_MAGIC, 8) != 0 ) goto fail;
 	tTrailer.HeaderOffset = XS_VfsRd64(aTrailer + 8);
 	tTrailer.Crc32 = XS_VfsRd32(aTrailer + 16);
-	if ( tTrailer.HeaderOffset == 0 ||
-	     tTrailer.HeaderOffset + XS_VFS_HEADER_SIZE + XS_VFS_TRAILER_SIZE > uSelfSize )
+	if ( tTrailer.HeaderOffset == 0 || !XS_U64Range(tTrailer.HeaderOffset,
+	     XS_VFS_HEADER_SIZE + XS_VFS_TRAILER_SIZE, uSelfSize) )
 		goto fail;
 	if ( !XS_VfsReadAt(tTrailer.HeaderOffset, aHeader, sizeof(aHeader)) ) goto fail;
 	{
@@ -313,10 +314,11 @@ bool XS_VfsBootstrap(void)
 	g_XS_Vfs.Header.IndexCrc32 = XS_VfsRd32(aHeader + 40);
 	if ( g_XS_Vfs.Header.EntryCount == 0 ||
 	     g_XS_Vfs.Header.EntryCount > XS_VFS_MAX_ENTRIES ) goto fail;
-	if ( tTrailer.HeaderOffset + g_XS_Vfs.Header.ArchiveSize != uSelfSize ) goto fail;
-	if ( g_XS_Vfs.Header.DataOffset >= g_XS_Vfs.Header.ArchiveSize ||
+	if ( g_XS_Vfs.Header.ArchiveSize != uSelfSize - tTrailer.HeaderOffset ) goto fail;
+	if ( g_XS_Vfs.Header.ArchiveSize < XS_VFS_HEADER_SIZE + XS_VFS_TRAILER_SIZE ||
+	     g_XS_Vfs.Header.DataOffset < XS_VFS_HEADER_SIZE ||
 	     g_XS_Vfs.Header.IndexOffset <= g_XS_Vfs.Header.DataOffset ||
-	     g_XS_Vfs.Header.IndexOffset >= g_XS_Vfs.Header.ArchiveSize ) goto fail;
+	     g_XS_Vfs.Header.IndexOffset >= g_XS_Vfs.Header.ArchiveSize - XS_VFS_TRAILER_SIZE ) goto fail;
 
 	g_XS_Vfs.uArchiveStart = tTrailer.HeaderOffset;
 
@@ -371,7 +373,7 @@ bool XS_VfsBootstrap(void)
 			if ( pE->OrigSize > XS_VFS_MAX_ENTRY_ORIG_SIZE ) goto fail;
 			if ( pE->Method == 0 && pE->CompSize != (uint32_t)pE->OrigSize ) goto fail;
 			if ( pE->DataOffset < g_XS_Vfs.Header.DataOffset ||
-			     pE->DataOffset + pE->CompSize > g_XS_Vfs.Header.IndexOffset )
+			     !XS_U64Range(pE->DataOffset, pE->CompSize, g_XS_Vfs.Header.IndexOffset) )
 				goto fail;
 		}
 		if ( iPos != (size_t)uLen ) goto fail;

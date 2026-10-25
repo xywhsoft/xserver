@@ -26,6 +26,8 @@ int XS_PackMain(int argc, char** argv);
 
 #include "lib/xrt.h"
 #include "xs_vfs.h"                /* 格式常量（XS_VFS_IMPLEMENTATION 未定义） */
+#include "checked.h"
+#include "limits.h"
 
 #include "tcc/LzmaEnc.h"
 
@@ -190,28 +192,59 @@ static uint8_t* XS_PackReadWhole(const char* sPath, size_t* pSize)
 
 static bool XS_PackWriteWhole(const char* sPath, const uint8_t* pData, size_t iSize)
 {
-	FILE* f = fopen(sPath, "wb");
-	bool bOk;
-
-	if ( f == NULL ) return false;
-	bOk = iSize == 0 || fwrite(pData, 1, iSize, f) == iSize;
-	if ( fclose(f) != 0 ) bOk = false;
-	return bOk;
+	xbytesview tData = { pData, iSize };
+	return xrtFileWriteAtomic(sPath, tData);
 }
 
-static void XS_PackMkDirs(const char* sFilePath, size_t iSkip)
+static bool XS_PackWriteFile(xfile hFile, const void* pData, size_t iSize)
 {
-	char aDir[4096];
+	size_t iWritten = 0;
+	return xrtWriteFull(hFile, pData, iSize, &iWritten);
+}
 
-	if ( strlen(sFilePath) >= sizeof(aDir) ) return;
-	strcpy(aDir, sFilePath);
-	for ( char* p = aDir + iSkip; *p; p++ ) {
+/* Every lookup remains relative to an open root, including existing directories.
+ * A temporary sibling is published only after all bytes have been written. */
+static bool XS_PackExtractWrite(xroot pRoot, const char* sPath,
+	const uint8_t* pData, size_t iSize)
+{
+	char aDir[XS_PATH_BYTES_LIMIT + 1u];
+	char aTemp[XS_PATH_BYTES_LIMIT + 1u];
+	static uint64 iSequence = 0;
+	xfileoptions tOptions;
+	xfile hFile = NULL;
+	bool bOk;
+	int iLength;
+	if ( strlen(sPath) >= sizeof(aDir) ) return false;
+	memcpy(aDir, sPath, strlen(sPath) + 1u);
+	for ( char* p = aDir; *p; p++ ) {
 		if ( *p == '/' ) {
+			xroot pDirectory;
 			*p = 0;
-			xrtDirCreate(aDir);
+			pDirectory = xrtRootOpenIn(pRoot, aDir);
+			if ( pDirectory == NULL ) {
+				if ( !xrtRootDirCreate(pRoot, aDir, 0755) ) return false;
+				pDirectory = xrtRootOpenIn(pRoot, aDir);
+			}
+			if ( pDirectory == NULL ) return false;
+			(void)xrtRootClose(pDirectory);
 			*p = '/';
 		}
 	}
+	xrtFileOptionsInit(&tOptions);
+	tOptions.Flags = XFILE_WRITE | XFILE_CREATE | XFILE_EXCLUSIVE | XFILE_NOFOLLOW;
+	tOptions.Mode = 0644;
+	for ( unsigned i = 0; i < 64 && hFile == NULL; i++ ) {
+		iLength = snprintf(aTemp, sizeof(aTemp), "%s.xs-tmp-%llu", sPath,
+			(unsigned long long)++iSequence);
+		if ( iLength < 0 || (size_t)iLength >= sizeof(aTemp) ) return false;
+		hFile = xrtRootFileOpen(pRoot, aTemp, &tOptions);
+	}
+	if ( hFile == NULL ) return false;
+	bOk = XS_PackWriteFile(hFile, pData, iSize);
+	if ( !xrtClose(hFile) ) bOk = false;
+	if ( bOk ) bOk = xrtRootFileRename(pRoot, aTemp, sPath, true);
+	if ( !bOk ) (void)xrtRootRemove(pRoot, aTemp);
+	return bOk;
 }
 
 /* ------------------------------------------------------------------ */
@@ -374,9 +407,8 @@ static bool XS_PackParse(const char* sExe, bool bRequireArchive,
 	if ( memcmp(aTrailer, XS_PACK_TRAILER_MAGIC, 8) != 0 ) goto nopack;
 	/* 归档头在尾标指向的归档起点（[base][头][数据][索引][尾标]） */
 	uHeaderOff = XS_PackRd64(aTrailer + 8);
-	if ( uHeaderOff == 0 ||
-	     uHeaderOff + XS_VFS_HEADER_SIZE + XS_VFS_TRAILER_SIZE
-	       > (uint64_t)pOut->iWholeSize ) goto nopack;
+	if ( uHeaderOff == 0 || !XS_U64Range(uHeaderOff,
+	     XS_VFS_HEADER_SIZE + XS_VFS_TRAILER_SIZE, pOut->iWholeSize) ) goto nopack;
 	memcpy(aHeader, pOut->pWhole + uHeaderOff, sizeof(aHeader));
 	{
 		uint8_t aBuf[16 + XS_VFS_HEADER_SIZE];
@@ -394,15 +426,16 @@ static bool XS_PackParse(const char* sExe, bool bRequireArchive,
 		uIndexOff = XS_PackRd64(aHeader + 24);
 		uDataOff = XS_PackRd64(aHeader + 16);
 		if ( pOut->uArchiveStart != uHeaderOff ||
-		     uHeaderOff + uArchiveSize != (uint64_t)pOut->iWholeSize ) {
+		     uArchiveSize != (uint64_t)pOut->iWholeSize - uHeaderOff ) {
 			snprintf(sErr, iErrCap, "archive size mismatch (corrupt?)");
 			XS_PackParsedUnit(pOut);
 			return false;
 		}
 		/* 布局校验与运行时装载器（xs_vfs.h XS_VfsLoad）一致：
 		 * 数据区 [DataOffset, IndexOffset) 必须落在归档内且非空 */
-		if ( uDataOff >= uArchiveSize || uIndexOff <= uDataOff ||
-		     uIndexOff >= uArchiveSize ) {
+		if ( uArchiveSize < XS_VFS_HEADER_SIZE + XS_VFS_TRAILER_SIZE ||
+		     uDataOff < XS_VFS_HEADER_SIZE || uIndexOff <= uDataOff ||
+		     uIndexOff >= uArchiveSize - XS_VFS_TRAILER_SIZE ) {
 			snprintf(sErr, iErrCap, "archive layout invalid");
 			XS_PackParsedUnit(pOut);
 			return false;
@@ -496,10 +529,14 @@ static bool XS_PackParse(const char* sExe, bool bRequireArchive,
 				goto malformed;
 			}
 			if ( pOut->pEntries[i].DataOffset < uDataOff ||
-			     pOut->pEntries[i].DataOffset + pOut->pEntries[i].CompSize
-			       > uIndexOff ) {
+			     !XS_U64Range(pOut->pEntries[i].DataOffset,
+				pOut->pEntries[i].CompSize, uIndexOff) ) {
 				snprintf(sErr, iErrCap, "entry data out of range: %s",
 					pOut->pEntries[i].sPath);
+				goto malformed;
+			}
+			if ( i > 0 && strcmp(pOut->pEntries[i - 1].sPath, pOut->pEntries[i].sPath) >= 0 ) {
+				snprintf(sErr, iErrCap, "entry paths not strictly sorted");
 				goto malformed;
 			}
 		}
@@ -573,8 +610,9 @@ static int XS_PackDoPack(const char* sSiteDir, const char* sOut)
 	uint64_t uDataCursor = 0;
 	uint32_t nLzma = 0, nStore = 0;
 	uint32_t i;
-	FILE* fOut = NULL;
+	xfile fOut = NULL;
 	FILE* fData = NULL;
+	str sStage = NULL;
 	int iExit = 1;
 
 	memset(&tList, 0, sizeof(tList));
@@ -586,7 +624,11 @@ static int XS_PackDoPack(const char* sSiteDir, const char* sOut)
 	{
 		char sCfg[4096];
 		xfile h;
-		snprintf(sCfg, sizeof(sCfg), "%s/xs.json", sSiteDir);
+		int n = snprintf(sCfg, sizeof(sCfg), "%s/xs.json", sSiteDir);
+		if ( n < 0 || (size_t)n >= sizeof(sCfg) ) {
+			printf("[pack] site path too long\n");
+			return 1;
+		}
 		h = xrtOpen(sCfg, XFILE_READ);
 		if ( h == NULL ) {
 			printf("[pack] site directory must contain xs.json: %s\n", sSiteDir);
@@ -618,8 +660,13 @@ static int XS_PackDoPack(const char* sSiteDir, const char* sOut)
 	qsort(tList.pFiles, tList.nCount, sizeof(XS_PackFile), XS_PackFileCmp);
 
 	iIndexCap = 64;
-	for ( i = 0; i < tList.nCount; i++ )
-		iIndexCap += 40 + strlen(tList.pFiles[i].sRel);
+	for ( i = 0; i < tList.nCount; i++ ) {
+		size_t nRel = strlen(tList.pFiles[i].sRel);
+		if ( nRel > UINT16_MAX || !XS_SizeAdd(iIndexCap, 40u + nRel, &iIndexCap) ||
+		     iIndexCap > (64u << 20) ) {
+			printf("[pack] index or entry path over limit\n"); goto done;
+		}
+	}
 	pIndex = (uint8_t*)malloc(iIndexCap);
 	if ( pIndex == NULL ) { printf("[pack] out of memory\n"); goto done; }
 
@@ -696,10 +743,14 @@ static int XS_PackDoPack(const char* sSiteDir, const char* sOut)
 			+ iIndexLen + XS_VFS_TRAILER_SIZE;
 		uint64_t uHeaderAbs = tBase.uArchiveStart;
 
-		fOut = fopen(sOut, "wb");
+		{
+			str sDirectory = xrtPathParent(sOut);
+			if ( sDirectory == NULL ) { printf("[pack] output directory allocation failed\n"); goto done; }
+			fOut = xrtFileTemp(sDirectory[0] != '\0' ? sDirectory : ".", "xs-pack-", ".tmp", &sStage);
+			xrtFree(sDirectory);
+		}
 		if ( fOut == NULL ) { printf("[pack] cannot write: %s\n", sOut); goto done; }
-		if ( fwrite(tBase.pWhole, 1, (size_t)tBase.uArchiveStart, fOut)
-		     != (size_t)tBase.uArchiveStart ) {
+		if ( !XS_PackWriteFile(fOut, tBase.pWhole, (size_t)tBase.uArchiveStart) ) {
 			printf("[pack] write base failed\n");
 			goto done;
 		}
@@ -715,7 +766,7 @@ static int XS_PackDoPack(const char* sSiteDir, const char* sOut)
 		XS_PackWr32(aHeader + 44, 0);
 		XS_PackWr64(aHeader + 48, 0);
 		XS_PackWr64(aHeader + 56, 0);
-		if ( fwrite(aHeader, 1, sizeof(aHeader), fOut) != sizeof(aHeader) ) {
+		if ( !XS_PackWriteFile(fOut, aHeader, sizeof(aHeader)) ) {
 			printf("[pack] write header failed\n");
 			goto done;
 		}
@@ -725,14 +776,15 @@ static int XS_PackDoPack(const char* sSiteDir, const char* sOut)
 			size_t n;
 			rewind(fData);
 			while ( (n = fread(aCopy, 1, sizeof(aCopy), fData)) > 0 ) {
-				if ( fwrite(aCopy, 1, n, fOut) != n ) {
+				if ( !XS_PackWriteFile(fOut, aCopy, n) ) {
 					printf("[pack] copy data failed\n");
 					goto done;
 				}
 			}
+			if ( ferror(fData) ) { printf("[pack] read temp data failed\n"); goto done; }
 		}
 		/* 索引区 + 尾标 */
-		if ( fwrite(pIndex, 1, iIndexLen, fOut) != iIndexLen ) {
+		if ( !XS_PackWriteFile(fOut, pIndex, iIndexLen) ) {
 			printf("[pack] write index failed\n");
 			goto done;
 		}
@@ -745,17 +797,21 @@ static int XS_PackDoPack(const char* sSiteDir, const char* sOut)
 			XS_PackWr32(aTrailer + 16, XS_PackCrc32(0, aBuf, sizeof(aBuf)));
 		}
 		XS_PackWr32(aTrailer + 20, 0);
-		if ( fwrite(aTrailer, 1, sizeof(aTrailer), fOut) != sizeof(aTrailer) ) {
+		if ( !XS_PackWriteFile(fOut, aTrailer, sizeof(aTrailer)) ) {
 			printf("[pack] write trailer failed\n");
 			goto done;
 		}
 	}
-	if ( fclose(fOut) != 0 ) {
+	if ( !xrtClose(fOut) ) {
 		fOut = NULL;
 		printf("[pack] close failed\n");
 		goto done;
 	}
 	fOut = NULL;
+	if ( !xrtFileMove(sStage, sOut, true) ) {
+		printf("[pack] publish failed: %s\n", sOut);
+		goto done;
+	}
 	printf("[pack] %s: %u entries (lzma %u, store %u), archive %llu bytes\n",
 	       sOut, (unsigned)tList.nCount, (unsigned)nLzma, (unsigned)nStore,
 	       (unsigned long long)(uDataCursor + iIndexLen
@@ -763,9 +819,9 @@ static int XS_PackDoPack(const char* sSiteDir, const char* sOut)
 	iExit = 0;
 
 done:
-	if ( fOut != NULL ) fclose(fOut);
+	if ( fOut != NULL ) xrtClose(fOut);
 	if ( fData != NULL ) fclose(fData);
-	if ( iExit != 0 ) remove(sOut);
+	if ( sStage != NULL ) { if ( iExit != 0 ) xrtFileDelete(sStage); xrtFree(sStage); }
 	free(pIndex);
 	XS_PackListUnit(&tList);
 	XS_PackParsedUnit(&tBase);
@@ -812,20 +868,30 @@ static int XS_PackDoExtract(const char* sExe, const char* sDir)
 	XS_PackParsed t;
 	char sErr[256];
 	int iExit = 1;
+	xroot pRoot = NULL;
 
 	if ( !XS_PackParse(sExe, true, &t, sErr, sizeof(sErr)) ) {
 		printf("[pack] %s\n", sErr);
 		return 1;
 	}
 	printf("[pack] extracting %u entries to %s\n", (unsigned)t.nCount, sDir);
-	xrtDirCreate(sDir);
+	/* Preflight every joined path before creating the output directory. */
+	for ( uint32_t i = 0; i < t.nCount; i++ ) {
+		size_t iJoined;
+		if ( !XS_SizeAdd(strlen(sDir), strlen(t.pEntries[i].sPath), &iJoined) ||
+		     iJoined >= XS_PATH_BYTES_LIMIT ) {
+			printf("[pack] output path too long\n");
+			goto done;
+		}
+	}
+	if ( !xrtDirCreateAll(sDir) || (pRoot = xrtRootOpen(sDir)) == NULL ) {
+		printf("[pack] cannot open extraction root\n");
+		goto done;
+	}
 	for ( uint32_t i = 0; i < t.nCount; i++ ) {
 		const uint8_t* pSrc = t.pWhole + t.uArchiveStart
 			+ t.pEntries[i].DataOffset;
 		uint8_t* pOutBuf;
-		char sPath[4096];
-
-		snprintf(sPath, sizeof(sPath), "%s/%s", sDir, t.pEntries[i].sPath);
 		if ( t.pEntries[i].Method == 0 ) {
 			pOutBuf = (uint8_t*)malloc(t.pEntries[i].OrigSize > 0
 				? (size_t)t.pEntries[i].OrigSize : 1);
@@ -843,9 +909,9 @@ static int XS_PackDoExtract(const char* sExe, const char* sDir)
 			free(pOutBuf);
 			goto done;
 		}
-		XS_PackMkDirs(sPath, strlen(sDir) + 1);
-		if ( !XS_PackWriteWhole(sPath, pOutBuf, (size_t)t.pEntries[i].OrigSize) ) {
-			printf("[pack] write failed: %s\n", sPath);
+		if ( !XS_PackExtractWrite(pRoot, t.pEntries[i].sPath, pOutBuf,
+			(size_t)t.pEntries[i].OrigSize) ) {
+			printf("[pack] write failed in extraction root: %s\n", t.pEntries[i].sPath);
 			free(pOutBuf);
 			goto done;
 		}
@@ -854,6 +920,7 @@ static int XS_PackDoExtract(const char* sExe, const char* sDir)
 	printf("[pack] extract ok\n");
 	iExit = 0;
 done:
+	if ( pRoot != NULL ) xrtRootClose(pRoot);
 	XS_PackParsedUnit(&t);
 	return iExit;
 }
