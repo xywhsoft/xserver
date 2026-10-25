@@ -531,7 +531,7 @@ XS_RequestResult RequestProc(XS_HttpReq* pReq)
     cfg_path = RELEASE / 'func_test_config.json'
     json.dump(cfg, open(cfg_path, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
 
-    log = open(tempfile.gettempdir() + '/xs_func.log', 'w')
+    log = open(RELEASE / 'xs_func.log', 'w', encoding='utf-8')
     proc = subprocess.Popen(
         [str(EXE), str(cfg_path)],
         cwd=str(RELEASE), stdout=log, stderr=subprocess.STDOUT)
@@ -968,17 +968,27 @@ XS_RequestResult RequestProc(XS_HttpReq* pReq)
 
 
 def main():
-    global EXE
+    global EXE, RELEASE
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--exe', type=Path, default=EXE)
     args = parser.parse_args()
     EXE = args.exe.resolve()
-    config_matrix()
-    listener_failure_matrix()
-    tls_identity_diagnostic_matrix()
-    tls_static_large_matrix()
-    behavior_matrix()
+    # Every variant/process gets its own config path and log. Shared release
+    # paths let concurrent reload tests switch each other to different ports.
+    original_release = RELEASE
+    with tempfile.TemporaryDirectory(prefix='xs-func-release-') as raw:
+        RELEASE = Path(raw) / 'release'
+        shutil.copytree(original_release, RELEASE,
+            ignore=shutil.ignore_patterns('*.exe','xs','*.build.json','func_test_config.json','xs_func.log'))
+        try:
+            config_matrix()
+            listener_failure_matrix()
+            tls_identity_diagnostic_matrix()
+            tls_static_large_matrix()
+            behavior_matrix()
+        finally:
+            RELEASE = original_release
     if failures:
         print('FUNC TEST FAILURES (%d):' % len(failures))
         for item in failures:

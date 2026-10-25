@@ -23,6 +23,7 @@ def main():
                       '-fno-omit-frame-pointer']
         libraries = ['-lws2_32', '-liphlpapi'] if os.name == 'nt' else ['-pthread', '-ldl', '-lm']
         subprocess.run([args.cc, *flags, str(ROOT/'tools/native_boundaries_test.c'),
+                        str(ROOT/'tcc/LzmaDec.c'),
                         '-o', str(exe), *libraries], cwd=ROOT, check=True)
         subprocess.run([str(exe)], cwd=ROOT, check=True, timeout=60)
     return 0

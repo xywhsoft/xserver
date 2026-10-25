@@ -29,9 +29,10 @@ extern "C" {
 /* 契约 API                                                            */
 /* ------------------------------------------------------------------ */
 
-/* 探测并装载自身应用包。无包/损坏返回 false（传统目录模式，无副作用）。
+/* 探测并装载自身应用包。false 后用 XS_VfsInvalid 区分无包与损坏。
  * 进程启动调用一次；成功后 XS_VfsActive() 为真。 */
 bool XS_VfsBootstrap(void);
+bool XS_VfsInvalid(void);
 
 /* 应用包是否已装载 */
 bool XS_VfsActive(void);
@@ -116,6 +117,7 @@ static struct {
 	xmutex* pCacheLock;
 	size_t iCachedBytes;
 } g_XS_Vfs;
+static bool g_XS_VfsInvalid;
 
 /* ------------------------------------------------------------------ */
 /* CRC32（与 qrpng/PNG 同款表法；打包侧 python zlib.crc32 / C 工具一致） */
@@ -231,7 +233,7 @@ static const char* XS_VfsSelfPath(void)
 		int iLen;
 
 		if ( iWideLen == 0 || iWideLen >= sizeof(arrWide) / sizeof(arrWide[0]) ) {
-			snprintf(sPath, sizeof(sPath), "");
+			sPath[0] = '\0';
 			return sPath;
 		}
 		iLen = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
@@ -239,14 +241,14 @@ static const char* XS_VfsSelfPath(void)
 		if ( iLen <= 0 || (size_t)iLen >= sizeof(sPath) ||
 		     WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
 			arrWide, (int)iWideLen, sPath, iLen, NULL, NULL) != iLen ) {
-			snprintf(sPath, sizeof(sPath), "");
+			sPath[0] = '\0';
 			return sPath;
 		}
 		sPath[iLen] = '\0';
 #else
 		ssize_t iLen = readlink("/proc/self/exe", sPath, sizeof(sPath) - 1);
 		if ( iLen <= 0 || (size_t)iLen >= sizeof(sPath) ) {
-			snprintf(sPath, sizeof(sPath), "");
+			sPath[0] = '\0';
 			return sPath;
 		}
 		sPath[iLen] = '\0';
@@ -291,6 +293,7 @@ bool XS_VfsBootstrap(void)
 
 	/* 尾标：magic + CRC（尾标前 16B ‖ 归档头 64B） */
 	if ( memcmp(aTrailer, XS_VFS_TRAILER_MAGIC, 8) != 0 ) goto fail;
+	g_XS_VfsInvalid = true; /* A recognized trailer must never silently downgrade. */
 	tTrailer.HeaderOffset = XS_VfsRd64(aTrailer + 8);
 	tTrailer.Crc32 = XS_VfsRd32(aTrailer + 16);
 	if ( tTrailer.HeaderOffset == 0 || !XS_U64Range(tTrailer.HeaderOffset,
@@ -372,6 +375,7 @@ bool XS_VfsBootstrap(void)
 			pE->OrigSize = XS_VfsRd64(pIndex + iPos); iPos += 8;
 			pE->OrigCrc32 = XS_VfsRd32(pIndex + iPos); iPos += 4;
 			if ( pE->OrigSize > XS_VFS_MAX_ENTRY_ORIG_SIZE ) goto fail;
+			if ( pE->Method == 1 && (pE->CompSize < LZMA_PROPS_SIZE || pE->OrigSize == 0) ) goto fail;
 			if ( pE->Method == 0 && pE->CompSize != (uint32_t)pE->OrigSize ) goto fail;
 			if ( pE->DataOffset < g_XS_Vfs.Header.DataOffset ||
 			     !XS_U64Range(pE->DataOffset, pE->CompSize, g_XS_Vfs.Header.IndexOffset) )
@@ -390,6 +394,7 @@ bool XS_VfsBootstrap(void)
 	g_XS_Vfs.pCacheLock = xrtMutexCreate();
 	if ( g_XS_Vfs.pCacheLock == NULL ) goto fail;
 	g_XS_Vfs.bActive = true;
+	g_XS_VfsInvalid = false;
 	return true;
 
 fail:
@@ -415,6 +420,11 @@ fail:
 bool XS_VfsActive(void)
 {
 	return g_XS_Vfs.bActive;
+}
+
+bool XS_VfsInvalid(void)
+{
+	return g_XS_VfsInvalid;
 }
 
 int XS_VfsEntryCount(void)
@@ -484,7 +494,7 @@ static unsigned char* XS_VfsDecodeLzma(const uint8_t* pSrc, size_t iSrcSize,
 	ELzmaStatus eStatus;
 	SRes eRes;
 
-	if ( uOrigSize == 0 || uOrigSize > XS_VFS_MAX_ENTRY_ORIG_SIZE ) return NULL;
+	if ( uOrigSize == 0 || uOrigSize > XS_VFS_MAX_ENTRY_ORIG_SIZE || iSrcSize < LZMA_PROPS_SIZE ) return NULL;
 	pOut = (unsigned char*)xrtMalloc((size_t)uOrigSize);
 	if ( pOut == NULL ) return NULL;
 	uOrig = (size_t)uOrigSize;

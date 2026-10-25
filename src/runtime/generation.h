@@ -263,7 +263,7 @@ static XS_ServerGeneration* XS_GenerationCreate(XS_ServerInfo* pServer)
 	xrtAtomic32Init(&pGeneration->tConnections, 0);
 	xrtAtomic32Init(&pGeneration->tActivities, 0);
 	xrtAtomic32Init(&pGeneration->tQuiesced, 0);
-	xrtAtomic32Init(&pGeneration->tPublishState, 0);
+	xrtAtomic32Init(&pGeneration->tPublishState, XS_GENERATION_PREPARING);
 	pGeneration->pServer = pServer;
 	pServer->Generation = pGeneration;
 	return pGeneration;
@@ -272,7 +272,7 @@ static XS_ServerGeneration* XS_GenerationCreate(XS_ServerInfo* pServer)
 static bool XS_GenerationIsPublished(const XS_ServerGeneration* pGeneration)
 {
 	return pGeneration != NULL &&
-	       xrtAtomic32Load(&pGeneration->tPublishState, XMEMORY_ACQUIRE) == 1;
+	       xrtAtomic32Load(&pGeneration->tPublishState, XMEMORY_ACQUIRE) == XS_GENERATION_PUBLISHED;
 }
 
 static bool XS_GenerationWaitPublished(XS_ServerGeneration* pGeneration)
@@ -282,37 +282,37 @@ static bool XS_GenerationWaitPublished(XS_ServerGeneration* pGeneration)
 	if ( pGeneration == NULL || pGeneration->pPublishLock == NULL ) return false;
 	xrtMutexLock(pGeneration->pPublishLock);
 	while ( (iState = xrtAtomic32Load(&pGeneration->tPublishState,
-		XMEMORY_ACQUIRE)) == 0 ) {
+		XMEMORY_ACQUIRE)) == XS_GENERATION_PREPARING ) {
 		if ( xrtCondWait(pGeneration->pPublishCond,
 			pGeneration->pPublishLock) == XWAIT_ERROR ) break;
 	}
 	iState = xrtAtomic32Load(&pGeneration->tPublishState, XMEMORY_ACQUIRE);
 	xrtMutexUnlock(pGeneration->pPublishLock);
-	return iState == 1;
+	return iState == XS_GENERATION_PUBLISHED;
 }
 
 static bool XS_GenerationPublish(XS_ServerGeneration* pGeneration)
 {
-	uint32 iExpected = 0;
+	uint32 iExpected = XS_GENERATION_PREPARING;
 	bool bPublished;
 
 	if ( pGeneration == NULL || pGeneration->pPublishLock == NULL ) return false;
 	xrtMutexLock(pGeneration->pPublishLock);
 	bPublished = xrtAtomic32CompareExchange(&pGeneration->tPublishState,
-		&iExpected, 1, XMEMORY_ACQ_REL, XMEMORY_ACQUIRE);
+		&iExpected, XS_GENERATION_PUBLISHED, XMEMORY_ACQ_REL, XMEMORY_ACQUIRE);
 	if ( bPublished ) (void)xrtCondBroadcast(pGeneration->pPublishCond);
 	xrtMutexUnlock(pGeneration->pPublishLock);
-	return bPublished || iExpected == 1;
+	return bPublished || iExpected == XS_GENERATION_PUBLISHED;
 }
 
 static void XS_GenerationDiscard(XS_ServerGeneration* pGeneration)
 {
-	uint32 iExpected = 0;
+	uint32 iExpected = XS_GENERATION_PREPARING;
 
 	if ( pGeneration == NULL || pGeneration->pPublishLock == NULL ) return;
 	xrtMutexLock(pGeneration->pPublishLock);
 	if ( xrtAtomic32CompareExchange(&pGeneration->tPublishState,
-		&iExpected, 2, XMEMORY_ACQ_REL, XMEMORY_ACQUIRE) ) {
+		&iExpected, XS_GENERATION_DISCARDED, XMEMORY_ACQ_REL, XMEMORY_ACQUIRE) ) {
 		(void)xrtCondBroadcast(pGeneration->pPublishCond);
 	}
 	xrtMutexUnlock(pGeneration->pPublishLock);

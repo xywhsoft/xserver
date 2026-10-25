@@ -46,10 +46,13 @@ def metadata_path(binary: Path) -> Path:
 
 
 def write_metadata(binary: Path, *, source_hash: str, commit: str,
-                   platform: str, extensions: list[str], banner: str) -> dict:
+                   platform: str, extensions: list[str], banner: str,
+                   build_options: dict | None = None) -> dict:
     record = {"schema": 1, "source_commit": commit, "source_sha256": source_hash,
               "binary_sha256": file_digest(binary), "platform": platform,
               "extensions": extensions, "banner": banner}
+    if build_options is not None:
+        record['build_options'] = build_options
     target = metadata_path(binary)
     fd, name = tempfile.mkstemp(prefix="xs-provenance-", suffix=".tmp", dir=target.parent)
     try:

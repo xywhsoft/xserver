@@ -72,7 +72,7 @@ void* XS_AppReadAllLimit(const char* sRelPath, size_t iLimit, size_t* pSize, boo
 
 	/* 1) 磁盘优先：appPath 相对路径解析（绝对路径原样） */
 	sAbs = xrtPathIsAbs(sRelPath) ? xrtStrDup(sRelPath)
-	                               : xrtPathJoin(XS_AppPath(), sRelPath);
+	                               : xrtPathJoin(xsAppPath(), sRelPath);
 	if ( sAbs == NULL ) return NULL;
 	{
 		size_t iSize = 0;
@@ -96,7 +96,7 @@ void* XS_AppReadAllLimit(const char* sRelPath, size_t iLimit, size_t* pSize, boo
 		char aKey[1024];
 		const char* pRel = sRelPath;
 		size_t n;
-		const char* sApp = XS_AppPath();
+		const char* sApp = xsAppPath();
 		size_t nApp = sApp != NULL ? strlen(sApp) : 0;
 
 		if ( nApp > 0 && strlen(sRelPath) > nApp &&

@@ -122,7 +122,6 @@ XRT_API bool xsTlsRefresh(const char* sServerName, char* sErr, size_t iErrCap)
 	XS_ListenerSlot* pSlot = NULL;
 	void* pExpectedRuntime = NULL;
 	XS_TlsRefreshNode* pCurrent = NULL;
-	void* pOldChain = NULL;
 	bool bOK;
 
 	if ( sErr && iErrCap > 0 ) sErr[0] = '\0';

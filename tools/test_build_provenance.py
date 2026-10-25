@@ -21,6 +21,14 @@ class ProvenanceTests(unittest.TestCase):
     def test_valid_build(self):
         self.assertEqual(verify_metadata(self.binary, **self.options)["source_commit"], "abcdef0")
 
+    def test_policy_compiler_options_are_recorded(self):
+        options = {'compiler':'gcc','cflags':['-DXS_CONNECTIONS_LIMIT_DEFAULT=128'],'link_extra':''}
+        record = write_metadata(self.binary, commit='abcdef0',
+            banner='[xs] XServer 1.0.0 (commit abcdef0, 2026-10-25, linux)',
+            build_options=options, **self.options)
+        self.assertEqual(record['build_options'], options)
+        self.assertEqual(verify_metadata(self.binary, **self.options)['build_options'], options)
+
     def test_stale_source_is_rejected(self):
         with self.assertRaisesRegex(RuntimeError, "stale source"):
             verify_metadata(self.binary, **{**self.options, "source_hash": "b" * 64})

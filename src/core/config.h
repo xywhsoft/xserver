@@ -42,9 +42,7 @@ typedef struct XS_ConfigRevision {
 	XS_App			App;
 } XS_ConfigRevision;
 
-/* engine.h 的 XS_App 在此定义；归一化基准目录借用其 XS_AppPath。
- * 此处前置声明，engine.h 稍后提供定义（static 函数声明与定义可分离）。 */
-static const char* XS_AppPath(void);
+/* Configuration depends on the SDK path contract, not engine.h's private TU. */
 
 /* ============================================================
  * 文件系统路径归一化：相对路径按配置文件所在目录解析为绝对路径
@@ -75,6 +73,50 @@ too_long:
 	return false;
 }
 
+static bool XS_ConfigResolvePathList(const char** psField, cstr sBaseDir,
+	const char* sKey, char* sErr, size_t iErrCap)
+{
+	const char* p;
+	str sResult = NULL;
+	size_t iUsed = 0;
+	if ( psField == NULL || *psField == NULL || (*psField)[0] == '\0' ) return true;
+	for ( p = *psField; *p != '\0'; ) {
+		const char* pEnd = strchr(p, ';');
+		size_t iSize = pEnd != NULL ? (size_t)(pEnd - p) : strlen(p);
+		if ( iSize != 0 ) {
+			const char* sPart = xrtStrDupN(p, iSize);
+			str sNew;
+			size_t iNext;
+			if ( sPart == NULL ) goto allocation_failed;
+			if ( !XS_ConfigResolveField(&sPart, sBaseDir, sKey, sErr, iErrCap) ) {
+				xrtFree((void*)sPart); xrtFree(sResult); return false;
+			}
+			if ( !XS_SizeAdd(iUsed, strlen(sPart) + (iUsed != 0 ? 1u : 0u), &iNext) ||
+			     iNext > XS_CONFIG_STRING_LIMIT ) {
+				xrtFree((void*)sPart); xrtFree(sResult);
+				snprintf(sErr, iErrCap, "field '%s' path list too long", sKey); return false;
+			}
+			sNew = xrtRealloc(sResult, iNext + 1u);
+			if ( sNew == NULL ) { xrtFree((void*)sPart); goto allocation_failed; }
+			sResult = sNew;
+			if ( iUsed != 0 ) sResult[iUsed++] = ';';
+			memcpy(sResult + iUsed, sPart, strlen(sPart) + 1u);
+			iUsed = iNext;
+			xrtFree((void*)sPart);
+		}
+		if ( pEnd == NULL ) break;
+		p = pEnd + 1;
+	}
+	if ( sResult == NULL && (sResult = xrtStrDup("")) == NULL ) goto allocation_failed;
+	xrtFree((void*)*psField);
+	*psField = sResult;
+	return true;
+allocation_failed:
+	xrtFree(sResult);
+	snprintf(sErr, iErrCap, "out of memory resolving field '%s'", sKey);
+	return false;
+}
+
 static bool XS_ConfigResolveHostPaths(XS_HostInfo* pHost, cstr sBaseDir,
 	char* sErr, size_t iErrCap)
 {
@@ -83,8 +125,8 @@ static bool XS_ConfigResolveHostPaths(XS_HostInfo* pHost, cstr sBaseDir,
 	if ( !XS_ConfigResolveField(&pHost->member, sBaseDir, key, sErr, iErrCap) ) return false
 	XS_RESOLVE_FIELD(Path, "path");
 	XS_RESOLVE_FIELD(DevFile, "devfile");
-	XS_RESOLVE_FIELD(DevInc, "dev_inc");
-	XS_RESOLVE_FIELD(DevLib, "dev_lib");
+	if ( !XS_ConfigResolvePathList(&pHost->DevInc, sBaseDir, "dev_inc", sErr, iErrCap) ) return false;
+	if ( !XS_ConfigResolvePathList(&pHost->DevLib, sBaseDir, "dev_lib", sErr, iErrCap) ) return false;
 	XS_RESOLVE_FIELD(TlsCA, "tls_ca");
 	XS_RESOLVE_FIELD(TlsCert, "tls_cert");
 	XS_RESOLVE_FIELD(TlsKey, "tls_key");
@@ -607,7 +649,7 @@ static bool XS_ConfigBuild(const char* sSource, xvalue* pRoot, XS_App* pApp)
 	 * （demo 目录可整体搬移）。旧式"配置与可执行文件同目录"的写法两个
 	 * 基准重合，语义不变。归一化后消费侧不再回落可执行文件目录。 */
 	{
-		str sBase = sSource != NULL ? xrtPathParent(sSource) : xrtStrDup(XS_AppPath());
+		str sBase = sSource != NULL ? xrtPathParent(sSource) : xrtStrDup(xsAppPath());
 		if ( sBase == NULL ) {
 			snprintf(pApp->ParseError, sizeof(pApp->ParseError), "out of memory resolving config directory");
 			return false;
@@ -615,9 +657,9 @@ static bool XS_ConfigBuild(const char* sSource, xvalue* pRoot, XS_App* pApp)
 
 		if ( sBase == NULL || sBase[0] == '\0' ) {
 			xrtFree(sBase);
-			sBase = xrtStrDup(XS_AppPath());
+			sBase = xrtStrDup(xsAppPath());
 		} else if ( !xrtPathIsAbs(sBase) ) {
-			str sAbs = xrtPathJoin(XS_AppPath(), sBase);
+			str sAbs = xrtPathJoin(xsAppPath(), sBase);
 
 			xrtFree(sBase);
 			sBase = sAbs;
@@ -655,8 +697,12 @@ static bool XS_ConfigLoad(const char* sPath, XS_App* pApp)
 		snprintf(pApp->ParseError, sizeof(pApp->ParseError), "config read failed or exceeds byte limit");
 		return false;
 	}
-	bOk = XS_ConfigBuild(sPath, XS_TextValid((const char*)pData, iSize, XS_CONFIG_BYTES_LIMIT) ?
-		xrtJsonParse(xrtStrViewN((const char*)pData, iSize)) : NULL, pApp);
+	if ( !XS_TextValid((const char*)pData, iSize, XS_CONFIG_BYTES_LIMIT) ) {
+		xrtFree(pData);
+		snprintf(pApp->ParseError, sizeof(pApp->ParseError), "config contains NUL or exceeds byte limit");
+		return false;
+	}
+	bOk = XS_ConfigBuild(sPath, xrtJsonParse(xrtStrViewN((const char*)pData, iSize)), pApp);
 	xrtFree(pData);
 	return bOk;
 }

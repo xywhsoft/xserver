@@ -218,6 +218,19 @@ def main() -> int:
         malicious("layout",
                   lambda a: a.patch_header(data_off=a.index_off + 8),
                   "archive layout invalid")
+        malicious('lzma-short',
+                  lambda a: a.patch_entry(a.entries()[0], method=1, csize=0, osize=1),
+                  'compressed entry invalid')
+
+        broken_boot = tmp_path/'invalid-boot.exe'
+        corrupt = bytearray(packed.read_bytes())
+        struct.pack_into('<Q', corrupt, len(corrupt)-16, (1 << 64)-8)
+        broken_boot.write_bytes(corrupt)
+        broken_boot.chmod(broken_boot.stat().st_mode | 0o111)
+        (tmp_path/'xs.json').write_text('{"services":[]}', encoding='utf-8')
+        r = run_xs(broken_boot, cwd=tmp_path)
+        check('invalid embedded archive refuses directory fallback',
+              r.returncode != 0 and 'app pack invalid' in r.stdout, r.stdout+r.stderr)
 
         # A failed pack must preserve an existing destination, including failures
         # before an output stream has been opened.
@@ -231,6 +244,33 @@ def main() -> int:
         r = run_xs(exe, 'pack', str(tmp_path/'absent-site'), '-o', str(preserved))
         check('failed pack preserves destination', r.returncode != 0 and
               preserved.read_bytes() == b'previous valid output')
+        directory_target = tmp_path/'directory-target'
+        directory_target.mkdir()
+        (directory_target/'marker').write_text('preserved', encoding='utf-8')
+        r = run_xs(exe, 'pack', str(site), '-o', str(directory_target))
+        check('failed pack publication preserves existing directory', r.returncode != 0 and
+              (directory_target/'marker').read_text(encoding='utf-8') == 'preserved')
+        check('failed pack publication removes temporary output', not list(tmp_path.glob('xs-pack-*.tmp')))
+
+        blocked_extract = tmp_path/'blocked-extract'
+        (blocked_extract/'main.c').mkdir(parents=True)
+        (blocked_extract/'main.c'/'marker').write_text('preserved', encoding='utf-8')
+        r = run_xs(exe, 'pack', '--extract', str(packed), '-d', str(blocked_extract))
+        check('failed extract publication preserves destination', r.returncode != 0 and
+              (blocked_extract/'main.c'/'marker').read_text(encoding='utf-8') == 'preserved')
+        check('failed extract publication removes temporary file', not list(blocked_extract.glob('*.xs-tmp-*')))
+        nested = broken_site
+        try:
+            for _ in range(130):
+                nested = nested/'d'
+                nested.mkdir()
+        except OSError as error:
+            print(f'  SKIP: deep directory fixture unavailable: {error}')
+        else:
+            r = run_xs(exe, 'pack', str(broken_site), '-o', str(preserved))
+            check('failed walk preserves destination', r.returncode != 0 and
+                  'directory nesting over limit' in r.stdout and
+                  preserved.read_bytes() == b'previous valid output', r.stdout+r.stderr)
 
         for kind in ['directory', 'file']:
             linked_out = tmp_path / ('out-link-' + kind)
@@ -255,6 +295,19 @@ def main() -> int:
             else:
                 check('file link is replaced atomically or rejected',
                       r.returncode != 0 or not link.is_symlink(), r.stdout+r.stderr)
+
+        hardlink_out = tmp_path/'out-hardlink'
+        (hardlink_out/'wwwroot').mkdir(parents=True)
+        hardlink_original = tmp_path/'hardlink-original.txt'
+        hardlink_original.write_text('outside preserved', encoding='utf-8')
+        try:
+            (hardlink_out/'wwwroot'/'a.txt').hardlink_to(hardlink_original)
+        except OSError as error:
+            print(f'  SKIP: hardlink fixture unavailable: {error}')
+        else:
+            r = run_xs(exe, 'pack', '--extract', str(packed), '-d', str(hardlink_out))
+            check('hardlink target outside root is preserved',
+                  hardlink_original.read_text(encoding='utf-8') == 'outside preserved', r.stdout+r.stderr)
 
     print(f"\n{PASSED} pass, {FAILED} fail")
     return 1 if FAILED > 0 else 0

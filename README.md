@@ -79,6 +79,12 @@ app.exe                                      # 无参启动：自动从包内读
 
 格式与设计细节见 [docs/站点VFS设计.md](docs/站点VFS设计.md)；端到端测试 `python tools/test_site_vfs.py`，覆盖打包往返、多个 host 共用包内 C 脚本、空文件、静态服务及磁盘覆盖。`python tools/test_packed_reload.py --exe release/xs.exe` 覆盖包内配置与源码快照、host/server/all 重载、磁盘覆盖及失败回滚。两者均使用动态端口与临时站点，并纳入 `test.bat` / `test.sh` 基线。
 
+## 宿主质量检查
+
+`python tools/check_quality.py` 运行自有源码告警、输入/分配失败/并发边界及 SDK ABI 检查。对已构建候选使用 `python tools/check_quality.py --exe PATH`，会验证构建摘要并追加脚本、热重载、资源预算、协议与归档回归。Linux 可加 `--sanitize` 检查原生夹具；报告默认写入 `.build/quality-report.json`。
+
+资源默认值、SDK 所有权和线程契约见 [设计附录 B](docs/设计.md#附录-b宿主边界与质量检查2026-10-25)。预算可通过构建参数 `--cflag=-DXS_...=...` 调整，选项会记录在 `.build.json` 中。
+
 ## 开源许可
 
 本项目自有代码以 MIT 授权（见 [LICENSE](/D:/GIT/xserver/LICENSE)）。仓库捆绑的第三方组件各自保留原许可：

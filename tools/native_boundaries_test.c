@@ -5,13 +5,23 @@
 #include "src/core/config.h"
 #include "src/runtime/generation.h"
 #include "src/runtime/byte_budget.h"
+#define XS_VFS_IMPLEMENTATION
+#include "src/core/xs_vfs.h"
 #include <assert.h>
 
-static const char* XS_AppPath(void) { return "."; }
+const char* xsAppPath(void) {
+#ifdef _WIN32
+	return "D:/xs-test";
+#else
+	return "/xs-test";
+#endif
+}
+bool g_XS_VfsDisabled = false;
 
 static const char* valid_config =
 	"{\"services\":[{\"class\":\"http\",\"name\":\"test\",\"port\":8080,"
-	"\"host_default\":{\"devfile\":\"main.c\",\"path\":\"www\"}}]}";
+	"\"host_default\":{\"devfile\":\"main.c\",\"path\":\"www\","
+	"\"dev_inc\":\"inc;headers;;\",\"dev_lib\":\"lib;more\"}}]}";
 
 static xatomic32 quiesced, finalized, ready, run_workers, admissions;
 static XS_ByteBudget shared_budget;
@@ -111,7 +121,90 @@ static void check_config(const char* text, bool expected, const char* message)
 	bool ok = XS_ConfigLoadMemory("site/xs.json", text, strlen(text), &app);
 	assert(ok == expected);
 	if ( !ok ) assert(strstr(app.ParseError, message) != NULL);
+	if ( ok && app.ServerCount && app.Servers[0]->DefaultHost->DevInc != NULL ) {
+		const char* paths = app.Servers[0]->DefaultHost->DevInc;
+		const char* second = strchr(paths, ';');
+		assert(xrtPathIsAbs(paths) && second != NULL && xrtPathIsAbs(second + 1));
+		assert(strstr(paths, ";;") == NULL);
+	}
 	XS_ConfigFree(&app);
+}
+
+static int32 race_cache(ptr unused)
+{
+	(void)unused;
+	for ( unsigned i = 0; i < 500; i++ ) {
+		size_t size = 0;
+		const unsigned char* data = XS_VfsEntryData(0, &size);
+		assert(data != NULL && size == 1 && data[0] == 'X');
+	}
+	return 0;
+}
+
+static void check_cache(void)
+{
+	str path = NULL;
+	size_t written = 0;
+	xthread* threads[4];
+	g_XS_Vfs.hSelf = xrtFileTemp(NULL, "xs-cache-", ".bin", &path);
+	assert(g_XS_Vfs.hSelf != NULL);
+	assert(xrtWriteFull(g_XS_Vfs.hSelf, "X", 1, &written));
+	g_XS_Vfs.pCacheLock = xrtMutexCreate();
+	g_XS_Vfs.pEntries = xrtCalloc(1, sizeof(XS_VfsEntry));
+	assert(g_XS_Vfs.pCacheLock != NULL && g_XS_Vfs.pEntries != NULL);
+	g_XS_Vfs.Header.EntryCount = 1;
+	g_XS_Vfs.pEntries[0].OrigSize = 1;
+	g_XS_Vfs.pEntries[0].CompSize = 1;
+	g_XS_Vfs.pEntries[0].OrigCrc32 = XS_VfsCrc32(0, "X", 1);
+	g_XS_Vfs.bActive = true;
+	assert(xrtMemDebugFailAfter(0));
+	size_t size = 0;
+	assert(XS_VfsEntryData(0, &size) == NULL);
+	xrtMemDebugFailClear();
+	assert(g_XS_Vfs.iCachedBytes == 0 && g_XS_Vfs.pEntries[0].pCached == NULL);
+	for ( unsigned i = 0; i < 4; i++ ) {
+		threads[i] = xrtThreadCreate(race_cache, NULL, 0);
+		assert(threads[i] != NULL);
+	}
+	for ( unsigned i = 0; i < 4; i++ ) {
+		assert(xrtThreadWait(threads[i]) == XWAIT_OK);
+		xrtThreadDestroy(threads[i]);
+	}
+	assert(g_XS_Vfs.iCachedBytes == 1);
+	xrtFree(g_XS_Vfs.pEntries[0].pCached);
+	g_XS_Vfs.pEntries[0].pCached = NULL;
+	g_XS_Vfs.iCachedBytes = XS_VFS_CACHE_BYTES_LIMIT;
+	assert(XS_VfsEntryData(0, &size) == NULL);
+	assert(xrtClose(g_XS_Vfs.hSelf));
+	assert(xrtFileDelete(path));
+	xrtFree(path);
+	xrtMutexDestroy(g_XS_Vfs.pCacheLock);
+	xrtFree(g_XS_Vfs.pEntries);
+	memset(&g_XS_Vfs, 0, sizeof(g_XS_Vfs));
+	puts("PASS VFS cold-cache concurrency, allocation failure and cache byte limit");
+}
+
+static void check_config_mutations(void)
+{
+	char mutated[512];
+	uint32 random = 0x9173u;
+	xmemdebugsnapshot before, after;
+	xrtClearError();
+	xrtMemDebugSnapshot(&before);
+	for ( unsigned i = 0; i < 512; i++ ) {
+		XS_App app;
+		size_t size = strlen(valid_config);
+		memcpy(mutated, valid_config, size);
+		random ^= random << 13; random ^= random >> 17; random ^= random << 5;
+		mutated[random % size] = (char)(random >> 24);
+		if ( i % 3 == 0 ) size = random % size;
+		(void)XS_ConfigLoadMemory("site/xs.json", mutated, size, &app);
+		XS_ConfigFree(&app);
+		xrtClearError();
+		xrtMemDebugSnapshot(&after);
+		assert(after.LiveBytes == before.LiveBytes && after.LiveCount == before.LiveCount);
+	}
+	puts("PASS 512 deterministic config mutations/truncations without leaked state");
 }
 
 int main(void)
@@ -155,5 +248,7 @@ int main(void)
 	assert(triggered > 20);
 	printf("PASS checked arithmetic/text, config NUL rejection and %u allocation failures without leaks\n", triggered);
 	check_lifetimes();
+	check_cache();
+	check_config_mutations();
 	return 0;
 }

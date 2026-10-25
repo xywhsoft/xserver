@@ -136,7 +136,8 @@ def build(args: argparse.Namespace, selected: dict) -> Path:
     def compile_source(source: str, name: str, extra: list[str],
                        lang: str = "c") -> None:
         obj = str(directory / (name + ".o"))
-        run([args.cc, "-x", lang, "-c", source, *flags, "-O2", *extra, "-o", obj],
+        run([args.cc, "-x", lang, "-c", source, *flags, "-O2", *extra,
+             *getattr(args, "cflag", []), "-o", obj],
             args.dry_run)
         objects.append(obj)
 
@@ -196,14 +197,18 @@ def build(args: argparse.Namespace, selected: dict) -> Path:
             banner = subprocess.check_output([str(output), "--version"], cwd=ROOT,
                 text=True, encoding="utf-8", errors="replace").strip()
             write_metadata(output, source_hash=source_hash, commit=commit,
-                           platform=platform, extensions=list(selected), banner=banner)
+                           platform=platform, extensions=list(selected), banner=banner,
+                           build_options={"compiler": args.cc, "cflags": getattr(args, "cflag", []),
+                                          "link_extra": args.link_extra or ""})
             if platform == "windows":
                 staged_gui = Path(temp) / "xsw.exe"
                 link(args.cc, objects, ["-mwindows", *libraries], staged_gui)
                 publish(staged_gui, output.with_name("xsw.exe"))
                 write_metadata(output.with_name("xsw.exe"), source_hash=source_hash,
                                commit=commit, platform=platform,
-                               extensions=list(selected), banner=banner)
+                               extensions=list(selected), banner=banner,
+                               build_options={"compiler": args.cc, "cflags": getattr(args, "cflag", []),
+                                              "link_extra": args.link_extra or ""})
                 print(f"[build] built {output.with_name('xsw.exe')}", flush=True)
     print(f"[build] {'would publish' if args.dry_run else 'built'} {output}", flush=True)
     return output
@@ -220,6 +225,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="artifact root; platform/extension variants are isolated below it")
     parser.add_argument("--output", type=Path, help="output executable (default: release/xs[.exe])")
     parser.add_argument("--cc", default="gcc", help="C compiler executable (default: gcc)")
+    parser.add_argument("--cflag", action="append", default=[],
+                        help="extra compiler argument (repeat --cflag=-DNAME=value to tune host policy)")
     parser.add_argument("--sysroot", type=Path, default=None,
                         help="embed libc headers (e.g. musl include) at virtual /xsroot/usr/include "
                              "and compile libtcc with -DCONFIG_SYSROOT=/xsroot")

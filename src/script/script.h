@@ -243,9 +243,9 @@ static XS_ScriptRuntime* XS_ScriptCompile(XS_HostInfo* pHost)
 			for ( int i = 0; i < nEntries; i++ ) {
 				const char* sRel = XS_VfsEntryPath(i);
 				size_t n = sRel != NULL ? strlen(sRel) : 0;
-				bool bSource = n > 2 && (
+				bool bSource = (n > 2 && (
 					strcmp(sRel + n - 2, ".h") == 0 ||
-					strcmp(sRel + n - 2, ".c") == 0 ) ||
+					strcmp(sRel + n - 2, ".c") == 0 )) ||
 					( n > 4 && strcmp(sRel + n - 4, ".inc") == 0 );
 
 				if ( !bSource || n + 16 >= sizeof(aVirtual) ) continue;

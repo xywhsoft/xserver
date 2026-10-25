@@ -123,7 +123,7 @@ bool xsExtensionEnabled(const char* sName)
 	if ( sName == NULL || sName[0] == 0 ) {
 		return false;
 	}
-	for ( iIndex = 0; iIndex < XS_EXTENSION_COUNT; iIndex++ ) {
+	for ( iIndex = 0; iIndex < xsExtensionCount(); iIndex++ ) {
 		const char* sEach = g_XS_ExtensionNames[iIndex];
 		size_t i = 0;
 
@@ -158,7 +158,7 @@ uint32 xsExtensionCount(void)
 
 const char* xsExtensionName(uint32 iIndex)
 {
-	if ( iIndex >= XS_EXTENSION_COUNT ) {
+	if ( iIndex >= xsExtensionCount() ) {
 		return NULL;
 	}
 	return g_XS_ExtensionNames[iIndex];

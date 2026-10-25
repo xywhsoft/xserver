@@ -877,7 +877,7 @@ static bool XS_AcmeDaemonStart(XS_App* pApp, XS_AcmeConfig* pConfig,
 {
 	XS_AcmeDaemon* pDaemon = &g_XS_Acme;
 	xnetengineconfig tEngine;
-	const char* sAppPath = XS_AppPath();
+	const char* sAppPath = xsAppPath();
 	xvalue* pJson;
 	char* sText;
 	size_t i;

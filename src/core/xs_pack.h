@@ -150,7 +150,7 @@ static uint8_t* XS_PackUnlzma(const uint8_t* pSrc, size_t iSrcSize, uint64_t uOr
 	SizeT uOut, uIn;
 	ELzmaStatus eSt;
 
-	if ( uOrig == 0 ) return NULL;
+	if ( uOrig == 0 || iSrcSize < LZMA_PROPS_SIZE ) return NULL;
 	pOut = (uint8_t*)malloc((size_t)uOrig);
 	if ( pOut == NULL ) return NULL;
 	uOut = (SizeT)uOrig;
@@ -264,6 +264,7 @@ typedef struct XS_PackList {
 
 static bool XS_PackListAdd(XS_PackList* pList, const char* sRel, const char* sAbs)
 {
+	if ( pList->nCount >= XS_VFS_MAX_ENTRIES ) return false;
 	if ( pList->nCount == pList->nCap ) {
 		uint32_t nNew = pList->nCap == 0 ? 64 : pList->nCap * 2;
 		XS_PackFile* pNew = (XS_PackFile*)realloc(
@@ -275,7 +276,11 @@ static bool XS_PackListAdd(XS_PackList* pList, const char* sRel, const char* sAb
 	pList->pFiles[pList->nCount].sRel = XS_PackStrDup(sRel);
 	pList->pFiles[pList->nCount].sAbs = XS_PackStrDup(sAbs);
 	if ( pList->pFiles[pList->nCount].sRel == NULL ||
-	     pList->pFiles[pList->nCount].sAbs == NULL ) return false;
+	     pList->pFiles[pList->nCount].sAbs == NULL ) {
+		free(pList->pFiles[pList->nCount].sRel);
+		free(pList->pFiles[pList->nCount].sAbs);
+		return false;
+	}
 	pList->nCount++;
 	return true;
 }
@@ -292,8 +297,11 @@ static void XS_PackListUnit(XS_PackList* pList)
 	memset(pList, 0, sizeof(*pList));
 }
 
-static bool XS_PackWalk(XS_PackList* pList, const char* sAbsDir, const char* sRel)
+static bool XS_PackWalk(XS_PackList* pList, const char* sAbsDir, const char* sRel, unsigned iDepth)
 {
+	if ( iDepth > 128u ) {
+		snprintf(pList->sError, sizeof(pList->sError), "directory nesting over limit"); return false;
+	}
 	xdir hDir = xrtDirOpen(sAbsDir, XDIR_STAT);
 	xdirentry tEntry;
 
@@ -303,12 +311,16 @@ static bool XS_PackWalk(XS_PackList* pList, const char* sAbsDir, const char* sRe
 		return false;
 	}
 	while ( xrtDirNext(hDir, &tEntry) == XDIR_NEXT_ITEM ) {
-		char aName[512];
+		char aName[XS_PATH_BYTES_LIMIT + 1u];
 		char* sAbs;
 		char* sRel2;
 		size_t nName = tEntry.Name.Size;
 
-		if ( nName == 0 || nName >= sizeof(aName) ) continue;
+		if ( nName == 0 ) continue;
+		if ( nName >= sizeof(aName) ) {
+			snprintf(pList->sError, sizeof(pList->sError), "entry name too long");
+			xrtDirClose(hDir); return false;
+		}
 		memcpy(aName, tEntry.Name.Data, nName);
 		aName[nName] = 0;
 		if ( strcmp(aName, ".") == 0 || strcmp(aName, "..") == 0 ) continue;
@@ -328,7 +340,7 @@ static bool XS_PackWalk(XS_PackList* pList, const char* sAbsDir, const char* sRe
 		else sprintf(sRel2, "%s/%s", sRel, aName);
 
 		if ( tEntry.Info.Type == XFILE_TYPE_DIRECTORY ) {
-			bool bOk = XS_PackWalk(pList, sAbs, sRel2);
+			bool bOk = XS_PackWalk(pList, sAbs, sRel2, iDepth + 1u);
 			free(sAbs); free(sRel2);
 			if ( !bOk ) { xrtDirClose(hDir); return false; }
 		}
@@ -517,6 +529,11 @@ static bool XS_PackParse(const char* sExe, bool bRequireArchive,
 					pOut->pEntries[i].sPath);
 				goto malformed;
 			}
+			if ( pOut->pEntries[i].Method == 1 &&
+			     (pOut->pEntries[i].CompSize < LZMA_PROPS_SIZE || pOut->pEntries[i].OrigSize == 0) ) {
+				snprintf(sErr, iErrCap, "compressed entry invalid: %s", pOut->pEntries[i].sPath);
+				goto malformed;
+			}
 			if ( pOut->pEntries[i].OrigSize > XS_VFS_MAX_ENTRY_ORIG_SIZE ) {
 				snprintf(sErr, iErrCap, "entry size over limit: %s",
 					pOut->pEntries[i].sPath);
@@ -649,7 +666,7 @@ static int XS_PackDoPack(const char* sSiteDir, const char* sOut)
 		return 1;
 	}
 
-	if ( !XS_PackWalk(&tList, sSiteDir, "") ) {
+	if ( !XS_PackWalk(&tList, sSiteDir, "", 0) ) {
 		printf("[pack] %s\n", tList.sError[0] ? tList.sError : "walk failed");
 		goto done;
 	}

@@ -6,7 +6,9 @@
  * → generation 排空的优雅停机。
  */
 
+#ifndef XRT_MODULE_ALL
 #define XRT_MODULE_ALL
+#endif
 
 
 
@@ -295,7 +297,7 @@ static void XS_PrintVersion(void)
 		unsigned int iIndex;
 
 		printf("[xs] extensions (%u):", XS_EXTENSION_COUNT);
-		for ( iIndex = 0; iIndex < XS_EXTENSION_COUNT; iIndex++ ) {
+		for ( iIndex = 0; iIndex < xsExtensionCount(); iIndex++ ) {
 			printf("%s %s", iIndex > 0 ? "," : "", g_XS_ExtensionNames[iIndex]);
 		}
 		printf("\n");
@@ -403,7 +405,9 @@ int main(int argc, char** argv)
 	/* 站点 VFS：无显式 config 时探测自身应用包（单文件发布模式） */
 	if ( sArgConfig == NULL && XS_VfsBootstrap() ) {
 		size_t iVfsSize = 0;
-		const char* sVfsJson = (const char*)XS_VfsReadAll("xs.json", &iVfsSize);
+		int iConfigEntry = XS_VfsLookup("xs.json");
+		const char* sVfsJson = iConfigEntry >= 0 && XS_VfsEntrySize(iConfigEntry) <= XS_CONFIG_BYTES_LIMIT ?
+			(const char*)XS_VfsEntryData(iConfigEntry, &iVfsSize) : NULL;
 
 		if ( sVfsJson != NULL ) {
 			XS_PrintVersion();
@@ -421,11 +425,15 @@ int main(int argc, char** argv)
 		}
 		else {
 			XS_PrintVersion();
-			printf("[xs] app pack present but xs.json missing\n");
+			printf("[xs] app pack xs.json missing, unreadable or over byte limit\n");
 			return XS_MainExit(1, pOwnedArgv, iOwnedArgc);
 		}
 	}
 	else {
+	if ( sArgConfig == NULL && XS_VfsInvalid() ) {
+		printf("[xs] app pack invalid; refusing directory fallback\n");
+		return XS_MainExit(1, pOwnedArgv, iOwnedArgc);
+	}
 	/* 启动横幅：版本 + 本变体携带的扩展清单（与 --version 同一输出） */
 	XS_PrintVersion();
 

@@ -1,6 +1,8 @@
 #ifndef XS_SDK_XSBASE_H
 #define XS_SDK_XSBASE_H
 
+#define XS_SDK_ABI_VERSION 1u
+
 /*
  * xs3 契约头 —— 应用与脚本唯一依赖的 xs 层声明
  *
@@ -238,12 +240,19 @@ typedef bool (*XS_ServiceSwapProc)(XS_HostInfo* pHost, xvalue** ppShared);
  * xs API（其余一切能力皆为 xrt 或可选库符号）
  * ============================================================ */
 
-/* 配置访问：
+/* 配置访问（同进程可信原生代码；不构成脚本隔离）：
  * - xsServerFind 返回 retained server lease，必须 xsServerRelease；
  * - xsServerRetain 用于延长连接/枚举回调内借用指针的生命周期；
  * - 枚举参数只在回调内借用，如需保存必须 Retain；
  * - xsHostFind/xsEnumHosts 的 host 由其 server lease 共同保护；
  * - xsConfigRoot 返回 retained xvalue，必须 xrtValueRelease。 */
+/* Queries synchronize their own topology access. Returned config strings,
+ * Custom and host arrays are borrowed from that immutable generation; do not
+ * mutate/free them. Runtime/RuntimeLock/Generation/ConfigOwner are host-private.
+ * State/Runtime are mutable host fields, not a concurrent status-query API.
+ * Enumeration callbacks run without the topology lock and may query/submit
+ * reload again. Keep a server lease when carrying any host pointer off-callback.
+ * Stop rejects new topology leases; an existing lease still needs Release. */
 typedef bool (*XS_ServerEnumProc)(XS_ServerInfo* pServer, void* pUserData);
 typedef bool (*XS_HostEnumProc)(XS_HostInfo* pHost, void* pUserData);
 XS_API XS_ServerInfo* xsServerFind(const char* sName);
@@ -257,7 +266,9 @@ XS_API xvalue* xsConfigRoot(void);			/* xs.json 顶层 Custom */
 /* 重载协调器：Submit 返回 0 表示未受理；非零 ID 可用 xsReloadQuery 查询终态。
  * host/server 都以完整 server generation 为发布单元，同 server 旧意图会被
  * 最新意图覆盖；失败时旧代原样服务。
- * bool 入口是兼容包装，只表示 Submit 是否返回非零。 */
+ * bool 入口是兼容包装，只表示 Submit 是否返回非零。
+ * Submit/Query 可并发调用；不得在网络/生命周期回调内等待本次重载完成。
+ * Query 复制结果到调用方缓冲，有限结果环过期后返回 false。 */
 XS_API XS_ReloadId xsReloadHostSubmit(XS_HostInfo* pHost);
 XS_API XS_ReloadId xsReloadServerSubmit(const char* sName);
 XS_API XS_ReloadId xsReloadAllSubmit(void);
@@ -266,7 +277,11 @@ XS_API bool xsReloadHost(XS_HostInfo* pHost);
 XS_API bool xsReloadServer(const char* sName);
 XS_API bool xsReloadAll(void);
 
-/* 生命周期定时器：绑定 owner 所属 generation，换代自动作废旧代 */
+/* 生命周期定时器：绑定 owner 所属 generation，换代自动作废旧代。
+ * After 返回 0 表示未创建；Cancel 只请求取消，不等待在途回调退出。
+ * userData 由应用拥有，必须覆盖可能在途的 proc 调用；取消不会释放它。
+ * proc 在 Engine Worker 执行，应有界且不得阻塞等待本 Worker 的工作。
+ * 回调可重入取消/提交重载；退役后 After 返回 0。 */
 typedef void (*XS_TimerProc)(void* pUserData);
 XS_API uint64 xsTimerAfter(XS_HostInfo* pOwner, uint32 iMillisecond, XS_TimerProc proc, void* pUserData);
 XS_API bool xsTimerCancel(uint64 iTimerId);
@@ -284,6 +299,8 @@ XS_API bool xsExtensionEnabled(const char* sName);
  * 枚举出的名字喂给 xsExtensionEnabled 必为 true（同一张表）。 */
 XS_API uint32 xsExtensionCount(void);
 XS_API const char* xsExtensionName(uint32 iIndex);
+/* TCC 状态由调用方拥有；同一状态的编译/执行/销毁须由调用方串行化。
+ * 销毁前，所有指向该状态生成代码的函数调用和异步回调必须已经结束。 */
 XS_API TCCState* xsCreateTCC(void);
 XS_API void xsDestroyTCC(TCCState* pTcc);
 
