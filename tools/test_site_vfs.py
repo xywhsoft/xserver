@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import http.client
 import json
+import random
 import shutil
 import socket
 import subprocess
@@ -84,6 +85,8 @@ def make_site(dir_: Path, dev_inc: str | None = None) -> None:
         "<html><body>pack-about</body></html>", encoding="utf-8")
     (www / "big.js").write_text("var x = 1;\n" * 5000, encoding="utf-8")
     (www / "empty.txt").write_bytes(b"")
+    # A repeated 80 KiB random block compresses across multiple 64 KiB input chunks.
+    (www / "chunked.bin").write_bytes(random.Random(0x9173).randbytes(80 << 10) * 4)
     # 子目录索引页：磁盘根存在但子目录不在时，尾斜杠请求应从包内兑底
     docs = www / "docs"
     docs.mkdir()
@@ -135,11 +138,15 @@ def main() -> int:
         # ---- 2. --list ----
         r = run_xs(exe, "pack", "--list", str(packed))
         check("list exits 0", r.returncode == 0, r.stderr)
-        check("list shows 7 entries including shared script and empty file",
-              "7 entries" in r.stdout and "main.c" in r.stdout
+        check("list shows 8 entries including shared script and empty file",
+              "8 entries" in r.stdout and "main.c" in r.stdout
               and "wwwroot/index.html" in r.stdout
               and "wwwroot/docs/index.html" in r.stdout,
               r.stdout)
+        chunked_line = next(line for line in r.stdout.splitlines() if line.endswith('wwwroot/chunked.bin'))
+        check('large compressed fixture spans multiple input chunks',
+              chunked_line.split()[0] == 'lzma' and int(chunked_line.split()[3]) > (64 << 10),
+              chunked_line)
 
         # ---- 3. --extract round-trip ----
         out = tmp_path / "extracted"
@@ -182,6 +189,10 @@ def main() -> int:
             code, body = http_get("/big.js")
             check("GET /big.js 200 (large asset)",
                   code == 200 and len(body) >= 54000)
+            for attempt in range(2):
+                code, body = http_get('/chunked.bin')
+                check(f'multi-chunk packed asset matches on read {attempt + 1}',
+                      code == 200 and body == (site/'wwwroot'/'chunked.bin').read_bytes())
             for attempt in range(2):
                 code, body = http_get("/empty.txt")
                 check(f"empty packed file returns 200 on read {attempt + 1}",

@@ -209,6 +209,14 @@ static void check_config_mutations(void)
 	puts("PASS 512 deterministic config mutations/truncations without leaked state");
 }
 
+static uint8_t* decode_vfs_bytes(const uint8_t* data, size_t size, uint64_t original)
+{
+	size_t written;
+	assert(size <= UINT32_MAX && xrtFileResize(g_XS_Vfs.hSelf, size));
+	assert(xrtWriteAtFull(g_XS_Vfs.hSelf, 0, data, size, &written));
+	return XS_VfsDecodeLzma(0, (uint32_t)size, original);
+}
+
 static void check_lzma_consumption(void)
 {
 	/* XS pack's LZMA1 stream for 1024 'A' bytes, without an end marker. */
@@ -220,8 +228,11 @@ static void check_lzma_consumption(void)
 	xmemdebugsnapshot before, after;
 	xrtClearError();
 	xrtMemDebugSnapshot(&before);
+	str path = NULL;
+	g_XS_Vfs.hSelf = xrtFileTemp(NULL, "xs-lzma-", ".bin", &path);
+	assert(g_XS_Vfs.hSelf != NULL);
 	uint8_t* tool = XS_PackUnlzma(compressed, sizeof(compressed), 1024);
-	uint8_t* runtime = XS_VfsDecodeLzma(compressed, sizeof(compressed), 1024);
+	uint8_t* runtime = decode_vfs_bytes(compressed, sizeof(compressed), 1024);
 	assert(tool != NULL && runtime != NULL);
 	for ( size_t i = 0; i < 1024; i++ ) assert(tool[i] == 'A' && runtime[i] == 'A');
 	free(tool);
@@ -230,18 +241,100 @@ static void check_lzma_consumption(void)
 	for ( unsigned i = 0; i < 3; i++ ) {
 		trailing[sizeof(compressed)] = i == 2 ? 0xff : (uint8_t)i;
 		assert(XS_PackUnlzma(trailing, sizeof(trailing), 1024) == NULL);
-		assert(XS_VfsDecodeLzma(trailing, sizeof(trailing), 1024) == NULL);
+		assert(decode_vfs_bytes(trailing, sizeof(trailing), 1024) == NULL);
 	}
 	for ( size_t size = 0; size < sizeof(compressed); size++ ) {
 		assert(XS_PackUnlzma(compressed, size, 1024) == NULL);
-		assert(XS_VfsDecodeLzma(compressed, size, 1024) == NULL);
+		assert(decode_vfs_bytes(compressed, size, 1024) == NULL);
 	}
 	assert(XS_PackUnlzma(compressed, sizeof(compressed), 1025) == NULL);
-	assert(XS_VfsDecodeLzma(compressed, sizeof(compressed), 1025) == NULL);
+	assert(decode_vfs_bytes(compressed, sizeof(compressed), 1025) == NULL);
+	assert(xrtClose(g_XS_Vfs.hSelf));
+	g_XS_Vfs.hSelf = NULL;
+	assert(xrtFileDelete(path));
+	xrtFree(path);
 	xrtClearError();
 	xrtMemDebugSnapshot(&after);
 	assert(after.LiveBytes == before.LiveBytes && after.LiveCount == before.LiveCount);
 	puts("PASS LZMA exact input/output consumption, trailing bytes and all truncated prefixes without leaks");
+}
+
+static void check_lzma_streaming(void)
+{
+	const size_t original_size = 256u << 10;
+	uint8_t* original = malloc(original_size);
+	uint32 random = 0x8273ab12u;
+	str path = NULL;
+	xmemdebugsnapshot before, after;
+	xrtClearError();
+	xrtMemDebugSnapshot(&before);
+	assert(original != NULL);
+	for ( size_t i = 0; i < original_size; i++ ) {
+		random ^= random << 13; random ^= random >> 17; random ^= random << 5;
+		original[i] = (uint8_t)(random >> 24);
+	}
+	g_XS_Vfs.hSelf = xrtFileTemp(NULL, "xs-lzma-stream-", ".bin", &path);
+	assert(g_XS_Vfs.hSelf != NULL);
+	for ( int marked = 0; marked < 2; marked++ ) {
+		size_t capacity = original_size + original_size / 3u + 65536u;
+		uint8_t* compressed = malloc(capacity);
+		CLzmaEncProps properties;
+		SizeT props_size = LZMA_PROPS_SIZE, packed_size = capacity - LZMA_PROPS_SIZE;
+		assert(compressed != NULL);
+		LzmaEncProps_Init(&properties);
+		properties.level = 1;
+		properties.numThreads = 1;
+		properties.reduceSize = original_size;
+		assert(LzmaEncode(compressed + LZMA_PROPS_SIZE, &packed_size, original, original_size,
+			&properties, compressed, &props_size, marked, NULL,
+			&s_XS_PackLzmaAlloc, &s_XS_PackLzmaAlloc) == SZ_OK);
+		size_t compressed_size = packed_size + LZMA_PROPS_SIZE;
+		assert(props_size == LZMA_PROPS_SIZE && compressed_size > 3u * XS_VFS_INPUT_CHUNK_BYTES);
+		uint8_t* tool = XS_PackUnlzma(compressed, compressed_size, original_size);
+		uint8_t* runtime = decode_vfs_bytes(compressed, compressed_size, original_size);
+		assert(tool != NULL && runtime != NULL);
+		assert(memcmp(tool, original, original_size) == 0 && memcmp(runtime, original, original_size) == 0);
+		free(tool); xrtFree(runtime);
+		XS_VfsEntry entry = {0};
+		entry.Method = 1;
+		entry.CompSize = (uint32_t)compressed_size;
+		entry.OrigSize = original_size;
+		entry.OrigCrc32 = XS_VfsCrc32(0, original, original_size);
+		g_XS_Vfs.pEntries = &entry;
+		size_t size = 0;
+		runtime = (uint8_t*)XS_VfsEntryDataLocked(0, &size);
+		assert(runtime != NULL && size == original_size && g_XS_Vfs.iCachedBytes == original_size);
+		assert(XS_VfsEntryDataLocked(0, &size) == runtime);
+		xrtFree(entry.pCached); entry.pCached = NULL; g_XS_Vfs.iCachedBytes = 0;
+		entry.OrigCrc32 ^= 1;
+		assert(XS_VfsEntryDataLocked(0, &size) == NULL);
+		assert(entry.pCached == NULL && g_XS_Vfs.iCachedBytes == 0);
+		xmemdebugsnapshot baseline;
+		xrtClearError(); xrtMemDebugSnapshot(&baseline);
+		for ( unsigned failure = 0; failure < 3; failure++ ) {
+			assert(xrtMemDebugFailAfter(failure));
+			assert(XS_VfsDecodeLzma(0, (uint32_t)compressed_size, original_size) == NULL);
+			assert(xrtMemDebugFailTriggered());
+			xrtMemDebugFailClear(); xrtClearError(); xrtMemDebugSnapshot(&after);
+			assert(after.LiveBytes == baseline.LiveBytes && after.LiveCount == baseline.LiveCount);
+		}
+		/* The second chunk is absent even though the index declares a full stream. */
+		assert(xrtFileResize(g_XS_Vfs.hSelf, XS_VFS_INPUT_CHUNK_BYTES + LZMA_PROPS_SIZE));
+		assert(XS_VfsDecodeLzma(0, (uint32_t)compressed_size, original_size) == NULL);
+		xrtClearError(); xrtMemDebugSnapshot(&after);
+		assert(after.LiveBytes == baseline.LiveBytes && after.LiveCount == baseline.LiveCount);
+		assert(decode_vfs_bytes(compressed, compressed_size - 1u, original_size) == NULL);
+		compressed[compressed_size] = 0;
+		assert(decode_vfs_bytes(compressed, compressed_size + 1u, original_size) == NULL);
+		free(compressed);
+		g_XS_Vfs.pEntries = NULL;
+	}
+	assert(xrtClose(g_XS_Vfs.hSelf));
+	assert(xrtFileDelete(path)); xrtFree(path); free(original);
+	memset(&g_XS_Vfs, 0, sizeof(g_XS_Vfs));
+	xrtClearError(); xrtMemDebugSnapshot(&after);
+	assert(after.LiveBytes == before.LiveBytes && after.LiveCount == before.LiveCount);
+	puts("PASS multi-chunk marked/unmarked LZMA, cache CRC, three allocation failures and missing input without leaks");
 }
 
 int main(void)
@@ -288,5 +381,6 @@ int main(void)
 	check_cache();
 	check_config_mutations();
 	check_lzma_consumption();
+	check_lzma_streaming();
 	return 0;
 }

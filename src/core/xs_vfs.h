@@ -72,6 +72,7 @@ int XS_VfsEntryCount(void);
 #define XS_VFS_HEADER_SIZE  64u
 #define XS_VFS_MAX_ENTRIES  100000u
 #define XS_VFS_MAX_PATH_BYTES 4096u
+#define XS_VFS_INPUT_CHUNK_BYTES (64u << 10)
 #define XS_VFS_MAX_ENTRY_ORIG_SIZE  UINT64_C(1024 * 1024 * 1024)
 
 static const uint8_t XS_VFS_TRAILER_MAGIC[8] = { 'X','S','V','P','A','C','K',0 };
@@ -484,7 +485,7 @@ int XS_VfsLookup(const char* sRelPath)
 /* 惰性解压 + 缓存                                                     */
 /* ------------------------------------------------------------------ */
 
-/* LZMA 解码：镜像 tcc_builtin_vfs.c 的调用形态（props 5B + 流） */
+/* LZMA props + stream; reuse the final output as the decoder dictionary. */
 static void* XS_VfsLzmaAlloc(ISzAllocPtr pAlloc, size_t size)
 {
 	(void)pAlloc;
@@ -497,36 +498,66 @@ static void XS_VfsLzmaFree(ISzAllocPtr pAlloc, void* address)
 }
 static const ISzAlloc s_XS_VfsLzmaAlloc = { XS_VfsLzmaAlloc, XS_VfsLzmaFree };
 
-static unsigned char* XS_VfsDecodeLzma(const uint8_t* pSrc, size_t iSrcSize,
-                                       uint64_t uOrigSize)
+static unsigned char* XS_VfsDecodeLzma(uint64_t uOffset, uint32_t iSrcSize,
+                                      uint64_t uOrigSize)
 {
-	unsigned char* pOut;
-	size_t uOrig;
-	SizeT uIn = 0;
-	ELzmaStatus eStatus;
-	SRes eRes;
+	uint8_t aProps[LZMA_PROPS_SIZE];
+	unsigned char* pOut = NULL;
+	unsigned char* pInput = NULL;
+	CLzmaDec tDecoder;
+	size_t iRemaining, iCapacity, iLoaded = 0, iPosition = 0;
+	bool bOk = false;
 
-	if ( uOrigSize == 0 || uOrigSize > XS_VFS_MAX_ENTRY_ORIG_SIZE || iSrcSize < LZMA_PROPS_SIZE ) return NULL;
-	pOut = (unsigned char*)xrtMalloc((size_t)uOrigSize);
-	if ( pOut == NULL ) return NULL;
-	uOrig = (size_t)uOrigSize;
-	uIn = (SizeT)(iSrcSize - LZMA_PROPS_SIZE);
-	eRes = LzmaDecode(pOut, &uOrig,
-		pSrc + LZMA_PROPS_SIZE, &uIn,
-		pSrc, LZMA_PROPS_SIZE,
-		LZMA_FINISH_END, &eStatus, &s_XS_VfsLzmaAlloc);
-	if ( eRes != SZ_OK || uOrig != (size_t)uOrigSize ||
-	     (uIn + LZMA_PROPS_SIZE) != iSrcSize ) {
-		xrtFree(pOut);
+	if ( uOrigSize == 0 || uOrigSize > XS_VFS_MAX_ENTRY_ORIG_SIZE ||
+	     iSrcSize <= LZMA_PROPS_SIZE || !XS_U64Range(uOffset, iSrcSize, UINT64_MAX) )
 		return NULL;
+	if ( !XS_VfsReadAt(uOffset, aProps, sizeof(aProps)) ) return NULL;
+	iRemaining = iSrcSize - LZMA_PROPS_SIZE;
+	iCapacity = iRemaining < XS_VFS_INPUT_CHUNK_BYTES ? iRemaining : XS_VFS_INPUT_CHUNK_BYTES;
+	LzmaDec_Construct(&tDecoder);
+	if ( LzmaDec_AllocateProbs(&tDecoder, aProps, sizeof(aProps), &s_XS_VfsLzmaAlloc) != SZ_OK )
+		goto done;
+	pOut = (unsigned char*)xrtMalloc((size_t)uOrigSize);
+	if ( pOut == NULL ) goto done;
+	pInput = (unsigned char*)xrtMalloc(iCapacity);
+	if ( pInput == NULL ) goto done;
+	tDecoder.dic = pOut;
+	tDecoder.dicBufSize = (SizeT)uOrigSize;
+	LzmaDec_Init(&tDecoder);
+	uOffset += LZMA_PROPS_SIZE;
+	while ( iRemaining != 0 || iPosition < iLoaded ) {
+		if ( iPosition == iLoaded ) {
+			iLoaded = iRemaining < iCapacity ? iRemaining : iCapacity;
+			if ( !XS_VfsReadAt(uOffset, pInput, iLoaded) ) goto done;
+			uOffset += iLoaded;
+			iRemaining -= iLoaded;
+			iPosition = 0;
+		}
+		SizeT iConsumed = iLoaded - iPosition;
+		SizeT iPreviousOutput = tDecoder.dicPos;
+		ELzmaStatus eStatus;
+		SRes eRes = LzmaDec_DecodeToDic(&tDecoder, (SizeT)uOrigSize,
+			pInput + iPosition, &iConsumed, LZMA_FINISH_END, &eStatus);
+		if ( eRes != SZ_OK || iConsumed > iLoaded - iPosition ) goto done;
+		iPosition += iConsumed;
+		if ( eStatus == LZMA_STATUS_FINISHED_WITH_MARK ||
+		     eStatus == LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK ) {
+			bOk = tDecoder.dicPos == (SizeT)uOrigSize &&
+				iPosition == iLoaded && iRemaining == 0;
+			break;
+		}
+		if ( iConsumed == 0 && tDecoder.dicPos == iPreviousOutput ) goto done;
 	}
+done:
+	xrtFree(pInput);
+	LzmaDec_FreeProbs(&tDecoder, &s_XS_VfsLzmaAlloc);
+	if ( !bOk ) { xrtFree(pOut); return NULL; }
 	return pOut;
 }
 
 static const unsigned char* XS_VfsEntryDataLocked(int iEntry, size_t* pSize)
 {
 	XS_VfsEntry* pE = &g_XS_Vfs.pEntries[iEntry];
-	unsigned char* pComp = NULL;
 	unsigned char* pOut = NULL;
 
 	if ( pE->pCached != NULL ) {                              /* protected by cache mutex */
@@ -535,22 +566,17 @@ static const unsigned char* XS_VfsEntryDataLocked(int iEntry, size_t* pSize)
 	}
 	if ( !XS_U64Range(g_XS_Vfs.iCachedBytes, pE->OrigSize, XS_VFS_CACHE_BYTES_LIMIT) )
 		return NULL;
-	/* 读压缩区间 */
-	/* 空 STORE 条目也必须返回有效视图，不能与“未命中/读取失败”混淆。 */
-	pComp = (unsigned char*)xrtMalloc(pE->CompSize > 0 ? pE->CompSize : 1);
-	if ( pComp == NULL ) return NULL;
-	if ( pE->CompSize > 0 && !XS_VfsReadAt(g_XS_Vfs.uArchiveStart + pE->DataOffset,
-	                   pComp, pE->CompSize) ) {
-		xrtFree(pComp);
-		return NULL;
-	}
 	if ( pE->Method == 1 ) {
-		pOut = XS_VfsDecodeLzma(pComp, pE->CompSize, pE->OrigSize);
-		xrtFree(pComp);
+		pOut = XS_VfsDecodeLzma(g_XS_Vfs.uArchiveStart + pE->DataOffset,
+			pE->CompSize, pE->OrigSize);
 		if ( pOut == NULL ) return NULL;
 	}
 	else {
-		pOut = pComp;                                          /* STORE 直用 */
+		/* Empty STORE entries still return a valid borrowed view. */
+		pOut = (unsigned char*)xrtMalloc(pE->CompSize > 0 ? pE->CompSize : 1);
+		if ( pOut == NULL ) return NULL;
+		if ( pE->CompSize > 0 && !XS_VfsReadAt(g_XS_Vfs.uArchiveStart + pE->DataOffset,
+		     pOut, pE->CompSize) ) { xrtFree(pOut); return NULL; }
 	}
 	if ( XS_VfsCrc32(0, pOut, (size_t)pE->OrigSize) != pE->OrigCrc32 ) {
 		xrtFree(pOut);

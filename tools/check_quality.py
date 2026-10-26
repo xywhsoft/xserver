@@ -1,5 +1,6 @@
 """Repeatable XS quality gate; use --exe for an isolated host regression pass."""
 from pathlib import Path
+from test_native_boundaries import SANITIZER_ALIGNMENT_EXCLUSIONS
 import argparse
 import datetime
 import hashlib
@@ -56,7 +57,9 @@ def main():
               'executable':str(args.exe.resolve()) if args.exe else None,
               'source_sha256':source_hash,'test_inputs_sha256':tests_hash,
               'binary_sha256':metadata['binary_sha256'] if args.exe else None,
-              'native_sanitizers':args.sanitize,'checks':[]}
+              'native_sanitizers':args.sanitize,
+              'native_sanitizer_exclusions':{'alignment':list(SANITIZER_ALIGNMENT_EXCLUSIONS)} if args.sanitize else {},
+              'checks':[]}
     code = 0
     try:
         for arguments in commands:
