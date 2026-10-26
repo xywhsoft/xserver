@@ -7,6 +7,8 @@
 #include "src/runtime/byte_budget.h"
 #define XS_VFS_IMPLEMENTATION
 #include "src/core/xs_vfs.h"
+#define XS_PACK_IMPLEMENTATION
+#include "src/core/xs_pack.h"
 #include <assert.h>
 
 const char* xsAppPath(void) {
@@ -207,6 +209,41 @@ static void check_config_mutations(void)
 	puts("PASS 512 deterministic config mutations/truncations without leaked state");
 }
 
+static void check_lzma_consumption(void)
+{
+	/* XS pack's LZMA1 stream for 1024 'A' bytes, without an end marker. */
+	static const uint8_t compressed[] = {
+		0x5d, 0x00, 0x10, 0x00, 0x00, 0x00, 0x20, 0xef, 0xfb,
+		0xbf, 0xfe, 0xa3, 0xb0, 0xde, 0xe0, 0x72, 0x00
+	};
+	uint8_t trailing[sizeof(compressed) + 1u];
+	xmemdebugsnapshot before, after;
+	xrtClearError();
+	xrtMemDebugSnapshot(&before);
+	uint8_t* tool = XS_PackUnlzma(compressed, sizeof(compressed), 1024);
+	uint8_t* runtime = XS_VfsDecodeLzma(compressed, sizeof(compressed), 1024);
+	assert(tool != NULL && runtime != NULL);
+	for ( size_t i = 0; i < 1024; i++ ) assert(tool[i] == 'A' && runtime[i] == 'A');
+	free(tool);
+	xrtFree(runtime);
+	memcpy(trailing, compressed, sizeof(compressed));
+	for ( unsigned i = 0; i < 3; i++ ) {
+		trailing[sizeof(compressed)] = i == 2 ? 0xff : (uint8_t)i;
+		assert(XS_PackUnlzma(trailing, sizeof(trailing), 1024) == NULL);
+		assert(XS_VfsDecodeLzma(trailing, sizeof(trailing), 1024) == NULL);
+	}
+	for ( size_t size = 0; size < sizeof(compressed); size++ ) {
+		assert(XS_PackUnlzma(compressed, size, 1024) == NULL);
+		assert(XS_VfsDecodeLzma(compressed, size, 1024) == NULL);
+	}
+	assert(XS_PackUnlzma(compressed, sizeof(compressed), 1025) == NULL);
+	assert(XS_VfsDecodeLzma(compressed, sizeof(compressed), 1025) == NULL);
+	xrtClearError();
+	xrtMemDebugSnapshot(&after);
+	assert(after.LiveBytes == before.LiveBytes && after.LiveCount == before.LiveCount);
+	puts("PASS LZMA exact input/output consumption, trailing bytes and all truncated prefixes without leaks");
+}
+
 int main(void)
 {
 	size_t size = 17;
@@ -250,5 +287,6 @@ int main(void)
 	check_lifetimes();
 	check_cache();
 	check_config_mutations();
+	check_lzma_consumption();
 	return 0;
 }

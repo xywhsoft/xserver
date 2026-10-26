@@ -157,7 +157,8 @@ static uint8_t* XS_PackUnlzma(const uint8_t* pSrc, size_t iSrcSize, uint64_t uOr
 	uIn = (SizeT)iSrcSize - LZMA_PROPS_SIZE;
 	if ( LzmaDecode(pOut, &uOut, pSrc + LZMA_PROPS_SIZE, &uIn,
 	        pSrc, LZMA_PROPS_SIZE, LZMA_FINISH_END, &eSt,
-	        &s_XS_PackLzmaAlloc) != SZ_OK || uOut != (SizeT)uOrig ) {
+	        &s_XS_PackLzmaAlloc) != SZ_OK || uOut != (SizeT)uOrig ||
+	     uIn != (SizeT)(iSrcSize - LZMA_PROPS_SIZE) ) {
 		free(pOut);
 		return NULL;
 	}

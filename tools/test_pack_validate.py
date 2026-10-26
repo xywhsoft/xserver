@@ -128,6 +128,38 @@ def make_sparse_file(path: Path, size: int) -> None:
         stream.truncate(size)
 
 
+def check_lzma_trailing_data(exe: Path, tmp: Path) -> None:
+    site = tmp/'lzma-site'
+    make_site(site)
+    (site/'wwwroot'/'large.txt').write_bytes(b'A' * 1024)
+    packed = tmp/'lzma-good.exe'
+    result = run_xs(exe, 'pack', str(site), '-o', str(packed))
+    check('LZMA consumption fixture packs successfully', result.returncode == 0,
+          result.stdout + result.stderr)
+    if result.returncode != 0:
+        return
+    archive = Archive(bytearray(packed.read_bytes()))
+    entry = next(e for e in archive.entries() if e['path'] == 'wwwroot/large.txt')
+    assert entry['method'] == 1 and entry['doff'] + entry['csize'] < archive.index_off
+    # Extend the declared compressed span into the next entry. The original
+    # stream, decoded bytes and original CRC all remain intact.
+    archive.patch_entry(entry, csize=entry['csize'] + 1)
+    archive.refresh_crcs()
+    bad = tmp/'lzma-trailing-data.exe'
+    bad.write_bytes(archive.data)
+    output = tmp/'lzma-out'
+    (output/'wwwroot').mkdir(parents=True)
+    target = output/'wwwroot'/'large.txt'
+    target.write_bytes(b'previous content')
+    result = run_xs(exe, 'pack', '--extract', str(bad), '-d', str(output))
+    check('LZMA trailing data rejected despite matching decoded CRC',
+          result.returncode != 0 and 'decode/CRC failed' in result.stdout,
+          result.stdout + result.stderr)
+    check('LZMA trailing data preserves existing target', target.read_bytes() == b'previous content')
+    check('LZMA trailing data leaves no temporary target',
+          not list(target.parent.glob('large.txt.xs-tmp-*')))
+
+
 class Archive:
     """站点包字节视图:trailer/header/索引定位与 CRC 重算。"""
 
@@ -216,6 +248,7 @@ def main() -> int:
               by_path.get("wwwroot/a.txt", {}).get("method") == 0,
               str(by_path))
         check_unicode_paths(exe, tmp_path)
+        check_lzma_trailing_data(exe, tmp_path)
 
         # ---- 正向:校验不误伤合法归档 ----
         out = tmp_path / "out-good"

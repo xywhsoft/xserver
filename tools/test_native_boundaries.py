@@ -23,7 +23,8 @@ def main():
                       '-fno-omit-frame-pointer']
         libraries = ['-lws2_32', '-liphlpapi'] if os.name == 'nt' else ['-pthread', '-ldl', '-lm']
         subprocess.run([args.cc, *flags, str(ROOT/'tools/native_boundaries_test.c'),
-                        str(ROOT/'tcc/LzmaDec.c'),
+                        '-DZ7_ST', *[str(ROOT/'tcc'/name) for name in
+                                     ['LzmaDec.c', 'LzmaEnc.c', 'LzFind.c', 'CpuArch.c']],
                         '-o', str(exe), *libraries], cwd=ROOT, check=True)
         subprocess.run([str(exe)], cwd=ROOT, check=True, timeout=60)
         # This probe replaces file/dir APIs with deterministic failure sources.
