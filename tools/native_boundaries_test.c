@@ -211,10 +211,7 @@ static void check_config_mutations(void)
 
 static uint8_t* decode_vfs_bytes(const uint8_t* data, size_t size, uint64_t original)
 {
-	size_t written;
-	assert(size <= UINT32_MAX && xrtFileResize(g_XS_Vfs.hSelf, size));
-	assert(xrtWriteAtFull(g_XS_Vfs.hSelf, 0, data, size, &written));
-	return XS_VfsDecodeLzma(0, (uint32_t)size, original);
+	return XS_VfsDecodeLzma(data, size, original);
 }
 
 static void check_lzma_consumption(void)
@@ -228,9 +225,6 @@ static void check_lzma_consumption(void)
 	xmemdebugsnapshot before, after;
 	xrtClearError();
 	xrtMemDebugSnapshot(&before);
-	str path = NULL;
-	g_XS_Vfs.hSelf = xrtFileTemp(NULL, "xs-lzma-", ".bin", &path);
-	assert(g_XS_Vfs.hSelf != NULL);
 	uint8_t* tool = XS_PackUnlzma(compressed, sizeof(compressed), 1024);
 	uint8_t* runtime = decode_vfs_bytes(compressed, sizeof(compressed), 1024);
 	assert(tool != NULL && runtime != NULL);
@@ -249,17 +243,13 @@ static void check_lzma_consumption(void)
 	}
 	assert(XS_PackUnlzma(compressed, sizeof(compressed), 1025) == NULL);
 	assert(decode_vfs_bytes(compressed, sizeof(compressed), 1025) == NULL);
-	assert(xrtClose(g_XS_Vfs.hSelf));
-	g_XS_Vfs.hSelf = NULL;
-	assert(xrtFileDelete(path));
-	xrtFree(path);
 	xrtClearError();
 	xrtMemDebugSnapshot(&after);
 	assert(after.LiveBytes == before.LiveBytes && after.LiveCount == before.LiveCount);
 	puts("PASS LZMA exact input/output consumption, trailing bytes and all truncated prefixes without leaks");
 }
 
-static void check_lzma_streaming(void)
+static void check_lzma_entry_read(void)
 {
 	const size_t original_size = 256u << 10;
 	uint8_t* original = malloc(original_size);
@@ -269,11 +259,12 @@ static void check_lzma_streaming(void)
 	xrtClearError();
 	xrtMemDebugSnapshot(&before);
 	assert(original != NULL);
-	for ( size_t i = 0; i < original_size; i++ ) {
+	for ( size_t i = 0; i < original_size / 2u; i++ ) {
 		random ^= random << 13; random ^= random >> 17; random ^= random << 5;
 		original[i] = (uint8_t)(random >> 24);
 	}
-	g_XS_Vfs.hSelf = xrtFileTemp(NULL, "xs-lzma-stream-", ".bin", &path);
+	memcpy(original + original_size / 2u, original, original_size / 2u);
+	g_XS_Vfs.hSelf = xrtFileTemp(NULL, "xs-lzma-entry-", ".bin", &path);
 	assert(g_XS_Vfs.hSelf != NULL);
 	for ( int marked = 0; marked < 2; marked++ ) {
 		size_t capacity = original_size + original_size / 3u + 65536u;
@@ -289,7 +280,7 @@ static void check_lzma_streaming(void)
 			&properties, compressed, &props_size, marked, NULL,
 			&s_XS_PackLzmaAlloc, &s_XS_PackLzmaAlloc) == SZ_OK);
 		size_t compressed_size = packed_size + LZMA_PROPS_SIZE;
-		assert(props_size == LZMA_PROPS_SIZE && compressed_size > 3u * XS_VFS_INPUT_CHUNK_BYTES);
+		assert(props_size == LZMA_PROPS_SIZE && compressed_size > (64u << 10) && compressed_size < original_size);
 		uint8_t* tool = XS_PackUnlzma(compressed, compressed_size, original_size);
 		uint8_t* runtime = decode_vfs_bytes(compressed, compressed_size, original_size);
 		assert(tool != NULL && runtime != NULL);
@@ -302,6 +293,8 @@ static void check_lzma_streaming(void)
 		entry.OrigCrc32 = XS_VfsCrc32(0, original, original_size);
 		g_XS_Vfs.pEntries = &entry;
 		size_t size = 0;
+		assert(xrtFileResize(g_XS_Vfs.hSelf, compressed_size));
+		assert(xrtWriteAtFull(g_XS_Vfs.hSelf, 0, compressed, compressed_size, &size));
 		runtime = (uint8_t*)XS_VfsEntryDataLocked(0, &size);
 		assert(runtime != NULL && size == original_size && g_XS_Vfs.iCachedBytes == original_size);
 		assert(XS_VfsEntryDataLocked(0, &size) == runtime);
@@ -313,14 +306,16 @@ static void check_lzma_streaming(void)
 		xrtClearError(); xrtMemDebugSnapshot(&baseline);
 		for ( unsigned failure = 0; failure < 3; failure++ ) {
 			assert(xrtMemDebugFailAfter(failure));
-			assert(XS_VfsDecodeLzma(0, (uint32_t)compressed_size, original_size) == NULL);
+			assert(XS_VfsEntryDataLocked(0, &size) == NULL);
 			assert(xrtMemDebugFailTriggered());
 			xrtMemDebugFailClear(); xrtClearError(); xrtMemDebugSnapshot(&after);
 			assert(after.LiveBytes == baseline.LiveBytes && after.LiveCount == baseline.LiveCount);
+			assert(entry.pCached == NULL && g_XS_Vfs.iCachedBytes == 0);
 		}
-		/* The second chunk is absent even though the index declares a full stream. */
-		assert(xrtFileResize(g_XS_Vfs.hSelf, XS_VFS_INPUT_CHUNK_BYTES + LZMA_PROPS_SIZE));
-		assert(XS_VfsDecodeLzma(0, (uint32_t)compressed_size, original_size) == NULL);
+		/* A short entry read must release the temporary input buffer. */
+		assert(xrtFileResize(g_XS_Vfs.hSelf, compressed_size - 1u));
+		assert(XS_VfsEntryDataLocked(0, &size) == NULL);
+		assert(entry.pCached == NULL && g_XS_Vfs.iCachedBytes == 0);
 		xrtClearError(); xrtMemDebugSnapshot(&after);
 		assert(after.LiveBytes == baseline.LiveBytes && after.LiveCount == baseline.LiveCount);
 		assert(decode_vfs_bytes(compressed, compressed_size - 1u, original_size) == NULL);
@@ -334,7 +329,7 @@ static void check_lzma_streaming(void)
 	memset(&g_XS_Vfs, 0, sizeof(g_XS_Vfs));
 	xrtClearError(); xrtMemDebugSnapshot(&after);
 	assert(after.LiveBytes == before.LiveBytes && after.LiveCount == before.LiveCount);
-	puts("PASS multi-chunk marked/unmarked LZMA, cache CRC, three allocation failures and missing input without leaks");
+	puts("PASS whole-entry marked/unmarked LZMA, cache CRC, three allocation failures and short reads without leaks");
 }
 
 int main(void)
@@ -381,6 +376,6 @@ int main(void)
 	check_cache();
 	check_config_mutations();
 	check_lzma_consumption();
-	check_lzma_streaming();
+	check_lzma_entry_read();
 	return 0;
 }

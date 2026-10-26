@@ -67,7 +67,7 @@ bool xrtReadAtFull(xfile handle, uint64 offset, ptr buffer, size_t request, size
 	*done = 0;
 	if ( ++positioned_file.reads == positioned_file.fail_read ) return false;
 	if ( request > positioned_file.largest_read ) positioned_file.largest_read = request;
-	if ( request > (64u << 10) ) return false;
+	if ( request > (1u << 20) ) return false;
 	if ( !XS_U64Range(offset, request, positioned_file.size) ) return false;
 	memset(buffer, 0, request);
 	if ( offset < sizeof(positioned_file.data) ) {
@@ -275,7 +275,7 @@ static void check_paths(void)
 	assert(!XS_VfsArchivePathValid(long_path, sizeof(long_path)));
 }
 
-static void check_compressed_allocation_bound(void)
+static void check_compressed_entry_read(void)
 {
 	static const uint8_t compressed[] = {
 		0x5d, 0x00, 0x10, 0x00, 0x00, 0x00, 0x20, 0xef, 0xfb,
@@ -289,15 +289,14 @@ static void check_compressed_allocation_bound(void)
 	entry.DataOffset = 64;
 	entry.Method = 1;
 	entry.OrigSize = 1024;
-	for ( unsigned i = 0; i < 2; i++ ) {
-		entry.CompSize = i == 0 ? 16u << 20 : UINT32_MAX;
+	const uint32_t invalid_sizes[] = { 0, LZMA_PROPS_SIZE, 1024, 1025, 16u << 20, UINT32_MAX };
+	for ( unsigned i = 0; i < sizeof(invalid_sizes) / sizeof(invalid_sizes[0]); i++ ) {
+		entry.CompSize = invalid_sizes[i];
 		positioned_file.size = (uint64)entry.CompSize + 64u;
 		largest_allocation = positioned_file.largest_read = 0;
+		positioned_file.reads = 0;
 		assert(XS_VfsEntryDataLocked(0, &size) == NULL);
-		printf("VFS hostile span %u: largest allocation request %zu, largest read %zu\n",
-			entry.CompSize, largest_allocation, positioned_file.largest_read);
-		assert(largest_allocation <= (64u << 10));
-		assert(positioned_file.largest_read <= (64u << 10));
+		assert(largest_allocation == 0 && positioned_file.reads == 0);
 		assert(live_bytes == 0 && entry.pCached == NULL && g_XS_Vfs.iCachedBytes == 0);
 	}
 	positioned_file.size = 64u + sizeof(compressed);
@@ -305,15 +304,16 @@ static void check_compressed_allocation_bound(void)
 	uint8_t expected[1024];
 	memset(expected, 'A', sizeof(expected));
 	entry.OrigCrc32 = XS_VfsCrc32(0, expected, sizeof(expected));
-	for ( unsigned failure = 1; failure <= 2; failure++ ) {
-		positioned_file.reads = 0;
-		positioned_file.fail_read = failure;
-		assert(XS_VfsEntryDataLocked(0, &size) == NULL);
-		assert(live_bytes == 0 && entry.pCached == NULL && g_XS_Vfs.iCachedBytes == 0);
-	}
+	positioned_file.reads = 0;
+	positioned_file.fail_read = 1;
+	assert(XS_VfsEntryDataLocked(0, &size) == NULL);
+	assert(live_bytes == 0 && entry.pCached == NULL && g_XS_Vfs.iCachedBytes == 0);
+	positioned_file.reads = 0;
 	positioned_file.fail_read = 0;
 	const uint8_t* output = XS_VfsEntryDataLocked(0, &size);
 	assert(output != NULL && size == sizeof(expected) && memcmp(output, expected, size) == 0);
+	assert(positioned_file.reads == 1 && positioned_file.largest_read == sizeof(compressed));
+	assert(XS_VfsEntryDataLocked(0, &size) == output && positioned_file.reads == 1);
 	xrtFree(entry.pCached);
 	entry.pCached = NULL;
 	assert(live_bytes == 0);
@@ -325,7 +325,7 @@ int main(void)
 	check_walk();
 	check_read();
 	check_paths();
-	check_compressed_allocation_bound();
-	puts("PASS native pack I/O, canonical paths and bounded VFS compressed input");
+	check_compressed_entry_read();
+	puts("PASS native pack I/O, canonical paths and single-read VFS compressed input");
 	return 0;
 }

@@ -158,6 +158,22 @@ def check_lzma_trailing_data(exe: Path, tmp: Path) -> None:
     check('LZMA trailing data preserves existing target', target.read_bytes() == b'previous content')
     check('LZMA trailing data leaves no temporary target',
           not list(target.parent.glob('large.txt.xs-tmp-*')))
+    for label, original_size in [('equal', entry['csize']), ('larger', entry['csize'] - 1)]:
+        invalid = Archive(bytearray(packed.read_bytes()))
+        invalid.patch_entry(entry, osize=original_size)
+        invalid.refresh_crcs()
+        bad = tmp/f'lzma-input-{label}-original.exe'
+        bad.write_bytes(invalid.data)
+        bad.chmod(bad.stat().st_mode | 0o111)
+        try:
+            result = run_xs(bad, cwd=tmp, timeout=5)
+        except subprocess.TimeoutExpired:
+            check(f'LZMA input {label} original rejected before startup', False,
+                  'invalid archive did not stop startup within 5 seconds')
+        else:
+            check(f'LZMA input {label} original rejected before startup',
+                  result.returncode != 0 and 'app pack invalid' in result.stdout,
+                  result.stdout + result.stderr)
 
 
 class Archive:

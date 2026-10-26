@@ -85,8 +85,8 @@ def make_site(dir_: Path, dev_inc: str | None = None) -> None:
         "<html><body>pack-about</body></html>", encoding="utf-8")
     (www / "big.js").write_text("var x = 1;\n" * 5000, encoding="utf-8")
     (www / "empty.txt").write_bytes(b"")
-    # A repeated 80 KiB random block compresses across multiple 64 KiB input chunks.
-    (www / "chunked.bin").write_bytes(random.Random(0x9173).randbytes(80 << 10) * 4)
+    # Keep a compressed entry above 64 KiB to cover whole-entry reads of larger assets.
+    (www / "compressed.bin").write_bytes(random.Random(0x9173).randbytes(80 << 10) * 4)
     # 子目录索引页：磁盘根存在但子目录不在时，尾斜杠请求应从包内兑底
     docs = www / "docs"
     docs.mkdir()
@@ -143,10 +143,10 @@ def main() -> int:
               and "wwwroot/index.html" in r.stdout
               and "wwwroot/docs/index.html" in r.stdout,
               r.stdout)
-        chunked_line = next(line for line in r.stdout.splitlines() if line.endswith('wwwroot/chunked.bin'))
-        check('large compressed fixture spans multiple input chunks',
-              chunked_line.split()[0] == 'lzma' and int(chunked_line.split()[3]) > (64 << 10),
-              chunked_line)
+        compressed_line = next(line for line in r.stdout.splitlines() if line.endswith('wwwroot/compressed.bin'))
+        check('large compressed fixture exceeds 64 KiB',
+              compressed_line.split()[0] == 'lzma' and int(compressed_line.split()[3]) > (64 << 10),
+              compressed_line)
 
         # ---- 3. --extract round-trip ----
         out = tmp_path / "extracted"
@@ -190,9 +190,9 @@ def main() -> int:
             check("GET /big.js 200 (large asset)",
                   code == 200 and len(body) >= 54000)
             for attempt in range(2):
-                code, body = http_get('/chunked.bin')
-                check(f'multi-chunk packed asset matches on read {attempt + 1}',
-                      code == 200 and body == (site/'wwwroot'/'chunked.bin').read_bytes())
+                code, body = http_get('/compressed.bin')
+                check(f'compressed packed asset matches on read {attempt + 1}',
+                      code == 200 and body == (site/'wwwroot'/'compressed.bin').read_bytes())
             for attempt in range(2):
                 code, body = http_get("/empty.txt")
                 check(f"empty packed file returns 200 on read {attempt + 1}",
