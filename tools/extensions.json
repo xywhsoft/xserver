@@ -141,8 +141,6 @@
  "xwork": {
   "macro": "XS_USE_XWORK",
   "requires": [
-   "xhttp",
-   "xhttp-client",
    "xllm-session"
   ],
   "host_includes": [
@@ -159,12 +157,6 @@
     "path": "lib/xwork/src/work/xwork_agent.c"
    },
    {
-    "path": "lib/xwork/src/work/xwork_catalog.c"
-   },
-   {
-    "path": "lib/xwork/src/work/xwork_contract.c"
-   },
-   {
     "path": "lib/xwork/src/work/xwork_core.c"
    },
    {
@@ -177,34 +169,10 @@
     "path": "lib/xwork/src/work/xwork_mcp.c"
    },
    {
-    "path": "lib/xwork/src/work/xwork_observability.c"
-   },
-   {
     "path": "lib/xwork/src/work/xwork_python.c"
    },
    {
-    "path": "lib/xwork/src/work/xwork_recovery.c"
-   },
-   {
-    "path": "lib/xwork/src/work/xwork_request_tokens.c"
-   },
-   {
-    "path": "lib/xwork/src/work/xwork_runtime.c"
-   },
-   {
-    "path": "lib/xwork/src/work/xwork_schedule.c"
-   },
-   {
-    "path": "lib/xwork/src/work/xwork_scheduler.c"
-   },
-   {
     "path": "lib/xwork/src/work/xwork_subagent.c"
-   },
-   {
-    "path": "lib/xwork/src/work/xwork_task.c"
-   },
-   {
-    "path": "lib/xwork/src/work/xwork_tool_receipts.c"
    },
    {
     "path": "lib/xwork/src/work/xwork_tools.c"

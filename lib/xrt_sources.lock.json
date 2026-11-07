@@ -3101,83 +3101,67 @@
     },
     "lib/xwork/README.md": {
       "source": "extlibs/xwork/README.md",
-      "sha256": "de5dbf0c00313794e8a24f725154959d22e6296b2d9822cc592e1be780ff14b4",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
+      "sha256": "8674134c923750d07ff1f841051aacf197ef32be623572ca3d89fb02f4aec920"
     },
     "lib/xwork/config/modules.json": {
       "source": "extlibs/xwork/config/modules.json",
-      "sha256": "8efe06963f6e41bde58aa8545f4c4e7be056691bcc30724decd7b4bdff9d9b6a",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
+      "sha256": "c52ed4ae07481bdc3e73cd9d85a58dc094c3c2de0a1eaa52cded134492a1f6ed"
     },
     "lib/xwork/config/performance_profiles.json": {
       "source": "extlibs/xwork/config/performance_profiles.json",
-      "sha256": "6ab75f93787adff64762f516c968ba2350c212800c15817a37f164ad63c18b36",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
+      "sha256": "6ab75f93787adff64762f516c968ba2350c212800c15817a37f164ad63c18b36"
     },
     "lib/xwork/config/size_profiles.json": {
       "source": "extlibs/xwork/config/size_profiles.json",
-      "sha256": "6e291c0a6c4ac2ceeb48206bb914bd214b6073e3231d965d5ff8d10bf2fc362b",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
+      "sha256": "6e291c0a6c4ac2ceeb48206bb914bd214b6073e3231d965d5ff8d10bf2fc362b"
     },
     "lib/xwork/include/xwork.h": {
       "source": "extlibs/xwork/include/xwork.h",
-      "sha256": "b5683a0fac630c60f51d95bf728b9031aa99a4d05fcc81ba642e2110bcc82c02",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
+      "sha256": "b5683a0fac630c60f51d95bf728b9031aa99a4d05fcc81ba642e2110bcc82c02"
     },
     "lib/xwork/include/xwork/api.h": {
       "source": "extlibs/xwork/include/xwork/api.h",
-      "sha256": "4ce9fe624f5d4bd77141f18ef17ffdc74dec1985f85cbefac709626ee07448ab",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
+      "sha256": "e3e05ee6f950d879ed03c63c66d6c7a7108c5aa20bcfabcf69505e6667b41ece"
     },
     "lib/xwork/include/xwork/features.h": {
       "source": "extlibs/xwork/include/xwork/features.h",
-      "sha256": "055c8fe2d3a7b45a15f08429f0f35c610d927bfd79b4503cd5aafd66aed7d0f2",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
+      "sha256": "91996f1fc399ed139543929d919af4a48b2e044979866650f0414ff822fd2be3"
     },
     "lib/xwork/src/internal/xwork_internal.h": {
       "source": "extlibs/xwork/src/internal/xwork_internal.h",
-      "sha256": "6cb8bf536f9313c34489df25fc5b79d3c9c565ef0c65c0a5fd4f39363190a7fd",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
+      "sha256": "a899e654a4aa31ff7f0c250be83a42c604beb4b7869903dc881b13f743ac7920"
     },
     "lib/xwork/src/work/xwork_agent.c": {
       "source": "extlibs/xwork/src/work/xwork_agent.c",
-      "sha256": "34722d90ec978f3f6fd4d391f003569cb8a2e6ff7635ba0413d7e7a66a683b95",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
+      "sha256": "dcc5a7bf49c118caab095f0ebeb03312259a53f26849d169f8bbfa43dd04c729"
     },
     "lib/xwork/src/work/xwork_core.c": {
       "source": "extlibs/xwork/src/work/xwork_core.c",
-      "sha256": "475e3da484fb068f343c206abae37813d92f45daf3b4b5ec9573e66fc5f33ef9",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
+      "sha256": "306ddeeaa3b30b12ee5d23e09652c12c7883ea80b20c37b9e15526fe511dab14"
     },
     "lib/xwork/src/work/xwork_executor.c": {
       "source": "extlibs/xwork/src/work/xwork_executor.c",
-      "sha256": "b7febb526d173c5cb6989230d953361594f96095d01a0d8e1b56455f60908598",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
+      "sha256": "c7e978721b506d356429c91f7059479b2d9b20fef3a4d9fa9c8edc1bd290dc14"
     },
     "lib/xwork/src/work/xwork_explore.c": {
       "source": "extlibs/xwork/src/work/xwork_explore.c",
-      "sha256": "45746f7ee0c804fa9ce9136e387661a0ceac80a674fb139376e64393e34f75e1",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
+      "sha256": "597dc0cde135d3d251652e2ca3d4de0178b08bd514d9982b7abaeaa7833007ef"
     },
     "lib/xwork/src/work/xwork_mcp.c": {
       "source": "extlibs/xwork/src/work/xwork_mcp.c",
-      "sha256": "65818a78779d6047ce2e529c797ab9449afe90f528f072bce245262520b337b7",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
+      "sha256": "bf3167d145246b8791f7dba2ea2ad0ff09aa97adaeb2402499e5b3b40c83cfcb"
     },
     "lib/xwork/src/work/xwork_python.c": {
       "source": "extlibs/xwork/src/work/xwork_python.c",
-      "sha256": "4140cc5f8ab0ba59f6ed6c8506d2bffdbadbce455060ff005d11fcdfc71cd4ef",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
+      "sha256": "176c6169733320326daaa137955cd3d4fb34de37d2fb98bae1c0495468f6fe34"
     },
     "lib/xwork/src/work/xwork_subagent.c": {
       "source": "extlibs/xwork/src/work/xwork_subagent.c",
-      "sha256": "d8281ff03ac03765e11a0393976827c0aefea4dd0f8b58f028ad222c47ebfd49",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
+      "sha256": "1eae0635528cdffd9b1cd43ebebcdd2fd3a478193b5092ad93549e0061da4707"
     },
     "lib/xwork/src/work/xwork_tools.c": {
       "source": "extlibs/xwork/src/work/xwork_tools.c",
-      "sha256": "8988a12567f7649045b11f9ca4b3092e613a7cbada66e972ca0a4c64684389de",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
+      "sha256": "6c7b01485acf16dd6d399274935e924fdb145812888ea360cd664aa6ee38213f"
     },
     "lib/xws-client/README.md": {
       "source": "extlibs/xws-client/README.md",
@@ -3881,7 +3865,7 @@
     },
     "lib/xwork/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "32a46513447529d9933c4b9e52d52af1bc377079f8adbd18c2c2227ba2fcf44b"
+      "sha256": "b3bfb895ad3829deb9ce7cbe698f4f20b6aa896358ccb20f838a85d9e0ed58ae"
     },
     "lib/xws-client/UPSTREAM.txt": {
       "generated": true,
@@ -3965,7 +3949,7 @@
     },
     "src/script/import_xwork.inc": {
       "generated": true,
-      "sha256": "18dd42f2ce9f1354bf1edd6f6d816fadf84b8e793a9147b720f462bec67ec7d0"
+      "sha256": "c34dd9b58d5fdbaacdcc8f6bd5041fbf2acbf75575c3334820c30873f3f213ba"
     },
     "src/script/import_xws.inc": {
       "generated": true,
@@ -3985,60 +3969,7 @@
     },
     "tools/extensions.json": {
       "generated": true,
-      "sha256": "2435eeae398c922e8ab461003e012598a8219820368a0280b7d0adff23264045"
-    },
-    "lib/xwork/src/work/xwork_catalog.c": {
-      "source": "extlibs/xwork/src/work/xwork_catalog.c",
-      "sha256": "81898452ead2ec42a664386757ea37e5a2ee5e65f7e4efe740331f52bc816258",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
-    },
-    "lib/xwork/src/work/xwork_contract.c": {
-      "source": "extlibs/xwork/src/work/xwork_contract.c",
-      "sha256": "9059a739a6e7df56dc741d127bc02ae8e0893d5f61dd8ed164f10489913f7ca2",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
-    },
-    "lib/xwork/src/work/xwork_observability.c": {
-      "source": "extlibs/xwork/src/work/xwork_observability.c",
-      "sha256": "c6e70e55b290fccb99109f326f8933d7e37deb562cafef1c4f1c525ce61232e1",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
-    },
-    "lib/xwork/src/work/xwork_recovery.c": {
-      "source": "extlibs/xwork/src/work/xwork_recovery.c",
-      "sha256": "e9ff6cb8729a25f595767b1aa1ba4e231ff8938cc57ec6f5903bd77318c8e0b7",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
-    },
-    "lib/xwork/src/work/xwork_request_tokens.c": {
-      "source": "extlibs/xwork/src/work/xwork_request_tokens.c",
-      "sha256": "14df2c20a2ab9f7bc0aa0493e738ebf08e812ce69db6ac71e2c749407e0a7241",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
-    },
-    "lib/xwork/src/work/xwork_runtime.c": {
-      "source": "extlibs/xwork/src/work/xwork_runtime.c",
-      "sha256": "d44f46a985524182a135c1e6cbf2625dfe1f728c9b56441d19cfa4b509fceff6",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
-    },
-    "lib/xwork/src/work/xwork_schedule.c": {
-      "source": "extlibs/xwork/src/work/xwork_schedule.c",
-      "sha256": "fa73c17ac0533ccd5339a6792eccc864b95cfbd8e1e92a715743590fdbd67031",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
-    },
-    "lib/xwork/src/work/xwork_scheduler.c": {
-      "source": "extlibs/xwork/src/work/xwork_scheduler.c",
-      "sha256": "f72be6e4a3f8a6c176157d84e4cb29925288048665f0cbcf3998a7cafffb8008",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
-    },
-    "lib/xwork/src/work/xwork_task.c": {
-      "source": "extlibs/xwork/src/work/xwork_task.c",
-      "sha256": "4897d01da636f3b2789d5192f7662352e72a865a4d65bd557f697b51b3dbfa15",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
-    },
-    "lib/xwork/src/work/xwork_tool_receipts.c": {
-      "source": "extlibs/xwork/src/work/xwork_tool_receipts.c",
-      "sha256": "1e6126b5344e750163cafeef98a07d6bb2a210bb27ddb39a6961ce320e0c16b0",
-      "upstream_commit": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
+      "sha256": "e1941320101d1dc62ebf6cb68a12963442f5219c78746231696ac644d355b150"
     }
-  },
-  "library_commits": {
-    "xwork": "94109c4a5b1420caa1bed17d1259fd7b9c9d48b8"
   }
 }
