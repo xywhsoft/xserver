@@ -19,6 +19,24 @@ from xs_extensions import ROOT, select_extensions
 
 
 PROTOCOL_PROBES = {
+    "xcron": """
+        xcronexpression expression;
+        REQUIRE(xcronExpressionCompile(XRT_STR_LITERAL("*/5 * * * *"), XCRON_UNIX5,
+                                      &expression, NULL));
+        REQUIRE(expression.Fields[XCRON_FIELD_MINUTE] & (UINT64_C(1) << 5));
+    """,
+    "xmqtt": """
+        xmqttcodecconfig config;
+        REQUIRE(xmqttCodecConfigInit(&config));
+    """,
+    "xredis": """
+        xredisreaderconfig config;
+        REQUIRE(xredisReaderConfigInit(&config));
+    """,
+    "xrpc": """
+        xrpcdecodeconfig config;
+        REQUIRE(xrpcDecodeConfigInit(&config));
+    """,
     "xrudp": """
         xrudppunch punch;
         xrudpaddress target = {4, 42000, 0, {127, 0, 0, 1}}, offered;
@@ -798,6 +816,11 @@ def check(exe: Path, names: list[str]) -> None:
                                f"{version.stdout}{version.stderr}")
         print(f"PASS version banner + --version: {expected_list}", flush=True)
         absent = {
+            "xcron": ("xcron.h", "extern int xcronExpressionCompile(void*, int, void*, void*);",
+                      "xcronExpressionCompile(0, 1, 0, 0)"),
+            "xmqtt": ("xmqtt.h", "extern int xmqttCodecConfigInit(void*);", "xmqttCodecConfigInit(0)"),
+            "xredis": ("xredis.h", "extern int xredisReaderConfigInit(void*);", "xredisReaderConfigInit(0)"),
+            "xrpc": ("xrpc.h", "extern int xrpcDecodeConfigInit(void*);", "xrpcDecodeConfigInit(0)"),
             "xrudp": ("xrudp.h", "extern void xrtRudpEndpointConfigInit(void*);",
                        "xrtRudpEndpointConfigInit(0)"),
             "xhttp": ("xhttp.h", "extern int xrtUrlParse(void*, void*);",

@@ -275,6 +275,9 @@
 #if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_EVENT)) && !defined(XRT_FEATURE_EVENT)
 #define XRT_FEATURE_EVENT
 #endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_EVENT_WAITER)) && !defined(XRT_FEATURE_EVENT_WAITER)
+#define XRT_FEATURE_EVENT_WAITER
+#endif
 #if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_EXECUTOR)) && !defined(XRT_FEATURE_EXECUTOR)
 #define XRT_FEATURE_EXECUTOR
 #endif
@@ -542,6 +545,9 @@
 #if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_FILE)) && !defined(XRT_FEATURE_NET_FILE)
 #define XRT_FEATURE_NET_FILE
 #endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_FILE_FUTURE)) && !defined(XRT_FEATURE_NET_FILE_FUTURE)
+#define XRT_FEATURE_NET_FILE_FUTURE
+#endif
 #if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_FRAME)) && !defined(XRT_FEATURE_NET_FRAME)
 #define XRT_FEATURE_NET_FRAME
 #endif
@@ -622,6 +628,9 @@
 #endif
 #if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP_FUTURE)) && !defined(XRT_FEATURE_NET_TCP_FUTURE)
 #define XRT_FEATURE_NET_TCP_FUTURE
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP_RETIRE)) && !defined(XRT_FEATURE_NET_TCP_RETIRE)
+#define XRT_FEATURE_NET_TCP_RETIRE
 #endif
 #if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP_SERVER)) && !defined(XRT_FEATURE_NET_TCP_SERVER)
 #define XRT_FEATURE_NET_TCP_SERVER
@@ -859,6 +868,9 @@
 #endif
 #if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_CLIENT)) && !defined(XRT_FEATURE_TLS_CLIENT)
 #define XRT_FEATURE_TLS_CLIENT
+#endif
+#if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_CLIENT_AUTH)) && !defined(XRT_FEATURE_TLS_CLIENT_AUTH)
+#define XRT_FEATURE_TLS_CLIENT_AUTH
 #endif
 #if (defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_CLIENT_RESUME)) && !defined(XRT_FEATURE_TLS_CLIENT_RESUME)
 #define XRT_FEATURE_TLS_CLIENT_RESUME

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import re
 import shlex
@@ -77,6 +78,9 @@ def build(args: argparse.Namespace, selected: dict) -> Path:
     platform = "windows" if os.name == "nt" else "linux"
     suffix = ".exe" if platform == "windows" else ""
     variant = "+".join(selected) or "default"
+    # Large extension sets otherwise exceed Windows compiler/linker path limits.
+    if len(variant) > 80:
+        variant = "extensions-" + hashlib.sha256(variant.encode("utf-8")).hexdigest()[:32]
     directory = args.build_dir.resolve() / platform / variant
     output = (args.output or ROOT / "release" / ("xs" + suffix)).resolve()
     packer = directory / ("vfs_pack" + suffix)

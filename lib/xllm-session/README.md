@@ -14,6 +14,7 @@
 - 只在完整 Agent 轮次边界推进的压缩事务
 - 未完成工具调用隔离，禁止压缩不完整轮次
 - 原子 JSON 快照、进程重启加载及摘要连续性
+- v3 快照/日志完整保留多模态 parts、二进制附件与 native 数据，读取兼容 v1/v2
 - 先写后确认的增量 NDJSON 日志、快照检查点和快照后重放恢复
 - 崩溃残尾自动截断、日志序号去重，以及完整损坏记录的显式拒绝
 - 会话深分叉，保留摘要、序号与压缩检查点，并隔离父子分支的后续状态
@@ -43,3 +44,17 @@ xcode CLI
         -> xllm          一次模型调用、SSE、provider 适配
             -> xrt       核心 HTTP/1.1 wire、TLS、future、网络运行时
 ```
+
+## Current persistence and governance contract
+
+Persistence schema 4 preserves complete text/image/native parts, signed
+assistant responses, raw entries and bounded restored model context. Legacy
+v1/v2/v3 fixtures migrate through the same loading path. Image tool results
+store descriptive text as a text part alongside the exact image bytes.
+
+Server usage anchors the retained prefix. Subsequent messages and system-prompt
+changes contribute their actual estimated growth; an unchanged fork can keep
+the same valid anchor. Legacy data without usable feedback falls back to the
+retained estimate. Setting model budgets must not silently discard the recent
+conversation tail. See the migrated snapshot/journal, adversarial transaction,
+model-context, image and allocator-fault fixtures in the product tests.

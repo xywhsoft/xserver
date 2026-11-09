@@ -124,6 +124,14 @@ class ExtensionTests(unittest.TestCase):
         self.assertNotIn("extension-sqlite", text)
         self.assertNotIn("extension-xtp", text)
 
+    def test_all_build_paths_fit_windows_compiler_limits(self):
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            self.assertEqual(build.main(['all', '--dry-run', '--build-dir', str(ROOT/'.build/test')]), 0)
+        directory = next(line.removeprefix('[build] directory=')
+                         for line in stdout.getvalue().splitlines() if line.startswith('[build] directory='))
+        self.assertLess(len(str(Path(directory)/'xs-link-12345678/link.rsp')), 240)
+
     def test_addition_needs_no_build_or_host_branch(self):
         registry = load_registry()
         registry["demo"] = copy.deepcopy(registry["xtp"])

@@ -21,6 +21,10 @@
 /lib/xws-server/** -text
 /lib/xssh/** -text
 /lib/xrudp/** -text
+/lib/xcron/** -text
+/lib/xmqtt/** -text
+/lib/xredis/** -text
+/lib/xrpc/** -text
 /lib/xrtshim/** text eol=lf
 /lib/xrt_sources.lock.json text eol=lf
 /lib/xrt_version.txt text eol=lf

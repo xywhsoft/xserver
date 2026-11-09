@@ -1,4 +1,4 @@
-# xllm v2
+# xllm v3.2
 
 `xllm` 是纯 C 的单次模型调用层。它负责把统一请求转换为提供方请求，通过 xrt HTTP/1.1 客户端传输，增量解析 SSE，并将文本、推理内容、多工具调用和 token usage 归一化。
 
@@ -11,7 +11,7 @@
 - 响应为有序内容块（文本/思考/工具调用按到达顺序交错）+ 便利字段
 - 流式 HTTP/SSE，支持任意网络分片；`event:` 类型化事件（Anthropic）与 typed events（Responses）
 - provider 边界严格校验 JSON，拒绝宽松解析器可接受的畸形 SSE/非流式响应
-- 文本与推理内容增量事件；Anthropic thinking 签名捕获与原生回放
+- 文本与推理内容增量事件；Anthropic thinking 签名与对应推理、回答文本的完整回放
 - 多个工具调用交错返回及 arguments 增量拼接；工具结果关联回放
 - 采样面：temperature / top_p / stop / JSON 模式 / 推理力度与预算 / 非流式开关
 - 逐请求逃生舱：额外传输头 + 原始 JSON 体浅合并
@@ -140,3 +140,18 @@ xrtCancelDestroy(operation);
 - 当前输入内容为文本；图片、文件等多模态输入后续扩展。
 - 全局限流、跨任务退避和配额策略仍由 xwork/宿主负责；xllm 只处理单次 provider 调用内的短暂失败。
 - 目前以 chat-completions 兼容协议为首个闭环，后续 provider adapter 不改变上层请求/响应模型。
+
+## v3.2 integration and ABI
+
+This mainline includes the v3.1 hardened value/provider/transport contracts and
+preserves the native-mainline `xllmRequestSetTimeout` entry point. Its signed
+relative-millisecond budget begins once at call submission and spans retries.
+`xllmRequestSetDeadline` accepts an absolute monotonic-microsecond deadline.
+The last setter selects the budget form. The public request layout includes
+both forms; rebuild native libraries, hosts and SDK consumers together.
+
+Signed assistant text and per-block reasoning survive provider replay. Client
+configuration is snapshotted before publication; transport errors retain their
+structured primary cause. Tests include allocator failure sweeps, provider
+wire fixtures, TLS, cancellation and deadline propagation. No live provider
+credential is required for the bounded native suite.
