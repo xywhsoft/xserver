@@ -1,0 +1,140 @@
+{
+  "date": "2026-11-09",
+  "scope": "production-xs-upgrade-and-network-retest",
+  "before": {
+    "source_commit": "df945ec864cf293bf51ab9424f54c7ecaa6fd3b2",
+    "binary_sha256": "b32fa5696b9950a0dc0fa4fd8277a112e27cbea093deb5d53948a35072d273fe",
+    "pid": "2741104",
+    "headerless_batches": [
+      {
+        "port": 80,
+        "attempts": 192,
+        "resets": 65
+      },
+      {
+        "port": 8440,
+        "attempts": 192,
+        "resets": 66
+      }
+    ],
+    "early_headerless_batch": {
+      "attempts": 192,
+      "resets": 15,
+      "failed_indexes_mod64": [
+        7,
+        13,
+        17,
+        22,
+        30
+      ]
+    },
+    "observation": "reset positions repeated modulo 64; reset before sending HTTP"
+  },
+  "deployment": {
+    "started_at_utc": "2026-11-09T03:00:01.475569+00:00",
+    "active_at_utc": "2026-11-09T03:00:08Z",
+    "source_commit": "505a0e8b5f35ed48d03cfdecb1d964b616536ef1",
+    "xrt_commit": "4618fde3f6acf38bed3226498a5ce33b1d11415f",
+    "source_sha256": "4f4f6825d75975ac85615b9a6fd9bcab7fe5b009f5ff9ad72579e3fbe7a2fbf5",
+    "binary_sha256": "d1429f9dee8f1082ae37f0d483294e1d79c9b89bb308305ae068a01bb24c4868",
+    "binary_bytes": 10409272,
+    "extension_count": 29,
+    "new_pid": "3986528",
+    "health_routes": 19,
+    "config_unchanged": true,
+    "catalog_response_hashes_unchanged": true,
+    "rollback_used": false,
+    "backup": "/home/xs/network-incident-20261109/production-before"
+  },
+  "after": {
+    "last_checked_at_utc": "2026-11-09T03:04:28.900308+00:00",
+    "http_requests_no_retry": 1472,
+    "http_request_failures": 0,
+    "headerless_connections": 576,
+    "headerless_resets": 0,
+    "strict_tls_close_notify_checks": 1000,
+    "strict_tls_close_notify_failures": 0,
+    "concurrency": 8,
+    "stress_batches": [
+      {
+        "probe": "stress-server.json",
+        "client": "server-Linux",
+        "utc": "2026-11-09T03:01:33Z",
+        "endpoint": "loopback-http",
+        "count": 200,
+        "http_success": 200,
+        "errors": {}
+      },
+      {
+        "probe": "stress-server.json",
+        "client": "server-Linux",
+        "utc": "2026-11-09T03:01:33Z",
+        "endpoint": "loopback-xs-tls",
+        "count": 200,
+        "http_success": 200,
+        "errors": {},
+        "tls_close_notify_success": 200
+      },
+      {
+        "probe": "stress-server.json",
+        "client": "server-Linux",
+        "utc": "2026-11-09T03:01:33Z",
+        "endpoint": "nginx-public-https",
+        "count": 200,
+        "http_success": 200,
+        "errors": {},
+        "tls_close_notify_success": 200
+      },
+      {
+        "probe": "stress-external.json",
+        "client": "external-Windows",
+        "utc": "2026-11-09T03:01:17Z",
+        "endpoint": "public-https",
+        "count": 200,
+        "http_success": 200,
+        "errors": {},
+        "tls_close_notify_success": 200
+      },
+      {
+        "probe": "stress-server-final.json",
+        "client": "server-Linux",
+        "utc": "2026-11-09T03:03:52Z",
+        "endpoint": "loopback-http",
+        "count": 200,
+        "http_success": 200,
+        "errors": {}
+      },
+      {
+        "probe": "stress-server-final.json",
+        "client": "server-Linux",
+        "utc": "2026-11-09T03:03:52Z",
+        "endpoint": "loopback-xs-tls",
+        "count": 200,
+        "http_success": 200,
+        "errors": {},
+        "tls_close_notify_success": 200
+      },
+      {
+        "probe": "stress-server-final.json",
+        "client": "server-Linux",
+        "utc": "2026-11-09T03:03:52Z",
+        "endpoint": "nginx-public-https",
+        "count": 200,
+        "http_success": 200,
+        "errors": {},
+        "tls_close_notify_success": 200
+      }
+    ],
+    "service": "MainPID=3986528\nNRestarts=0\nMemoryCurrent=103526400\nActiveState=active\nActiveEnterTimestamp=Mon 2026-11-09 03:00:08 UTC\n"
+  },
+  "limitations": [
+    "Upgrade and restart occurred together; no restart-only old-binary production control.",
+    "Short observation window; exact causal XRT change and long-running stability unproven.",
+    "Screenshot-specific historical LZMA object not tested."
+  ],
+  "artifacts": {
+    "local": "D:/GIT/mdo/.build/network-incident-20261109",
+    "remote": "/home/xs/network-incident-20261109"
+  },
+  "temporary_build_source_and_objects_removed": true
+}
