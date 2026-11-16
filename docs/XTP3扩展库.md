@@ -2,7 +2,7 @@
 
 `build.bat xtp` / `bash build.sh xtp` 选择 XRT XTP3，自动包含 xws 与 xrudp。宿主逐文件原生编译 `lib/xtp/src`，脚本直接 `#include <xtp.h>`，用 `XS_USE_XTP` 判断能力。42 个外部 API 按公开声明导入；inline helper 在脚本内直接编译，不加动态包装或操作码分发。XTP1/2 头文件、符号、实现与线路兼容均已移除。
 
-完整模块来自 XRT 提交 `e485d1aed4336d1edd9b2fb291fd87769db6e0b0`；许可证见 `lib/xtp/LICENSE`，每个上游文件的来源提交和 SHA256 见 `lib/xrt_sources.lock.json`。本次只升级 xtp；核心、xws、xrudp 与其他产品保持各自固定版本，不能用 XTP 的提交号冒充核心版本。用 `python tools/sync_xrt.py --check` 校验。后续更新仍使用 `--source ../xrt --ref <commit> --library xtp`，不修改 vendored 源码。
+完整模块来自 XRT 提交 `cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd`；许可证见 `lib/xtp/LICENSE`，每个上游文件的来源提交和 SHA256 见 `lib/xrt_sources.lock.json`。本次只升级 xtp；核心、xws、xrudp 与其他产品保持各自固定版本，不能用 XTP 的提交号冒充核心版本。用 `python tools/sync_xrt.py --check` 校验。后续更新仍使用 `--source ../xrt --ref <commit> --library xtp`，不修改 vendored 源码。
 
 ## 可运行示例
 
@@ -14,7 +14,7 @@ python tools/run_xtp3_example.py --exe .build/xtp3/xs-xtp3.exe
 python tools/test_extensions_runtime.py --exe .build/xtp3/xs-xtp3.exe xtp
 ```
 
-Linux 将 exe 路径换成 `.build/xtp3/xs-xtp3`。示例源码在 `dev/xtp3/main.c`，在临时的独立 custom 服务进程内运行后退出，不连接外网、不操作现有 xs 服务。它覆盖四种 Command/Params 组合、TABLE 的 ParamAt、RPC、可靠 PUSH 与 DATAGRAM 形态 NOTIFY。宿主仍按实际网络边界调用 Input，并把 Output 真正交给下层后调用 Advance。TCP/TLS/WS/xrudp 适配器借用已有网络对象，不创建连接或接管事件。
+Linux 将 exe 路径换成 `.build/xtp3/xs-xtp3`。示例源码在 `dev/xtp3/main.c`，在临时的独立 custom 服务进程内运行后退出，不连接外网、不操作现有 xs 服务。它覆盖四种 Command/Params 组合、TABLE 的 ParamAt、RPC、可靠 PUSH 与 DATAGRAM 形态 NOTIFY，以及批量输出和跨帧短写的 host/TCC 结构及令牌 ABI。宿主仍按实际网络边界调用 Input，并把 Output 真正交给下层后调用 Advance。TCP/TLS/WS/xrudp 适配器借用已有网络对象，不创建连接或接管事件。
 
 同一个 Session 的操作由宿主串行化，不同实例可以并行。输入和回调中的 Command、Params、Body、Packet 均为借用视图；异步使用须在回调返回前复制到应用自己的有界存储。异步 REQUEST 只保留 opaque Request token，再用 Reply 回复；不可保留整个回调指针。TABLE 保留线顺序，ParamAt 在 ARRAY/TABLE 都可用，字符串查找只用于 TABLE。
 
@@ -26,4 +26,8 @@ Windows/Linux GCC 宿主的直接/嵌套 TCC 均验证了 42 个 XTP 导出、�
 
 XRT 的游戏丢包/RTT/MTU 测试、Delivery 故障/OOM/模糊测试不等同于 XS 热重载、移动公网或长时间生产验收。强安全配置使用 TLS1.3 或 xrudp Noise；对普通裸 UDP 的解析不构成身份认证或可靠投递保证。
 
-XTP 自有 C/头约 114.05 KiB；其源码预算超标和可恢复 RPC 默认回执窗口限制仍存在。完整功能覆盖与测量保留在固定的 XRT 提交中，XS 未把依赖源码算成 XTP 自己的体积，也未以 SDK ABI 通过冒充完整 WSS/移动网络验收。
+XTP 自有 C/头按 UTF-8/LF 计 121998 B（119.14 KiB），源码不设硬上限，优先简洁、安全和性能；含 Delivery 的自有目标码 text 为 44992 B，依赖另计。可恢复 RPC 已改为固定滚动完成窗口，移除默认 1024/60s 的速率限制；未消费的迟到结果只以 STATE_LOST 退休。默认 16 KiB 发送聚合仅组合已排队的同一可靠 lane，不等待凑包，并显式统计额外暂存复制；BatchBytes=0 可关闭。
+
+固定 XRT 来源包含完整 WSS/TLS1.3/HTTP Upgrade 例程、多连接/多 worker 与真实 UDP/Noise 容量工具、x86/大端及有界持续连接验证。网络连接与 HTTP 前端仍由宿主管理；XS 的 ABI 通过不代替移动网络/NAT 或多日长稳。相应测试和性能证据位于上游 extlibs/xtp/docs/qualification.md 与 performance.md。
+
+最终收据见 [2026-11-17 验证记录](xtp3-validation-2026-11-17.json)：固定来源、两个宿主二进制、示例和测试日志均记录 SHA256。Windows/Linux 外层及嵌套 TCC 已实际验证聚合 Frames、跨帧短写与新增配置/统计字段；注册29项、快照9项、选择性同步8项通过。上游标准性能 profile 的 P99 波动门限仍未通过，不能将这些本机延迟值当成稳定回归基线。

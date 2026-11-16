@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "date_local": "2026-11-17",
+  "integration_base_commit": "1f9f3246f5fab4ea4e13b925cfad9dfda4e0a6f0",
+  "xtp_production_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd",
+  "core_commit": "4618fde3f6acf38bed3226498a5ce33b1d11415f",
+  "scope": "Windows/Linux GCC host, direct and nested TCC; four Command/Params shapes, TABLE ParamAt, RPC/PUSH/NOTIFY, aggregate Frames and STREAM prefix crossing frame boundaries, callback and 32-byte by-value token ABI; 329 exports in xtp/xws/xrudp closure; only xtp source pin changed",
+  "unit_tests": {
+    "extension_registry": 29,
+    "snapshot_integrity": 9,
+    "selective_sync": 8
+  },
+  "inputs_sha256": {
+    "lib/xrt_sources.lock.json": "c9ba74b017af92d3108e1a690962437464ce832e06a14664f2192cb19600bbed",
+    "dev/xtp3/main.c": "c822bc9229ea43d7711a89c272d1649749c8b0348dd9c28ac3fee0590a7e49af",
+    "tools/test_extensions_runtime.py": "5c8da78f42934ca1669514f92e5c986e36cccd5dc37569acca1c67dacd961ab3",
+    "tools/run_xtp3_example.py": "8cde52a1a071af36959072b1000e5a6ae8d9a2d1188e697ca5e39801e9cad265"
+  },
+  "executables_sha256": {
+    ".build/xtp3/xs-xtp3.exe": "8ba1d6b133b87b902556e32bc6e68cfe2ac07000b7ef841d49f7c52f14d82be3",
+    ".build/xtp3-linux/xs-xtp3": "1133e09b39be07d09ee2afc85a5756d7bc7d3e8ae7979c650ee205e9ab6689c4"
+  },
+  "logs_sha256": {
+    ".build/xtp3-release-build.log": "6483d5ad6f01f678a9f1ba458b657df19172ebb9603f68945b95c158bd25b3fd",
+    ".build/xtp3-release-runtime.log": "e95053a89b511f5926d9d71539b9ef30430f3e80d321728c160578f63e820d72",
+    ".build/xtp3-release-example.log": "c2bcba3e5ae86da6850c44a9400221f32298e286d02e83f52df0e8e13308a310",
+    ".build/xtp3-release-sync.log": "2d5613ca9448a09b18c10a6e70cd6db2569dc5384d4505212d5d074d2ffa87bd",
+    ".build/xtp3-release-extensions.log": "1f3b607109cf32660e804f9e38ab2dfbfa35c0cb8bf27dd8d24462998b3baac3",
+    ".build/xtp3-release-selective-sync.log": "63d7342e134fd3af35ca91e04bb9099b5e29221e44df7951de720072e9326fc4",
+    ".build/xtp3-release-linux-build.log": "ee3bf9d7cbe732a1d86eca0306c7d8eb73872b70743059c1d1ad6de0da113b88",
+    ".build/xtp3-release-linux-runtime.log": "e6be66c9f1f504f000d37edddaa23cb5e642031ee532142209e75768e71dbbf1",
+    ".build/xtp3-release-linux-example.log": "8383134e0fcdf7b755dedbb0b3e241d8e2fcdb978ab576d85ea442e272a2a2d5"
+  },
+  "upstream_final_c99_asan_log_sha256": "598173095dc94bcef54d4a2febe64ac703882d7c450999aaac6ecc6824a516fa",
+  "not_qualified": [
+    "physical mobile devices and carrier/NAT switching",
+    "multi-day soak",
+    "stable P99 regression baseline; upstream 3- and 7-repeat quality gates remain exceeded"
+  ]
+}

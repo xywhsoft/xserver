@@ -20,7 +20,7 @@ typedef struct xtptx {
 #endif
 } xtptx;
 #if defined(XTP_FEATURE_XTP_DELIVERY)
-typedef struct xtpreceipt {uint64_t ID,Until;size_t Lane;unsigned State;} xtpreceipt;
+typedef struct xtpreceipt {uint64_t ID;size_t Lane;} xtpreceipt;
 #define XTP_REPLAY(t) ((t)->Replay)
 #define XTP_TICKET(t) ((t)->Ticket)
 #else
@@ -31,6 +31,11 @@ typedef struct xtphistory {uint64_t ID;int32_t Status;xtpmessagekind Type;} xtph
 typedef struct xtpsessionlane {
     xtplane Config;xtpreader* Reader;xtpsession* Session;size_t Head,Tail,Index;
 } xtpsessionlane;
+typedef struct xtpbatchentry {size_t Index,Offset,Bytes;uint64_t Seal;} xtpbatchentry;
+typedef struct xtpbatch {
+    size_t Capacity,Size,Count,Lane;uint64_t Epoch,Binding;
+    xtpbatchentry Entry[XTP_BATCH_MAX];unsigned char Data[1];
+} xtpbatch;
 struct xtpsession {
     xtpconfig Config;xtpevents Events;void* User;
     xtppending* Pending;xtptx* Tx;xtphistory* History;xtpsessionlane* Lanes;size_t* Buckets;
@@ -38,6 +43,7 @@ struct xtpsession {
     uint64_t Cookie[2],NextID,NextSerial,Binding,LastNow,HighID;
     uint64_t Submitted,Completed,Messages,Unknown,Duplicates;
     bool Bound,Busy,Callback,Closing,Closed,Unbinding,CloseRequested;
+    xtpbatch* Batch;uint64_t Batches,BatchedFrames,BatchCopiedBytes;
 #if defined(XTP_FEATURE_XTP_DELIVERY)
     xtpreceipt* Receipts;xtpdeliveryidentity Identity;
     size_t RetainHead,RetainTail,Retained,ReceiptCount;
@@ -63,6 +69,7 @@ static void* xtpSessionMemory(void* user,void* memory,size_t n)
 bool xtp__SessionAddress(const xtpsession* s,uintptr_t address,size_t n)
 {
     const void* p=(const void*)address;
+    if(s->Batch&&xtp__Overlap(s->Batch,sizeof(*s->Batch)+s->Batch->Capacity,p,n))return false;
     if(!xrtMemRangeValid(p,n)||xtp__Overlap(s,sizeof(*s),p,n)||
         xtp__Overlap(s->Tx,s->Config.MaxTxFrames*sizeof(*s->Tx),p,n)||
         xtp__Overlap(s->Pending,s->Config.MaxPending*sizeof(*s->Pending),p,n)||
@@ -100,6 +107,7 @@ XTP_API void xtpConfigInit(xtpconfig* c)
     c->MaxPending=64;c->MaxIncomingRequests=64;c->MaxLanes=4;c->MaxTxFrames=256;c->MaxTxBytes=1048576;
     c->ResponseReserveBytes=262144;c->ResponseReserveFrames=16;c->MaxResponseBytes=65536;
     c->MaxSessionBytes=16777216;c->DedupWindow=1024;
+    c->BatchBytes=16384;
     c->DefaultOperationTimeoutUs=c->IncomingRequestTimeoutUs=5000000;
     xtpDeliveryConfigInit(&c->Delivery);c->Delivery.Enabled=false;
 }
@@ -107,6 +115,7 @@ static void xtpSessionFreeTables(xtpsession* s)
 {
     xtpSessionMemory(s,s->Lanes,0);xtpSessionMemory(s,s->Pending,0);xtpSessionMemory(s,s->Tx,0);
     xtpSessionMemory(s,s->History,0);xtpSessionMemory(s,s->Buckets,0);
+    xtpSessionMemory(s,s->Batch,0);
 #if defined(XTP_FEATURE_XTP_DELIVERY)
     xtpSessionMemory(s,s->Receipts,0);
 #endif
@@ -120,7 +129,8 @@ XTP_API xtpresult xtpCreate(const xtpconfig* input,const xtpevents* events,void*
     else xtpConfigInit(&c);
     if(xtp__CodecConfig(&c.Reader.Codec,&codec)!=XTP_OK||!c.MaxPending||c.MaxPending>4096||
         !c.MaxIncomingRequests||c.MaxIncomingRequests>4096||!c.MaxLanes||c.MaxLanes>64||
-        c.MaxTxFrames<2||c.MaxTxFrames>16384||c.MaxResponseBytes<32||c.MaxResponseBytes>codec.MaxFrameBytes||
+        c.MaxTxFrames<2||c.MaxTxFrames>16384||(c.BatchBytes&&(c.BatchBytes<64||c.BatchBytes>1048576))||
+        c.MaxResponseBytes<32||c.MaxResponseBytes>codec.MaxFrameBytes||
         c.MaxTxBytes<c.MaxResponseBytes||c.ResponseReserveBytes<32||c.ResponseReserveBytes>=c.MaxTxBytes||
         !c.ResponseReserveFrames||c.ResponseReserveFrames>=c.MaxTxFrames||c.MaxSessionBytes<sizeof(xtpsession)||
         !c.DedupWindow||c.DedupWindow>65536||!c.DefaultOperationTimeoutUs||!c.IncomingRequestTimeoutUs||
@@ -233,10 +243,6 @@ static void xtpSessionComplete(xtpsession* s,size_t pi,xtpcompletion* c)
         }else
 #endif
         xtpTxFree(s,p.Tx);}
-#if defined(XTP_FEATURE_XTP_DELIVERY)
-    if(s->Receipts){xtpreceipt* r=&s->Receipts[p.ID%s->Config.DedupWindow];
-        if(r->ID==p.ID&&r->State==1){r->State=0;--s->ReceiptCount;}}
-#endif
     c->Operation=(xtpoperationtoken){{s->Cookie[0],p.Serial}};c->Type=p.Type;c->MessageID=p.ID;c->Tag=p.Tag;
     ++s->Completed;if(s->Events.OnComplete){s->Callback=true;s->Events.OnComplete(s,c,s->User);s->Callback=false;}
 }
@@ -263,10 +269,22 @@ static bool xtpKeep(const xtpsession* s,const xtptx* t)
 {return s->Unbinding&&!s->Closing&&!s->CloseRequested&&t->Replay&&!t->RetireAfterSend;}
 static bool xtpRetriable(const xtpsession* s,const xtptx* t)
 {return !t->Replay||(t->Queued&&t->RoundStarted)||t->Attempts<s->Config.Delivery.MaxAttempts;}
-static void xtpReceiptExpire(xtpsession* s,xtpreceipt* r)
+static void xtpReceiptPut(xtpsession* s,uint64_t id,size_t lane)
 {
-    if(r->ID>=s->ResultFloor)s->ResultFloor=r->ID==UINT64_MAX?UINT64_MAX:r->ID+1;
-    r->State=0;--s->ReceiptCount;
+    uint64_t floor=id>=s->Config.DedupWindow?id-s->Config.DedupWindow+1:1;
+    if(floor>s->ResultFloor)s->ResultFloor=floor;
+    if(id<s->ResultFloor)return;
+    xtpreceipt* r=&s->Receipts[id%s->Config.DedupWindow];
+    if(!r->ID)++s->ReceiptCount;
+    *r=(xtpreceipt){id,lane};
+}
+static uint64_t xtpResultFloor(const xtpsession* s)
+{
+    uint64_t floor=s->ResultFloor;
+    for(size_t i=0;i<s->Config.MaxPending;++i){const xtppending* p=&s->Pending[i];
+        if(p->Active&&p->Type==XTP_REQUEST&&p->Tx!=XTP_NONE&&s->Tx[p->Tx].Replay&&
+            p->Deadline>s->LastNow&&p->ID<floor)floor=p->ID;}
+    return floor;
 }
 #else
 #define xtpKeep(s,t) false
@@ -340,14 +358,14 @@ static xtpflow xtpSendControl(xtpsession* s,size_t lane,const xtpframeview* f,in
     return XTP_FLOW_ACCEPT;
 }
 #if defined(XTP_FEATURE_XTP_DELIVERY)
-static bool xtpResultAck(xtpsession* s,size_t lane,uint64_t id)
+static bool xtpResultAck(xtpsession* s,size_t lane,uint64_t id,int32_t status)
 {
     /* Coalesce queued receipts without owning another queue. */
     for(size_t j=0;j<s->Config.MaxTxFrames;++j){xtptx* q=&s->Tx[j];
         if(q->Active&&q->Type==XTP_ACK&&q->ID==id&&q->Lane==lane&&
             !q->Bytes&&(q->Control[17]&XTP_FLAG_RESULT_ACK))return true;}
     size_t i=xtpTxTake(s,lane,32,false);if(i==XTP_NONE)return false;
-    if(!xtpControl(s,i,XTP_ACK,id,0)){xtpTxFree(s,i);return false;}
+    if(!xtpControl(s,i,XTP_ACK,id,status)){xtpTxFree(s,i);return false;}
     s->Tx[i].Control[17]|=XTP_FLAG_RESULT_ACK;++s->ResultAcks;return true;
 }
 static void xtpRetireResult(xtpsession* s,size_t i)
@@ -385,10 +403,14 @@ static xtpflow xtpSessionFrame(xtpreader* reader,const xtpframeview* f,void* use
 #endif
         size_t pi=xtpPendingFind(s,f->MessageID);
 #if defined(XTP_FEATURE_XTP_DELIVERY)
-        if(pi==XTP_NONE&&f->Type==XTP_RESPONSE&&s->Receipts){xtpreceipt* r=&s->Receipts[f->MessageID%s->Config.DedupWindow];
-            if(r->State==2&&r->ID==f->MessageID&&r->Lane==li&&r->Until>s->LastNow){
-                if(!xtpResultAck(s,li,f->MessageID))return XTP_FLOW_PAUSE;
-                ++s->Duplicates;return XTP_FLOW_ACCEPT;}}
+        if(pi==XTP_NONE&&f->Type==XTP_RESPONSE&&s->ReplayRequests&&
+            (!s->NextID||f->MessageID<s->NextID)){
+            xtpreceipt* r=&s->Receipts[f->MessageID%s->Config.DedupWindow];
+            bool consumed=r->ID==f->MessageID&&f->MessageID>=s->ResultFloor;
+            if(consumed&&r->Lane!=li){++s->Unknown;return XTP_FLOW_ACCEPT;}
+            if(!xtpResultAck(s,li,f->MessageID,consumed?0:XTP_STATUS_STATE_LOST))return XTP_FLOW_PAUSE;
+            if(consumed)++s->Duplicates;else ++s->Unknown;
+            return XTP_FLOW_ACCEPT;}
 #endif
         if(f->ResultAck||pi==XTP_NONE||s->Pending[pi].Lane!=li||
             (s->Pending[pi].Type==XTP_REQUEST)!=(f->Type==XTP_RESPONSE)){
@@ -403,9 +425,8 @@ static xtpflow xtpSessionFrame(xtpreader* reader,const xtpframeview* f,void* use
         if(p->Tx!=XTP_NONE&&s->Tx[p->Tx].Replay&&s->LastNow<p->Deadline){
             if(f->Status==XTP_STATUS_BUSY){xtpRetryBusy(s,p->Tx);return XTP_FLOW_ACCEPT;}
             if(f->Type==XTP_RESPONSE){
-                if(!xtpResultAck(s,li,f->MessageID))return XTP_FLOW_PAUSE;
-                xtpreceipt* r=&s->Receipts[p->ID%s->Config.DedupWindow];r->State=2;
-                r->Until=xtpSessionDue(s->LastNow,s->Lifetime);if(r->Until>s->AuthUntil)r->Until=s->AuthUntil;}}
+                if(!xtpResultAck(s,li,f->MessageID,0))return XTP_FLOW_PAUSE;
+                xtpReceiptPut(s,p->ID,li);}}
 #endif
         xtpcompletion c={0};c.Reason=f->Type==XTP_RESPONSE?XTP_FINISH_RESPONSE:XTP_FINISH_ACK;
         c.HasRemoteStatus=true;c.Status=f->Status;
@@ -494,8 +515,7 @@ static bool xtpProof(xtpsession* s,const xtpbinding* b,uint64_t now)
         memcmp(&p->Identity,&s->Identity,sizeof(s->Identity))||p->LifetimeUs!=s->Lifetime||
         (p->AllowRequests&&s->Config.Delivery.AllowRequests)!=s->ReplayRequests)return false;
     for(size_t i=s->RetainHead;i!=XTP_NONE;i=s->Tx[i].RetainNext){const xtptx* t=&s->Tx[i];
-        if((!t->Incoming&&t->Type==XTP_PUSH&&t->ID<p->PeerReceiveFloor)||
-            (t->Incoming&&!t->Waiting&&t->ID<p->PeerResultFloor))return false;}
+        if(!t->Incoming&&t->Type==XTP_PUSH&&t->ID<p->PeerReceiveFloor)return false;}
     return true;
 }
 #endif
@@ -538,6 +558,12 @@ XTP_API xtpresult xtpBind(xtpsession* s,const xtpbinding* b,uint64_t now,uint64_
                 s->ReplayRequests=p->AllowRequests&&s->Config.Delivery.AllowRequests;s->DeliveryStarted=true;}
             else if(p->UntilUs<s->AuthUntil)s->AuthUntil=p->UntilUs;
             s->Suspended=false;
+            for(size_t i=s->RetainHead;i!=XTP_NONE;i=s->Tx[i].RetainNext)s->Tx[i].Queued=false;
+            /* The peer proves no live request remains below this floor.
+             * Cache retirement is not a claim of result consumption. */
+            for(size_t i=s->RetainHead;i!=XTP_NONE;){xtptx* t=&s->Tx[i];size_t next=t->RetainNext;
+                if(t->Incoming&&!t->Waiting&&t->ID<p->PeerResultFloor)xtpTxFree(s,i);
+                i=next;}
             /* Cached results precede resubmissions. Retained order is stable. */
             for(unsigned pass=0;pass<2;++pass)for(size_t i=s->RetainHead;i!=XTP_NONE;i=s->Tx[i].RetainNext){xtptx* t=&s->Tx[i];
                 if((pass==0)!=t->Incoming||t->Waiting)continue;
@@ -633,10 +659,6 @@ XTP_API xtpresult xtpSubmitBatch(xtpsession* s,const xtpmessage* messages,size_t
         if(due[i]<=now)return XTP_E_DEADLINE;
 #if defined(XTP_FEATURE_XTP_DELIVERY)
         if(o.Replay&&(due[i]>s->AuthUntil||due[i]>xtpSessionDue(now,s->Lifetime)))return XTP_E_LIMIT;
-        if(o.Replay&&m->Type==XTP_REQUEST){
-            if(s->Receipts[id%s->Config.DedupWindow].State)return XTP_E_LIMIT;
-            for(size_t j=0;j<i;++j)if(options[j].Replay&&messages[j].Type==XTP_REQUEST&&
-                packets[j].MessageID%s->Config.DedupWindow==id%s->Config.DedupWindow)return XTP_E_LIMIT;}
 #endif
         if(m->Type!=XTP_NOTIFY){if(!id)return XTP_E_LIMIT;++reliable;}
         packets[i]=(xtppacket){0};packets[i].Type=m->Type;packets[i].Command=m->Command;
@@ -671,9 +693,7 @@ XTP_API xtpresult xtpSubmitBatch(xtpsession* s,const xtpmessage* messages,size_t
     for(size_t i=0;i<count;++i){xtptx* t=&s->Tx[taken[i]];t->Type=messages[i].Type;t->ID=packets[i].MessageID;
         t->Deadline=due[i];t->Notify=t->Type==XTP_NOTIFY;t->Tag=options?options[i].Tag:NULL;
 #if defined(XTP_FEATURE_XTP_DELIVERY)
-        if(packets[i].Replayable){xtpRetain(s,taken[i],due[i]);
-            if(t->Type==XTP_REQUEST){xtpreceipt* r=&s->Receipts[t->ID%s->Config.DedupWindow];
-                *r=(xtpreceipt){t->ID,0,t->Lane,1};++s->ReceiptCount;}}
+        if(packets[i].Replayable)xtpRetain(s,taken[i],due[i]);
 #endif
         if(!t->Notify){size_t pi=s->FreePending;xtppending* p=&s->Pending[pi];s->FreePending=p->Next;
             memset(p,0,sizeof(*p));p->Active=true;p->ID=t->ID;p->Type=t->Type;p->Serial=t->Serial;
@@ -710,7 +730,52 @@ XTP_API xtpresult xtpReply(xtpsession* s,xtprequesttoken token,const xtpresponse
     if(s->Bound)xtpTxQueue(s,i);
     return XTP_OK;
 }
-XTP_API xtpresult xtpOutput(xtpsession* s,uint32_t id,xtpoutput* out)
+static bool xtpBatchValid(const xtpsession* s,const xtpbatch* b)
+{
+    if(!b||!b->Epoch||b->Binding!=s->Binding||b->Lane>=s->LaneCount)return false;
+    size_t i=s->Lanes[b->Lane].Head;
+    for(size_t k=0;k<b->Count;++k){const xtpbatchentry* e=&b->Entry[k];
+        if(i!=e->Index||i==XTP_NONE)return false;
+        const xtptx* t=&s->Tx[i];
+        if(!t->Active||!t->Queued||XTP_TICKET(t)!=e->Seal||t->Offset!=e->Offset||
+            t->Size-t->Offset!=e->Bytes||t->Deadline<=s->LastNow||!xtpRetriable(s,t))return false;
+        i=t->Next;}
+    return true;
+}
+static bool xtpBatchOffer(xtpsession* s,size_t lane,size_t bytes,size_t frames,xtpoutput* out)
+{
+    if(!s->Lanes[lane].Config.Reliable||!s->Config.BatchBytes||!s->NextSerial)return false;
+    if(bytes>s->Config.BatchBytes)bytes=s->Config.BatchBytes;
+    if(s->Lanes[lane].Config.Mode==XTP_INPUT_RECORD&&bytes>s->Lanes[lane].Config.RecordLimit)bytes=s->Lanes[lane].Config.RecordLimit;
+    if(frames>s->Config.Reader.Codec.MaxBatch)frames=s->Config.Reader.Codec.MaxBatch;
+    if(frames>s->Config.Reader.MaxFrames)frames=s->Config.Reader.MaxFrames;
+    if(frames<2)return false;
+    xtpbatch* b=s->Batch;
+    if(!(xtpBatchValid(s,b)&&b->Lane==lane&&b->Size<=bytes&&b->Count<=frames)){
+        size_t size=0,count=0;
+        for(size_t i=s->Lanes[lane].Head;i!=XTP_NONE&&count<frames;i=s->Tx[i].Next){xtptx* t=&s->Tx[i];
+            if(t->Deadline<=s->LastNow||!xtpRetriable(s,t)||t->Size-t->Offset>bytes-size)break;
+            size+=t->Size-t->Offset;++count;}
+        if(count<2)return false;
+        s->Busy=true;
+        if(b)b->Epoch=0;
+        if(!b||b->Capacity<size){xtpbatch* grown=xtpSessionMemory(s,b,sizeof(*b)+size);
+            if(!grown){s->Busy=false;return false;}b=grown;s->Batch=b;b->Capacity=size;}
+        b->Epoch=s->NextSerial++;b->Binding=s->Binding;b->Lane=lane;b->Size=size;b->Count=count;
+        size_t i=s->Lanes[lane].Head,offset=0;
+        for(size_t k=0;k<count;++k){xtptx* t=&s->Tx[i];size_t n=t->Size-t->Offset;
+            b->Entry[k]=(xtpbatchentry){i,t->Offset,n,XTP_TICKET(t)};
+            memcpy(b->Data+offset,(t->Bytes?t->Bytes:t->Control)+t->Offset,n);offset+=n;i=t->Next;}
+        ++s->Batches;s->BatchedFrames+=count;s->BatchCopiedBytes+=size;s->Busy=false;
+    }
+    out->Data=(xbytesview){b->Data,b->Size};out->Frames=b->Count;
+    out->Ticket=(xtpoutputticket){{s->Binding,0,b->Epoch,0}};
+    for(size_t k=0;k<b->Count;++k){xtptx* t=&s->Tx[b->Entry[k].Index];
+        if(t->Deadline<out->DeadlineUs)out->DeadlineUs=t->Deadline;
+        if(t->Incoming||t->Type==XTP_ACK)out->Priority=1;}
+    return true;
+}
+xtpresult xtp__Output(xtpsession* s,uint32_t id,size_t bytes,size_t frames,xtpoutput* out)
 {
     if(!s||s->Busy||!s->Bound||s->Closing||s->CloseRequested)return XTP_E_STATE;
 #if defined(XTP_FEATURE_XTP_DELIVERY)
@@ -723,35 +788,57 @@ XTP_API xtpresult xtpOutput(xtpsession* s,uint32_t id,xtpoutput* out)
         if(h!=XTP_NONE&&s->Tx[h].Deadline>s->LastNow&&xtpRetriable(s,&s->Tx[h])){i=h;break;}}
     if(i==XTP_NONE)return XTP_AGAIN;
     xtptx* t=&s->Tx[i];xtplane* l=&s->Lanes[t->Lane].Config;xtpoutput o={0};
-    if(t->Deadline<=s->LastNow||!xtpRetriable(s,t))return XTP_AGAIN; /* Drive retires expired heads. */
+    if(t->Deadline<=s->LastNow||!xtpRetriable(s,t))return XTP_AGAIN;
     o.Data=(xbytesview){(t->Bytes?t->Bytes:t->Control)+t->Offset,t->Size-t->Offset};
     o.Ticket=(xtpoutputticket){{s->Binding,i+1,XTP_TICKET(t),t->Offset}};o.BindingID=s->Binding;
-    o.DeadlineUs=t->Deadline;o.LaneID=l->ID;o.Mode=l->Mode;o.Reliable=l->Reliable;
-    o.Priority=t->Incoming||t->Type==XTP_ACK?1:0;*out=o;return XTP_OK;
+    o.DeadlineUs=t->Deadline;o.LaneID=l->ID;o.Mode=l->Mode;o.Reliable=l->Reliable;o.Frames=1;
+    o.Priority=t->Incoming||t->Type==XTP_ACK?1:0;
+    (void)xtpBatchOffer(s,t->Lane,bytes,frames,&o);*out=o;return XTP_OK;
 }
-XTP_API xtpresult xtpAdvance(xtpsession* s,xtpoutputticket ticket,size_t accepted,uint64_t now)
+XTP_API xtpresult xtpOutput(xtpsession* s,uint32_t id,xtpoutput* out)
+{return xtp__Output(s,id,SIZE_MAX,SIZE_MAX,out);}
+static bool xtpAdvanceFrame(xtpsession* s,size_t i,size_t accepted,uint64_t now)
 {
-    if(!s||s->Busy||!s->Bound||s->CloseRequested||ticket._Opaque[0]!=s->Binding||
-        !ticket._Opaque[1]||ticket._Opaque[1]>s->Config.MaxTxFrames||now<s->LastNow)return XTP_E_STATE;
-    size_t i=(size_t)ticket._Opaque[1]-1;xtptx* t=&s->Tx[i];
-    if(!t->Active||!t->Queued||s->Lanes[t->Lane].Head!=i||XTP_TICKET(t)!=ticket._Opaque[2]||
-        t->Offset!=ticket._Opaque[3]||accepted>t->Size-t->Offset||
-        (s->Lanes[t->Lane].Config.Mode==XTP_INPUT_RECORD&&accepted&&accepted!=t->Size))return XTP_E_ARGUMENT;
-    s->LastNow=now;if(!accepted)return XTP_AGAIN;s->Busy=true;s->TurnFrames=s->Config.Reader.MaxFrames;
-    s->NextLane=(t->Lane+1)%s->LaneCount;
+    xtptx* t=&s->Tx[i];s->NextLane=(t->Lane+1)%s->LaneCount;
 #if defined(XTP_FEATURE_XTP_DELIVERY)
     if(t->Replay&&!t->RoundStarted){t->RoundStarted=true;++t->Attempts;++s->Attempts;}
 #endif
-    t->Sent=true;t->Offset+=accepted;
-    if(t->Pending!=XTP_NONE)s->Pending[t->Pending].Sent=true;
-    if(t->Offset==t->Size){if(t->Notify){--s->TurnFrames;xtpNotifyComplete(s,i,now>=t->Deadline?XTP_FINISH_TIMEOUT:XTP_FINISH_SENT,now>=t->Deadline?XTP_E_DEADLINE:XTP_OK);}
-        else{
+    t->Sent=true;t->Offset+=accepted;if(t->Pending!=XTP_NONE)s->Pending[t->Pending].Sent=true;
+    if(t->Offset!=t->Size)return false;
+    if(t->Notify){--s->TurnFrames;xtpNotifyComplete(s,i,now>=t->Deadline?XTP_FINISH_TIMEOUT:XTP_FINISH_SENT,now>=t->Deadline?XTP_E_DEADLINE:XTP_OK);}
+    else{
 #if defined(XTP_FEATURE_XTP_DELIVERY)
-            if(t->Replay&&!t->RetireAfterSend)xtpTxUnqueue(s,i);else
+        if(t->Replay&&!t->RetireAfterSend)xtpTxUnqueue(s,i);else
 #endif
-            {if(t->Pending!=XTP_NONE)s->Pending[t->Pending].Tx=XTP_NONE;xtpTxFree(s,i);}}}
+        {if(t->Pending!=XTP_NONE)s->Pending[t->Pending].Tx=XTP_NONE;xtpTxFree(s,i);}}
+    return true;
+}
+xtpresult xtp__Advance(xtpsession* s,const xtpoutputticket* ticket,size_t accepted,uint64_t now,size_t* frames)
+{
+    if(frames)*frames=0;
+    if(!s||s->Busy||!s->Bound||s->CloseRequested||ticket->_Opaque[0]!=s->Binding||now<s->LastNow)return XTP_E_STATE;
+    xtpbatch* b=s->Batch;size_t i=XTP_NONE;
+    if(!ticket->_Opaque[1]){
+        if(!xtpBatchValid(s,b)||b->Epoch!=ticket->_Opaque[2]||ticket->_Opaque[3]||accepted>b->Size||
+            (s->Lanes[b->Lane].Config.Mode==XTP_INPUT_RECORD&&accepted&&accepted!=b->Size))return XTP_E_ARGUMENT;
+    }else{
+        if(ticket->_Opaque[1]>s->Config.MaxTxFrames)return XTP_E_STATE;
+        i=(size_t)ticket->_Opaque[1]-1;xtptx* t=&s->Tx[i];
+        if(!t->Active||!t->Queued||s->Lanes[t->Lane].Head!=i||XTP_TICKET(t)!=ticket->_Opaque[2]||
+            t->Offset!=ticket->_Opaque[3]||accepted>t->Size-t->Offset||
+            (s->Lanes[t->Lane].Config.Mode==XTP_INPUT_RECORD&&accepted&&accepted!=t->Size))return XTP_E_ARGUMENT;}
+    s->LastNow=now;if(!accepted)return XTP_AGAIN;s->Busy=true;s->TurnFrames=s->Config.Reader.MaxFrames;size_t done=0;
+    if(i!=XTP_NONE)done=xtpAdvanceFrame(s,i,accepted,now)?1:0;
+    else{b->Epoch=0;size_t remaining=accepted;
+        for(size_t k=0;k<b->Count&&remaining;++k){xtpbatchentry e=b->Entry[k];size_t n=remaining<e.Bytes?remaining:e.Bytes;
+            if(xtpAdvanceFrame(s,e.Index,n,now))++done;
+            remaining-=n;}}
+    if(frames)*frames=done;
     return xtpSessionLeave(s,XTP_OK);
 }
+XTP_API xtpresult xtpAdvance(xtpsession* s,xtpoutputticket ticket,size_t accepted,uint64_t now)
+{return xtp__Advance(s,&ticket,accepted,now,NULL);}
+
 xtpresult xtp__DropNotify(xtpsession* s,const xtpoutputticket* ticket,xtpresult reason,uint64_t now)
 {
     if(s->Busy||!s->Bound||s->CloseRequested||ticket->_Opaque[0]!=s->Binding||!ticket->_Opaque[1]||
@@ -816,12 +903,6 @@ XTP_API xtpresult xtpDrive(xtpsession* s,uint64_t now,uint64_t* next)
         if(s->Bound)xtpDueMin(&due,s->Tx[i].RetryAt);
 #endif
     }
-#if defined(XTP_FEATURE_XTP_DELIVERY)
-    if(s->Receipts)for(size_t i=0;i<s->Config.DedupWindow;++i){xtpreceipt* r=&s->Receipts[i];
-        if(r->State!=2)continue;
-        if(r->Until<=now){if(!s->TurnFrames){again=true;continue;}--s->TurnFrames;xtpReceiptExpire(s,r);}
-        else xtpDueMin(&due,r->Until);}
-#endif
     xtpresult result=xtpSessionLeave(s,again?XTP_AGAIN:XTP_OK);*next=s->Closed?0:due;return result;
 }
 XTP_API xtpresult xtpClose(xtpsession* s,uint64_t now)
@@ -844,12 +925,13 @@ XTP_API xtpresult xtpInfo(const xtpsession* s,xtpinfo* info)
     if(!s||!xtp__SessionAddress(s,(uintptr_t)info,sizeof(*info)))return XTP_E_ARGUMENT;
     *info=(xtpinfo){s->Binding,s->NextID,s->Submitted,s->Completed,s->Messages,s->Unknown,s->Duplicates,
         s->PendingCount,s->Incoming,s->TxCount,s->TxBytes,s->Storage,s->Peak,s->Bound,s->Closing||s->CloseRequested,s->Closed,
-        0,0,s->HighID>=s->Config.DedupWindow?s->HighID-s->Config.DedupWindow+1:1,1,0,0,0,false,false};
+        0,0,s->HighID>=s->Config.DedupWindow?s->HighID-s->Config.DedupWindow+1:1,1,0,0,0,false,false,0,0,0};
 #if defined(XTP_FEATURE_XTP_DELIVERY)
-    info->Retained=s->Retained;info->Receipts=s->ReceiptCount;info->ResultFloor=s->ResultFloor;
+    info->Retained=s->Retained;info->Receipts=s->ReceiptCount;info->ResultFloor=xtpResultFloor(s);
     info->Attempts=s->Attempts;info->Retries=s->Retries;info->ResultAcks=s->ResultAcks;
     info->Suspended=s->Suspended;info->ReplayRequests=s->ReplayRequests;
 #endif
+    info->Batches=s->Batches;info->BatchedFrames=s->BatchedFrames;info->BatchCopiedBytes=s->BatchCopiedBytes;
     return XTP_OK;
 }
 #undef XTP_NONE

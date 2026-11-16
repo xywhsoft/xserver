@@ -4661,122 +4661,122 @@
     },
     "lib/xtp/README.md": {
       "source": "extlibs/xtp/README.md",
-      "sha256": "7ba6550d9f9fca75256fef278451994847dc7de905610a577c40881d89728089",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "sha256": "671463129f2a8eebf3f38e18f85f83a0e16829bd88f6d4db088e43642cd8defc",
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/include/xtp/codec.h": {
       "source": "extlibs/xtp/include/xtp/codec.h",
       "sha256": "ba22a1c6781ff09cab1ec1adf32bb0415f710ccf899021c5dde6ee5a812c2ff3",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/include/xtp/export.h": {
       "source": "extlibs/xtp/include/xtp/export.h",
       "sha256": "9cea40e3d6a6a559bc4c171e8779bac9cbba6c8a2bf164cd19dac0f7137461ea",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/include/xtp/features.h": {
       "source": "extlibs/xtp/include/xtp/features.h",
       "sha256": "63a4663ef040dffe275d9ec69e4858f1eb1fea6e429f699d5498c8f5b9fddbaa",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/include/xtp/reader.h": {
       "source": "extlibs/xtp/include/xtp/reader.h",
       "sha256": "57699af9895cff7e51ffa50b9dc693b38a75c680b1d61057d63e78db0e040bc2",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/include/xtp/session.h": {
       "source": "extlibs/xtp/include/xtp/session.h",
-      "sha256": "473d8c13cf81fdbc661732e386a605950d0e603438f3be5465af09c057fbfca9",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "sha256": "0ba764a070012e24f5e0bbc2081bca046edbdbfc99d9a8f283c7484cb9ead1e9",
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/include/xtp/tcp.h": {
       "source": "extlibs/xtp/include/xtp/tcp.h",
       "sha256": "87978783101f72440b092248b625ddf071af4c50e6e66ffc8c627cf9fcef2b82",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/include/xtp/tls.h": {
       "source": "extlibs/xtp/include/xtp/tls.h",
       "sha256": "19bd9388af5f751edab271c7e69ce270383cd271a899f2b2f1b784f7aeb3003f",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/include/xtp/transport.h": {
       "source": "extlibs/xtp/include/xtp/transport.h",
       "sha256": "1e51520e607ffd5fd4774a12f0979681d144f6dec31df0f12e3ee61015c1c971",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/include/xtp/types.h": {
       "source": "extlibs/xtp/include/xtp/types.h",
       "sha256": "f4fb5d6a964c2b9ba04d23574378eb56262be5c8e3ae21b671e03d4715ce8ec8",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/include/xtp/ws.h": {
       "source": "extlibs/xtp/include/xtp/ws.h",
       "sha256": "13ebd12f2eddafa61741e8dd0f49b6fd0f65b42774dfdb47288e22714dbd214b",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/include/xtp/xrudp.h": {
       "source": "extlibs/xtp/include/xtp/xrudp.h",
       "sha256": "10c5f5b1c3d75147491d536474ac932b753f618c9d6bff86f6aadd0968c14236",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/include/xtp.h": {
       "source": "extlibs/xtp/include/xtp.h",
       "sha256": "78e593a888b7ff2c678f69b075ad5ffd0fd9065b17bde452d13ac68297c54cb8",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/src/codec/codec.c": {
       "source": "extlibs/xtp/src/codec/codec.c",
-      "sha256": "59376630d1e04943298605e0be5779934ed2726aeba517894c4fe70fb7d754bc",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "sha256": "5282dec6a359a1c4b8aafd66e430fc14078ca14c9eacfaea798bfba11873ee56",
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/src/internal/xtp_codec.h": {
       "source": "extlibs/xtp/src/internal/xtp_codec.h",
-      "sha256": "a56d786fc7eee290dc5e841a0e9c1ba0c93e6e504f1d98198897c524b8b83e15",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "sha256": "5197352c38662a0ad62b103e79833962558eb0e933627067b641516f235825db",
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/src/reader/reader.c": {
       "source": "extlibs/xtp/src/reader/reader.c",
       "sha256": "6d1756515ac07ae747d3691481d6785147eedf737d8a312d25d310d927c18ca2",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/src/session/session.c": {
       "source": "extlibs/xtp/src/session/session.c",
-      "sha256": "ff44668535ff01058364204118e93bbbd3f3a4a52b00cf1685984b8a84dc23a8",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "sha256": "c67c92447a1ae04a6e9869bbaaa545646896b724c1d9336d51161b496aeb668b",
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/src/transport/tcp.c": {
       "source": "extlibs/xtp/src/transport/tcp.c",
       "sha256": "98a92da35fc3dc5d4d8caa76c1c4f878bd8801e049b8d5cfde751057ab2b1349",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/src/transport/tls.c": {
       "source": "extlibs/xtp/src/transport/tls.c",
       "sha256": "e754e427ffe2e8e2433620ee0f99a2c64a3351358a8acf203250997d024928ae",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/src/transport/transport.c": {
       "source": "extlibs/xtp/src/transport/transport.c",
-      "sha256": "270c70cb7ad9cc738ecb345cb3dfcc73a4714146ba1ab3448b5329ce545b52c6",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "sha256": "6853ab44b2e90fa0c744ee2a524c5391971505d36ed39e4bc83cae3a13de6a70",
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/src/transport/ws.c": {
       "source": "extlibs/xtp/src/transport/ws.c",
       "sha256": "1270c813472ea4adff67778b9136ed4ab731ffe7b9b165888ac817e1e00c96a2",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/src/transport/xrudp.c": {
       "source": "extlibs/xtp/src/transport/xrudp.c",
       "sha256": "31656ad39d6f2dce1a342efe0b080d9c249cbb1066f5ceb5a5a3d589a550602b",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/config/modules.json": {
       "source": "extlibs/xtp/config/modules.json",
-      "sha256": "f04b038c39f4a6b068e8860e449fb0b46ea0ced87a362c226bd74bd089198f65",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "sha256": "988d09410a488b2b00c31a606900927c33d73abd35820864ba15890747d58604",
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "9b1bc2b4ee721a1a9275a6789388633f9394a822538a13cca04233ea8e3b1c8e"
+      "sha256": "05c97be1bf4b9aa4ac7e77afbbed40d9a6e6e309e0e9076ea1e4f8c993132807"
     },
     "src/script/import_xtp.inc": {
       "generated": true,
@@ -4785,20 +4785,20 @@
     "lib/xtp/config/performance_profiles.json": {
       "source": "extlibs/xtp/config/performance_profiles.json",
       "sha256": "b1c921c2b9f6fa872e0b7ead70932b11d8d4711bf6417a9181e13a052906a9df",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/config/size_profiles.json": {
       "source": "extlibs/xtp/config/size_profiles.json",
       "sha256": "763196514cfc1dd5ed42d058c3030c76c5fa6511e81efdb864a43478d02694f6",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     },
     "lib/xtp/LICENSE": {
       "source": "extlibs/xtp/LICENSE",
       "sha256": "98905b515b79667a921c4828babc2278f9fb78740da4215464d3757fc31ee9af",
-      "upstream_commit": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
     }
   },
   "library_commits": {
-    "xtp": "e485d1aed4336d1edd9b2fb291fd87769db6e0b0"
+    "xtp": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
   }
 }

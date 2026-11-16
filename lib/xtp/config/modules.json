@@ -180,10 +180,12 @@
         "extlibs/xtp/src/session/session.c"
       ],
       "tests": [
-        "extlibs/xtp/tests/test_session.c"
+        "extlibs/xtp/tests/test_session.c",
+        "extlibs/xtp/tests/test_batch.c"
       ],
       "single_tests": [
-        "extlibs/xtp/tests/single/test_single_xtp_session.c"
+        "extlibs/xtp/tests/single/test_single_xtp_session.c",
+        "extlibs/xtp/tests/single/test_single_xtp_batch.c"
       ],
       "examples": [
         "extlibs/xtp/examples/session/main.c"
@@ -330,12 +332,14 @@
         "extlibs/xtp/tests/test_codec.c",
         "extlibs/xtp/tests/test_reader.c",
         "extlibs/xtp/tests/test_session.c",
-        "extlibs/xtp/tests/test_transport.c"
+        "extlibs/xtp/tests/test_transport.c",
+        "extlibs/xtp/tests/test_batch.c"
       ],
       "single_tests": [
         "extlibs/xtp/tests/single/test_single_xtp_codec.c",
         "extlibs/xtp/tests/single/test_single_xtp_reader.c",
-        "extlibs/xtp/tests/single/test_single_xtp_session.c"
+        "extlibs/xtp/tests/single/test_single_xtp_session.c",
+        "extlibs/xtp/tests/single/test_single_xtp_batch.c"
       ],
       "examples": [],
       "benchmarks": [],
@@ -343,7 +347,8 @@
       "single_test_owners": {
         "extlibs/xtp/tests/single/test_single_xtp_codec.c": "xtp_codec",
         "extlibs/xtp/tests/single/test_single_xtp_reader.c": "xtp_reader",
-        "extlibs/xtp/tests/single/test_single_xtp_session.c": "xtp_session"
+        "extlibs/xtp/tests/single/test_single_xtp_session.c": "xtp_session",
+        "extlibs/xtp/tests/single/test_single_xtp_batch.c": "xtp_session"
       }
     },
     {
@@ -369,7 +374,8 @@
         "extlibs/xtp/examples/ws/main.c"
       ],
       "benchmarks": [
-        "extlibs/xtp/bench/bench_native.c"
+        "extlibs/xtp/bench/bench_native.c",
+        "extlibs/xtp/bench/bench_multi.c"
       ],
       "docs": [
         "extlibs/xtp/docs/transport.md"
@@ -449,6 +455,35 @@
       },
       "examples": [
         "extlibs/xtp/examples/game/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xtp/bench/bench_xrudp.c"
+      ],
+      "docs": []
+    },
+    {
+      "name": "xtp_wss_tests",
+      "state": "developing",
+      "feature": null,
+      "depends": [
+        "xtp_native",
+        "websocket_connection_tls",
+        "websocket_upgrade"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xtp/tests/test_wss.c"
+      ],
+      "single_tests": [
+        "extlibs/xtp/tests/single/test_single_xtp_wss.c"
+      ],
+      "single_test_owners": {
+        "extlibs/xtp/tests/single/test_single_xtp_wss.c": "xtp_wss_tests"
+      },
+      "examples": [
+        "extlibs/xtp/examples/wss/main.c"
       ],
       "benchmarks": [],
       "docs": []

@@ -151,7 +151,7 @@ def check_public_sdk(exe: Path, selected: dict, directory: Path) -> None:
     if count is None:
         raise RuntimeError(f"public SDK export count missing:\n{proc.stdout}")
     if "xtp" in selected:
-        marker = "[sdk] xtp3 codec+four-shapes+callback-ABI+RPC+PUSH+NOTIFY ok"
+        marker = "[sdk] xtp3 codec+four-shapes+callback-ABI+RPC+PUSH+NOTIFY+batch ok"
         if proc.stdout.count(marker) != 2:
             raise RuntimeError(f"xtp3 callback ABI evidence missing:\n{proc.stdout}{proc.stderr}")
         print("PASS xtp3: four shapes, table ParamAt, host/TCC callback and by-value token ABI, outer + nested TCC", flush=True)

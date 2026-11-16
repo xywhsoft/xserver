@@ -14,7 +14,7 @@ def main():
         result = invoke(args.exe.resolve(), source, Path(directory), 'xtp3-example')
         print(result.stdout, end='')
         print(result.stderr, end='')
-        if result.returncode or '[sdk] xtp3 codec+four-shapes+callback-ABI+RPC+PUSH+NOTIFY ok' not in result.stdout:
+        if result.returncode or '[sdk] xtp3 codec+four-shapes+callback-ABI+RPC+PUSH+NOTIFY+batch ok' not in result.stdout:
             return 1
     return 0
 
