@@ -21,6 +21,7 @@
 /lib/xws-server/** -text
 /lib/xssh/** -text
 /lib/xrudp/** -text
+/lib/xtp/** -text
 /lib/xcron/** -text
 /lib/xmqtt/** -text
 /lib/xredis/** -text
