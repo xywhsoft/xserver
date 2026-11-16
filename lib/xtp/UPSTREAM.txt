@@ -1,4 +1,4 @@
 Source: xrt extlibs/xtp
-Snapshot: c6e6dbd361e5b076e379d69e3ea655e760f029dc
+Snapshot: e485d1aed4336d1edd9b2fb291fd87769db6e0b0
 Byte-for-byte committed extension snapshot; core and other libraries retain their own pins.
 Per-file source commits and SHA256 are recorded in ../xrt_sources.lock.json.

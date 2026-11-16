@@ -2,7 +2,7 @@
 
 `build.bat xtp` / `bash build.sh xtp` 选择 XRT XTP3，自动包含 xws 与 xrudp。宿主逐文件原生编译 `lib/xtp/src`，脚本直接 `#include <xtp.h>`，用 `XS_USE_XTP` 判断能力。42 个外部 API 按公开声明导入；inline helper 在脚本内直接编译，不加动态包装或操作码分发。XTP1/2 头文件、符号、实现与线路兼容均已移除。
 
-完整模块来自 XRT 提交 `c6e6dbd361e5b076e379d69e3ea655e760f029dc`；许可证见 `lib/xtp/LICENSE`，每个上游文件的来源提交和 SHA256 见 `lib/xrt_sources.lock.json`。本次只升级 xtp；核心、xws、xrudp 与其他产品保持各自固定版本，不能用 XTP 的提交号冒充核心版本。用 `python tools/sync_xrt.py --check` 校验。后续更新仍使用 `--source ../xrt --ref <commit> --library xtp`，不修改 vendored 源码。
+完整模块来自 XRT 提交 `e485d1aed4336d1edd9b2fb291fd87769db6e0b0`；许可证见 `lib/xtp/LICENSE`，每个上游文件的来源提交和 SHA256 见 `lib/xrt_sources.lock.json`。本次只升级 xtp；核心、xws、xrudp 与其他产品保持各自固定版本，不能用 XTP 的提交号冒充核心版本。用 `python tools/sync_xrt.py --check` 校验。后续更新仍使用 `--source ../xrt --ref <commit> --library xtp`，不修改 vendored 源码。
 
 ## 可运行示例
 
