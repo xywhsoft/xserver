@@ -61,11 +61,11 @@ class SiteVfsFormatTests(unittest.TestCase):
 class ExtensionTests(unittest.TestCase):
     def test_selection(self):
         for names, expected in (
-            ([], []), (["sqlite"], ["sqlite"]), (["xtp"], ["xtp"]),
+            ([], []), (["sqlite"], ["sqlite"]), (["xtp"], ["xtp", "xws", "xrudp"]),
             (["xllm"], ["xllm"]),
-            (["sqlite", "xtp"], ["sqlite", "xtp"]),
-            (["xtp", "SQLITE", "xtp", "sqlite"], ["sqlite", "xtp"]),
-            (["xllm", "sqlite", "XTP"], ["sqlite", "xtp", "xllm"]),
+            (["sqlite", "xtp"], ["sqlite", "xtp", "xws", "xrudp"]),
+            (["xtp", "SQLITE", "xtp", "sqlite"], ["sqlite", "xtp", "xws", "xrudp"]),
+            (["xllm", "sqlite", "XTP"], ["sqlite", "xtp", "xllm", "xws", "xrudp"]),
             (["xllm-session"], ["xllm", "xllm-session"]),
         ):
             with self.subTest(names=names):
@@ -82,7 +82,7 @@ class ExtensionTests(unittest.TestCase):
                 header = host_header(selected)
                 self.assertIn("xs/xsbase.h", resources)
                 for name, entry in load_registry().items():
-                    enabled = name in names
+                    enabled = name in selected
                     self.assertEqual(entry["symbols"] in header, enabled)
                     self.assertEqual(entry["macro"] in header, enabled)
                     for virtual in entry["headers"]:
@@ -108,7 +108,7 @@ class ExtensionTests(unittest.TestCase):
                                    "--build-dir", str(directory), "--output", str(output)])
             self.assertEqual(code, 0)
             text = stdout.getvalue()
-            self.assertEqual(text.count("-c lib/xtp2.h "), 1)
+            self.assertEqual(text.count("-c lib/xtp/src/codec/codec.c "), 1)
             self.assertEqual(text.count("-c lib/sqlite3.c "), 1)
             self.assertIn("extensions=sqlite, xtp", text)
             self.assertIn(str(output.resolve()), text)
@@ -136,7 +136,7 @@ class ExtensionTests(unittest.TestCase):
         registry = load_registry()
         registry["demo"] = copy.deepcopy(registry["xtp"])
         registry["demo"]["macro"] = "XS_USE_DEMO"
-        registry["demo"]["headers"] = {"demo.h": "lib/xtp2.h"}
+        registry["demo"]["headers"] = {"demo.h": "lib/xtp/include/xtp.h"}
         registry["demo"]["link_flags"] = {"linux": ["-lm"]}
         selected = select_extensions(["demo"], registry)
         self.assertIn('tcc_define_symbol(pTcc, "XS_USE_DEMO", "1")', host_header(selected))
@@ -144,10 +144,10 @@ class ExtensionTests(unittest.TestCase):
 
     def test_collisions_and_path_bounds(self):
         registry = load_registry()
-        registry["xtp"]["headers"] = {"SQLITE3.H": "lib/xtp2.h"}
+        registry["xtp"]["headers"] = {"SQLITE3.H": "lib/xtp/include/xtp.h"}
         with self.assertRaisesRegex(ValueError, "collision"):
             select_extensions(["sqlite", "xtp"], registry)
-        registry["xtp"]["headers"] = {"xsbase.h": "lib/xtp2.h"}
+        registry["xtp"]["headers"] = {"xsbase.h": "lib/xtp/include/xtp.h"}
         with self.assertRaisesRegex(ValueError, "duplicate VFS"):
             vfs.collect(select_extensions(["xtp"], registry))
         with self.assertRaisesRegex(ValueError, "out-of-project"):
@@ -164,12 +164,12 @@ class ExtensionTests(unittest.TestCase):
                     load_registry(path)
 
     def test_xtp_import_covers_every_external_api(self):
-        header = (ROOT / "lib/xtp2.h").read_text(encoding="utf-8")
-        imports = (ROOT / "src/script/import_xtp2.inc").read_text(encoding="utf-8")
-        apis = set(re.findall(r"^(?:void|bool|xtp2_result|xtp2_iter|const char \*)"
-                              r"\s*(xtp2_\w+)\(", header, re.MULTILINE))
-        symbols = re.findall(r"XS_XTP2_SYMBOL\((\w+)\)", imports)
-        self.assertEqual(len(symbols), 13)
+        from sync_xrt import public_functions
+        entry = load_registry()["xtp"]
+        apis = set(public_functions([ROOT / p for p in entry["headers"].values()], "xtp"))
+        imports = (ROOT / entry["symbols"]).read_text(encoding="utf-8")
+        symbols = re.findall(r"XS_XTP_SYMBOL\((\w+)\)", imports)
+        self.assertTrue({"xtpCreate", "xtpSubmit", "xtpReply", "xtpXrudpWrite"} <= set(symbols))
         self.assertEqual(len(symbols), len(set(symbols)))
         self.assertEqual(set(symbols), apis)
 

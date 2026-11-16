@@ -147,6 +147,10 @@ def modular_registry(source: Path, registry: dict) -> dict:
             "symbols": f"src/script/import_{name.replace('-', '_')}.inc",
             "symbol_macro": "XS_" + identifier + "_SYMBOL",
         })
+        # The upstream product identifier defines the public import namespace.
+        entry.update(macro="XS_USE_" + identifier,
+                     symbols=f"src/script/import_{name.replace('-', '_')}.inc",
+                     symbol_macro="XS_" + identifier + "_SYMBOL")
         headers = {p.relative_to(base / "include").as_posix():
                    "lib/" + p.relative_to(source / "extlibs").as_posix()
                    for p in sorted((base / "include").rglob("*.h"))}
@@ -293,6 +297,7 @@ def refresh_library_commit(source: Path, reference: str, library: str) -> None:
     registry = load_registry()
     if library not in registry or not re.fullmatch(r"[a-z][a-z0-9-]*", library):
         raise ValueError("unknown extension")
+    old_symbols = registry[library]["symbols"]
     with tempfile.TemporaryDirectory(prefix="xs-xrt-library-") as directory:
         snapshot = Path(directory) / "source"
         _export_commit(source, commit, snapshot)
@@ -317,6 +322,12 @@ def refresh_library_commit(source: Path, reference: str, library: str) -> None:
                 "Per-file source commits and SHA256 are recorded in ../xrt_sources.lock.json.\n").encode(),
         }
         record = json.loads(LOCK.read_text(encoding="utf-8"))
+        if old_symbols != entry["symbols"]:
+            old = record["files"].get(old_symbols)
+            if not old or not old.get("generated") or not old_symbols.startswith("src/script/import_"):
+                raise ValueError("unsafe obsolete generated import")
+            (ROOT / old_symbols).unlink()
+            del record["files"][old_symbols]
         obsolete = [p for p in record["files"] if p.startswith(f"lib/{library}/") and p not in files and p not in generated]
         for relative in obsolete:
             (ROOT / relative).unlink()

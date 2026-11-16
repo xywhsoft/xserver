@@ -25,7 +25,7 @@ TCC 宿主吸收了 xlang（demo6）的成熟经验并推进到**单文件交付
 
 ## xs 不做什么
 
-- 不做 bus、内置 XTP 服务驱动、管理面、调试面、任何治理；XTP2 编解码器作为可选独立库提供，连接由应用管理
+- 不做 bus、内置 XTP 服务驱动、管理面、调试面、任何治理；XTP3 协议库作为可选独立库提供，连接由应用管理
 - 不做 HTTP 便利封装、路由、session、权限——那是 xadmin 们的事
 - 不做沙盒与权限限制——C 语言限制不住，一切对脚本开放
 - 宿主协议驱动基于 xrt http core 与 websocket core；应用可通过可选扩展使用完整 xhttp / xws 系列与 xssh。
@@ -54,11 +54,11 @@ build.bat all
 
 Linux 使用相同参数，例如 `bash build.sh sqlite xtp xllm xsmtp`；需要 GCC 与 Python 3.10+。不传参数只包含固定的 xrt/libtcc 等基础能力。参数顺序无关、重复自动去重、名称不区分大小写，未知库名报错退出，不会悄悄生成错误变体。
 
-当前提供 25 个可选扩展，其中 xrt 扩展共 20 个：既有认证、邮件、ACME、LLM/会话/Agent 库，以及 `xhttp`、`xhttp-client`、`xhttp-server`、`xhttp-policy`、`xws`、`xws-client`、`xws-server`、`xws-group`、`xssh`、`xrudp`。`build.bat all` 全部启用；如只选 `xws-client`，会自动携带 xws 与 HTTP 客户端依赖。**xruntime 是 xlang 专属扩展，不进入 xs。** 更新快照使用 `python tools/sync_xrt.py --source ../xrt`，上游模块清单同时控制源码、SDK、导出及生产依赖。
+当前提供 29 个可选扩展，其中 xrt 扩展共 25 个：既有认证、邮件、ACME、LLM/会话/Agent 库，以及 `xhttp`、`xhttp-client`、`xhttp-server`、`xhttp-policy`、`xws`、`xws-client`、`xws-server`、`xws-group`、`xssh`、`xrudp`。`build.bat all` 全部启用；如只选 `xws-client`，会自动携带 xws 与 HTTP 客户端依赖。**xruntime 是 xlang 专属扩展，不进入 xs。** 更新快照使用 `python tools/sync_xrt.py --source ../xrt`，上游模块清单同时控制源码、SDK、导出及生产依赖。
 
 `build.bat --list-extensions` 查看可选库；`build.bat sqlite xtp --dry-run` 查看实际构建命令。产物默认仍为 `release/xs.exe` 或 `release/xs`，可用 `--output` 指定其他位置。构建中间文件按平台和库组合隔离到 `.build/`，不会重写 `src/script/tcc_builtin_resources.c` 旧快照。
 
-启用后，脚本直接 `#include <sqlite3.h>` / `#include <xtp2.h>` / `#include <xllm.h>`，无需再定义 `XTP2_IMPLEMENTATION`。脚本可用 `XS_USE_SQLITE`、`XS_USE_XTP2`、`XS_USE_XLLM` 判断当前宿主能力，嵌套 `xsCreateTCC()` 环境也一致。
+启用后，脚本直接 `#include <sqlite3.h>` / `#include <xtp.h>` / `#include <xllm.h>`，无需再定义 `XTP_IMPLEMENTATION`。脚本可用 `XS_USE_SQLITE`、`XS_USE_XTP`、`XS_USE_XLLM` 判断当前宿主能力，嵌套 `xsCreateTCC()` 环境也一致。
 
 后续库在 [扩展清单](/D:/GIT/xserver/tools/extensions.json) 登记源码、头文件、宏和符号清单，不需要修改两个平台的构建脚本或 TCC 宿主分支。参见[可选扩展库说明](/D:/GIT/xserver/docs/可选扩展库.md)。
 
@@ -97,3 +97,5 @@ app.exe                                      # 无参启动：自动从包内读
 | MD4C（Martin Mitáš） | `lib/md4c/` | MIT |
 
 TCC 以静态链接编入单一二进制。按 LGPL-2.1 要求，发布二进制时须让接收方能够用修改版 TCC 重新链接出完整程序——本仓库公开全部源码与构建脚本（`build.bat` / `build.sh`），即满足该要求；修改过的 TCC 部分保持 LGPL 并随源码提供。项目自有代码与用户脚本的许可均不受 TCC 许可影响。
+
+XTP3 的运行示例、借用规则和迁移说明见 [XTP3 扩展库](docs/XTP3扩展库.md)；不保留 XTP1/2 的头文件、符号或线路兼容。

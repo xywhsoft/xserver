@@ -16,20 +16,72 @@
   "symbol_macro": "XS_SQLITE_SYMBOL"
  },
  "xtp": {
-  "macro": "XS_USE_XTP2",
+  "macro": "XS_USE_XTP",
   "headers": {
-   "xtp2.h": "lib/xtp2.h"
+   "xtp/codec.h": "lib/xtp/include/xtp/codec.h",
+   "xtp/export.h": "lib/xtp/include/xtp/export.h",
+   "xtp/features.h": "lib/xtp/include/xtp/features.h",
+   "xtp/reader.h": "lib/xtp/include/xtp/reader.h",
+   "xtp/session.h": "lib/xtp/include/xtp/session.h",
+   "xtp/tcp.h": "lib/xtp/include/xtp/tcp.h",
+   "xtp/tls.h": "lib/xtp/include/xtp/tls.h",
+   "xtp/transport.h": "lib/xtp/include/xtp/transport.h",
+   "xtp/types.h": "lib/xtp/include/xtp/types.h",
+   "xtp/ws.h": "lib/xtp/include/xtp/ws.h",
+   "xtp/xrudp.h": "lib/xtp/include/xtp/xrudp.h",
+   "xtp.h": "lib/xtp/include/xtp.h"
   },
   "sources": [
    {
-    "path": "lib/xtp2.h",
-    "defines": [
-     "XTP2_IMPLEMENTATION"
-    ]
+    "path": "lib/xtp/src/codec/codec.c"
+   },
+   {
+    "path": "lib/xtp/src/reader/reader.c"
+   },
+   {
+    "path": "lib/xtp/src/session/session.c"
+   },
+   {
+    "path": "lib/xtp/src/transport/tcp.c"
+   },
+   {
+    "path": "lib/xtp/src/transport/tls.c"
+   },
+   {
+    "path": "lib/xtp/src/transport/transport.c"
+   },
+   {
+    "path": "lib/xtp/src/transport/ws.c"
+   },
+   {
+    "path": "lib/xtp/src/transport/xrudp.c"
    }
   ],
-  "symbols": "src/script/import_xtp2.inc",
-  "symbol_macro": "XS_XTP2_SYMBOL"
+  "symbols": "src/script/import_xtp.inc",
+  "symbol_macro": "XS_XTP_SYMBOL",
+  "feature_macro": [
+   "XRT_MODULE_ALL",
+   "XTP_MODULE_ALL",
+   "XTP_FEATURE_XTP",
+   "XTP_FEATURE_XTP_CODEC",
+   "XTP_FEATURE_XTP_DELIVERY",
+   "XTP_FEATURE_XTP_NATIVE",
+   "XTP_FEATURE_XTP_READER",
+   "XTP_FEATURE_XTP_SESSION",
+   "XTP_FEATURE_XTP_TCP",
+   "XTP_FEATURE_XTP_TLS",
+   "XTP_FEATURE_XTP_TRANSPORT",
+   "XTP_FEATURE_XTP_WS",
+   "XTP_FEATURE_XTP_XRUDP"
+  ],
+  "host_includes": [
+   "lib/xtp/include",
+   "lib/xrtshim"
+  ],
+  "requires": [
+   "xrudp",
+   "xws"
+  ]
  },
  "xllm": {
   "macro": "XS_USE_XLLM",

@@ -127,8 +127,12 @@ def check_public_sdk(exe: Path, selected: dict, directory: Path) -> None:
     code += "NULL };\n"
     if "xrudp" in selected:
         code += (ROOT / "tools/fixtures/xrudp_native_sdk.c").read_text(encoding="utf-8") + "\n"
+    if "xtp" in selected:
+        code += (ROOT / "dev/xtp3/main.c").read_text(encoding="utf-8") + "\n"
     code += "void CheckSDK(void) { size_t i;\n"
     code += "for (i = 0; i + 1 < sizeof(exports)/sizeof(exports[0]); ++i) REQUIRE(exports[i] != NULL);\n"
+    if "xtp" in selected:
+        code += "CheckXtp3();\n"
     for name, body in PROTOCOL_PROBES.items():
         if name in selected:
             code += "{\n" + body + "}\n"
@@ -146,6 +150,11 @@ def check_public_sdk(exe: Path, selected: dict, directory: Path) -> None:
     count = re.search(r"\[sdk\] outer \+ nested ok exports=(\d+)", proc.stdout)
     if count is None:
         raise RuntimeError(f"public SDK export count missing:\n{proc.stdout}")
+    if "xtp" in selected:
+        marker = "[sdk] xtp3 codec+four-shapes+callback-ABI+RPC+PUSH+NOTIFY ok"
+        if proc.stdout.count(marker) != 2:
+            raise RuntimeError(f"xtp3 callback ABI evidence missing:\n{proc.stdout}{proc.stderr}")
+        print("PASS xtp3: four shapes, table ParamAt, host/TCC callback and by-value token ABI, outer + nested TCC", flush=True)
     if "xrudp" in selected:
         for family in (4, 6):
             marker = f"[sdk] xrudp native family={family} Noise+reliable+FIN+cancel+closed-handles ok"
@@ -181,45 +190,9 @@ static void probe_sqlite(void)
 }
 #endif
 
-#ifdef XS_USE_XTP2
-#include <xtp2.h>
-#ifdef XTP2_IMPLEMENTATION
-#error The probe must call the host implementation, not compile another copy.
-#endif
-static void probe_xtp(void)
-{
-    unsigned char bytes[128];
-    xtp2_packet p = {0};
-    xtp2_config config;
-    xtp2_processor *rx = NULL;
-    xtp2_param param, field;
-    xtp2_iter iter;
-    xtp2_message message;
-    xtp2_span value;
-    size_t size, written, used;
-    xtp2_config_init(&config);
-    p.id = 7; p.type = XTP2_REQUEST; p.command = xtp2_text("ping");
-    field.key = xtp2_text("a"); field.value = xtp2_text("b");
-    p.params = &field; p.param_count = 1; p.body = xtp2_text("body");
-    REQUIRE(xtp2_measure(&p, NULL, &size) == XTP2_OK);
-    REQUIRE(xtp2_encode(&p, NULL, bytes, sizeof(bytes), &written) == XTP2_OK && written == size);
-    REQUIRE(xtp2_create(&config, &rx) == XTP2_OK);
-    REQUIRE(xtp2_feed(rx, bytes, 7, &used, &message) == XTP2_MORE && used == 7);
-    REQUIRE(xtp2_feed(rx, bytes + 7, written - 7, &used, &message) == XTP2_MESSAGE);
-    REQUIRE(used == written - 7 && message.id == 7 && xtp2_wants_reply(&message));
-    REQUIRE(message.body.size == 4 && memcmp(message.body.data, "body", 4) == 0);
-    iter = xtp2_params(&message);
-    REQUIRE(xtp2_param_next(&iter, &param) && param.key.size == 1 && param.value.size == 1);
-    REQUIRE(!xtp2_param_next(&iter, &param));
-    REQUIRE(xtp2_find(&message, xtp2_text("a"), &value) && value.size == 1);
-    REQUIRE(*(const char *)value.data == 'b');
-    REQUIRE(strcmp(xtp2_error_string(XTP2_OK), "ok") == 0);
-    REQUIRE(xtp2_finish(rx) == XTP2_OK);
-    xtp2_reset(rx);
-    REQUIRE(xtp2_finish(rx) == XTP2_OK);
-    xtp2_destroy(rx);
-    REQUIRE(xtp2_decode(bytes, written, NULL, &message) == XTP2_OK && message.id == 7);
-}
+#ifdef XS_USE_XTP
+/* XTP3_SDK_FIXTURE */
+static void probe_xtp(void) { CheckXtp3(); }
 #endif
 
 #ifdef XS_USE_XLLM
@@ -633,7 +606,7 @@ static void probe_md4c(void)
 
 static const char nested_source[] =
     "#ifdef XS_USE_SQLITE\n#include <sqlite3.h>\n#endif\n"
-    "#ifdef XS_USE_XTP2\n#include <xtp2.h>\n#endif\n"
+    "#ifdef XS_USE_XTP\n#include <xtp.h>\n#endif\n"
     "#ifdef XS_USE_XLLM\n#include <xllm.h>\n#endif\n"
     "#ifdef XS_USE_XLLM_SESSION\n#include <xllm-session.h>\n#endif\n"
     "#ifdef XS_USE_XMAIL\n#include <xmail.h>\n#endif\n"
@@ -648,7 +621,7 @@ static const char nested_source[] =
     "#ifdef XS_USE_XOAUTH2\n#include <xoauth2.h>\n#endif\n"
     "int nested(void) { int mask = 0; unsigned char buf[256];\n"
     "#ifdef XS_USE_SQLITE\nif(sqlite3_libversion_number()>0) mask |= 1;\n#endif\n"
-    "#ifdef XS_USE_XTP2\nif(xtp2_error_string(XTP2_OK)[0]=='o') mask |= 2;\n\n#endif\n\n"
+    "#ifdef XS_USE_XTP\nif(XTP_WIRE_VERSION==3) { xtpcodecconfig c; xtpCodecConfigInit(&c); if(c.MaxFrameBytes>=32) mask |= 2; }\n\n#endif\n\n"
     "#ifdef XS_USE_XLLM\nif(xllmEstimateTextTokens(\"a\")>0) mask |= 4;\n\n#endif\n\n"
     "#ifdef XS_USE_XLLM_SESSION\nxllmSessionConfigInit((xllm_session_config*)buf);\n"
     "if(((xllm_session_config*)buf)->uContextWindowTokens>0) mask |= 8;\n\n#endif\n\n"
@@ -675,7 +648,7 @@ void ServiceInit(XS_HostInfo *host)
 #ifdef XS_USE_SQLITE
     mask |= 1; probe_sqlite();
 #endif
-#ifdef XS_USE_XTP2
+#ifdef XS_USE_XTP
     mask |= 2; probe_xtp();
 #endif
 #ifdef XS_USE_XLLM
@@ -765,6 +738,8 @@ void ServiceInit(XS_HostInfo *host)
 '''
 
 
+PROBE = PROBE.replace('/* XTP3_SDK_FIXTURE */', (ROOT / 'dev/xtp3/main.c').read_text(encoding='utf-8'))
+
 def invoke(exe: Path, source: str, directory: Path, name: str) -> subprocess.CompletedProcess:
     script = directory / (name + ".c")
     config = directory / (name + ".json")
@@ -802,6 +777,18 @@ def check(exe: Path, names: list[str]) -> None:
             raise RuntimeError(f"enabled/nested probe failed ({proc.returncode}):\n{output}")
         print(f"PASS enabled + nested TCC: {', '.join(selected) or '(none)'}", flush=True)
         check_public_sdk(exe, selected, directory)
+        # A selected XTP3 host must not expose the retired implementation.
+        for suffix, body, marker in (
+            ("header", "#include </xs/xtp2.h>\n", "xtp2.h"),
+            ("symbol", "extern void xtp2_config_init(void*);\n", "xtp2_config_init"),
+        ):
+            call = "xtp2_config_init(0);" if suffix == "symbol" else ""
+            source = "#include <xsbase.h>\n#include <stdlib.h>\n" + body
+            source += "void ServiceInit(XS_HostInfo* h){(void)h;" + call + "exit(0);}\n"
+            retired = invoke(exe, source, directory, "retired-xtp-" + suffix)
+            if retired.returncode != 1 or marker not in retired.stdout + retired.stderr:
+                raise RuntimeError(f"retired XTP API is still exposed:\n{retired.stdout}{retired.stderr}")
+        print("PASS retired XTP header + symbols absent; no version-2 wire compatibility", flush=True)
 
         # 启动横幅与 --version 一致地报告本变体扩展清单
         expected_list = (f"[xs] extensions ({len(selected)}): "
@@ -843,8 +830,7 @@ def check(exe: Path, names: list[str]) -> None:
                          "xrtTypeRegistryCreate()"),
             "sqlite": ("sqlite3.h", "extern int sqlite3_libversion_number(void);",
                        "sqlite3_libversion_number()"),
-            "xtp": ("xtp2.h", "extern const char *xtp2_error_string(int);",
-                    "xtp2_error_string(0)"),
+            "xtp": ("xtp.h", "extern void xtpConfigInit(void*);", "xtpConfigInit(0)"),
             "xllm": ("xllm.h", "extern const char *xllmErrorCodeName(int);",
                      "xllmErrorCodeName(0)"),
             "xllm-session": ("xllm-session.h", "extern void xllmSessionConfigInit(void*);",
