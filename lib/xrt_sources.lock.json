@@ -2853,7 +2853,10 @@
     },
     "lib/xrt.h": {
       "source": "single/xrt.h",
-      "sha256": "19037b60c9b8711cf94727fcd19b1d87a6a100f56467e3331f88ff03168bcc27"
+      "sha256": "9466f702a8da0e979c3c9d0f9ffb4b08765b6bb8656ade0a98a3f45ea84e232a",
+      "upstream_fixes": [
+        "54c59c14491dcac91e56ba24925d95afafbfdf0f"
+      ]
     },
     "lib/xrt_decl.h": {
       "source": "single/xrt_decl.h",
@@ -4117,7 +4120,7 @@
     },
     "lib/xrt_version.txt": {
       "generated": true,
-      "sha256": "a6298b18bc5165d516105d922902d77b0bd576015d2c003df3e1c9f8c11265e0"
+      "sha256": "c49e1868de9f8f145bd9fab034fd21f1f83ea1b1dce81da8d52c4edaa5ca9ae3"
     },
     "lib/xrtshim/xrt/array.h": {
       "generated": true,
