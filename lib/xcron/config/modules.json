@@ -96,6 +96,27 @@
         "source_roots": [
           "occurrence"
         ]
+      },
+      {
+        "name": "checkpoint",
+        "state": "retained",
+        "source_roots": [
+          "checkpoint"
+        ]
+      },
+      {
+        "name": "checkpoint_store",
+        "state": "retained",
+        "source_roots": [
+          "checkpoint_store"
+        ]
+      },
+      {
+        "name": "checkpoint_group",
+        "state": "retained",
+        "source_roots": [
+          "checkpoint_group"
+        ]
       }
     ]
   },
@@ -135,7 +156,11 @@
         "xcron_occurrence",
         "xcron_scheduler_selected",
         "xcron_executor_selected",
-        "xcron_service_selected"
+        "xcron_service_selected",
+        "xcron_checkpoint",
+        "xcron_checkpoint_store",
+        "xcron_service_checkpoint",
+        "xcron_checkpoint_group"
       ],
       "collect_dependency_assets": [
         "examples"
@@ -326,7 +351,9 @@
       "examples": [
         "extlibs/xcron/examples/tzdb_file/main.c"
       ],
-      "benchmarks": [],
+      "benchmarks": [
+        "extlibs/xcron/bench/bench_tzdb_file.c"
+      ],
       "docs": [
         "extlibs/xcron/docs/tzdb.md",
         "extlibs/xcron/docs/api/reference.md",
@@ -511,6 +538,107 @@
       ]
     },
     {
+      "name": "xcron_checkpoint",
+      "state": "developing",
+      "feature": "XCRON_FEATURE_XCRON_CHECKPOINT",
+      "depends": [
+        "xcron_scheduler_selected",
+        "crc32"
+      ],
+      "public_headers": [
+        "extlibs/xcron/include/xcron/checkpoint.h"
+      ],
+      "internal_headers": [
+        "extlibs/xcron/src/checkpoint/checkpoint_internal.h"
+      ],
+      "sources": [
+        "extlibs/xcron/src/checkpoint/checkpoint.c"
+      ],
+      "tests": [
+        "extlibs/xcron/tests/test_checkpoint.c"
+      ],
+      "single_tests": [
+        "extlibs/xcron/tests/single/test_single_xcron_checkpoint.c"
+      ],
+      "examples": [
+        "extlibs/xcron/examples/checkpoint/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xcron/bench/bench_checkpoint.c"
+      ],
+      "docs": [
+        "extlibs/xcron/docs/checkpoint.md",
+        "extlibs/xcron/docs/api/reference.md",
+        "extlibs/xcron/examples/checkpoint/README.md"
+      ]
+    },
+    {
+      "name": "xcron_checkpoint_store",
+      "state": "developing",
+      "feature": "XCRON_FEATURE_XCRON_CHECKPOINT_STORE",
+      "depends": [
+        "xcron_checkpoint",
+        "file_root",
+        "file_lock"
+      ],
+      "public_headers": [
+        "extlibs/xcron/include/xcron/checkpoint_store.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xcron/src/checkpoint_store/checkpoint_store.c"
+      ],
+      "tests": [
+        "extlibs/xcron/tests/test_checkpoint_store.c"
+      ],
+      "single_tests": [
+        "extlibs/xcron/tests/single/test_single_xcron_checkpoint_store.c"
+      ],
+      "examples": [
+        "extlibs/xcron/examples/checkpoint_store/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xcron/bench/bench_checkpoint_store.c"
+      ],
+      "docs": [
+        "extlibs/xcron/docs/checkpoint_store.md",
+        "extlibs/xcron/docs/api/reference.md",
+        "extlibs/xcron/examples/checkpoint_store/README.md"
+      ]
+    },
+    {
+      "name": "xcron_checkpoint_group",
+      "state": "developing",
+      "feature": "XCRON_FEATURE_XCRON_CHECKPOINT_GROUP",
+      "depends": [
+        "xcron_checkpoint_store"
+      ],
+      "public_headers": [
+        "extlibs/xcron/include/xcron/checkpoint_group.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xcron/src/checkpoint_group/checkpoint_group.c"
+      ],
+      "tests": [
+        "extlibs/xcron/tests/test_checkpoint_group.c"
+      ],
+      "single_tests": [
+        "extlibs/xcron/tests/single/test_single_xcron_checkpoint_group.c"
+      ],
+      "examples": [
+        "extlibs/xcron/examples/checkpoint_group/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xcron/bench/bench_checkpoint_group.c"
+      ],
+      "docs": [
+        "extlibs/xcron/docs/checkpoint_group.md",
+        "extlibs/xcron/docs/api/reference.md",
+        "extlibs/xcron/examples/checkpoint_group/README.md"
+      ]
+    },
+    {
       "name": "xcron_executor",
       "state": "developing",
       "feature": "XCRON_FEATURE_XCRON_EXECUTOR",
@@ -656,6 +784,65 @@
       ]
     },
     {
+      "name": "xcron_service_checkpoint",
+      "state": "developing",
+      "feature": "XCRON_FEATURE_XCRON_SERVICE_CHECKPOINT",
+      "depends": [
+        "xcron_service_selected",
+        "xcron_checkpoint_group"
+      ],
+      "public_headers": [
+        "extlibs/xcron/include/xcron/service_checkpoint.h"
+      ],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xcron/tests/test_service_checkpoint.c"
+      ],
+      "single_tests": [
+        "extlibs/xcron/tests/single/test_single_xcron_service_checkpoint.c"
+      ],
+      "examples": [
+        "extlibs/xcron/examples/service_checkpoint/main.c",
+        "extlibs/xcron/examples/service_checkpoint_group/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xcron/bench/bench_service_checkpoint.c",
+        "extlibs/xcron/bench/bench_service_checkpoint_group.c"
+      ],
+      "docs": [
+        "extlibs/xcron/docs/service_checkpoint.md",
+        "extlibs/xcron/docs/api/reference.md",
+        "extlibs/xcron/examples/service_checkpoint/README.md",
+        "extlibs/xcron/examples/service_checkpoint_group/README.md"
+      ]
+    },
+    {
+      "name": "xcron_tzdb_error_tests",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xcron_tzdb_file",
+        "thread",
+        "memory_stats"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xcron/tests/test_tzdb_errors.c"
+      ],
+      "single_tests": [
+        "extlibs/xcron/tests/single/test_single_xcron_tzdb_errors.c",
+        "extlibs/xcron/tests/single/test_single_xcron_tzdb_error_failure.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xcron/docs/tzdb.md"
+      ]
+    },
+    {
       "name": "xcron_tests",
       "state": "implemented",
       "feature": null,
@@ -677,12 +864,17 @@
         "extlibs/xcron/tests/test_executor.c",
         "extlibs/xcron/tests/test_service.c",
         "extlibs/xcron/tests/test_tzdb.c",
+        "extlibs/xcron/tests/test_tzdb_errors.c",
         "extlibs/xcron/tests/test_tzdb_file.c",
         "extlibs/xcron/tests/test_delivery.c",
         "extlibs/xcron/tests/test_occurrence.c",
         "extlibs/xcron/tests/test_scheduler_selected.c",
         "extlibs/xcron/tests/test_executor_selected.c",
-        "extlibs/xcron/tests/test_service_selected.c"
+        "extlibs/xcron/tests/test_service_selected.c",
+        "extlibs/xcron/tests/test_checkpoint.c",
+        "extlibs/xcron/tests/test_checkpoint_store.c",
+        "extlibs/xcron/tests/test_service_checkpoint.c",
+        "extlibs/xcron/tests/test_checkpoint_group.c"
       ],
       "single_tests": [
         "extlibs/xcron/tests/single/test_single_xcron_expression.c",
@@ -695,13 +887,19 @@
         "extlibs/xcron/tests/single/test_single_xcron_service.c",
         "extlibs/xcron/tests/single/test_single_xcron_service_waiter.c",
         "extlibs/xcron/tests/single/test_single_xcron_tzdb.c",
+        "extlibs/xcron/tests/single/test_single_xcron_tzdb_errors.c",
+        "extlibs/xcron/tests/single/test_single_xcron_tzdb_error_failure.c",
         "extlibs/xcron/tests/single/test_single_xcron_tzdb_file.c",
         "extlibs/xcron/tests/single/test_single_xcron_delivery.c",
         "extlibs/xcron/tests/single/test_single_xcron_occurrence.c",
         "extlibs/xcron/tests/single/test_single_xcron_scheduler_selected.c",
         "extlibs/xcron/tests/single/test_single_xcron_executor_selected.c",
         "extlibs/xcron/tests/single/test_single_xcron_service_selected.c",
-        "extlibs/xcron/tests/single/test_single_xcron_service_readable.c"
+        "extlibs/xcron/tests/single/test_single_xcron_service_readable.c",
+        "extlibs/xcron/tests/single/test_single_xcron_checkpoint.c",
+        "extlibs/xcron/tests/single/test_single_xcron_checkpoint_store.c",
+        "extlibs/xcron/tests/single/test_single_xcron_service_checkpoint.c",
+        "extlibs/xcron/tests/single/test_single_xcron_checkpoint_group.c"
       ],
       "examples": [],
       "benchmarks": [],
@@ -709,6 +907,8 @@
         "extlibs/xcron/README.md"
       ],
       "single_test_owners": {
+        "extlibs/xcron/tests/single/test_single_xcron_tzdb_errors.c": "xcron_tzdb_file",
+        "extlibs/xcron/tests/single/test_single_xcron_tzdb_error_failure.c": "xcron_tzdb_file",
         "extlibs/xcron/tests/single/test_single_xcron_expression.c": "xcron_expression",
         "extlibs/xcron/tests/single/test_single_xcron_calendar.c": "xcron_calendar",
         "extlibs/xcron/tests/single/test_single_xcron_timezone.c": "xcron_timezone",
@@ -723,7 +923,11 @@
         "extlibs/xcron/tests/single/test_single_xcron_delivery.c": "xcron_delivery",
         "extlibs/xcron/tests/single/test_single_xcron_occurrence.c": "xcron_occurrence",
         "extlibs/xcron/tests/single/test_single_xcron_service_selected.c": "xcron_service_selected",
-        "extlibs/xcron/tests/single/test_single_xcron_service_readable.c": "xcron_service"
+        "extlibs/xcron/tests/single/test_single_xcron_service_readable.c": "xcron_service",
+        "extlibs/xcron/tests/single/test_single_xcron_checkpoint.c": "xcron_checkpoint",
+        "extlibs/xcron/tests/single/test_single_xcron_checkpoint_store.c": "xcron_checkpoint_store",
+        "extlibs/xcron/tests/single/test_single_xcron_service_checkpoint.c": "xcron_service_checkpoint",
+        "extlibs/xcron/tests/single/test_single_xcron_checkpoint_group.c": "xcron_checkpoint_group"
       }
     }
   ]

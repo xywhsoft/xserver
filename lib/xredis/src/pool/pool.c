@@ -1,4 +1,8 @@
 #include <xredis/pool.h>
+#include "../internal/sentinel_pool_internal.h"
+#include "../internal/sentinel_config.h"
+#include "../internal/sentinel_events_internal.h"
+#include <xredis/subscriber_notify.h>
 #include "../internal/client_connect.h"
 #include "../internal/pool_admit.h"
 #include "../internal/pool_connect_internal.h"
@@ -184,7 +188,7 @@ static bool xredisLeaseDisarm(xredispool* Pool, xredislease* Lease)
 
 static void xredisPoolIdleRemove(xredispool* Pool, xredispoolslot* Slot)
 {
-    /* Owning worker, with Pool Gate held for public counters. */
+    /* Pool Gate held, including shared callers rotating ready members. */
     if (!Slot->Idle) return;
     if (Slot->PreviousIdle) Slot->PreviousIdle->NextIdle = Slot->NextIdle; else Pool->IdleHead = Slot->NextIdle;
     if (Slot->NextIdle) Slot->NextIdle->PreviousIdle = Slot->PreviousIdle; else Pool->IdleTail = Slot->PreviousIdle;
@@ -283,6 +287,9 @@ static void xredisPoolProcessLease(xredispool* Pool, xredislease* Lease)
         return;
     }
     bool Reusable = Info.State == XREDIS_CLIENT_OPEN && !Abort && !Closing;
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_POOL)
+    Reusable = Reusable && xrtAtomic32Load(&Pool->Quota.Closing, XMEMORY_ACQUIRE) != 2;
+#endif
     if (!Reusable && xrtFutureState(Slot->Closed) == XFUTURE_PENDING) { xredisClientClose(Slot->Client); return; }
     if (!xredisLeaseDisarm(Pool, Lease)) return;
     xrtMutexLock(&Lease->Gate);
@@ -408,7 +415,11 @@ static void xredisPoolWork(xnetworker* Worker, ptr Data)
 #endif
     for (size_t Index = 0; Index < Budget; ++Index) {
         xrtMutexLock(&Pool->Gate); xredislease* Lease = Pool->WaitHead;
-        xredispoolslot* Slot = Pool->Info.State == XREDIS_POOL_OPEN ? Pool->IdleHead : NULL;
+        bool Paused = false;
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_POOL)
+        Paused = xrtAtomic32Load(&Pool->Quota.Closing, XMEMORY_ACQUIRE) == 2;
+#endif
+        xredispoolslot* Slot = Pool->Info.State == XREDIS_POOL_OPEN && !Paused ? Pool->IdleHead : NULL;
         bool NoLive = !xredisPoolCanWait(Pool);
         if (Slot && Lease) xredisPoolIdleRemove(Pool, Slot);
         xrtMutexUnlock(&Pool->Gate);
@@ -479,8 +490,8 @@ static void xredisPoolSlotInit(xredispool* Pool, xredispoolslot* Slot)
     xrtAtomic32Init(&Slot->Owner.Nested, 0);
 #endif
 }
-XREDIS_API xredisadmission xredisPoolCreate(xnetengine* Engine, uint64 Affinity,
-    xredisclient* const* Clients, size_t Count, const xredispoolconfig* Config, xredispool** Result)
+static xredisadmission xredisPoolCreateAdmit(xnetengine* Engine, uint64 Affinity,
+    xredisclient* const* Clients, size_t Count, const xredispoolconfig* Config, xredispool** Result, bool Shared)
 {
     xredispoolconfig Options;
     if (!Engine || !Result || !xrtMemRangeValid(Result, sizeof(*Result)) || !Count || Count > 65536 || !Clients ||
@@ -492,6 +503,8 @@ XREDIS_API xredisadmission xredisPoolCreate(xnetengine* Engine, uint64 Affinity,
     if (!xredisPoolBounds(&Options)) {
         xredisPoolReport(XERR_ARGUMENT, "invalid pool bounds/deadlines"); return XREDIS_ADMISSION_ERROR;
     }
+    /* Private mode tag. Public exclusive configurations require a finite hold. */
+    if (Shared) Options.LeaseTimeout = 0;
     xredisclient** Sorted = xrtMalloc(Count * sizeof(*Sorted)); if (!Sorted) return XREDIS_ADMISSION_ERROR;
     memcpy(Sorted, Clients, Count * sizeof(*Sorted)); qsort(Sorted, Count, sizeof(*Sorted), xredisPoolCompareClient);
     bool Valid = Sorted[0] != NULL;
@@ -536,9 +549,79 @@ XREDIS_API xredisadmission xredisPoolCreate(xnetengine* Engine, uint64 Affinity,
         xrtNetEngineUnpin(Engine); xredisPoolRelease(Pool); return Admission;
     }
     xredisPoolRef(Pool); /* Active lifetime, independent of caller. */
-    xrtMutexLock(&Pool->Gate); Pool->Initialized = true; *Result = Pool; xredisPoolWakeLocked(Pool); xrtMutexUnlock(&Pool->Gate);
+    xrtMutexLock(&Pool->Gate);
+    if (Shared) for (size_t Index = 0; Index < Count; ++Index) {
+        xredispoolslot* Slot = &Pool->Slots[Index];
+        xrtAtomic32Store(&Slot->Owner.State, XREDIS_OWNER_ACTIVE, XMEMORY_RELEASE);
+        xredisPoolIdleAppend(Pool, Slot);
+    }
+    Pool->Initialized = true; *Result = Pool; xredisPoolWakeLocked(Pool); xrtMutexUnlock(&Pool->Gate);
     return XREDIS_ADMISSION_ACCEPTED;
 }
+XREDIS_API xredisadmission xredisPoolCreate(xnetengine* Engine, uint64 Affinity,
+    xredisclient* const* Clients, size_t Count, const xredispoolconfig* Config, xredispool** Result)
+{ return xredisPoolCreateAdmit(Engine, Affinity, Clients, Count, Config, Result, false); }
+
+#if defined(XREDIS_FEATURE_XREDIS_POOL_SHARED)
+xredisadmission __xredisSharedPoolCreate(xnetengine* Engine, uint64 Affinity,
+    xredisclient* const* Clients, size_t Count, const xredispoolconfig* Config, xredispool** Result)
+{ return xredisPoolCreateAdmit(Engine, Affinity, Clients, Count, Config, Result, true); }
+
+static xredisadmission xredisSharedPoolCallAdmit(xredispool* Pool, const xbytesview* Arguments, size_t Count,
+    int64 Timeout, xfuture** Future, double Entered, bool Sync, bool Asking)
+{
+#if !defined(XREDIS_FEATURE_XREDIS_POOL_SHARED_ASKING)
+    (void)Asking;
+#endif
+    if (!Pool || !Future || !xrtMemRangeValid(Future, sizeof(*Future)) || Timeout < XRT_WAIT_FOREVER ||
+        xrtMemRangesOverlap(Pool, Pool ? Pool->StorageBytes : 0, Future, sizeof(*Future))) {
+        xredisPoolReport(XERR_ARGUMENT, "invalid shared pool call/output"); return XREDIS_ADMISSION_ERROR;
+    }
+    xrtMutexLock(&Pool->Gate);
+    if (Pool->Config.LeaseTimeout != 0 || (Sync && !Pool->Finished && xrtNetEngineCurrent(Pool->Engine))) {
+        xrtMutexUnlock(&Pool->Gate);
+        xredisPoolReport(XERR_STATE, "requires shared pool; sync call cannot block an engine worker"); return XREDIS_ADMISSION_ERROR;
+    }
+    size_t Budget = Pool->Info.Idle < Pool->Config.WorkItems ? Pool->Info.Idle : Pool->Config.WorkItems;
+    xrtMutexUnlock(&Pool->Gate);
+    xredisadmission Admission = XREDIS_ADMISSION_OVERLOADED;
+    for (size_t Index = 0; Index < Budget; ++Index) {
+        xrtMutexLock(&Pool->Gate);
+        xredispoolslot* Slot = Pool->Info.State == XREDIS_POOL_OPEN ? Pool->IdleHead : NULL;
+        xredisclient* Client = Slot ? Slot->Client : NULL;
+        if (Client) {
+            xredisClientRetain(Client);
+            xredisPoolIdleRemove(Pool, Slot); xredisPoolIdleAppend(Pool, Slot);
+        }
+        xrtMutexUnlock(&Pool->Gate);
+        if (!Client) break;
+        /* Native owner admission rechecks state/claim under the client gate.
+         * Only a rejected constructor may try another member; never replay. */
+#if defined(XREDIS_FEATURE_XREDIS_POOL_SHARED_ASKING)
+        if (Asking) Admission = __xredisClientOwnedAsking(Client, &Slot->Owner, Arguments, Count, Timeout, Entered, Future);
+        else
+#endif
+        Admission = __xredisClientOwnedCall(Client, &Slot->Owner, Arguments, Count, Timeout, Entered, false, Future);
+        xredisClientRelease(Client);
+        if (Admission == XREDIS_ADMISSION_ACCEPTED) {
+            if (Sync) xrtFutureWait(*Future);
+            return Admission;
+        }
+        if (Admission != XREDIS_ADMISSION_CLOSED && Admission != XREDIS_ADMISSION_OVERLOADED) return Admission;
+    }
+    xrtMutexLock(&Pool->Gate);
+    Admission = Pool->Info.State == XREDIS_POOL_OPEN ? XREDIS_ADMISSION_OVERLOADED : XREDIS_ADMISSION_CLOSED;
+    ++Pool->Info.Rejected; xrtMutexUnlock(&Pool->Gate); return Admission;
+}
+xredisadmission __xredisSharedPoolCall(xredispool* Pool, const xbytesview* Arguments, size_t Count,
+    int64 Timeout, xfuture** Future, double Entered, bool Sync)
+{ return xredisSharedPoolCallAdmit(Pool, Arguments, Count, Timeout, Future, Entered, Sync, false); }
+#if defined(XREDIS_FEATURE_XREDIS_POOL_SHARED_ASKING)
+xredisadmission __xredisSharedPoolAsking(xredispool* Pool, const xbytesview* Arguments, size_t Count,
+    int64 Timeout, xfuture** Future, double Entered, bool Sync)
+{ return xredisSharedPoolCallAdmit(Pool, Arguments, Count, Timeout, Future, Entered, Sync, true); }
+#endif
+#endif
 
 static xredisadmission xredisPoolAcquireAdmit(xredispool* Pool, int64 Timeout, xfuture** Future, double Entered, bool Sync)
 {
@@ -547,6 +630,11 @@ static xredisadmission xredisPoolAcquireAdmit(xredispool* Pool, int64 Timeout, x
         xredisPoolReport(XERR_ARGUMENT, "invalid pool acquisition/output"); return XREDIS_ADMISSION_ERROR;
     }
     xrtMutexLock(&Pool->Gate);
+#if defined(XREDIS_FEATURE_XREDIS_POOL_SHARED)
+    if (!Pool->Config.LeaseTimeout) {
+        xrtMutexUnlock(&Pool->Gate); xredisPoolReport(XERR_STATE, "shared pools do not grant exclusive leases"); return XREDIS_ADMISSION_ERROR;
+    }
+#endif
     if (Sync && !Pool->Finished && xrtNetEngineCurrent(Pool->Engine)) {
         xrtMutexUnlock(&Pool->Gate); xredisPoolReport(XERR_STATE, "sync acquire cannot block an engine worker"); return XREDIS_ADMISSION_ERROR;
     }
@@ -648,6 +736,19 @@ XREDIS_API xredisadmission xredisLeaseCallAsync(xredislease* Lease, const xbytes
 { return xredisLeaseCallAdmit(Lease, Arguments, Count, Timeout, Future, xrtTimer(), false); }
 XREDIS_API xredisadmission xredisLeaseCall(xredislease* Lease, const xbytesview* Arguments, size_t Count, int64 Timeout, xfuture** Future)
 { return xredisLeaseCallAdmit(Lease, Arguments, Count, Timeout, Future, xrtTimer(), true); }
+#if defined(XREDIS_FEATURE_XREDIS_POOL_ASKING)
+xredisadmission __xredisLeaseAsking(xredislease* Lease,const xbytesview* Arguments,size_t Count,
+    int64 Timeout,xfuture** Future,double Entered,bool Sync)
+{
+    xredispool* Pool=NULL;xredispoolslot* Slot=NULL;
+    xredisadmission A=xredisLeaseEnter(Lease,Sync,Future,&Pool,&Slot);
+    if(A!=XREDIS_ADMISSION_ACCEPTED)return A;
+    A=__xredisClientOwnedAsking(Slot->Client,&Slot->Owner,Arguments,Count,Timeout,Entered,Future);
+    xredisLeaseLeave(Lease,Pool);
+    if(Sync && A==XREDIS_ADMISSION_ACCEPTED)xrtFutureWait(*Future);
+    return A;
+}
+#endif
 #if defined(XREDIS_FEATURE_XREDIS_POOL_TRANSACTION)
 xredisadmission __xredisLeaseTransaction(xredislease* Lease, const xredistransactioncommand* Commands,
     size_t Count, const xredistransactionconfig* Config, int64 Timeout, xfuture** Future, double Entered, bool Sync)
@@ -712,9 +813,110 @@ struct xredispoolconnectstate {
     double TimerDeadline;
     bool Dropped;
 };
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_POOL)
+enum { XREDIS_PC_DISCOVERING = 5 };
+typedef struct xredispoolsentinelwatch {
+    xfuture* Future;
+    xfuturewatch Watch;
+    xredispool* Pool;
+    xredispoolslot* Slot;
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_EVENTS)
+    xatomic32* WakeFlag;
+#endif
+    bool Active;
+} xredispoolsentinelwatch;
+typedef struct xredispoolsentinelentry {
+    xredissentineldiscovery* Discovery;
+    xredispoolsentinelwatch Pending;
+    double Deadline;uint64 Generation;bool FencePending,FenceCancel,Cancelled;
+} xredispoolsentinelentry;
+typedef struct xredispoolsentinelrefresh {
+    xredissentineldiscovery* Discovery;
+    xredispoolsentinelwatch Pending;
+    double Due;
+    int64 Interval, AppliedInterval;
+    xatomic32 Dirty;
+    bool Requested, Cancelled, Retiring;
+} xredispoolsentinelrefresh;
+typedef struct xredispoolsentinelseeds {
+    xredissentinelpoolseedconfig Config;
+    xredissentinelendpoint* Entries;
+    unsigned char* Hosts;
+    xredissentineldiscovery* Query;
+    size_t Known;
+    double NextQuery;
+} xredispoolsentinelseeds;
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_EVENTS)
+typedef struct xredispoolsentinelevents {
+    xredissentineleventconfig Config;
+    xredissentineleventinfo Info;
+    xredissubscriptionsession* Session;
+    xredisclient* Client;
+    xfuture* Closed;
+    xredispoolsentinelwatch Read;
+    double HintAt;
+    uint64 Generation;
+    xredisrequeststatus Failure;
+    xatomic32 Enabled, Wake;
+    bool Started, Hint, More, WaitSession, StopIssued;
+} xredispoolsentinelevents;
+#endif
+typedef struct xredispoolsentinelstate {
+    xredispoolconnectstate Base;xredissentinelpoolconfig Config;xredissentinelpoolinfo Info;
+    xredispoolsentinelrefresh Refresh;
+    xredispoolsentinelseeds Seeds;
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_EVENTS)
+    xredispoolsentinelevents Events;
+#endif
+    xredispoolsentinelentry* Entries;unsigned char *Host,*Service;size_t HostBytes,FenceNext,FencePending,Keeper,ReplicaLimit;
+    bool Fencing,Notify;
+} xredispoolsentinelstate;
+static bool xredisPoolSpMode(xredispool* P){return P->Connector->Config.Size==0;}
+static xredispoolsentinelstate* xredisPoolSpState(xredispool* P){return (xredispoolsentinelstate*)P->Connector;}
+static bool xredisPoolSpProcess(xredispool*,xredispoolslot*);
+static void xredisPoolSpStart(xredispool*,size_t);
+static bool xredisPoolSpRetired(xredispool*,size_t);
+static void xredisPoolSpDrive(xredispool*);
+static bool xredisPoolSpAllowed(xredispool* P)
+{
+    if(!xredisPoolSpMode(P))return true;
+    xredispoolsentinelstate* S=xredisPoolSpState(P);
+    /* Establish one preferred endpoint before starting concurrent refill. */
+    return !S->Fencing && !S->Refresh.Discovery && (!S->ReplicaLimit || S->Info.Generation || !S->Base.Info.Connecting);
+}
+static double xredisPoolSpRefreshDue(xredispool* P)
+{
+    xredispoolsentinelstate* S=xredisPoolSpState(P);
+    if(S->Refresh.Due==INFINITY)return INFINITY;
+    bool Open=xrtAtomic32Load(&P->Quota.Closing,XMEMORY_ACQUIRE)!=1;
+    return S->Refresh.Discovery || (Open && !S->Fencing && P->Info.Live==P->Count) ? S->Refresh.Due : INFINITY;
+}
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_EVENTS)
+static double xredisPoolSpEventDue(xredispool* P)
+{
+    xredispoolsentinelevents* E=&xredisPoolSpState(P)->Events;
+    return xrtAtomic32Load(&E->Enabled,XMEMORY_ACQUIRE) && E->Hint ? E->HintAt : INFINITY;
+}
+#endif
+static bool xredisPoolSpMore(xredispool* P)
+{
+    if(!xredisPoolSpMode(P))return false;
+    xredispoolsentinelstate* S=xredisPoolSpState(P);
+    double Refresh=xredisPoolSpRefreshDue(P);
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_EVENTS)
+    if(xrtAtomic32Load(&S->Events.Enabled,XMEMORY_ACQUIRE) && S->Events.More)return true;
+    Refresh=fmin(Refresh,xredisPoolSpEventDue(P));
+#endif
+    return (S->Fencing && S->FenceNext<P->Count) || (Refresh!=INFINITY && Refresh<=xrtTimer()) ||
+        (P->Info.State==XREDIS_POOL_OPEN && !S->Fencing && !S->Refresh.Discovery &&
+         P->Info.Live==P->Count && S->Refresh.Requested);
+}
+static void xredisPoolSpDispose(xredispool*);
+static void xredisPoolSpFailure(xredispool*,xredissentinelstatus);
+#endif
 static void xredisPoolConnectIncrement(uint64* Value) { if (*Value != UINT64_MAX) ++*Value; }
 static bool xredisPoolConnectOpen(xredispool* Pool)
-{ return !xrtAtomic32Load(&Pool->Quota.Closing, XMEMORY_ACQUIRE); }
+{ return xrtAtomic32Load(&Pool->Quota.Closing, XMEMORY_ACQUIRE) != 1; }
 static void xredisPoolConnectHeapSwap(xredispoolconnectstate* State, size_t A, size_t B)
 {
     size_t Item = State->Heap[A]; State->Heap[A] = State->Heap[B]; State->Heap[B] = Item;
@@ -806,20 +1008,28 @@ static void xredisPoolConnectRetired(xredispool* Pool, xredispoolslot* Slot, xre
     xredispoolconnectentry* Entry = &State->Entries[Item];
     xredisPoolConnectHeapRemove(State, Item); xredisPoolConnectQueueRemove(State, Item);
     xredisPoolConnectReadyDrop(Pool, Item);
-    if (Entry->Phase == XREDIS_PC_ONLINE && xredisPoolConnectOpen(Pool)) xredisPoolConnectFailed(Pool, Item, Status);
+    bool CountFailure = true;
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_POOL)
+    if (xredisPoolSpMode(Pool)) CountFailure = xredisPoolSpRetired(Pool, Item);
+#endif
+    if (CountFailure && Entry->Phase == XREDIS_PC_ONLINE && xredisPoolConnectOpen(Pool)) xredisPoolConnectFailed(Pool, Item, Status);
     xrtMutexLock(&Pool->Gate);
     if (Entry->InFlight) { Entry->InFlight = false; --State->Info.Connecting; }
     bool Open = Pool->Info.State == XREDIS_POOL_OPEN;
     if (Open) { Entry->Phase = XREDIS_PC_WAIT; ++State->Info.Waiting; }
     else { Entry->Phase = XREDIS_PC_DONE; Slot->Retired = true; ++Pool->Retired; }
     xrtMutexUnlock(&Pool->Gate);
-    if (Open) xredisPoolConnectHeapPut(State, Item, xredisPoolConnectRetry(Pool, Item));
+    if (Open) xredisPoolConnectHeapPut(State, Item, CountFailure ? xredisPoolConnectRetry(Pool, Item) : xrtTimer());
 }
 static void xredisPoolConnectDrain(xredispool* Pool, size_t Item, xredisrequeststatus Status)
 {
     xredispoolconnectstate* State = Pool->Connector; xredispoolconnectentry* Entry = &State->Entries[Item];
     if (Entry->Phase != XREDIS_PC_DRAIN) {
-        if (xredisPoolConnectOpen(Pool)) xredisPoolConnectFailed(Pool, Item, Status);
+        bool CountFailure=true;
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_POOL)
+        if(xredisPoolSpMode(Pool) && xredisPoolSpState(Pool)->Entries[Item].FenceCancel)CountFailure=false;
+#endif
+        if (CountFailure && xredisPoolConnectOpen(Pool)) xredisPoolConnectFailed(Pool, Item, Status);
         Entry->Phase = XREDIS_PC_DRAIN; xredisPoolConnectHeapRemove(State, Item); xredisPoolConnectReadyDrop(Pool, Item);
     }
     xredisClientClose(Pool->Slots[Item].Client); xredisPoolSlotNotify(&Pool->Slots[Item]);
@@ -828,6 +1038,9 @@ static bool xredisPoolConnectProcess(xredispool* Pool, xredispoolslot* Slot)
 {
     xredispoolconnectstate* State = Pool->Connector; size_t Item = (size_t)(Slot - Pool->Slots);
     xredispoolconnectentry* Entry = &State->Entries[Item];
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_POOL)
+    if (xredisPoolSpMode(Pool) && Entry->Phase == XREDIS_PC_DISCOVERING) return xredisPoolSpProcess(Pool, Slot);
+#endif
     if (Entry->Phase == XREDIS_PC_ONLINE) return false;
     if (Entry->Phase == XREDIS_PC_WAIT) {
         if (!xredisPoolConnectOpen(Pool)) {
@@ -848,7 +1061,17 @@ static bool xredisPoolConnectProcess(xredispool* Pool, xredispoolslot* Slot)
                 Slot->Claimed && Info.State == XREDIS_CLIENT_OPEN && !Info.Requests) {
                 xredisPoolConnectReadyDrop(Pool, Item); xredisPoolConnectHeapRemove(State, Item);
                 Entry->Phase = XREDIS_PC_ONLINE; Entry->Failures = 0; Entry->InFlight = false; Slot->Dead = false;
-                xrtMutexLock(&Pool->Gate); --State->Info.Connecting; ++Pool->Info.Live; xredisPoolConnectIncrement(&State->Info.Connected); xrtMutexUnlock(&Pool->Gate);
+                xrtMutexLock(&Pool->Gate);
+#if defined(XREDIS_FEATURE_XREDIS_POOL_SHARED)
+                /* Activate only after native readiness/initialization storage
+                 * retire, before ProcessSlot publishes the ready-list entry. */
+                if (!Pool->Config.LeaseTimeout && Pool->Info.State == XREDIS_POOL_OPEN)
+                    xrtAtomic32Store(&Slot->Owner.State, XREDIS_OWNER_ACTIVE, XMEMORY_RELEASE);
+#endif
+                --State->Info.Connecting; ++Pool->Info.Live; xredisPoolConnectIncrement(&State->Info.Connected); xrtMutexUnlock(&Pool->Gate);
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_POOL)
+                if(xredisPoolSpMode(Pool))xredisPoolSpState(Pool)->Notify=true;
+#endif
                 return false;
             }
             xredisPoolConnectDrain(Pool, Item, Ready ? xredisPoolConnectReadyStatus(Ready->Status) : XREDIS_REQUEST_INITIALIZATION);
@@ -869,21 +1092,9 @@ static bool xredisPoolConnectWatch(xredispool* Pool, xredispoolslot* Slot, xfutu
     if (!*Registered) xredisPoolRelease(Pool);
     return Watched != XFUTURE_WATCH_ERROR;
 }
-static void xredisPoolConnectStart(xredispool* Pool, size_t Item)
+static void xredisPoolConnectAdopt(xredispool* Pool,size_t Item,xredisclient* Client)
 {
-    xredispoolconnectstate* State = Pool->Connector; xredispoolconnectentry* Entry = &State->Entries[Item]; xredispoolslot* Slot = &Pool->Slots[Item];
-    xrtMutexLock(&Pool->Gate);
-    if (Pool->Info.State != XREDIS_POOL_OPEN) { xrtMutexUnlock(&Pool->Gate); return; }
-    --State->Info.Waiting; ++State->Info.Connecting; xredisPoolConnectIncrement(&State->Info.Attempts);
-    Entry->InFlight = true; Entry->Phase = XREDIS_PC_CONNECTING; xredisPoolConnectIncrement(&Entry->Attempt);
-    xrtMutexUnlock(&Pool->Gate);
-    Entry->Due = xredisPoolDeadline(xrtTimer(), State->Config.AttemptTimeout);
-    xredisclient* Client = NULL;
-    bool Started = State->Config.Connect(Pool->Engine, Item, Entry->Attempt, State->Config.AttemptTimeout, State->Config.Data, &Client);
-    if (!Started || !Client) {
-        if (xredisPoolConnectOpen(Pool)) xredisPoolConnectFailed(Pool, Item, XREDIS_REQUEST_INITIALIZATION);
-        xredisPoolConnectRetired(Pool, Slot, XREDIS_REQUEST_INITIALIZATION); return;
-    }
+    xredispoolconnectstate* State=Pool->Connector;xredispoolconnectentry* Entry=&State->Entries[Item];xredispoolslot* Slot=&Pool->Slots[Item];
     Slot->Client = Client; Slot->Dead = true;
     xrtAtomic32Store(&Slot->Owner.State, XREDIS_OWNER_CLOSING, XMEMORY_RELEASE); Slot->Owner.Deadline = INFINITY;
     if (__xredisClientClaimStarting(Client, &Slot->Owner, Pool->Engine) == XREDIS_ADMISSION_ACCEPTED) {
@@ -896,9 +1107,610 @@ static void xredisPoolConnectStart(xredispool* Pool, size_t Item)
     else xredisPoolConnectHeapPut(State, Item, Entry->Due);
     xredisPoolSlotNotify(Slot);
 }
+
+static void xredisPoolConnectStart(xredispool* Pool, size_t Item)
+{
+    xredispoolconnectstate* State = Pool->Connector; xredispoolconnectentry* Entry = &State->Entries[Item]; xredispoolslot* Slot = &Pool->Slots[Item];
+    xrtMutexLock(&Pool->Gate);
+    if (Pool->Info.State != XREDIS_POOL_OPEN) { xrtMutexUnlock(&Pool->Gate); return; }
+    --State->Info.Waiting; ++State->Info.Connecting; xredisPoolConnectIncrement(&State->Info.Attempts);
+    Entry->InFlight = true; Entry->Phase = XREDIS_PC_CONNECTING; xredisPoolConnectIncrement(&Entry->Attempt);
+    xrtMutexUnlock(&Pool->Gate);
+    Entry->Due = xredisPoolDeadline(xrtTimer(), State->Config.AttemptTimeout);
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_POOL)
+    if(xredisPoolSpMode(Pool)){xredisPoolSpStart(Pool,Item);return;}
+#endif
+    xredisclient* Client = NULL;
+    bool Started = State->Config.Connect(Pool->Engine, Item, Entry->Attempt, State->Config.AttemptTimeout, State->Config.Data, &Client);
+    if (!Started || !Client) {
+        if (xredisPoolConnectOpen(Pool)) xredisPoolConnectFailed(Pool, Item, XREDIS_REQUEST_INITIALIZATION);
+        xredisPoolConnectRetired(Pool, Slot, XREDIS_REQUEST_INITIALIZATION); return;
+    }
+    xredisPoolConnectAdopt(Pool,Item,Client);
+}
+
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_POOL)
+static xredisrequeststatus xredisPoolSpNative(xredissentinelstatus S)
+{
+    switch(S){case XREDIS_SENTINEL_TIMEOUT:return XREDIS_REQUEST_TIMEOUT;
+    case XREDIS_SENTINEL_CANCELLED:return XREDIS_REQUEST_CANCELLED;
+    case XREDIS_SENTINEL_NO_REPLICA:
+    case XREDIS_SENTINEL_UNREACHABLE:return XREDIS_REQUEST_DISCONNECTED;
+    case XREDIS_SENTINEL_PROTOCOL:return XREDIS_REQUEST_PROTOCOL;
+    case XREDIS_SENTINEL_LIMIT:return XREDIS_REQUEST_LIMIT;
+    case XREDIS_SENTINEL_MEMORY:return XREDIS_REQUEST_MEMORY;default:return XREDIS_REQUEST_INITIALIZATION;}
+}
+static bool xredisPoolSpTransient(xredissentinelstatus S)
+{return S==XREDIS_SENTINEL_TIMEOUT || S==XREDIS_SENTINEL_UNREACHABLE || S==XREDIS_SENTINEL_STALE_ROLE || S==XREDIS_SENTINEL_NO_REPLICA;}
+static void xredisPoolSpFailure(xredispool* P,xredissentinelstatus Status)
+{xredispoolsentinelstate* S=xredisPoolSpState(P);xrtMutexLock(&P->Gate);S->Info.LastStatus=Status;xrtMutexUnlock(&P->Gate);S->Notify=true;}
+static void xredisPoolSpNotify(xredispool* P)
+{
+    xredispoolsentinelstate* S=xredisPoolSpState(P);if(!S->Notify)return;S->Notify=false;
+    if(S->Config.Notify){xredissentinelpoolinfo I={0};I.Size=sizeof(I);(void)__xredisSentinelPoolInfo(P,&I);S->Config.Notify(P,&I,S->Config.Discovery.Data);}
+}
+static void xredisPoolSpWatchSignal(ptr Data)
+{
+    xredispoolsentinelwatch* W=Data;
+    if(W->Slot){xredisPoolSlotNotify(W->Slot);return;}
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_EVENTS)
+    if(W->WakeFlag)xrtAtomic32Store(W->WakeFlag,1,XMEMORY_RELEASE);
+#endif
+    xredispool* P=W->Pool;
+    xrtMutexLock(&P->Gate);xredisPoolWakeLocked(P);xrtMutexUnlock(&P->Gate);
+}
+static void xredisPoolSpWatchDrop(ptr Data)
+{
+    xredispoolsentinelwatch* W=Data;
+    xredispool* P=W->Pool;
+    xrtMutexLock(&P->Gate);W->Active=false;xrtMutexUnlock(&P->Gate);
+    xredisPoolSpWatchSignal(W);xredisPoolRelease(P); /* No more Watch access. */
+}
+static bool xredisPoolSpWatchStop(xredispoolsentinelwatch* W)
+{
+    if(!W->Future)return true;
+    xredispool* P=W->Pool;
+    xrtMutexLock(&P->Gate);bool Active=W->Active;xrtMutexUnlock(&P->Gate);
+    if(Active)(void)xrtFutureWatchDetach(W->Future,&W->Watch);
+    xrtMutexLock(&P->Gate);Active=W->Active;xrtMutexUnlock(&P->Gate);if(Active)return false;
+    xrtFutureDestroy(W->Future);W->Future=NULL;return true;
+}
+static bool xredisPoolSpWatchStart(xredispoolsentinelwatch* W,xfuture* F)
+{
+    xredispool* P=W->Pool;W->Future=F;
+    if(!xrtFutureWatchInit(&W->Watch,xredisPoolSpWatchSignal,xredisPoolSpWatchDrop,W))return false;
+    xredisPoolRef(P);xrtMutexLock(&P->Gate);W->Active=true;xrtMutexUnlock(&P->Gate);
+    xfuturewatchresult A=xrtFutureWatchAdd(F,&W->Watch);
+    if(A!=XFUTURE_WATCH_PENDING){xrtMutexLock(&P->Gate);W->Active=false;xrtMutexUnlock(&P->Gate);xredisPoolRelease(P);}
+    if(A==XFUTURE_WATCH_READY)xredisPoolSpWatchSignal(W);
+    return A!=XFUTURE_WATCH_ERROR;
+}
+static bool xredisPoolSpRetired(xredispool* P,size_t Item)
+{
+    xredispoolsentinelstate* S=xredisPoolSpState(P);xredispoolsentinelentry* H=&S->Entries[Item];
+    bool Intentional=H->FencePending || H->FenceCancel;
+    if(H->FencePending){H->FencePending=false;--S->FencePending;}
+    H->FenceCancel=false;
+    if(!Intentional && S->Base.Entries[Item].Phase==XREDIS_PC_ONLINE && xredisPoolConnectOpen(P))xredisPoolSpFailure(P,XREDIS_SENTINEL_UNREACHABLE);
+    return !Intentional;
+}
+static xredisadmission xredisPoolSpDiscover(xredispool* P,double Deadline,xredissentineldiscovery** D)
+{
+    xredispoolsentinelstate* S=xredisPoolSpState(P);
+    xredissentinelconfig K=S->Config.Discovery;K.PreferredSeed=S->Info.PreferredSeed;
+    xredissentinelendpoint Prefer={{S->Host,S->HostBytes},S->Info.Port};
+    if(S->Seeds.Entries){
+        xredispoolsentinelseeds* Seeds=&S->Seeds;
+        K.SeedCount=Seeds->Known;
+        bool Query=Seeds->Known<Seeds->Config.MaxSeeds && !Seeds->Query && xrtTimer()>=Seeds->NextQuery;
+        xredissentinelpeerdiscovery Peers={Seeds->Entries,Seeds->Config.Connect,S->Config.Discovery.SeedCount,
+            Query?Seeds->Config.MaxPeerRows:0,Seeds->Config.PeerTimeout};
+        xredisadmission A=__xredisSentinelDiscoveryCreateWithPeers(P->Engine,&K,Deadline,S->ReplicaLimit,
+            S->ReplicaLimit && S->Info.Generation?&Prefer:NULL,&Peers,D);
+        if(A==XREDIS_ADMISSION_ACCEPTED && Query)Seeds->Query=*D;
+        return A;
+    }
+    return S->ReplicaLimit?
+        __xredisSentinelReplicaCreateUntil(P->Engine,&K,Deadline,S->ReplicaLimit,S->Info.Generation?&Prefer:NULL,D):
+        __xredisSentinelDiscoveryCreateUntil(P->Engine,&K,Deadline,D);
+}
+static void xredisPoolSpDestroyDiscovery(xredispoolsentinelstate* S,xredissentineldiscovery* D)
+{
+    if(S->Seeds.Query==D){
+        S->Seeds.Query=NULL;
+        S->Seeds.NextQuery=xredisPoolDeadline(xrtTimer(),S->Seeds.Config.PeerRefreshMin);
+    }
+    xredisSentinelDiscoveryDestroy(D);
+}
+static void xredisPoolSpStart(xredispool* P,size_t Item)
+{
+    xredispoolsentinelstate* S=xredisPoolSpState(P);xredispoolconnectentry* E=&S->Base.Entries[Item];xredispoolsentinelentry* H=&S->Entries[Item];
+    E->Phase=XREDIS_PC_DISCOVERING;H->Deadline=E->Due;H->Generation=S->Info.Generation;H->FenceCancel=false;H->Cancelled=false;
+    if(xrtTimer()>=H->Deadline){xredisPoolSpFailure(P,XREDIS_SENTINEL_TIMEOUT);xredisPoolConnectFailed(P,Item,XREDIS_REQUEST_TIMEOUT);xredisPoolConnectRetired(P,&P->Slots[Item],XREDIS_REQUEST_TIMEOUT);return;}
+    if(xredisPoolSpDiscover(P,H->Deadline,&H->Discovery)!=XREDIS_ADMISSION_ACCEPTED){
+        xredisPoolSpFailure(P,XREDIS_SENTINEL_MEMORY);xredisPoolConnectFailed(P,Item,XREDIS_REQUEST_MEMORY);xredisPoolClose(P);xredisPoolConnectRetired(P,&P->Slots[Item],XREDIS_REQUEST_MEMORY);return;}
+    xredisPoolSlotNotify(&P->Slots[Item]);
+}
+static bool xredisPoolSpSame(xredispoolsentinelstate* S,const xredissentinelendpoint* A)
+{return S->Info.Generation && S->Info.Port==A->Port && S->HostBytes==A->Host.Size && !memcmp(S->Host,A->Host.Data,A->Host.Size);}
+static bool xredisPoolSpSeedEqual(xredissentinelendpoint A,xredissentinelendpoint B)
+{return A.Port==B.Port && A.Host.Size==B.Host.Size && !memcmp(A.Host.Data,B.Host.Data,A.Host.Size);}
+static bool xredisPoolSpSeedContains(const xredissentinelendpoint* Entries,size_t Count,xredissentinelendpoint New)
+{
+    for(size_t I=0;I<Count;++I)if(xredisPoolSpSeedEqual(Entries[I],New))return true;
+    return false;
+}
+static void xredisPoolSpSeedCopy(xredissentinelendpoint* Out,unsigned char* Host,xredissentinelendpoint Source)
+{
+    memcpy(Host,Source.Host.Data,Source.Host.Size);
+    *Out=(xredissentinelendpoint){{Host,Source.Host.Size},Source.Port};
+}
+static size_t xredisPoolSpCollectPeers(xredispoolsentinelstate* S,xredissentineldiscovery* D)
+{
+    xredispoolsentinelseeds* Seeds=&S->Seeds;
+    size_t Known=Seeds->Known;
+    if(Seeds->Query!=D)return Known;
+    size_t Count;
+    const xredissentinelendpoint* Peers=__xredisSentinelDiscoveredPeers(D,&Count);
+    /* The worker fills unused entries outside the admission/snapshot gate.
+     * Published entries and indexes remain immutable for active discoveries. */
+    for(size_t I=0;I<Count && Known<Seeds->Config.MaxSeeds;++I){
+        if(xredisPoolSpSeedContains(Seeds->Entries,Known,Peers[I]))continue;
+        xredisPoolSpSeedCopy(&Seeds->Entries[Known],Seeds->Hosts+Known*S->Config.Discovery.MaxHostBytes,Peers[I]);
+        ++Known;
+    }
+    return Known;
+}
+static bool xredisPoolSpTopology(xredispool* P,size_t Item,const xredissentinelresult* R,xredissentineldiscovery* D)
+{
+    xredispoolsentinelstate* S=xredisPoolSpState(P);
+    size_t Known=xredisPoolSpCollectPeers(S,D);
+    xrtMutexLock(&P->Gate);
+    if(P->Info.State!=XREDIS_POOL_OPEN){xrtMutexUnlock(&P->Gate);return false;}
+    S->Seeds.Known=Known;
+    S->Info.PreferredSeed=R->PreferredSeed;S->Info.LastStatus=XREDIS_SENTINEL_OK;
+    if(!xredisPoolSpSame(S,&R->Endpoint)){
+        if(S->Info.Generation==UINT64_MAX){xrtMutexUnlock(&P->Gate);xredisPoolSpFailure(P,XREDIS_SENTINEL_LIMIT);xredisPoolClose(P);return false;}
+        bool Changed=S->Info.Generation!=0;++S->Info.Generation;
+        if(Changed){++S->Info.Changes;S->Fencing=true;S->FenceNext=0;S->FencePending=0;S->Keeper=Item;
+            /* Every native owned-call already checks this aggregate atomic gate. */
+            xrtAtomic32Store(&P->Quota.Closing,2,XMEMORY_RELEASE);}
+        memcpy(S->Host,R->Endpoint.Host.Data,R->Endpoint.Host.Size);S->HostBytes=R->Endpoint.Host.Size;S->Info.Port=R->Endpoint.Port;
+    }
+    xrtMutexUnlock(&P->Gate);S->Notify=true;xredisPoolSpNotify(P);return true;
+}
+static void xredisPoolSpAdopt(xredispool* P,size_t Item,bool Discard,xredisrequeststatus Why)
+{
+    xredispoolsentinelstate* S=xredisPoolSpState(P);xredispoolsentinelentry* H=&S->Entries[Item];xredisclient* C=NULL;
+    if(!xredisSentinelDiscoveryTakeClient(H->Discovery,&C)){
+        xredisPoolSpFailure(P,XREDIS_SENTINEL_FACTORY);xredisPoolClose(P);return;
+    }
+    xredisPoolSpDestroyDiscovery(S,H->Discovery);H->Discovery=NULL;H->Generation=S->Info.Generation;
+    S->Base.Entries[Item].Phase=XREDIS_PC_CONNECTING;S->Base.Entries[Item].Due=H->Deadline;
+    xredisPoolConnectAdopt(P,Item,C);
+    if(Discard)xredisPoolConnectDrain(P,Item,Why);
+}
+static bool xredisPoolSpProcess(xredispool* P,xredispoolslot* Slot)
+{
+    size_t Item=(size_t)(Slot-P->Slots);xredispoolsentinelstate* S=xredisPoolSpState(P);xredispoolsentinelentry* H=&S->Entries[Item];
+    bool Open=xredisPoolConnectOpen(P),Reconfigure=S->Fencing && S->Keeper!=Item;
+    /* A detached Watch's final release can queue an extra event. Do not detach
+     * its newly registered successor until completion, due time or first stop. */
+    if(H->Pending.Future && !xrtFutureDone(H->Pending.Future) && xrtTimer()<S->Base.Entries[Item].Due &&
+       ((Open && !Reconfigure) || H->Cancelled))return true;
+    xredisPoolConnectHeapRemove(&S->Base,Item);
+    if(!xredisPoolSpWatchStop(&H->Pending))return true;
+    if(!H->Discovery){xredisPoolConnectRetired(P,Slot,XREDIS_REQUEST_INITIALIZATION);return true;}
+    xredissentinelresult R={0};R.Size=sizeof(R);(void)xredisSentinelDiscoveryResult(H->Discovery,&R);
+    if(!Open || Reconfigure){H->FenceCancel=Reconfigure && Open;
+        if(R.Status==XREDIS_SENTINEL_OK){xredisPoolSpAdopt(P,Item,true,XREDIS_REQUEST_CLOSED);return true;}
+        H->Cancelled=true;(void)xredisSentinelDiscoveryCancel(H->Discovery);
+    }
+    xredissentinelstep Step=xredisSentinelDiscoveryStep(H->Discovery);
+    if(Step==XREDIS_SENTINEL_STEP_ERROR){xredisPoolSpFailure(P,XREDIS_SENTINEL_PROTOCOL);xredisPoolClose(P);xredisPoolSlotNotify(Slot);return true;}
+    if(Step==XREDIS_SENTINEL_DONE){
+        (void)xredisSentinelDiscoveryResult(H->Discovery,&R);
+        if(R.Status==XREDIS_SENTINEL_OK){
+            if(xrtTimer()>=H->Deadline){xredisPoolSpFailure(P,XREDIS_SENTINEL_TIMEOUT);if(S->Keeper==Item)S->Keeper=SIZE_MAX;xredisPoolSpAdopt(P,Item,true,XREDIS_REQUEST_TIMEOUT);return true;}
+            if(S->Fencing){xredisPoolConnectHeapPut(&S->Base,Item,H->Deadline);return true;}
+            if(!xredisPoolSpTopology(P,Item,&R,H->Discovery)){xredisPoolSlotNotify(Slot);return true;}
+            if(S->Fencing){H->Generation=S->Info.Generation;xredisPoolConnectHeapPut(&S->Base,Item,H->Deadline);return true;}
+            xredisPoolSpAdopt(P,Item,false,XREDIS_REQUEST_OK);return true;
+        }
+        xredisPoolSpDestroyDiscovery(S,H->Discovery);H->Discovery=NULL;
+        if(Open && !H->FenceCancel){xredisPoolSpFailure(P,R.Status);xredisPoolConnectFailed(P,Item,xredisPoolSpNative(R.Status));if(!xredisPoolSpTransient(R.Status))xredisPoolClose(P);}
+        xredisPoolConnectRetired(P,Slot,xredisPoolSpNative(R.Status));return true;
+    }
+    if(Step==XREDIS_SENTINEL_MORE){xredisPoolSlotNotify(Slot);return true;}
+    xfuture* F=xredisSentinelDiscoveryPending(H->Discovery);
+    if(F && !xredisPoolSpWatchStart(&H->Pending,F)){xredisPoolSpFailure(P,XREDIS_SENTINEL_MEMORY);xredisPoolClose(P);xredisPoolSlotNotify(Slot);}
+    xredisPoolConnectHeapPut(&S->Base,Item,xredisSentinelDiscoveryNextWake(H->Discovery));return true;
+}
+/* Existing worker and timer own this probe, including its physical close. */
+static void xredisPoolSpRefreshDrive(xredispool* P)
+{
+    xredispoolsentinelstate* S=xredisPoolSpState(P);
+    xredispoolsentinelrefresh* R=&S->Refresh;
+    if(!R->Discovery && R->Due==INFINITY && !xrtAtomic32Load(&R->Dirty,XMEMORY_ACQUIRE))return;
+    double Now=xrtTimer();
+    if(!R->Discovery && R->Due>Now && !xrtAtomic32Load(&R->Dirty,XMEMORY_ACQUIRE))return;
+    xrtMutexLock(&P->Gate);
+    bool Open=P->Info.State==XREDIS_POOL_OPEN;
+    bool Full=P->Info.Live==P->Count && !S->Base.Info.Connecting && !S->Fencing;
+    int64 Interval=R->Interval;
+    if(!R->Discovery && R->AppliedInterval!=Interval){
+        R->AppliedInterval=Interval;
+        R->Due=Interval?xredisPoolDeadline(Now,Interval):INFINITY;
+    }
+    bool Start=!R->Discovery && Open && Full && (R->Requested || R->Due<=Now);
+    if(Start)R->Requested=false;
+    xrtAtomic32Store(&R->Dirty,(uint32)R->Requested,XMEMORY_RELEASE);
+    xrtMutexUnlock(&P->Gate);
+    if(!R->Discovery){
+        if(!Open){R->Due=INFINITY;return;}
+        if(!Start)return;
+        if(xredisPoolSpDiscover(P,xredisPoolDeadline(Now,S->Config.Discovery.Timeout),&R->Discovery)!=XREDIS_ADMISSION_ACCEPTED){
+            R->Due=Interval?xredisPoolDeadline(Now,Interval):INFINITY;
+            xredisPoolSpFailure(P,XREDIS_SENTINEL_MEMORY);
+            return;
+        }
+        R->Due=Now;
+    }
+    if(!R->Retiring && !R->Cancelled && (!Open || !Full)){
+        R->Cancelled=true;
+        (void)xredisSentinelDiscoveryCancel(R->Discovery);
+        R->Due=Now;
+    }
+    if(R->Due>Now && (!R->Pending.Future || !xrtFutureDone(R->Pending.Future)))return;
+    if(!xredisPoolSpWatchStop(&R->Pending)){R->Due=INFINITY;return;}
+    xredissentinelstep Step=xredisSentinelDiscoveryStep(R->Discovery);
+    if(Step==XREDIS_SENTINEL_DONE){
+        xredissentinelresult Result={.Size=sizeof(Result)};
+        (void)xredisSentinelDiscoveryResult(R->Discovery,&Result);
+        if(!R->Retiring && Result.Status==XREDIS_SENTINEL_OK){
+            R->Retiring=__xredisSentinelDiscoveryRetire(R->Discovery);
+            if(R->Retiring){
+                (void)xredisPoolSpTopology(P,SIZE_MAX,&Result,R->Discovery);
+                R->Due=Now;
+                return;
+            }
+        }
+        if(Open && !R->Cancelled && !R->Retiring)xredisPoolSpFailure(P,Result.Status);
+        xredisPoolSpDestroyDiscovery(S,R->Discovery);
+        R->Discovery=NULL;R->Cancelled=false;R->Retiring=false;
+        R->AppliedInterval=Interval;
+        R->Due=Open && Interval?xredisPoolDeadline(xrtTimer(),Interval):INFINITY;
+        return;
+    }
+    if(Step==XREDIS_SENTINEL_STEP_ERROR){
+        xredisPoolSpFailure(P,XREDIS_SENTINEL_PROTOCOL);xredisPoolClose(P);R->Due=Now;return;
+    }
+    R->Due=Now;
+    if(Step==XREDIS_SENTINEL_MORE)return;
+    xfuture* F=xredisSentinelDiscoveryPending(R->Discovery);
+    R->Due=xredisSentinelDiscoveryNextWake(R->Discovery);
+    if(F && !xredisPoolSpWatchStart(&R->Pending,F)){
+        xredisPoolSpFailure(P,XREDIS_SENTINEL_MEMORY);xredisPoolClose(P);R->Due=Now;
+    }
+}
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_EVENTS)
+static bool xredisPoolSpEventConnect(xnetengine* Engine,uint64 Attempt,int64 Timeout,ptr Data,xredisclient** Client)
+{
+    xredispool* P=Data;
+    if(!xredisPoolConnectOpen(P))return false;
+    xredispoolsentinelstate* S=xredisPoolSpState(P);
+    xredispoolsentinelevents* E=&S->Events;
+    size_t Count=S->Seeds.Entries?S->Seeds.Known:S->Config.Discovery.SeedCount;
+    size_t Seed=Attempt==1?S->Info.PreferredSeed:(E->Info.Seed+1)%Count;
+    xredissentinelstatus Status=S->Seeds.Entries?
+        S->Seeds.Config.Connect(Engine,&S->Seeds.Entries[Seed],Timeout,S->Config.Discovery.Data,Client):
+        S->Config.Discovery.ConnectSeed(Engine,Seed,Timeout,S->Config.Discovery.Data,Client);
+    xrtMutexLock(&P->Gate);E->Info.Seed=Seed;E->Info.LastSeedStatus=Status;xrtMutexUnlock(&P->Gate);
+    return Status==XREDIS_SENTINEL_OK;
+}
+static void xredisPoolSpEventNotify(xredissubscriptionsession* Session,const xredissubscriptionsessioninfo* Info,ptr Data)
+{
+    (void)Session;
+    xredispool* P=Data;
+    xredispoolsentinelevents* E=&xredisPoolSpState(P)->Events;
+    xrtMutexLock(&P->Gate);
+    E->Info.Session=*Info;
+    if(E->Failure!=XREDIS_REQUEST_OK)E->Info.Session.LastFailure=E->Failure;
+    xrtAtomic32Store(&E->Wake,1,XMEMORY_RELEASE);
+    xredisPoolWakeLocked(P);
+    xrtMutexUnlock(&P->Gate);
+}
+static void xredisPoolSpEventStart(xredispool* P,xredispoolsentinelevents* E)
+{
+    xbytesview Channel=XRT_BYTES_LITERAL("+switch-master");
+    xredissubscriptionsconfig Intent;
+    xredisSubscriptionsConfigInit(&Intent);
+    Intent.MaxSubscriptions=1;
+    Intent.MaxNameBytes=Intent.MaxChangeBytes=Channel.Size;
+    xredissubscriptions* Store=NULL;
+    xredissubscriptionsessionconfig K;
+    xredisSubscriptionSessionConfigInit(&K);
+    K.Connect=xredisPoolSpEventConnect;
+    K.Notify=xredisPoolSpEventNotify;
+    K.Data=P;
+    K.Protocol=xredisPoolSpState(P)->Config.Discovery.Protocol;
+    K.AttemptTimeout=E->Config.AttemptTimeout;
+    K.RetryMin=E->Config.RetryMin;
+    K.RetryMax=E->Config.RetryMax;
+    K.Replay.Registry.MaxSubscriptions=K.Replay.MaxBatchNames=1;
+    K.Replay.Registry.MaxNameBytes=Channel.Size;
+    uint64 Revision;
+    if(xredisSubscriptionsCreate(&Intent,&Store) &&
+       xredisSubscriptionsApply(Store,XREDIS_PUBSUB_CMD_SUBSCRIBE,&Channel,1,&Revision)==XREDIS_ADMISSION_ACCEPTED &&
+       xredisSubscriptionSessionCreate(P->Engine,xrtNetWorkerIndex(P->Worker),Store,&K,&E->Session)==XREDIS_ADMISSION_ACCEPTED){
+        E->Closed=xredisSubscriptionSessionClosed(E->Session);
+    }else{
+        xrtMutexLock(&P->Gate);
+        E->Info.Session.State=XREDIS_SESSION_CLOSED;
+        E->Info.Session.LastFailure=XREDIS_REQUEST_MEMORY;
+        xrtMutexUnlock(&P->Gate);
+    }
+    xredisSubscriptionsRelease(Store);
+}
+static bool xredisPoolSpEventReleaseClient(xredispoolsentinelevents* E)
+{
+    if(!xredisPoolSpWatchStop(&E->Read))return false;
+    if(E->Client){xredisClientRelease(E->Client);E->Client=NULL;}
+    return true;
+}
+static void xredisPoolSpEventReceive(xredispool* P,xredispoolsentinelstate* S,xredispoolsentinelevents* E)
+{
+    if(!E->Client){
+        xredissubscriptionsessioncurrent Current;
+        if(xredisSubscriptionSessionCurrent(E->Session,&Current)!=XREDIS_ADMISSION_ACCEPTED)return;
+        E->Client=Current.Client;
+        E->WaitSession=false;
+        if(E->Generation!=Current.Generation){E->Generation=Current.Generation;E->Hint=true;}
+    }
+    if(E->WaitSession || (E->Read.Future && !xrtFutureDone(E->Read.Future)) || !xredisPoolSpWatchStop(&E->Read))return;
+
+    xredisreply* Replies[64];
+    size_t Taken=0,Matched=0;
+    if(xredisSubscriberTakeBatch(E->Client,Replies,E->Config.WorkMessages,&Taken)){
+        for(size_t I=0;I<Taken;++I){
+            if(__xredisSentinelSwitchEvent(Replies[I],S->Config.Discovery.Service,S->Config.Discovery.MaxHostBytes))++Matched;
+            xredisReplyRelease(Replies[I]);
+        }
+        xrtMutexLock(&P->Gate);
+        E->Info.Matched=Matched>UINT64_MAX-E->Info.Matched?UINT64_MAX:E->Info.Matched+Matched;
+        size_t Ignored=Taken-Matched;
+        E->Info.Ignored=Ignored>UINT64_MAX-E->Info.Ignored?UINT64_MAX:E->Info.Ignored+Ignored;
+        xrtMutexUnlock(&P->Gate);
+        if(Matched)E->Hint=true;
+        if(Taken==E->Config.WorkMessages){E->More=true;return;}
+    }
+    xfuture* Readable=NULL;
+    xredisadmission Admission=xredisSubscriberReadable(E->Client,&Readable);
+    if(Admission==XREDIS_ADMISSION_CLOSED){E->WaitSession=true;return;}
+    if(Admission!=XREDIS_ADMISSION_ACCEPTED || !xredisPoolSpWatchStart(&E->Read,Readable)){
+        E->Failure=Admission==XREDIS_ADMISSION_OVERLOADED?XREDIS_REQUEST_LIMIT:XREDIS_REQUEST_MEMORY;
+        (void)xredisSubscriptionSessionClose(E->Session);
+    }
+}
+static void xredisPoolSpEventDrive(xredispool* P,xredispoolsentinelstate* S)
+{
+    xredispoolsentinelevents* E=&S->Events;
+    if(!xrtAtomic32Load(&E->Enabled,XMEMORY_ACQUIRE))return;
+    bool Open=xredisPoolConnectOpen(P);
+    if(Open && E->Started && !E->More && !(E->Hint && xrtTimer()>=E->HintAt) &&
+       !xrtAtomic32Load(&E->Wake,XMEMORY_ACQUIRE))return;
+    xrtAtomic32Store(&E->Wake,0,XMEMORY_RELEASE);
+    E->More=false;
+    if(!E->Started){
+        E->Started=true;
+        if(Open)xredisPoolSpEventStart(P,E);
+        else{
+            xrtMutexLock(&P->Gate);E->Info.Session.State=XREDIS_SESSION_CLOSED;xrtMutexUnlock(&P->Gate);
+        }
+    }
+    if(!E->Session)return;
+    if(!Open || E->Info.Session.State==XREDIS_SESSION_CLOSED || E->Failure!=XREDIS_REQUEST_OK){
+        E->Hint=false;
+        bool Released=xredisPoolSpEventReleaseClient(E);
+        if(!xrtFutureDone(E->Closed)){
+            if(!E->StopIssued){(void)xredisSubscriptionSessionClose(E->Session);E->StopIssued=true;}
+            return;
+        }
+        if(!Released)return;
+        xrtFutureDestroy(E->Closed);E->Closed=NULL;
+        xredisSubscriptionSessionRelease(E->Session);E->Session=NULL;
+        return;
+    }
+    if(E->Client && E->Generation!=E->Info.Session.Generations && !xredisPoolSpEventReleaseClient(E))return;
+    if(E->Info.Session.State==XREDIS_SESSION_ONLINE)xredisPoolSpEventReceive(P,S,E);
+    else if(!xredisPoolSpEventReleaseClient(E))return;
+    if(E->Hint && xrtTimer()>=E->HintAt){
+        if(__xredisSentinelPoolRefresh(P,-1)==XREDIS_ADMISSION_ACCEPTED){
+            xrtMutexLock(&P->Gate);xredisPoolConnectIncrement(&E->Info.Hints);xrtMutexUnlock(&P->Gate);
+        }
+        E->Hint=false;E->HintAt=xredisPoolDeadline(xrtTimer(),E->Config.HintInterval);
+    }
+}
+xredisadmission __xredisSentinelPoolListen(xredispool* P,const xredissentineleventconfig* Config)
+{
+    xrtMutexLock(&P->Gate);
+    if(!P->Connector || !xredisPoolSpMode(P)){
+        xrtMutexUnlock(&P->Gate);
+        xredisPoolReport(XERR_STATE,"pool has no Sentinel maintenance");return XREDIS_ADMISSION_ERROR;
+    }
+    if(P->Info.State!=XREDIS_POOL_OPEN){xrtMutexUnlock(&P->Gate);return XREDIS_ADMISSION_CLOSED;}
+    xredispoolsentinelstate* S=xredisPoolSpState(P);
+    xredispoolsentinelevents* E=&S->Events;
+    if(xrtAtomic32Load(&E->Enabled,XMEMORY_RELAXED)){xrtMutexUnlock(&P->Gate);return XREDIS_ADMISSION_OVERLOADED;}
+    if(!__xredisSentinelEndpointValid((xredissentinelendpoint){S->Config.Discovery.Service,1},S->Config.Discovery.MaxServiceBytes)){
+        xrtMutexUnlock(&P->Gate);
+        xredisPoolReport(XERR_ARGUMENT,"Sentinel event service must be a single token");return XREDIS_ADMISSION_ERROR;
+    }
+    E->Config=*Config;E->Read.Pool=P;E->Read.WakeFlag=&E->Wake;
+    E->Info.Size=sizeof(E->Info);E->Info.Session.Size=sizeof(E->Info.Session);
+    E->Info.LastSeedStatus=XREDIS_SENTINEL_PENDING;
+    bool Posted=xredisPoolWakeLocked(P);
+    if(Posted)xrtAtomic32Store(&E->Enabled,1,XMEMORY_RELEASE);
+    xrtMutexUnlock(&P->Gate);
+    return Posted?XREDIS_ADMISSION_ACCEPTED:XREDIS_ADMISSION_ERROR;
+}
+bool __xredisSentinelPoolEventInfo(xredispool* P,xredissentineleventinfo* I)
+{
+    if(!P || !I || !xrtMemRangeValid(I,sizeof(*I)) || I->Size!=sizeof(*I) || xrtMemRangesOverlap(P,P->StorageBytes,I,sizeof(*I)))
+        return xredisPoolReport(XERR_ARGUMENT,"invalid Sentinel event snapshot");
+    xrtMutexLock(&P->Gate);
+    bool Valid=P->Connector && xredisPoolSpMode(P) && xrtAtomic32Load(&xredisPoolSpState(P)->Events.Enabled,XMEMORY_RELAXED);
+    if(Valid)*I=xredisPoolSpState(P)->Events.Info;
+    xrtMutexUnlock(&P->Gate);
+    return Valid?true:xredisPoolReport(XERR_STATE,"pool has no Sentinel listener");
+}
+#endif
+static void xredisPoolSpDrive(xredispool* P)
+{
+    xredispoolsentinelstate* S=xredisPoolSpState(P);
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_EVENTS)
+    xredisPoolSpEventDrive(P,S);
+#endif
+    xredisPoolSpRefreshDrive(P);
+    if(S->Fencing && !xredisPoolConnectOpen(P)){S->Fencing=false;S->Notify=true;}
+    if(S->Fencing){
+        for(size_t N=0;N<P->Config.WorkItems && S->FenceNext<P->Count;++N){
+            size_t Item=S->FenceNext++;if(Item==S->Keeper)continue;
+            xredispoolslot* Slot=&P->Slots[Item];xredispoolsentinelentry* H=&S->Entries[Item];
+            if(!Slot->Client && !H->Discovery)continue;
+            H->FencePending=true;H->FenceCancel=true;++S->FencePending;
+            if(Slot->Client){xrtMutexLock(&P->Gate);if(!Slot->Dead){Slot->Dead=true;--P->Info.Live;xredisPoolIdleRemove(P,Slot);}xrtMutexUnlock(&P->Gate);xredisClientClose(Slot->Client);}
+            xredisPoolSlotNotify(Slot);
+        }
+        if(S->FenceNext==P->Count && !S->FencePending && !S->Refresh.Discovery){
+            xrtMutexLock(&P->Gate);if(P->Info.State==XREDIS_POOL_OPEN)xrtAtomic32Store(&P->Quota.Closing,0,XMEMORY_RELEASE);xrtMutexUnlock(&P->Gate);
+            S->Fencing=false;S->Notify=true;if(S->Keeper!=SIZE_MAX)xredisPoolSlotNotify(&P->Slots[S->Keeper]);S->Keeper=SIZE_MAX;
+        }
+    }
+    xredisPoolSpNotify(P);
+}
+static void xredisPoolSpDispose(xredispool* P)
+{
+    xredispoolsentinelstate* S=xredisPoolSpState(P);S->Notify=true;xredisPoolSpNotify(P);
+    S->Config.Notify=NULL;S->Config.Discovery.ConnectSeed=NULL;S->Config.Discovery.ConnectMaster=NULL;S->Config.Discovery.Data=NULL;S->Config.Drop=NULL;
+    S->Seeds.Config.Connect=NULL;
+}
+xredisadmission __xredisSentinelPoolRefresh(xredispool* P,int64 Interval)
+{
+    if(!P){xredisPoolReport(XERR_ARGUMENT,"Sentinel refresh pool is NULL");return XREDIS_ADMISSION_ERROR;}
+    xrtMutexLock(&P->Gate);
+    bool Valid=P->Connector && xredisPoolSpMode(P);
+    bool Open=P->Info.State==XREDIS_POOL_OPEN;
+    bool Posted=false;
+    if(Valid && Open){
+        xredispoolsentinelrefresh* R=&xredisPoolSpState(P)->Refresh;
+        bool Requested=R->Requested;int64 Previous=R->Interval;
+        if(Interval<0)R->Requested=true;else R->Interval=Interval;
+        Posted=xredisPoolWakeLocked(P);
+        if(Posted)xrtAtomic32Store(&R->Dirty,1,XMEMORY_RELEASE);
+        else {R->Requested=Requested;R->Interval=Previous;}
+    }
+    xrtMutexUnlock(&P->Gate);
+    if(!Valid){xredisPoolReport(XERR_STATE,"pool has no Sentinel maintenance");return XREDIS_ADMISSION_ERROR;}
+    if(!Open)return XREDIS_ADMISSION_CLOSED;
+    return Posted?XREDIS_ADMISSION_ACCEPTED:XREDIS_ADMISSION_ERROR;
+}
+bool __xredisSentinelPoolInfo(xredispool* P,xredissentinelpoolinfo* I)
+{
+    if(!P || !I || !xrtMemRangeValid(I,sizeof(*I)) || I->Size!=sizeof(*I) || xrtMemRangesOverlap(P,P?P->StorageBytes:0,I,sizeof(*I)))return xredisPoolReport(XERR_ARGUMENT,"invalid Sentinel pool snapshot");
+    xrtMutexLock(&P->Gate);bool Valid=P->Connector && xredisPoolSpMode(P);
+    if(Valid){xredispoolsentinelstate* S=xredisPoolSpState(P);*I=S->Info;I->Connect=S->Base.Info;
+        I->Phase=P->Info.State==XREDIS_POOL_CLOSED?XREDIS_SENTINEL_POOL_CLOSED:P->Info.State==XREDIS_POOL_CLOSING?XREDIS_SENTINEL_POOL_CLOSING:
+            xrtAtomic32Load(&P->Quota.Closing,XMEMORY_ACQUIRE)==2?XREDIS_SENTINEL_POOL_RECONFIGURING:P->Info.Live?XREDIS_SENTINEL_POOL_ONLINE:XREDIS_SENTINEL_POOL_DISCOVERING;}
+    xrtMutexUnlock(&P->Gate);return Valid?true:xredisPoolReport(XERR_STATE,"pool has no Sentinel maintenance");
+}
+bool __xredisSentinelPoolSeedInfo(xredispool* P,xredissentinelpoolseedinfo* I)
+{
+    if(!P || !I || !xrtMemRangeValid(I,sizeof(*I)) || I->Size!=sizeof(*I) || xrtMemRangesOverlap(P,P->StorageBytes,I,sizeof(*I)))
+        return xredisPoolReport(XERR_ARGUMENT,"invalid Sentinel seed snapshot");
+    xrtMutexLock(&P->Gate);
+    bool Valid=P->Connector && xredisPoolSpMode(P) && xredisPoolSpState(P)->Seeds.Entries;
+    if(Valid){
+        xredispoolsentinelstate* S=xredisPoolSpState(P);
+        *I=(xredissentinelpoolseedinfo){sizeof(*I),S->Config.Discovery.SeedCount,S->Seeds.Known,S->Seeds.Config.MaxSeeds};
+    }
+    xrtMutexUnlock(&P->Gate);
+    return Valid?true:xredisPoolReport(XERR_STATE,"pool has no Sentinel seed table");
+}
+static bool xredisPoolSpSeedConfig(const xredissentinelpoolseedconfig* Seeds,const xredissentinelconfig* Discovery,
+    xredispool** Output,xredissentinelpoolseedconfig* K)
+{
+    if(!xrtMemRangeValid(Seeds,sizeof(*Seeds)) || xrtMemRangesOverlap(Seeds,sizeof(*Seeds),Output,sizeof(*Output)))return false;
+    *K=*Seeds;
+    if(K->Size!=sizeof(*K) || !K->Connect || K->MaxSeeds<Discovery->SeedCount || K->MaxSeeds>256 ||
+       !K->MaxPeerRows || K->MaxPeerRows>256 || K->PeerTimeout<=0 || K->PeerTimeout>60000 ||
+       K->PeerRefreshMin<100 || K->PeerRefreshMin>86400000)return false;
+    size_t Bytes=Discovery->SeedCount*sizeof(*K->Seeds);
+    if(!xrtMemRangeValid(K->Seeds,Bytes) || xrtMemRangesOverlap(K->Seeds,Bytes,Output,sizeof(*Output)))return false;
+    for(size_t I=0;I<Discovery->SeedCount;++I){
+        xredissentinelendpoint E=K->Seeds[I];
+        if(!__xredisSentinelEndpointValid(E,Discovery->MaxHostBytes) ||
+           xrtMemRangesOverlap(E.Host.Data,E.Host.Size,Output,sizeof(*Output)) || xredisPoolSpSeedContains(K->Seeds,I,E))return false;
+    }
+    return true;
+}
+xredisadmission __xredisSentinelPoolCreate(xnetengine* Engine,uint64 Affinity,size_t Count,const xredispoolconfig* Config,
+    const xredissentinelpoolconfig* Sentinel,const xredissentinelpoolseedconfig* Seeds,
+    xredissentinelreplicaconnect ConnectReplica,size_t MaxReplicas,xredispool** Output)
+{
+    if(!Engine || !Count || Count>65536 || !Output || !xrtMemRangeValid(Output,sizeof(*Output)) || !Sentinel || !xrtMemRangeValid(Sentinel,sizeof(*Sentinel)) ||
+       xrtMemRangesOverlap(Sentinel,sizeof(*Sentinel),Output,sizeof(*Output)) || (Config && (!xrtMemRangeValid(Config,sizeof(*Config)) || xrtMemRangesOverlap(Config,sizeof(*Config),Output,sizeof(*Output))))){
+        xredisPoolReport(XERR_ARGUMENT,"invalid Sentinel pool config/output");return XREDIS_ADMISSION_ERROR;}
+    xredissentinelpoolconfig K=*Sentinel;xredispoolconfig Options;if(Config)Options=*Config;else xredisPoolConfigInit(&Options);
+    if(ConnectReplica)K.Discovery.ConnectMaster=ConnectReplica;
+    if(K.Size!=sizeof(K) || !xredisPoolBounds(&Options) || !K.MaxConnecting || K.MaxConnecting>65536 || K.Discovery.Timeout>60000 || K.RetryMin<=0 || K.RetryMax<K.RetryMin || K.RetryMax>60000 || !__xredisSentinelConfigValid(&K.Discovery,Seeds!=NULL,Output,sizeof(*Output))){xredisPoolReport(XERR_ARGUMENT,"invalid Sentinel pool bounds");return XREDIS_ADMISSION_ERROR;}
+    xredissentinelpoolseedconfig SeedConfig={0};
+    if(Seeds && !xredisPoolSpSeedConfig(Seeds,&K.Discovery,Output,&SeedConfig)){
+        xredisPoolReport(XERR_ARGUMENT,"invalid Sentinel seed table bounds or addresses");return XREDIS_ADMISSION_ERROR;
+    }
+    size_t Per=sizeof(xredispoolconnectentry)+sizeof(size_t)+sizeof(xredispoolsentinelentry);
+    size_t Tail=sizeof(xredispoolsentinelstate)+K.Discovery.Service.Size+K.Discovery.MaxHostBytes+
+        SeedConfig.MaxSeeds*(sizeof(xredissentinelendpoint)+K.Discovery.MaxHostBytes);
+    if(Count>(SIZE_MAX-Tail)/Per){xredisPoolReport(XERR_RANGE,"Sentinel pool storage overflow");return XREDIS_ADMISSION_ERROR;}
+    xredispool* P=xredisPoolAllocate(Engine,Affinity,Count,&Options);if(!P)return XREDIS_ADMISSION_ERROR;
+    xredispoolsentinelstate* S=xrtCalloc(1,Tail+Count*Per);if(!S){xrtNetEngineUnpin(Engine);xredisPoolRelease(P);return XREDIS_ADMISSION_ERROR;}
+    P->Connector=&S->Base;S->Config=K;S->Keeper=SIZE_MAX;S->ReplicaLimit=MaxReplicas;S->Notify=true;
+    S->Refresh.Pending.Pool=P;S->Refresh.Due=INFINITY;
+    xrtAtomic32Init(&S->Refresh.Dirty,0);
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_EVENTS)
+    xrtAtomic32Init(&S->Events.Enabled,0);
+    xrtAtomic32Init(&S->Events.Wake,0);
+#endif
+    xredisPoolConnectConfigInit(&S->Base.Config);S->Base.Config.Size=0;S->Base.Config.Connect=NULL;S->Base.Config.Drop=K.Drop;S->Base.Config.Data=K.Discovery.Data;
+    S->Base.Config.Protocol=K.Discovery.Protocol;S->Base.Config.MaxConnecting=K.MaxConnecting<Count?K.MaxConnecting:Count;S->Base.Config.AttemptTimeout=K.Discovery.Timeout;S->Base.Config.RetryMin=K.RetryMin;S->Base.Config.RetryMax=K.RetryMax;
+    S->Base.Entries=(xredispoolconnectentry*)(S+1);S->Base.Heap=(size_t*)(S->Base.Entries+Count);S->Entries=(xredispoolsentinelentry*)(S->Base.Heap+Count);
+    S->Service=(unsigned char*)(S->Entries+Count);
+    if(Seeds){
+        S->Seeds.Config=SeedConfig;
+        S->Seeds.Entries=(xredissentinelendpoint*)S->Service;
+        S->Seeds.Hosts=(unsigned char*)(S->Seeds.Entries+SeedConfig.MaxSeeds);
+        S->Seeds.Known=K.Discovery.SeedCount;
+        S->Service=S->Seeds.Hosts+SeedConfig.MaxSeeds*K.Discovery.MaxHostBytes;
+        S->Seeds.Config.Seeds=S->Seeds.Entries;
+        for(size_t I=0;I<S->Seeds.Known;++I)xredisPoolSpSeedCopy(&S->Seeds.Entries[I],
+            S->Seeds.Hosts+I*K.Discovery.MaxHostBytes,SeedConfig.Seeds[I]);
+    }
+    S->Host=S->Service+K.Discovery.Service.Size;memcpy(S->Service,K.Discovery.Service.Data,K.Discovery.Service.Size);S->Config.Discovery.Service=(xbytesview){S->Service,K.Discovery.Service.Size};
+    S->Info.Size=sizeof(S->Info);S->Info.PreferredSeed=K.Discovery.PreferredSeed;S->Base.Info.Size=sizeof(S->Base.Info);S->Base.Info.Waiting=Count;
+    S->Base.Head=S->Base.Tail=SIZE_MAX;S->Base.HeapCount=Count;S->Base.Random=((uint64)(xrtTimer()*1000000.0)^(uint64)(uintptr_t)P)|1u;
+    double Now=xrtTimer();for(size_t Item=0;Item<Count;++Item){xredisPoolSlotInit(P,&P->Slots[Item]);P->Slots[Item].Dead=true;
+        S->Entries[Item].Pending.Pool=P;S->Entries[Item].Pending.Slot=&P->Slots[Item];
+        S->Base.Entries[Item].Heap=S->Base.Heap[Item]=Item;S->Base.Entries[Item].Due=Now;S->Base.Entries[Item].Previous=S->Base.Entries[Item].Next=SIZE_MAX;}
+    P->InitializeNext=Count;xredisPoolRef(P);xrtMutexLock(&P->Gate);P->Initialized=true;*Output=P;xredisPoolWakeLocked(P);xrtMutexUnlock(&P->Gate);return XREDIS_ADMISSION_ACCEPTED;
+}
+#endif
+
 static void xredisPoolConnectDrive(xredispool* Pool)
 {
     xredispoolconnectstate* State = Pool->Connector;
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_POOL)
+    if(xredisPoolSpMode(Pool))xredisPoolSpDrive(Pool);
+#endif
     /* Move due retries out of the heap even when concurrency is full. They
      * must never hide a later connecting attempt's hard timeout at the root. */
     for (size_t Count = 0; Count < Pool->Config.WorkItems && State->HeapCount; ++Count) {
@@ -910,13 +1722,24 @@ static void xredisPoolConnectDrive(xredispool* Pool)
     }
     for (size_t Count = 0; Count < Pool->Config.WorkItems && State->Head != SIZE_MAX; ++Count) {
         if (State->Info.Connecting >= State->Config.MaxConnecting || !xredisPoolConnectOpen(Pool)) break;
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_POOL)
+        if(!xredisPoolSpAllowed(Pool))break;
+#endif
         size_t Item = State->Head; xredisPoolConnectQueueRemove(State, Item); xredisPoolConnectStart(Pool, Item);
     }
 }
 static bool xredisPoolConnectMore(xredispool* Pool)
 {
     xredispoolconnectstate* State = Pool->Connector;
-    return (xredisPoolConnectOpen(Pool) && State->Head != SIZE_MAX && State->Info.Connecting < State->Config.MaxConnecting) ||
+    return
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_POOL)
+        xredisPoolSpMore(Pool) ||
+#endif
+        (xredisPoolConnectOpen(Pool)
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_POOL)
+        && xredisPoolSpAllowed(Pool)
+#endif
+        && State->Head != SIZE_MAX && State->Info.Connecting < State->Config.MaxConnecting) ||
         (State->HeapCount && State->Entries[State->Heap[0]].Due <= xrtTimer());
 }
 static void xredisPoolConnectTimer(xnetworker* Worker, uint64 Id, xnetresult Result, ptr Data)
@@ -930,6 +1753,12 @@ static void xredisPoolConnectSchedule(xredispool* Pool)
 {
     xredispoolconnectstate* State = Pool->Connector;
     double Deadline = State->HeapCount ? State->Entries[State->Heap[0]].Due : INFINITY;
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_POOL)
+    if(xredisPoolSpMode(Pool))Deadline=fmin(Deadline,xredisPoolSpRefreshDue(Pool));
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_EVENTS)
+    if(xredisPoolSpMode(Pool))Deadline=fmin(Deadline,xredisPoolSpEventDue(Pool));
+#endif
+#endif
     if (Deadline <= xrtTimer()) Deadline = INFINITY; /* Bounded post continuation handles due work. */
     if (State->Timer && State->TimerDeadline == Deadline) return;
     if (State->Timer) xrtNetEngineTimerCancelCurrent(Pool->Engine, State->Timer);
@@ -938,25 +1767,37 @@ static void xredisPoolConnectSchedule(xredispool* Pool)
     State->Timer = __xrtNetEngineSchedule(Pool->Engine, xrtNetWorkerIndex(Pool->Worker), Deadline, xredisPoolConnectTimer, Pool);
     if (!State->Timer) {
         xrtMutexLock(&Pool->Gate); State->Info.LastFailure = XREDIS_REQUEST_MEMORY; xrtMutexUnlock(&Pool->Gate);
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_POOL)
+        if(xredisPoolSpMode(Pool))xredisPoolSpFailure(Pool,XREDIS_SENTINEL_MEMORY);
+#endif
         xredisPoolClose(Pool); xredisPoolRelease(Pool);
     }
 }
 static bool xredisPoolConnectDispose(xredispool* Pool)
 {
     xredispoolconnectstate* State = Pool->Connector; if (State->Timer) return false;
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_POOL)
+    if(xredisPoolSpMode(Pool) && xredisPoolSpState(Pool)->Refresh.Discovery)return false;
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_EVENTS)
+    if(xredisPoolSpMode(Pool) && xredisPoolSpState(Pool)->Events.Session)return false;
+#endif
+#endif
     xrtMutexLock(&Pool->Gate);
     bool Ready = !Pool->Queued && !Pool->Info.Pending && !Pool->Info.Leased && Pool->Retired == Pool->Count && !Pool->LeaseEvents && !Pool->SlotEvents;
     xrtMutexUnlock(&Pool->Gate);
     if (!Ready) return false;
     if (!State->Dropped) {
+#if defined(XREDIS_FEATURE_XREDIS_SENTINEL_POOL)
+        if(xredisPoolSpMode(Pool))xredisPoolSpDispose(Pool);
+#endif
         xredispoolconnectdrop Drop = State->Config.Drop; ptr Data = State->Config.Data;
         State->Dropped = true; State->Config.Connect = NULL; State->Config.Drop = NULL; State->Config.Data = NULL;
         if (Drop) Drop(Data);
     }
     return true;
 }
-xredisadmission __xredisPoolConnect(xnetengine* Engine, uint64 Affinity, size_t Count,
-    const xredispoolconfig* Config, const xredispoolconnectconfig* Connect, xredispool** Result)
+static xredisadmission xredisPoolConnectAdmit(xnetengine* Engine, uint64 Affinity, size_t Count,
+    const xredispoolconfig* Config, const xredispoolconnectconfig* Connect, xredispool** Result, bool Shared)
 {
     if (!Engine || !Count || Count > 65536 || !Result || !xrtMemRangeValid(Result, sizeof(*Result)) ||
         !Connect || !xrtMemRangeValid(Connect, sizeof(*Connect)) || xrtMemRangesOverlap(Connect, sizeof(*Connect), Result, sizeof(*Result)) ||
@@ -970,6 +1811,7 @@ xredisadmission __xredisPoolConnect(xnetengine* Engine, uint64 Affinity, size_t 
         Factory.AttemptTimeout <= 0 || Factory.AttemptTimeout > 60000 || Factory.RetryMin <= 0 || Factory.RetryMax < Factory.RetryMin || Factory.RetryMax > 60000) {
         xredisPoolReport(XERR_ARGUMENT, "invalid automatic pool bounds/factory/profile"); return XREDIS_ADMISSION_ERROR;
     }
+    if (Shared) Options.LeaseTimeout = 0;
     xredispool* Pool = xredisPoolAllocate(Engine, Affinity, Count, &Options); if (!Pool) return XREDIS_ADMISSION_ERROR;
     size_t Bytes = sizeof(xredispoolconnectstate) + Count * (sizeof(xredispoolconnectentry) + sizeof(size_t));
     xredispoolconnectstate* State = Pool->Connector = xrtCalloc(1, Bytes);
@@ -989,6 +1831,14 @@ xredisadmission __xredisPoolConnect(xnetengine* Engine, uint64 Affinity, size_t 
     xrtMutexLock(&Pool->Gate); Pool->Initialized = true; *Result = Pool; xredisPoolWakeLocked(Pool); xrtMutexUnlock(&Pool->Gate);
     return XREDIS_ADMISSION_ACCEPTED;
 }
+xredisadmission __xredisPoolConnect(xnetengine* Engine, uint64 Affinity, size_t Count,
+    const xredispoolconfig* Config, const xredispoolconnectconfig* Connect, xredispool** Result)
+{ return xredisPoolConnectAdmit(Engine, Affinity, Count, Config, Connect, Result, false); }
+#if defined(XREDIS_FEATURE_XREDIS_POOL_SHARED_CONNECT)
+xredisadmission __xredisSharedPoolConnect(xnetengine* Engine, uint64 Affinity, size_t Count,
+    const xredispoolconfig* Config, const xredispoolconnectconfig* Connect, xredispool** Result)
+{ return xredisPoolConnectAdmit(Engine, Affinity, Count, Config, Connect, Result, true); }
+#endif
 bool __xredisPoolConnectInfo(xredispool* Pool, xredispoolconnectinfo* Info)
 {
     if (!Pool || !Info || !xrtMemRangeValid(Info, sizeof(*Info)) || Info->Size != sizeof(*Info) ||

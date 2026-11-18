@@ -16,7 +16,8 @@ typedef enum xcronrunresult {XCRON_RUN_SUCCEEDED=0,XCRON_RUN_FAILED,XCRON_RUN_CA
 typedef enum xcronschedulererror {
     XCRON_SCHEDULER_OK=0,XCRON_SCHEDULER_ARGUMENT=4001,XCRON_SCHEDULER_LIMIT,
     XCRON_SCHEDULER_MEMORY,XCRON_SCHEDULER_CLOSED,XCRON_SCHEDULER_STALE,
-    XCRON_SCHEDULER_BUSY,XCRON_SCHEDULER_CLOCK,XCRON_SCHEDULER_CALCULATION
+    XCRON_SCHEDULER_BUSY,XCRON_SCHEDULER_CLOCK,XCRON_SCHEDULER_CALCULATION,
+    XCRON_SCHEDULER_CHECKPOINT,XCRON_SCHEDULER_CHECKPOINT_MISMATCH
 } xcronschedulererror;
 typedef struct xcronschedulerissue {xcronschedulererror Code;xcronzonedissue Zoned;} xcronschedulerissue;
 typedef struct xcronschedulerconfig {
@@ -134,6 +135,11 @@ XCRON_API bool xcronSchedulerPollBudgeted(xcronscheduler* Scheduler,xcronclock N
  * Worker threads must deliver completions to the serialized scheduler owner.
  * Execution outcomes are counted; they do not implicitly stop future triggers. */
 XCRON_API bool xcronSchedulerComplete(xcronscheduler* Scheduler,xcronrunid Id,xcronrunresult Result,xcronschedulerissue* Issue);
+/* Hold or release future lease publication for a live job. Existing leases
+ * and recurrence searches continue. A paused job preserves its cursor and
+ * accumulates no skips until resume makes its normal policies applicable.
+ * Terminal jobs are unaffected. Closed or stale IDs fail. */
+XCRON_API bool xcronSchedulerSetPaused(xcronscheduler* Scheduler,xcronjobid Id,bool Paused,xcronschedulerissue* Issue);
 /* Cancels future dispatch only. Live leases remain valid and retain job storage.
  * Cancel is idempotent while the job exists; an already terminal reason remains. */
 XCRON_API bool xcronSchedulerCancel(xcronscheduler* Scheduler,xcronjobid Id,xcronschedulerissue* Issue);

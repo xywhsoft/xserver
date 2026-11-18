@@ -3783,6 +3783,418 @@
           }
         }
       ]
+    },
+    {
+      "name": "xcron_tzdb_file_1_reload",
+      "system": "tzdb_file",
+      "description": "Anchored-root TZif reload with warm filesystem cache: resolve/open/stat/read/close, decode/copy, atomic CAS publication and retired snapshot release; setup and final lookup validation excluded; no disk-cold or production qualification.",
+      "benchmarks": [
+        {
+          "name": "xcron_tzdb_file_1_reload",
+          "source": "extlibs/xcron/bench/bench_tzdb_file.c",
+          "suite": "xcron_tzdb_file",
+          "args": [
+            "512",
+            "1"
+          ],
+          "smoke_args": [
+            "8",
+            "1"
+          ],
+          "metrics": {
+            "reloads_per_sec": {
+              "direction": "higher",
+              "unit": "reloads/s"
+            },
+            "reload_p50_us": {
+              "direction": "lower",
+              "unit": "us"
+            },
+            "reload_p95_us": {
+              "direction": "lower",
+              "unit": "us"
+            },
+            "reload_p99_us": {
+              "direction": "lower",
+              "unit": "us"
+            },
+            "reload_p999_us": {
+              "direction": "lower",
+              "unit": "us"
+            }
+          },
+          "facts": [
+            "reloads",
+            "names",
+            "input_bytes",
+            "final_revision",
+            "checksum"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "xcron_tzdb_file_16_reload",
+      "system": "tzdb_file",
+      "description": "Anchored-root TZif reload with warm filesystem cache: resolve/open/stat/read/close, decode/copy, atomic CAS publication and retired snapshot release; setup and final lookup validation excluded; no disk-cold or production qualification.",
+      "benchmarks": [
+        {
+          "name": "xcron_tzdb_file_16_reload",
+          "source": "extlibs/xcron/bench/bench_tzdb_file.c",
+          "suite": "xcron_tzdb_file",
+          "args": [
+            "256",
+            "16"
+          ],
+          "smoke_args": [
+            "8",
+            "16"
+          ],
+          "metrics": {
+            "reloads_per_sec": {
+              "direction": "higher",
+              "unit": "reloads/s"
+            },
+            "reload_p50_us": {
+              "direction": "lower",
+              "unit": "us"
+            },
+            "reload_p95_us": {
+              "direction": "lower",
+              "unit": "us"
+            },
+            "reload_p99_us": {
+              "direction": "lower",
+              "unit": "us"
+            },
+            "reload_p999_us": {
+              "direction": "lower",
+              "unit": "us"
+            }
+          },
+          "facts": [
+            "reloads",
+            "names",
+            "input_bytes",
+            "final_revision",
+            "checksum"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "xcron_checkpoint",
+      "system": "checkpoint",
+      "description": "Quiescent in-memory actual scheduler save and restore/cancel/reap, one owner and fixed UTC job",
+      "benchmarks": [
+        {
+          "name": "xcron_checkpoint",
+          "source": "extlibs/xcron/bench/bench_checkpoint.c",
+          "suite": "xcron_checkpoint",
+          "args": [
+            "150000"
+          ],
+          "smoke_args": [
+            "1000"
+          ],
+          "metrics": {
+            "save_records_per_sec": {
+              "direction": "higher",
+              "unit": "records/s"
+            },
+            "restore_reap_records_per_sec": {
+              "direction": "higher",
+              "unit": "records/s"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "xcron_checkpoint_store",
+      "system": "checkpoint_store",
+      "description": "One synchronous commit per sample on one rooted alternating-slot file; includes native file flush",
+      "benchmarks": [
+        {
+          "name": "xcron_checkpoint_store",
+          "source": "extlibs/xcron/bench/bench_checkpoint_store.c",
+          "suite": "xcron_checkpoint_store",
+          "args": [
+            "1000"
+          ],
+          "smoke_args": [
+            "24"
+          ],
+          "metrics": {
+            "commits_per_sec": {
+              "direction": "higher",
+              "unit": "commits/s"
+            },
+            "commit_p50_us": {
+              "direction": "lower",
+              "unit": "us"
+            },
+            "commit_p99_us": {
+              "direction": "lower",
+              "unit": "us"
+            },
+            "commit_p999_us": {
+              "direction": "lower",
+              "unit": "us"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "xcron_service_checkpoint",
+      "system": "service",
+      "description": "Serial caller-to-owner checkpoint capture round trip for one quiescent UTC job",
+      "benchmarks": [
+        {
+          "name": "xcron_service_checkpoint",
+          "source": "extlibs/xcron/bench/bench_service_checkpoint.c",
+          "suite": "xcron_service_checkpoint",
+          "args": [
+            "10000"
+          ],
+          "smoke_args": [
+            "1000"
+          ],
+          "metrics": {
+            "captures_per_sec": {
+              "direction": "higher",
+              "unit": "captures/s"
+            },
+            "capture_p50_us": {
+              "direction": "lower",
+              "unit": "us"
+            },
+            "capture_p95_us": {
+              "direction": "lower",
+              "unit": "us"
+            },
+            "capture_p99_us": {
+              "direction": "lower",
+              "unit": "us"
+            },
+            "capture_p999_us": {
+              "direction": "lower",
+              "unit": "us"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "xcron_service_pause",
+      "system": "service",
+      "description": "Serial alternating pause/resume command round trips on a future UTC job",
+      "benchmarks": [
+        {
+          "name": "xcron_service_pause",
+          "source": "extlibs/xcron/bench/bench_service_checkpoint.c",
+          "suite": "xcron_service_checkpoint",
+          "args": [
+            "10000",
+            "pause"
+          ],
+          "smoke_args": [
+            "1000",
+            "pause"
+          ],
+          "metrics": {
+            "pauses_per_sec": {
+              "direction": "higher",
+              "unit": "commands/s"
+            },
+            "pause_p50_us": {
+              "direction": "lower",
+              "unit": "us"
+            },
+            "pause_p95_us": {
+              "direction": "lower",
+              "unit": "us"
+            },
+            "pause_p99_us": {
+              "direction": "lower",
+              "unit": "us"
+            },
+            "pause_p999_us": {
+              "direction": "lower",
+              "unit": "us"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "xcron_checkpoint_group_1",
+      "system": "checkpoint_group",
+      "description": "Replace a 1-record group in one write and native flush",
+      "benchmarks": [
+        {
+          "name": "xcron_checkpoint_group_1",
+          "source": "extlibs/xcron/bench/bench_checkpoint_group.c",
+          "suite": "xcron_checkpoint_group",
+          "args": [
+            "200",
+            "1"
+          ],
+          "smoke_args": [
+            "8",
+            "1"
+          ],
+          "metrics": {
+            "groups_per_sec": {
+              "direction": "higher",
+              "unit": "groups/s"
+            },
+            "records_per_sec": {
+              "direction": "higher",
+              "unit": "records/s"
+            },
+            "group_p50_us": {
+              "direction": "lower",
+              "unit": "us"
+            },
+            "group_p95_us": {
+              "direction": "lower",
+              "unit": "us"
+            },
+            "group_p99_us": {
+              "direction": "lower",
+              "unit": "us"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "xcron_checkpoint_group_64",
+      "system": "checkpoint_group",
+      "description": "Replace a 64-record group in one write and native flush",
+      "benchmarks": [
+        {
+          "name": "xcron_checkpoint_group_64",
+          "source": "extlibs/xcron/bench/bench_checkpoint_group.c",
+          "suite": "xcron_checkpoint_group",
+          "args": [
+            "200",
+            "64"
+          ],
+          "smoke_args": [
+            "8",
+            "64"
+          ],
+          "metrics": {
+            "groups_per_sec": {
+              "direction": "higher",
+              "unit": "groups/s"
+            },
+            "records_per_sec": {
+              "direction": "higher",
+              "unit": "records/s"
+            },
+            "group_p50_us": {
+              "direction": "lower",
+              "unit": "us"
+            },
+            "group_p95_us": {
+              "direction": "lower",
+              "unit": "us"
+            },
+            "group_p99_us": {
+              "direction": "lower",
+              "unit": "us"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "xcron_service_checkpoint_start_1",
+      "system": "service",
+      "description": "Whole-group live service startup for 1 paused jobs using a borrowed worker pool",
+      "benchmarks": [
+        {
+          "name": "xcron_service_checkpoint_start_1",
+          "source": "extlibs/xcron/bench/bench_service_checkpoint_group.c",
+          "suite": "xcron_service_checkpoint",
+          "args": [
+            "250",
+            "1"
+          ],
+          "smoke_args": [
+            "10",
+            "1"
+          ],
+          "metrics": {
+            "starts_per_sec": {
+              "direction": "higher",
+              "unit": "starts/s"
+            },
+            "restored_per_sec": {
+              "direction": "higher",
+              "unit": "jobs/s"
+            },
+            "start_p50_us": {
+              "direction": "lower",
+              "unit": "us"
+            },
+            "start_p95_us": {
+              "direction": "lower",
+              "unit": "us"
+            },
+            "start_p99_us": {
+              "direction": "lower",
+              "unit": "us"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "xcron_service_checkpoint_start_64",
+      "system": "service",
+      "description": "Whole-group live service startup for 64 paused jobs using a borrowed worker pool",
+      "benchmarks": [
+        {
+          "name": "xcron_service_checkpoint_start_64",
+          "source": "extlibs/xcron/bench/bench_service_checkpoint_group.c",
+          "suite": "xcron_service_checkpoint",
+          "args": [
+            "250",
+            "64"
+          ],
+          "smoke_args": [
+            "10",
+            "64"
+          ],
+          "metrics": {
+            "starts_per_sec": {
+              "direction": "higher",
+              "unit": "starts/s"
+            },
+            "restored_per_sec": {
+              "direction": "higher",
+              "unit": "jobs/s"
+            },
+            "start_p50_us": {
+              "direction": "lower",
+              "unit": "us"
+            },
+            "start_p95_us": {
+              "direction": "lower",
+              "unit": "us"
+            },
+            "start_p99_us": {
+              "direction": "lower",
+              "unit": "us"
+            }
+          }
+        }
+      ]
     }
   ]
 }

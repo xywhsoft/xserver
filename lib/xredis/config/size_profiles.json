@@ -176,6 +176,348 @@
         "xrtTask",
         "xrtProcess"
       ]
+    },
+    {
+      "name": "xredis_tracking",
+      "system": "client",
+      "suite": "xredis_tracking",
+      "description": "Existing Client with optional bounded observation ring, ordered results, Tracking configuration and immutable event decoder",
+      "forbid_symbols": [
+        "xrtTls",
+        "xrtHttp",
+        "xrtWebSocket",
+        "xrtNetDial",
+        "xrtNetResolver",
+        "xrtNetResolveOp",
+        "xredisClientDial",
+        "xrtTask"
+      ]
+    },
+    {
+      "name": "xredis_pubsub",
+      "system": "pubsub",
+      "suite": "xredis_pubsub",
+      "description": "Standalone Pub/Sub wire views/commands with no Client or network runtime",
+      "forbid_symbols": [
+        "xredisClient",
+        "xrtNet",
+        "xrtTls",
+        "xrtHttp",
+        "xrtWebSocket",
+        "xrtTask",
+        "xrtProcess"
+      ]
+    },
+    {
+      "name": "xredis_subscriber",
+      "system": "subscriber",
+      "suite": "xredis_subscriber",
+      "description": "Dedicated native Pub/Sub on existing numeric TCP Client; TLS/DNS/HTTP/WebSocket/task/process excluded",
+      "forbid_symbols": [
+        "xrtTls",
+        "xrtNetDial",
+        "xrtNetResolver",
+        "xredisClientDial",
+        "xrtHttp",
+        "xrtWebSocket",
+        "xrtTask",
+        "xrtProcess"
+      ]
+    },
+    {
+      "name": "xredis_subscriber_notify",
+      "system": "subscriber",
+      "suite": "xredis_subscriber_notify",
+      "description": "Optional shared readability and batch transfers on native Subscriber, excluding TLS/DNS/HTTP/WebSocket/task/process",
+      "forbid_symbols": [
+        "xrtTls",
+        "xrtNetDial",
+        "xrtNetResolver",
+        "xredisClientDial",
+        "xrtHttp",
+        "xrtWebSocket",
+        "xrtTask",
+        "xrtProcess"
+      ]
+    },
+    {
+      "name": "xredis_subscriptions",
+      "system": "subscriptions",
+      "suite": "xredis_subscriptions",
+      "description": "Desired snapshots and bounded native recovery; excludes optional TLS/DNS/HTTP/WebSocket/task/process",
+      "forbid_symbols": [
+        "xrtTls",
+        "xrtNetDial",
+        "xrtNetResolver",
+        "xredisClientDial",
+        "xrtHttp",
+        "xrtWebSocket",
+        "xrtTask",
+        "xrtProcess"
+      ]
+    },
+    {
+      "name": "xredis_subscription_session",
+      "system": "subscription_session",
+      "suite": "xredis_subscription_session",
+      "description": "Autonomous subscriber controller with native Engine posts/timer, no extra runtime; optional transport modules excluded",
+      "forbid_symbols": [
+        "xrtTls",
+        "xrtNetDial",
+        "xrtNetResolver",
+        "xredisClientDial",
+        "xrtHttp",
+        "xrtWebSocket",
+        "xrtTask",
+        "xrtProcess"
+      ]
+    },
+    {
+      "name": "xredis_role",
+      "system": "reply",
+      "suite": "xredis_role",
+      "description": "Immutable ROLE validation/cursors over reply owner; excludes networking, threads and executors",
+      "forbid_symbols": [
+        "xredisClient",
+        "xrtNet",
+        "xrtTcp",
+        "xrtThread",
+        "xrtTask",
+        "xrtFuture"
+      ]
+    },
+    {
+      "name": "xredis_role_client",
+      "system": "client",
+      "suite": "xredis_role_client",
+      "description": "Optional role-gated numeric initialization over existing client/reply owner; excludes TLS/Dial/HTTP/tasks",
+      "forbid_symbols": [
+        "xrtTls",
+        "xrtHttp",
+        "xrtWebSocket",
+        "xrtNetResolver",
+        "xrtTask"
+      ]
+    },
+    {
+      "name": "xredis_sentinel",
+      "system": "sentinel",
+      "suite": "xredis_sentinel",
+      "description": "Caller-driven discovery with native TCP/replies; excludes own timer/runtime, TLS/DNS/HTTP/tasks",
+      "forbid_symbols": [
+        "xrtTls",
+        "xrtHttp",
+        "xrtWebSocket",
+        "xrtNetResolver",
+        "xrtTask"
+      ]
+    },
+    {
+      "name": "xredis_sentinel_pool",
+      "system": "sentinel_pool",
+      "suite": "xredis_sentinel_pool",
+      "description": "Native pool Sentinel maintenance without TLS/DNS/HTTP/tasks",
+      "forbid_symbols": [
+        "xrtTls",
+        "xrtHttp",
+        "xrtWebSocket",
+        "xrtNetResolver",
+        "xrtTask"
+      ]
+    },
+    {
+      "name": "xredis_cluster_topology",
+      "system": "cluster_topology",
+      "suite": "xredis_cluster_topology",
+      "description": "Immutable Cluster routing without networking, threads, futures or runtime",
+      "forbid_symbols": [
+        "xredisClient",
+        "xrtNet",
+        "xrtTcp",
+        "xrtThread",
+        "xrtTask",
+        "xrtFuture"
+      ]
+    },
+    {
+      "name": "xredis_pool_asking",
+      "system": "pool_asking",
+      "suite": "xredis_pool_asking",
+      "description": "Native pooled ASKING groups without TLS/DNS/HTTP/tasks or an extra runtime",
+      "forbid_symbols": [
+        "xrtTls",
+        "xrtNetDial",
+        "xrtNetResolver",
+        "xrtHttp",
+        "xrtWebSocket",
+        "xrtTask",
+        "xrtProcess"
+      ]
+    },
+    {
+      "name": "xredis_pool_shared",
+      "system": "pool_shared",
+      "suite": "xredis_pool_shared",
+      "description": "Fixed native multiplexed pools without TLS/DNS/HTTP/tasks",
+      "forbid_symbols": [
+        "xrtTls",
+        "xrtNetResolver",
+        "xrtNetDial",
+        "xrtHttp",
+        "xrtWebSocket",
+        "xrtTask",
+        "xrtProcess"
+      ]
+    },
+    {
+      "name": "xredis_pool_shared_connect",
+      "system": "pool_shared_connect",
+      "suite": "xredis_pool_shared_connect",
+      "description": "Native shared pools and bounded reconnect without TLS/DNS/HTTP/tasks",
+      "forbid_symbols": [
+        "xrtTls",
+        "xrtNetResolver",
+        "xrtNetDial",
+        "xrtHttp",
+        "xrtWebSocket",
+        "xrtTask",
+        "xrtProcess"
+      ]
+    },
+    {
+      "name": "xredis_pool_shared_asking",
+      "system": "pool_shared_asking",
+      "suite": "xredis_pool_shared_asking",
+      "description": "Native shared ASKING groups without TLS/DNS/HTTP/tasks",
+      "forbid_symbols": [
+        "xrtTls",
+        "xrtNetResolver",
+        "xrtNetDial",
+        "xrtHttp",
+        "xrtWebSocket",
+        "xrtTask",
+        "xrtProcess"
+      ]
+    },
+    {
+      "name": "xredis_cluster_route",
+      "system": "cluster_route",
+      "suite": "xredis_cluster_route",
+      "description": "Bounded Cluster route controller using existing native shared I/O; no TLS/DNS/HTTP/tasks",
+      "forbid_symbols": [
+        "xrtTls",
+        "xrtNetResolver",
+        "xrtNetDial",
+        "xrtHttp",
+        "xrtWebSocket",
+        "xrtTask",
+        "xrtProcess"
+      ]
+    },
+    {
+      "name": "xredis_cluster_nodes",
+      "system": "cluster_nodes",
+      "suite": "xredis_cluster_nodes",
+      "description": "Bounded maintained Cluster node cache; no TLS/DNS/HTTP/tasks",
+      "forbid_symbols": [
+        "xrtTls",
+        "xrtNetResolver",
+        "xrtNetDial",
+        "xrtHttp",
+        "xrtWebSocket",
+        "xrtTask",
+        "xrtProcess"
+      ]
+    },
+    {
+      "name": "xredis_cluster_refresh",
+      "system": "cluster_refresh",
+      "suite": "xredis_cluster_refresh",
+      "description": "Coalesced metadata refresh and immutable topology views; no TLS/DNS/HTTP/tasks",
+      "forbid_symbols": [
+        "xrtTls",
+        "xrtNetResolver",
+        "xrtNetDial",
+        "xrtHttp",
+        "xrtWebSocket",
+        "xrtTask",
+        "xrtProcess"
+      ]
+    },
+    {
+      "name": "xredis_cluster_client",
+      "system": "cluster_client",
+      "suite": "xredis_cluster_client",
+      "description": "Asynchronous Cluster client, coalesced refresh and bounded queues; no TLS/DNS/HTTP/tasks",
+      "forbid_symbols": [
+        "xrtTls",
+        "xrtNetResolver",
+        "xrtNetDial",
+        "xrtHttp",
+        "xrtWebSocket",
+        "xrtTask",
+        "xrtProcess"
+      ]
+    },
+    {
+      "name": "xredis_command_keys",
+      "system": "command_keys",
+      "suite": "xredis_command_keys",
+      "description": "Immutable command key metadata and CRC only; no I/O, workers, TLS or topology",
+      "forbid_symbols": [
+        "xrtNet",
+        "xrtTls",
+        "xrtHttp",
+        "xrtWs",
+        "xrtTask",
+        "xrtProcess",
+        "xredisClusterTopology"
+      ]
+    },
+    {
+      "name": "xredis_cluster_command",
+      "system": "cluster_client",
+      "suite": "xredis_cluster_command",
+      "description": "Metadata-checked Cluster calls on existing native client; no DNS/TLS/HTTP/task process",
+      "forbid_symbols": [
+        "xrtTls",
+        "xrtNetResolver",
+        "xrtNetDial",
+        "xrtHttp",
+        "xrtWs",
+        "xrtTask",
+        "xrtProcess"
+      ]
+    },
+    {
+      "name": "xredis_cluster_client_sync",
+      "system": "cluster_client",
+      "suite": "xredis_cluster_client_sync",
+      "description": "Synchronous native Cluster facade; no additional runtime, DNS/TLS/HTTP/task/process",
+      "forbid_symbols": [
+        "xrtTls",
+        "xrtNetResolver",
+        "xrtNetDial",
+        "xrtHttp",
+        "xrtWs",
+        "xrtTask",
+        "xrtProcess"
+      ]
+    },
+    {
+      "name": "xredis_cluster_command_sync",
+      "system": "cluster_client",
+      "suite": "xredis_cluster_command_sync",
+      "description": "Synchronous native Cluster facade; no additional runtime, DNS/TLS/HTTP/task/process",
+      "forbid_symbols": [
+        "xrtTls",
+        "xrtNetResolver",
+        "xrtNetDial",
+        "xrtHttp",
+        "xrtWs",
+        "xrtTask",
+        "xrtProcess"
+      ]
     }
   ]
 }

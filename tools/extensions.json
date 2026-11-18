@@ -2345,6 +2345,9 @@
   "symbol_macro": "XS_XCRON_SYMBOL",
   "headers": {
    "xcron/calendar.h": "lib/xcron/include/xcron/calendar.h",
+   "xcron/checkpoint.h": "lib/xcron/include/xcron/checkpoint.h",
+   "xcron/checkpoint_group.h": "lib/xcron/include/xcron/checkpoint_group.h",
+   "xcron/checkpoint_store.h": "lib/xcron/include/xcron/checkpoint_store.h",
    "xcron/delivery.h": "lib/xcron/include/xcron/delivery.h",
    "xcron/executor.h": "lib/xcron/include/xcron/executor.h",
    "xcron/executor_selected.h": "lib/xcron/include/xcron/executor_selected.h",
@@ -2355,6 +2358,7 @@
    "xcron/scheduler.h": "lib/xcron/include/xcron/scheduler.h",
    "xcron/scheduler_selected.h": "lib/xcron/include/xcron/scheduler_selected.h",
    "xcron/service.h": "lib/xcron/include/xcron/service.h",
+   "xcron/service_checkpoint.h": "lib/xcron/include/xcron/service_checkpoint.h",
    "xcron/service_selected.h": "lib/xcron/include/xcron/service_selected.h",
    "xcron/timezone.h": "lib/xcron/include/xcron/timezone.h",
    "xcron/tzdb.h": "lib/xcron/include/xcron/tzdb.h",
@@ -2365,6 +2369,15 @@
   "sources": [
    {
     "path": "lib/xcron/src/calendar/calendar.c"
+   },
+   {
+    "path": "lib/xcron/src/checkpoint/checkpoint.c"
+   },
+   {
+    "path": "lib/xcron/src/checkpoint_group/checkpoint_group.c"
+   },
+   {
+    "path": "lib/xcron/src/checkpoint_store/checkpoint_store.c"
    },
    {
     "path": "lib/xcron/src/delivery/delivery.c"
@@ -2408,6 +2421,9 @@
    "XCRON_MODULE_ALL",
    "XCRON_FEATURE_XCRON",
    "XCRON_FEATURE_XCRON_CALENDAR",
+   "XCRON_FEATURE_XCRON_CHECKPOINT",
+   "XCRON_FEATURE_XCRON_CHECKPOINT_GROUP",
+   "XCRON_FEATURE_XCRON_CHECKPOINT_STORE",
    "XCRON_FEATURE_XCRON_DELIVERY",
    "XCRON_FEATURE_XCRON_EXECUTOR",
    "XCRON_FEATURE_XCRON_EXECUTOR_SELECTED",
@@ -2416,6 +2432,7 @@
    "XCRON_FEATURE_XCRON_SCHEDULER",
    "XCRON_FEATURE_XCRON_SCHEDULER_SELECTED",
    "XCRON_FEATURE_XCRON_SERVICE",
+   "XCRON_FEATURE_XCRON_SERVICE_CHECKPOINT",
    "XCRON_FEATURE_XCRON_SERVICE_SELECTED",
    "XCRON_FEATURE_XCRON_TIMEZONE",
    "XCRON_FEATURE_XCRON_TZDB",
@@ -2433,19 +2450,64 @@
   "symbol_macro": "XS_XMQTT_SYMBOL",
   "headers": {
    "xmqtt/client.h": "lib/xmqtt/include/xmqtt/client.h",
+   "xmqtt/client_auth.h": "lib/xmqtt/include/xmqtt/client_auth.h",
+   "xmqtt/client_dial.h": "lib/xmqtt/include/xmqtt/client_dial.h",
+   "xmqtt/client_inbox.h": "lib/xmqtt/include/xmqtt/client_inbox.h",
+   "xmqtt/client_session.h": "lib/xmqtt/include/xmqtt/client_session.h",
+   "xmqtt/client_session_dial.h": "lib/xmqtt/include/xmqtt/client_session_dial.h",
+   "xmqtt/client_session_tls.h": "lib/xmqtt/include/xmqtt/client_session_tls.h",
+   "xmqtt/client_store.h": "lib/xmqtt/include/xmqtt/client_store.h",
+   "xmqtt/client_store_tls.h": "lib/xmqtt/include/xmqtt/client_store_tls.h",
+   "xmqtt/client_store_ws.h": "lib/xmqtt/include/xmqtt/client_store_ws.h",
+   "xmqtt/client_tls.h": "lib/xmqtt/include/xmqtt/client_tls.h",
+   "xmqtt/client_tls_resume.h": "lib/xmqtt/include/xmqtt/client_tls_resume.h",
+   "xmqtt/client_ws.h": "lib/xmqtt/include/xmqtt/client_ws.h",
+   "xmqtt/client_ws_connect.h": "lib/xmqtt/include/xmqtt/client_ws_connect.h",
+   "xmqtt/client_ws_uri.h": "lib/xmqtt/include/xmqtt/client_ws_uri.h",
    "xmqtt/codec311.h": "lib/xmqtt/include/xmqtt/codec311.h",
    "xmqtt/codec5.h": "lib/xmqtt/include/xmqtt/codec5.h",
    "xmqtt/export.h": "lib/xmqtt/include/xmqtt/export.h",
    "xmqtt/features.h": "lib/xmqtt/include/xmqtt/features.h",
+   "xmqtt/journal.h": "lib/xmqtt/include/xmqtt/journal.h",
+   "xmqtt/journal_file.h": "lib/xmqtt/include/xmqtt/journal_file.h",
+   "xmqtt/journal_slot.h": "lib/xmqtt/include/xmqtt/journal_slot.h",
+   "xmqtt/journal_worker.h": "lib/xmqtt/include/xmqtt/journal_worker.h",
    "xmqtt/negotiation.h": "lib/xmqtt/include/xmqtt/negotiation.h",
    "xmqtt/packet.h": "lib/xmqtt/include/xmqtt/packet.h",
    "xmqtt/properties.h": "lib/xmqtt/include/xmqtt/properties.h",
+   "xmqtt/reconnect.h": "lib/xmqtt/include/xmqtt/reconnect.h",
+   "xmqtt/reconnect_store.h": "lib/xmqtt/include/xmqtt/reconnect_store.h",
+   "xmqtt/reconnect_subscriptions.h": "lib/xmqtt/include/xmqtt/reconnect_subscriptions.h",
+   "xmqtt/session.h": "lib/xmqtt/include/xmqtt/session.h",
+   "xmqtt/session_image.h": "lib/xmqtt/include/xmqtt/session_image.h",
+   "xmqtt/store_compact.h": "lib/xmqtt/include/xmqtt/store_compact.h",
+   "xmqtt/store_compact_online.h": "lib/xmqtt/include/xmqtt/store_compact_online.h",
+   "xmqtt/store_delta.h": "lib/xmqtt/include/xmqtt/store_delta.h",
+   "xmqtt/store_inbox.h": "lib/xmqtt/include/xmqtt/store_inbox.h",
+   "xmqtt/store_session.h": "lib/xmqtt/include/xmqtt/store_session.h",
+   "xmqtt/store_state.h": "lib/xmqtt/include/xmqtt/store_state.h",
+   "xmqtt/store_write.h": "lib/xmqtt/include/xmqtt/store_write.h",
    "xmqtt/wire.h": "lib/xmqtt/include/xmqtt/wire.h",
    "xmqtt.h": "lib/xmqtt/include/xmqtt.h"
   },
   "sources": [
    {
     "path": "lib/xmqtt/src/client/client.c"
+   },
+   {
+    "path": "lib/xmqtt/src/client/reconnect.c"
+   },
+   {
+    "path": "lib/xmqtt/src/client_ws/client_ws.c"
+   },
+   {
+    "path": "lib/xmqtt/src/client_ws_connect/connect.c"
+   },
+   {
+    "path": "lib/xmqtt/src/client_ws_uri/parse.c"
+   },
+   {
+    "path": "lib/xmqtt/src/client_ws_uri/uri.c"
    },
    {
     "path": "lib/xmqtt/src/codec311/codec311.c"
@@ -2466,6 +2528,30 @@
     "path": "lib/xmqtt/src/properties/properties.c"
    },
    {
+    "path": "lib/xmqtt/src/session/journal.c"
+   },
+   {
+    "path": "lib/xmqtt/src/session/journal_worker.c"
+   },
+   {
+    "path": "lib/xmqtt/src/session/session.c"
+   },
+   {
+    "path": "lib/xmqtt/src/session/session_image.c"
+   },
+   {
+    "path": "lib/xmqtt/src/session/store_delta.c"
+   },
+   {
+    "path": "lib/xmqtt/src/session/store_session.c"
+   },
+   {
+    "path": "lib/xmqtt/src/session/store_state.c"
+   },
+   {
+    "path": "lib/xmqtt/src/session/store_write.c"
+   },
+   {
     "path": "lib/xmqtt/src/wire/wire.c"
    }
   ],
@@ -2474,12 +2560,47 @@
    "XMQTT_MODULE_ALL",
    "XMQTT_FEATURE_XMQTT",
    "XMQTT_FEATURE_XMQTT_CLIENT",
+   "XMQTT_FEATURE_XMQTT_CLIENT_AUTH",
+   "XMQTT_FEATURE_XMQTT_CLIENT_DIAL",
+   "XMQTT_FEATURE_XMQTT_CLIENT_INBOX",
+   "XMQTT_FEATURE_XMQTT_CLIENT_SESSION",
+   "XMQTT_FEATURE_XMQTT_CLIENT_SESSION_DIAL",
+   "XMQTT_FEATURE_XMQTT_CLIENT_SESSION_TLS",
+   "XMQTT_FEATURE_XMQTT_CLIENT_STORE",
+   "XMQTT_FEATURE_XMQTT_CLIENT_STORE_TLS",
+   "XMQTT_FEATURE_XMQTT_CLIENT_STORE_WS",
+   "XMQTT_FEATURE_XMQTT_CLIENT_TLS",
+   "XMQTT_FEATURE_XMQTT_CLIENT_TLS_RESUME",
+   "XMQTT_FEATURE_XMQTT_CLIENT_WS",
+   "XMQTT_FEATURE_XMQTT_CLIENT_WS_CONNECT",
+   "XMQTT_FEATURE_XMQTT_CLIENT_WS_CONNECT_TLS",
+   "XMQTT_FEATURE_XMQTT_CLIENT_WS_TLS",
+   "XMQTT_FEATURE_XMQTT_CLIENT_WS_TLS_RESUME",
+   "XMQTT_FEATURE_XMQTT_CLIENT_WS_URI",
+   "XMQTT_FEATURE_XMQTT_CLIENT_WS_URI_TLS",
    "XMQTT_FEATURE_XMQTT_CODEC311",
    "XMQTT_FEATURE_XMQTT_CODEC5",
+   "XMQTT_FEATURE_XMQTT_JOURNAL",
+   "XMQTT_FEATURE_XMQTT_JOURNAL_FILE",
+   "XMQTT_FEATURE_XMQTT_JOURNAL_SLOT",
+   "XMQTT_FEATURE_XMQTT_JOURNAL_WORKER",
    "XMQTT_FEATURE_XMQTT_NEGOTIATION",
    "XMQTT_FEATURE_XMQTT_PACKET",
    "XMQTT_FEATURE_XMQTT_PROPERTIES",
-   "XMQTT_FEATURE_XMQTT_WIRE"
+   "XMQTT_FEATURE_XMQTT_RECONNECT",
+   "XMQTT_FEATURE_XMQTT_RECONNECT_STORE",
+   "XMQTT_FEATURE_XMQTT_RECONNECT_SUBSCRIPTIONS",
+   "XMQTT_FEATURE_XMQTT_SESSION",
+   "XMQTT_FEATURE_XMQTT_SESSION_IMAGE",
+   "XMQTT_FEATURE_XMQTT_STORE_COMPACT",
+   "XMQTT_FEATURE_XMQTT_STORE_COMPACT_ONLINE",
+   "XMQTT_FEATURE_XMQTT_STORE_DELTA",
+   "XMQTT_FEATURE_XMQTT_STORE_INBOX",
+   "XMQTT_FEATURE_XMQTT_STORE_SESSION",
+   "XMQTT_FEATURE_XMQTT_STORE_STATE",
+   "XMQTT_FEATURE_XMQTT_STORE_WRITE",
+   "XMQTT_FEATURE_XMQTT_WIRE",
+   "XMQTT_FEATURE_XMQTT_WS_URI_PARSE"
   ],
   "host_includes": [
    "lib/xmqtt/include",
@@ -2492,18 +2613,42 @@
   "symbol_macro": "XS_XREDIS_SYMBOL",
   "headers": {
    "xredis/client.h": "lib/xredis/include/xredis/client.h",
+   "xredis/cluster_client.h": "lib/xredis/include/xredis/cluster_client.h",
+   "xredis/cluster_client_sync.h": "lib/xredis/include/xredis/cluster_client_sync.h",
+   "xredis/cluster_command.h": "lib/xredis/include/xredis/cluster_command.h",
+   "xredis/cluster_command_sync.h": "lib/xredis/include/xredis/cluster_command_sync.h",
+   "xredis/cluster_nodes.h": "lib/xredis/include/xredis/cluster_nodes.h",
+   "xredis/cluster_refresh.h": "lib/xredis/include/xredis/cluster_refresh.h",
+   "xredis/cluster_route.h": "lib/xredis/include/xredis/cluster_route.h",
+   "xredis/cluster_topology.h": "lib/xredis/include/xredis/cluster_topology.h",
    "xredis/command.h": "lib/xredis/include/xredis/command.h",
+   "xredis/command_keys.h": "lib/xredis/include/xredis/command_keys.h",
    "xredis/dial.h": "lib/xredis/include/xredis/dial.h",
    "xredis/export.h": "lib/xredis/include/xredis/export.h",
    "xredis/features.h": "lib/xredis/include/xredis/features.h",
    "xredis/pool.h": "lib/xredis/include/xredis/pool.h",
+   "xredis/pool_asking.h": "lib/xredis/include/xredis/pool_asking.h",
    "xredis/pool_connect.h": "lib/xredis/include/xredis/pool_connect.h",
+   "xredis/pool_shared.h": "lib/xredis/include/xredis/pool_shared.h",
+   "xredis/pool_shared_asking.h": "lib/xredis/include/xredis/pool_shared_asking.h",
+   "xredis/pool_shared_connect.h": "lib/xredis/include/xredis/pool_shared_connect.h",
    "xredis/pool_transaction.h": "lib/xredis/include/xredis/pool_transaction.h",
    "xredis/pool_watch.h": "lib/xredis/include/xredis/pool_watch.h",
+   "xredis/pubsub.h": "lib/xredis/include/xredis/pubsub.h",
    "xredis/reader.h": "lib/xredis/include/xredis/reader.h",
    "xredis/reply.h": "lib/xredis/include/xredis/reply.h",
+   "xredis/role.h": "lib/xredis/include/xredis/role.h",
+   "xredis/role_client.h": "lib/xredis/include/xredis/role_client.h",
+   "xredis/sentinel.h": "lib/xredis/include/xredis/sentinel.h",
+   "xredis/sentinel_events.h": "lib/xredis/include/xredis/sentinel_events.h",
+   "xredis/sentinel_pool.h": "lib/xredis/include/xredis/sentinel_pool.h",
+   "xredis/subscriber.h": "lib/xredis/include/xredis/subscriber.h",
+   "xredis/subscriber_notify.h": "lib/xredis/include/xredis/subscriber_notify.h",
+   "xredis/subscription_session.h": "lib/xredis/include/xredis/subscription_session.h",
+   "xredis/subscriptions.h": "lib/xredis/include/xredis/subscriptions.h",
    "xredis/tls.h": "lib/xredis/include/xredis/tls.h",
    "xredis/tls_auth.h": "lib/xredis/include/xredis/tls_auth.h",
+   "xredis/tracking.h": "lib/xredis/include/xredis/tracking.h",
    "xredis/transaction.h": "lib/xredis/include/xredis/transaction.h",
    "xredis/watch.h": "lib/xredis/include/xredis/watch.h",
    "xredis.h": "lib/xredis/include/xredis.h"
@@ -2513,7 +2658,25 @@
     "path": "lib/xredis/src/client/client.c"
    },
    {
+    "path": "lib/xredis/src/cluster_client/cluster_client.c"
+   },
+   {
+    "path": "lib/xredis/src/cluster_nodes/cluster_nodes.c"
+   },
+   {
+    "path": "lib/xredis/src/cluster_refresh/cluster_refresh.c"
+   },
+   {
+    "path": "lib/xredis/src/cluster_route/cluster_route.c"
+   },
+   {
+    "path": "lib/xredis/src/cluster_topology/cluster_topology.c"
+   },
+   {
     "path": "lib/xredis/src/command/command.c"
+   },
+   {
+    "path": "lib/xredis/src/command_keys/command_keys.c"
    },
    {
     "path": "lib/xredis/src/dial/dial.c"
@@ -2522,7 +2685,19 @@
     "path": "lib/xredis/src/pool/pool.c"
    },
    {
+    "path": "lib/xredis/src/pool_asking/pool_asking.c"
+   },
+   {
     "path": "lib/xredis/src/pool_connect/pool_connect.c"
+   },
+   {
+    "path": "lib/xredis/src/pool_shared/pool_shared.c"
+   },
+   {
+    "path": "lib/xredis/src/pool_shared_asking/pool_shared_asking.c"
+   },
+   {
+    "path": "lib/xredis/src/pool_shared_connect/pool_shared_connect.c"
    },
    {
     "path": "lib/xredis/src/pool_transaction/pool_transaction.c"
@@ -2531,16 +2706,40 @@
     "path": "lib/xredis/src/pool_watch/pool_watch.c"
    },
    {
+    "path": "lib/xredis/src/pubsub/pubsub.c"
+   },
+   {
     "path": "lib/xredis/src/reader/reader.c"
    },
    {
     "path": "lib/xredis/src/reply/reply.c"
    },
    {
+    "path": "lib/xredis/src/sentinel/sentinel.c"
+   },
+   {
+    "path": "lib/xredis/src/sentinel_events/sentinel_events.c"
+   },
+   {
+    "path": "lib/xredis/src/sentinel_pool/sentinel_pool.c"
+   },
+   {
+    "path": "lib/xredis/src/subscriber/subscriber.c"
+   },
+   {
+    "path": "lib/xredis/src/subscription_session/subscription_session.c"
+   },
+   {
+    "path": "lib/xredis/src/subscriptions/subscriptions.c"
+   },
+   {
     "path": "lib/xredis/src/tls/tls.c"
    },
    {
     "path": "lib/xredis/src/tls_auth/tls_auth.c"
+   },
+   {
+    "path": "lib/xredis/src/tracking/tracking.c"
    },
    {
     "path": "lib/xredis/src/transaction/transaction.c"
@@ -2554,16 +2753,40 @@
    "XREDIS_MODULE_ALL",
    "XREDIS_FEATURE_XREDIS",
    "XREDIS_FEATURE_XREDIS_CLIENT",
+   "XREDIS_FEATURE_XREDIS_CLUSTER_CLIENT",
+   "XREDIS_FEATURE_XREDIS_CLUSTER_CLIENT_SYNC",
+   "XREDIS_FEATURE_XREDIS_CLUSTER_COMMAND",
+   "XREDIS_FEATURE_XREDIS_CLUSTER_COMMAND_SYNC",
+   "XREDIS_FEATURE_XREDIS_CLUSTER_NODES",
+   "XREDIS_FEATURE_XREDIS_CLUSTER_REFRESH",
+   "XREDIS_FEATURE_XREDIS_CLUSTER_ROUTE",
+   "XREDIS_FEATURE_XREDIS_CLUSTER_TOPOLOGY",
    "XREDIS_FEATURE_XREDIS_COMMAND",
+   "XREDIS_FEATURE_XREDIS_COMMAND_KEYS",
    "XREDIS_FEATURE_XREDIS_DIAL",
    "XREDIS_FEATURE_XREDIS_POOL",
+   "XREDIS_FEATURE_XREDIS_POOL_ASKING",
    "XREDIS_FEATURE_XREDIS_POOL_CONNECT",
+   "XREDIS_FEATURE_XREDIS_POOL_SHARED",
+   "XREDIS_FEATURE_XREDIS_POOL_SHARED_ASKING",
+   "XREDIS_FEATURE_XREDIS_POOL_SHARED_CONNECT",
    "XREDIS_FEATURE_XREDIS_POOL_TRANSACTION",
    "XREDIS_FEATURE_XREDIS_POOL_WATCH",
+   "XREDIS_FEATURE_XREDIS_PUBSUB",
    "XREDIS_FEATURE_XREDIS_READER",
    "XREDIS_FEATURE_XREDIS_REPLY",
+   "XREDIS_FEATURE_XREDIS_ROLE",
+   "XREDIS_FEATURE_XREDIS_ROLE_CLIENT",
+   "XREDIS_FEATURE_XREDIS_SENTINEL",
+   "XREDIS_FEATURE_XREDIS_SENTINEL_EVENTS",
+   "XREDIS_FEATURE_XREDIS_SENTINEL_POOL",
+   "XREDIS_FEATURE_XREDIS_SUBSCRIBER",
+   "XREDIS_FEATURE_XREDIS_SUBSCRIBER_NOTIFY",
+   "XREDIS_FEATURE_XREDIS_SUBSCRIPTIONS",
+   "XREDIS_FEATURE_XREDIS_SUBSCRIPTION_SESSION",
    "XREDIS_FEATURE_XREDIS_TLS",
    "XREDIS_FEATURE_XREDIS_TLS_AUTH",
+   "XREDIS_FEATURE_XREDIS_TRACKING",
    "XREDIS_FEATURE_XREDIS_TRANSACTION",
    "XREDIS_FEATURE_XREDIS_WATCH"
   ],
@@ -2580,9 +2803,11 @@
    "xrpc/call.h": "lib/xrpc/include/xrpc/call.h",
    "xrpc/decode.h": "lib/xrpc/include/xrpc/decode.h",
    "xrpc/dispatch.h": "lib/xrpc/include/xrpc/dispatch.h",
+   "xrpc/duplex.h": "lib/xrpc/include/xrpc/duplex.h",
    "xrpc/encode.h": "lib/xrpc/include/xrpc/encode.h",
    "xrpc/export.h": "lib/xrpc/include/xrpc/export.h",
    "xrpc/features.h": "lib/xrpc/include/xrpc/features.h",
+   "xrpc/frame.h": "lib/xrpc/include/xrpc/frame.h",
    "xrpc/http_client.h": "lib/xrpc/include/xrpc/http_client.h",
    "xrpc/http_dial.h": "lib/xrpc/include/xrpc/http_dial.h",
    "xrpc/http_server.h": "lib/xrpc/include/xrpc/http_server.h",
@@ -2594,7 +2819,16 @@
    "xrpc/receive.h": "lib/xrpc/include/xrpc/receive.h",
    "xrpc/response.h": "lib/xrpc/include/xrpc/response.h",
    "xrpc/server.h": "lib/xrpc/include/xrpc/server.h",
+   "xrpc/tcp.h": "lib/xrpc/include/xrpc/tcp.h",
+   "xrpc/tcp_dial.h": "lib/xrpc/include/xrpc/tcp_dial.h",
+   "xrpc/tls.h": "lib/xrpc/include/xrpc/tls.h",
+   "xrpc/tls_dial.h": "lib/xrpc/include/xrpc/tls_dial.h",
    "xrpc/types.h": "lib/xrpc/include/xrpc/types.h",
+   "xrpc/ws.h": "lib/xrpc/include/xrpc/ws.h",
+   "xrpc/ws_deflate.h": "lib/xrpc/include/xrpc/ws_deflate.h",
+   "xrpc/ws_dial.h": "lib/xrpc/include/xrpc/ws_dial.h",
+   "xrpc/ws_http.h": "lib/xrpc/include/xrpc/ws_http.h",
+   "xrpc/ws_uri.h": "lib/xrpc/include/xrpc/ws_uri.h",
    "xrpc.h": "lib/xrpc/include/xrpc.h"
   },
   "sources": [
@@ -2608,7 +2842,13 @@
     "path": "lib/xrpc/src/dispatch/dispatch.c"
    },
    {
+    "path": "lib/xrpc/src/duplex/duplex.c"
+   },
+   {
     "path": "lib/xrpc/src/encode/encode.c"
+   },
+   {
+    "path": "lib/xrpc/src/frame/frame.c"
    },
    {
     "path": "lib/xrpc/src/http_client/http_client.c"
@@ -2645,6 +2885,24 @@
    },
    {
     "path": "lib/xrpc/src/server/server.c"
+   },
+   {
+    "path": "lib/xrpc/src/tcp/tcp.c"
+   },
+   {
+    "path": "lib/xrpc/src/tcp_dial/tcp_dial.c"
+   },
+   {
+    "path": "lib/xrpc/src/tls/tls.c"
+   },
+   {
+    "path": "lib/xrpc/src/tls_dial/tls_dial.c"
+   },
+   {
+    "path": "lib/xrpc/src/ws/ws.c"
+   },
+   {
+    "path": "lib/xrpc/src/ws_uri/uri.c"
    }
   ],
   "feature_macro": [
@@ -2654,7 +2912,9 @@
    "XRPC_FEATURE_XRPC_CALL",
    "XRPC_FEATURE_XRPC_DECODE",
    "XRPC_FEATURE_XRPC_DISPATCH",
+   "XRPC_FEATURE_XRPC_DUPLEX",
    "XRPC_FEATURE_XRPC_ENCODE",
+   "XRPC_FEATURE_XRPC_FRAME",
    "XRPC_FEATURE_XRPC_HTTP_CLIENT",
    "XRPC_FEATURE_XRPC_HTTP_DIAL",
    "XRPC_FEATURE_XRPC_HTTP_SERVER",
@@ -2666,7 +2926,22 @@
    "XRPC_FEATURE_XRPC_RECEIVE",
    "XRPC_FEATURE_XRPC_RESPONSE",
    "XRPC_FEATURE_XRPC_RESULT_QUOTA",
-   "XRPC_FEATURE_XRPC_SERVER"
+   "XRPC_FEATURE_XRPC_SERVER",
+   "XRPC_FEATURE_XRPC_TCP",
+   "XRPC_FEATURE_XRPC_TCP_DIAL",
+   "XRPC_FEATURE_XRPC_TLS",
+   "XRPC_FEATURE_XRPC_TLS_DIAL",
+   "XRPC_FEATURE_XRPC_WS",
+   "XRPC_FEATURE_XRPC_WS_DEFLATE",
+   "XRPC_FEATURE_XRPC_WS_DIAL",
+   "XRPC_FEATURE_XRPC_WS_DIAL_TLS",
+   "XRPC_FEATURE_XRPC_WS_HTTP",
+   "XRPC_FEATURE_XRPC_WS_HTTP_DEFLATE",
+   "XRPC_FEATURE_XRPC_WS_HTTP_TLS",
+   "XRPC_FEATURE_XRPC_WS_TLS",
+   "XRPC_FEATURE_XRPC_WS_URI",
+   "XRPC_FEATURE_XRPC_WS_URI_PARSE",
+   "XRPC_FEATURE_XRPC_WS_URI_TLS"
   ],
   "host_includes": [
    "lib/xrpc/include",

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "upstream_commit": "4618fde3f6acf38bed3226498a5ce33b1d11415f",
+  "upstream_commit": "f0958579699937cdc5cbcf795a2aa86ca0ea2fc3",
   "upstream_working_tree": false,
   "files": {
     "lib/xacme/README.md": {
@@ -193,27 +193,39 @@
     },
     "lib/xcron/README.md": {
       "source": "extlibs/xcron/README.md",
-      "sha256": "b371b1c28ffc73ece5b9ffd0f9a7ca0ee7d89bff36224e8ab58e4209b61a2c87"
+      "sha256": "ebe90009736a49a2978d732c0b67c14679f24b4882f56f4c536953524623015e"
     },
     "lib/xcron/config/modules.json": {
       "source": "extlibs/xcron/config/modules.json",
-      "sha256": "67d4d20546a2aed2ebc9886a925fa3d17e99c17ebb3b97d31f9689d05e0ef07b"
+      "sha256": "22189a18466ccaf70486c6e8c6f6a507d6fadde11c777f69b1414ba07a38cc62"
     },
     "lib/xcron/config/performance_profiles.json": {
       "source": "extlibs/xcron/config/performance_profiles.json",
-      "sha256": "07e564541b5536baed041011fe0994a9a18a58d5b3326c07ed0d06691f9b441a"
+      "sha256": "d87652619d6f1d535780c624bf917aa5c26d2758434460dc1f3d17867d7683a6"
     },
     "lib/xcron/config/size_profiles.json": {
       "source": "extlibs/xcron/config/size_profiles.json",
-      "sha256": "520107d9dcea84776e040d102d0ff942b70f4da27bb05f4f5cb02b67c5ca703a"
+      "sha256": "d6e928d49073d03abb05a0de61c28736db22029836a252706c711cbb251cb995"
     },
     "lib/xcron/include/xcron.h": {
       "source": "extlibs/xcron/include/xcron.h",
-      "sha256": "b3f758ced866630ad5e4d684dbdf4f58278f15c802b2069de0b8cd3a39f44bf7"
+      "sha256": "82697a919139d10afb53595c651d1c2bbd11006232c7ce58942f470ace694f88"
     },
     "lib/xcron/include/xcron/calendar.h": {
       "source": "extlibs/xcron/include/xcron/calendar.h",
       "sha256": "f44e788a9499dc61cbe796fad2002d5b3aecb3bc1bcb71a5cdb83e77cc4bcd6b"
+    },
+    "lib/xcron/include/xcron/checkpoint.h": {
+      "source": "extlibs/xcron/include/xcron/checkpoint.h",
+      "sha256": "68658230edb2617406d53b01ca43e4c025c9449722c14f5a2e47bdad2f1b4cab"
+    },
+    "lib/xcron/include/xcron/checkpoint_group.h": {
+      "source": "extlibs/xcron/include/xcron/checkpoint_group.h",
+      "sha256": "c4bee329a854f6778321aead854996f13ff0d32882ed785a1265dd9bfcd5a9b9"
+    },
+    "lib/xcron/include/xcron/checkpoint_store.h": {
+      "source": "extlibs/xcron/include/xcron/checkpoint_store.h",
+      "sha256": "f697e9abcd1d8e27e42ab732c94d2ad234cfb7943d89947ab7d13cfd19db133d"
     },
     "lib/xcron/include/xcron/delivery.h": {
       "source": "extlibs/xcron/include/xcron/delivery.h",
@@ -237,7 +249,7 @@
     },
     "lib/xcron/include/xcron/features.h": {
       "source": "extlibs/xcron/include/xcron/features.h",
-      "sha256": "4a1198fd1259fdd94def8654daa89189b2ee86c6520f6ea489c5f36510aa71bd"
+      "sha256": "e2c3c5b7ddd4c632d26b5dfedfdedc8adb8058687510ecd9e740c4dfe800832a"
     },
     "lib/xcron/include/xcron/occurrence.h": {
       "source": "extlibs/xcron/include/xcron/occurrence.h",
@@ -245,7 +257,7 @@
     },
     "lib/xcron/include/xcron/scheduler.h": {
       "source": "extlibs/xcron/include/xcron/scheduler.h",
-      "sha256": "ee82cc98b6f5d03eaf88b2fb99d6b094d4e0c745da54584e2f9507d32e9b003b"
+      "sha256": "dba60452c3e71eca7df0f8d30ded1881e8503adb82eca7aa3b1fcb96a5cb9b2f"
     },
     "lib/xcron/include/xcron/scheduler_selected.h": {
       "source": "extlibs/xcron/include/xcron/scheduler_selected.h",
@@ -253,7 +265,11 @@
     },
     "lib/xcron/include/xcron/service.h": {
       "source": "extlibs/xcron/include/xcron/service.h",
-      "sha256": "9185a967ec052f70b89598cd6db6595452ac1a2a6d241de4586ae34d433f7694"
+      "sha256": "04774358d7469784843218754626adbf22c081f2e8294c154c8086744d3dab09"
+    },
+    "lib/xcron/include/xcron/service_checkpoint.h": {
+      "source": "extlibs/xcron/include/xcron/service_checkpoint.h",
+      "sha256": "49a0700beacc0852db4c56a2c057f544078a1ae4bdb3ee6e892ae52d2680021e"
     },
     "lib/xcron/include/xcron/service_selected.h": {
       "source": "extlibs/xcron/include/xcron/service_selected.h",
@@ -265,7 +281,7 @@
     },
     "lib/xcron/include/xcron/tzdb.h": {
       "source": "extlibs/xcron/include/xcron/tzdb.h",
-      "sha256": "7edf766666991d368bc4f463677204ff8c14b40fb978432404a913b00abffc07"
+      "sha256": "7893aba7e28d79d79314cafe54446425f2da8a96951944defda70b190382f354"
     },
     "lib/xcron/include/xcron/tzdb_file.h": {
       "source": "extlibs/xcron/include/xcron/tzdb_file.h",
@@ -282,6 +298,22 @@
     "lib/xcron/src/calendar/calendar_internal.h": {
       "source": "extlibs/xcron/src/calendar/calendar_internal.h",
       "sha256": "f6d9d5e33ebd3c1e7388eacba6d7b2183d06d8a237ca4ca16daecfeeca2b9173"
+    },
+    "lib/xcron/src/checkpoint/checkpoint.c": {
+      "source": "extlibs/xcron/src/checkpoint/checkpoint.c",
+      "sha256": "01dc4002cc2151a4dd29d428fdd51cdd9b3225fe834fce1f24c63e38f5e86095"
+    },
+    "lib/xcron/src/checkpoint/checkpoint_internal.h": {
+      "source": "extlibs/xcron/src/checkpoint/checkpoint_internal.h",
+      "sha256": "a1d60b0013671a8dcddc579cceea7874009a2f5219054063613ba0ae39e16cff"
+    },
+    "lib/xcron/src/checkpoint_group/checkpoint_group.c": {
+      "source": "extlibs/xcron/src/checkpoint_group/checkpoint_group.c",
+      "sha256": "80d6ac9a4d2f1d0e1cb8c2ca8268b1ad2359b57d9286e8a7f07a8feeee7134c0"
+    },
+    "lib/xcron/src/checkpoint_store/checkpoint_store.c": {
+      "source": "extlibs/xcron/src/checkpoint_store/checkpoint_store.c",
+      "sha256": "a3d1eb5fe399e6cbae140ceffe53ace9ece749a017c79ad336d194d505877cd4"
     },
     "lib/xcron/src/delivery/delivery.c": {
       "source": "extlibs/xcron/src/delivery/delivery.c",
@@ -309,7 +341,7 @@
     },
     "lib/xcron/src/scheduler/scheduler.c": {
       "source": "extlibs/xcron/src/scheduler/scheduler.c",
-      "sha256": "8529b5c88732548684af64660698faaead6436e673ac0c0b750be70674151f3b"
+      "sha256": "77ea5b746c7d9c91da072e4c2accb7613a4f1d66cae862ab760b669189f5716d"
     },
     "lib/xcron/src/scheduler/scheduler_internal.h": {
       "source": "extlibs/xcron/src/scheduler/scheduler_internal.h",
@@ -317,7 +349,7 @@
     },
     "lib/xcron/src/service/service.c": {
       "source": "extlibs/xcron/src/service/service.c",
-      "sha256": "2c04aef345c06e12024c20c0d41867ce772b6f7d471f92e722a2624cca2fa752"
+      "sha256": "b44cebaf06c6d525f05ce89d5d5e63f5cb30a9bdde25f713c4a3b552eef8724f"
     },
     "lib/xcron/src/timezone/timezone.c": {
       "source": "extlibs/xcron/src/timezone/timezone.c",
@@ -333,7 +365,7 @@
     },
     "lib/xcron/src/tzdb/tzdb.c": {
       "source": "extlibs/xcron/src/tzdb/tzdb.c",
-      "sha256": "8526d701f3acf608fa3e68d5142b6c836dd54bf32af7cce2c873b3f30c909113"
+      "sha256": "3d02c1d7f6a53e0f873d9a629b4185fbdeb97ecbeeed57e5ae08878d5b19f515"
     },
     "lib/xcron/src/tzdb/tzdb_internal.h": {
       "source": "extlibs/xcron/src/tzdb/tzdb_internal.h",
@@ -1985,7 +2017,7 @@
     },
     "lib/xllm-session/include/xllm-session/api.h": {
       "source": "extlibs/xllm-session/include/xllm-session/api.h",
-      "sha256": "2bc3e7853d8bc5a05c5d5e9e62d33cdba8d2ad1ce3d2ec91b240ae1f044714b7"
+      "sha256": "b0ac66206b21d89a4dc56aa80c1eb9b979c5139e1a46ffe740159e7d6087a364"
     },
     "lib/xllm-session/include/xllm-session/features.h": {
       "source": "extlibs/xllm-session/include/xllm-session/features.h",
@@ -1997,7 +2029,7 @@
     },
     "lib/xllm-session/src/session/xllm_session_compact.c": {
       "source": "extlibs/xllm-session/src/session/xllm_session_compact.c",
-      "sha256": "77b130c69672ee39290fc4c4048d2ab4fe8dea15d5d8f1400743d77d7917879e"
+      "sha256": "f5d701ccc005b87bfd5fe9768c9353e45e2fe024f15565ac2d8f50187d30c64f"
     },
     "lib/xllm-session/src/session/xllm_session_core.c": {
       "source": "extlibs/xllm-session/src/session/xllm_session_core.c",
@@ -2009,7 +2041,7 @@
     },
     "lib/xllm-session/src/session/xllm_session_govern.c": {
       "source": "extlibs/xllm-session/src/session/xllm_session_govern.c",
-      "sha256": "56c24115c61277f95a20c45f144021188c720bacc6139eeefde06bbccbc9df6a"
+      "sha256": "6ac83c1ef5b2ded57d260f160f85f94ac5fe98246240c70cc74a3a133d69d12f"
     },
     "lib/xllm-session/src/session/xllm_session_journal.c": {
       "source": "extlibs/xllm-session/src/session/xllm_session_journal.c",
@@ -2061,7 +2093,7 @@
     },
     "lib/xllm/include/xllm/api.h": {
       "source": "extlibs/xllm/include/xllm/api.h",
-      "sha256": "408945138ec8da932c6a8c9012a4d2e172971d30233470978d15724630fe9c54"
+      "sha256": "1a7d4b2994f651402541eff7a5c2873a761551b20f177bd0100e368053dc06aa"
     },
     "lib/xllm/include/xllm/executor.h": {
       "source": "extlibs/xllm/include/xllm/executor.h",
@@ -2085,7 +2117,7 @@
     },
     "lib/xllm/src/llm/dialect_anthropic.c": {
       "source": "extlibs/xllm/src/llm/dialect_anthropic.c",
-      "sha256": "ae2f9f3f056b624cf8ff8783f6ec7e177376cdf54ee99a2a275f7baeeb73bc59"
+      "sha256": "44fdc3053ef3d04b0c4e4e5b89b2b86bf07d473896a2d7df2a41a167a462834a"
     },
     "lib/xllm/src/llm/dialect_completions.c": {
       "source": "extlibs/xllm/src/llm/dialect_completions.c",
@@ -2309,27 +2341,83 @@
     },
     "lib/xmqtt/README.md": {
       "source": "extlibs/xmqtt/README.md",
-      "sha256": "399dd7686c5dbd41605929d1861380c3cdb7bb66f99577a734f7430b6940ba17"
+      "sha256": "a6e117fc171420e8f4a078c62a5a27710a408d9bc5e9b9bc824c2fcddb50235e"
     },
     "lib/xmqtt/config/modules.json": {
       "source": "extlibs/xmqtt/config/modules.json",
-      "sha256": "b2d9de5016a8297dfb301e0fefb28ecfb527a3b51a3da199bca3c354e7d17599"
+      "sha256": "554099826f0ef495e335b20a77cd1eac4223c66c2e29a00b8b480bd8200e208b"
     },
     "lib/xmqtt/config/performance_profiles.json": {
       "source": "extlibs/xmqtt/config/performance_profiles.json",
-      "sha256": "0b0fbe28b9a150240898d7b275a4e6f2b3154570ae560fbbd80c866dc0a53635"
+      "sha256": "f9c6f190ecdddabb0a6be61c8f2893395192b17d48880cb9d9ea4b10d4b5c166"
     },
     "lib/xmqtt/config/size_profiles.json": {
       "source": "extlibs/xmqtt/config/size_profiles.json",
-      "sha256": "bfa2c3ae2fa0a2c86350c9327609cdebe241e26c91a49c44da1cab7091f794fb"
+      "sha256": "61b08d11f2d21515d3d88e4ebd9d85092e0029c8ef661ec8e7ea66bb55ea45fa"
     },
     "lib/xmqtt/include/xmqtt.h": {
       "source": "extlibs/xmqtt/include/xmqtt.h",
-      "sha256": "051efaf0097eba1c1db64a50b8defc3bf62d4b9d649d669ed063d51b1ce5bb0f"
+      "sha256": "d7ee469fe4a63fb638ac560d361f70c4e0668c93b08c945c19e062ed5298e9b5"
     },
     "lib/xmqtt/include/xmqtt/client.h": {
       "source": "extlibs/xmqtt/include/xmqtt/client.h",
-      "sha256": "3157262ec6298738db8de907bd78119148e181e36849541a20f4c39d13fa83e6"
+      "sha256": "70e76eb45bb9aba8236ed7332bce87b0264b1c27e13714b0694c06e90a9a41b4"
+    },
+    "lib/xmqtt/include/xmqtt/client_auth.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/client_auth.h",
+      "sha256": "c8bcc41919fa487704d997794aa3a8c70a7f8464bd628c4035a7dd3cc1fbb03f"
+    },
+    "lib/xmqtt/include/xmqtt/client_dial.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/client_dial.h",
+      "sha256": "b04878b3605a58cf8090d932bde735fa66a0a04298bc8654ca5a979dff1d8cf7"
+    },
+    "lib/xmqtt/include/xmqtt/client_inbox.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/client_inbox.h",
+      "sha256": "53828e66024ba756ebc71ef4dd2b5abfb46c176fe6f4eb5d912b53b814a178f7"
+    },
+    "lib/xmqtt/include/xmqtt/client_session.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/client_session.h",
+      "sha256": "b1d824e387e20ff88ca37bbe5121bfa6c9879159100f18e9cee565b8d12e6ad5"
+    },
+    "lib/xmqtt/include/xmqtt/client_session_dial.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/client_session_dial.h",
+      "sha256": "56e1c901e533e1d07bed4817156299b1962293edbea35f82d367d55767cca5bf"
+    },
+    "lib/xmqtt/include/xmqtt/client_session_tls.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/client_session_tls.h",
+      "sha256": "9f36bdece8beafa6529ea912ad1307eb97d5b39fe0bcc8074b53d712e622098e"
+    },
+    "lib/xmqtt/include/xmqtt/client_store.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/client_store.h",
+      "sha256": "40776c47db90bb9513629980a19901a3599d312e1ebebe8d4ad3f2a28f4e13f3"
+    },
+    "lib/xmqtt/include/xmqtt/client_store_tls.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/client_store_tls.h",
+      "sha256": "9fe1b9b477595da2e3516c57fc480c7dbe115e386fd22823e5f305bc3493d6b4"
+    },
+    "lib/xmqtt/include/xmqtt/client_store_ws.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/client_store_ws.h",
+      "sha256": "cba0aacdd0bee72a2b6a129aabe85c6ed4bc488858fed18106ac89ee67851caf"
+    },
+    "lib/xmqtt/include/xmqtt/client_tls.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/client_tls.h",
+      "sha256": "904d7167ae5fa4a3a9d585664004199a1a10fe1953367505ec1c067719d53807"
+    },
+    "lib/xmqtt/include/xmqtt/client_tls_resume.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/client_tls_resume.h",
+      "sha256": "517729c1d88cbdc0e2b7d1bc649ed6ec847538fc47bede5c299015864abd91ff"
+    },
+    "lib/xmqtt/include/xmqtt/client_ws.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/client_ws.h",
+      "sha256": "310a5aa9b889e7e051ce1c84206e8ce23db2eaeaca1c9345fffe1552ab8972d0"
+    },
+    "lib/xmqtt/include/xmqtt/client_ws_connect.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/client_ws_connect.h",
+      "sha256": "1c8864a95f74533759dec8d1b3dc406a8220863de882f3d5f3617e46347d30a9"
+    },
+    "lib/xmqtt/include/xmqtt/client_ws_uri.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/client_ws_uri.h",
+      "sha256": "01a05dfe01ee9737864858fe377c4a0d1ab2ced2369982dc8ada94e5df90e380"
     },
     "lib/xmqtt/include/xmqtt/codec311.h": {
       "source": "extlibs/xmqtt/include/xmqtt/codec311.h",
@@ -2345,7 +2433,23 @@
     },
     "lib/xmqtt/include/xmqtt/features.h": {
       "source": "extlibs/xmqtt/include/xmqtt/features.h",
-      "sha256": "6f631dd2d8bbb34de20304d82e50ef9ef3c46bb0d2e65a5a28764a9abdd25398"
+      "sha256": "9551bac00594a67f43aedb01fa7c474cb5a576d50e08fb20cc21a686bb878bb8"
+    },
+    "lib/xmqtt/include/xmqtt/journal.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/journal.h",
+      "sha256": "45b6e3778037651aa772f0543a3ce504ff4fa40dce5065b493e91d6299a8c494"
+    },
+    "lib/xmqtt/include/xmqtt/journal_file.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/journal_file.h",
+      "sha256": "9d84fe787845de1b36cc0643b5b7adf09483c1bace681ce5902007a3c6631f8b"
+    },
+    "lib/xmqtt/include/xmqtt/journal_slot.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/journal_slot.h",
+      "sha256": "bbe83d2703b70493f53a210e24d7f2c7c050f7595ab95228d792d9c4579d08ba"
+    },
+    "lib/xmqtt/include/xmqtt/journal_worker.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/journal_worker.h",
+      "sha256": "6a46c1b09c53e9ab47b8f1a0d978b8c97d50595752e189dc82722bf38b1aba9c"
     },
     "lib/xmqtt/include/xmqtt/negotiation.h": {
       "source": "extlibs/xmqtt/include/xmqtt/negotiation.h",
@@ -2359,13 +2463,81 @@
       "source": "extlibs/xmqtt/include/xmqtt/properties.h",
       "sha256": "5d3ae59d93c0bc998b9c69f53fedcab37be970912efaf58e0669a058962f628b"
     },
+    "lib/xmqtt/include/xmqtt/reconnect.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/reconnect.h",
+      "sha256": "0550ac794552771dbd2e03b9b953573fc75ffa5fe434479176d681c43cbe52d5"
+    },
+    "lib/xmqtt/include/xmqtt/reconnect_store.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/reconnect_store.h",
+      "sha256": "402f4d3513214371d7ec50612e165c7251cfbf26a8ec1c3bde100f376e63e689"
+    },
+    "lib/xmqtt/include/xmqtt/reconnect_subscriptions.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/reconnect_subscriptions.h",
+      "sha256": "e2a6896967c9f5dd2b9ec0a190cb2b45c5d1c3ac2c9943a95309904a24ce2bdd"
+    },
+    "lib/xmqtt/include/xmqtt/session.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/session.h",
+      "sha256": "61364e80810d7e4c49029476712f4d95c7880aa1781c69773110d39c32e9cd44"
+    },
+    "lib/xmqtt/include/xmqtt/session_image.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/session_image.h",
+      "sha256": "a6694750df5d9b3c5ed0eb5a2b70d836b65cdd18ffe5d26833b2a89037da3e34"
+    },
+    "lib/xmqtt/include/xmqtt/store_compact.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/store_compact.h",
+      "sha256": "098bd0b3ef1574d1685f418fb3ab677b0d8f444156706a065447f7dece7a11d6"
+    },
+    "lib/xmqtt/include/xmqtt/store_compact_online.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/store_compact_online.h",
+      "sha256": "767bfd8b6e78b3543c92b8ba7e276ef0c0c0b75d76e8f3b3b1a995e9289f9465"
+    },
+    "lib/xmqtt/include/xmqtt/store_delta.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/store_delta.h",
+      "sha256": "20e1bf79bd5e2150f5b3d66a8a2418b299941dadb649fd08c9c9c7e73ae81eae"
+    },
+    "lib/xmqtt/include/xmqtt/store_inbox.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/store_inbox.h",
+      "sha256": "ae1d3979057d79455eb6f112cb64f99a7aa7face9234d82c9a56dec7f1c44272"
+    },
+    "lib/xmqtt/include/xmqtt/store_session.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/store_session.h",
+      "sha256": "baed382d95d3b475e9cf8cf7e4b47423ee89759da74b061749af377e48911e32"
+    },
+    "lib/xmqtt/include/xmqtt/store_state.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/store_state.h",
+      "sha256": "1befc404955643bbc3a4f8a82c130f460a036a725789b97488d2ebcc4124497b"
+    },
+    "lib/xmqtt/include/xmqtt/store_write.h": {
+      "source": "extlibs/xmqtt/include/xmqtt/store_write.h",
+      "sha256": "6eb94ab280a061699467be61b442973411819e18c11431a17179d80092b4f202"
+    },
     "lib/xmqtt/include/xmqtt/wire.h": {
       "source": "extlibs/xmqtt/include/xmqtt/wire.h",
       "sha256": "66a85dd1e2539b2c14bbd242523d9972587a5f16a694a0c93a3ab0886d5bb509"
     },
     "lib/xmqtt/src/client/client.c": {
       "source": "extlibs/xmqtt/src/client/client.c",
-      "sha256": "7571fa3874c48a34b45101218d23c0aa4cd113c8a248c4f648d982e758621dc6"
+      "sha256": "797a8527a3964ea9d98eb7bc318b61842ff7056fd5371b2bab0577a2ee59ac94"
+    },
+    "lib/xmqtt/src/client/reconnect.c": {
+      "source": "extlibs/xmqtt/src/client/reconnect.c",
+      "sha256": "8f7648de7a4f86ebd78b4941e6a494ed7b4fb5e2d455a5b80b0e1df9ea304d2f"
+    },
+    "lib/xmqtt/src/client_ws/client_ws.c": {
+      "source": "extlibs/xmqtt/src/client_ws/client_ws.c",
+      "sha256": "7bc98fa09905005fae81e2bbeecdba8e5eafcd3bfedaa8ecf1de50a4663c9c59"
+    },
+    "lib/xmqtt/src/client_ws_connect/connect.c": {
+      "source": "extlibs/xmqtt/src/client_ws_connect/connect.c",
+      "sha256": "3c9d0bf919a1c7652c6e9f04c4fe59974c02143c06e54286223a49d099f55f10"
+    },
+    "lib/xmqtt/src/client_ws_uri/parse.c": {
+      "source": "extlibs/xmqtt/src/client_ws_uri/parse.c",
+      "sha256": "41c4a636538c8beac47b3e64806a6a60149fff8e95ae7cd6d31d8128f05ba536"
+    },
+    "lib/xmqtt/src/client_ws_uri/uri.c": {
+      "source": "extlibs/xmqtt/src/client_ws_uri/uri.c",
+      "sha256": "f8610cdffae76c74a0282c3ce89ac68aba42ffe96f51ff642250905884c1c179"
     },
     "lib/xmqtt/src/codec311/codec311.c": {
       "source": "extlibs/xmqtt/src/codec311/codec311.c",
@@ -2379,9 +2551,61 @@
       "source": "extlibs/xmqtt/src/codec5/encode.c",
       "sha256": "0ff7f72c54710f434291673d761fae774b74d36acbab0c02ab54665d01380d25"
     },
+    "lib/xmqtt/src/internal/xmqtt_client_lifecycle.h": {
+      "source": "extlibs/xmqtt/src/internal/xmqtt_client_lifecycle.h",
+      "sha256": "32f443e55cf062b003287c7dba1b1806cae7fbfdd27e3372a6c0f484b7fa3e10"
+    },
+    "lib/xmqtt/src/internal/xmqtt_client_store.h": {
+      "source": "extlibs/xmqtt/src/internal/xmqtt_client_store.h",
+      "sha256": "fa2ec425bfd67341dc88646a7ad70af9d6eb2c760ab5a6cde7346126f3c999a7"
+    },
+    "lib/xmqtt/src/internal/xmqtt_client_ws_connect_internal.h": {
+      "source": "extlibs/xmqtt/src/internal/xmqtt_client_ws_connect_internal.h",
+      "sha256": "d3bd76ae2a6d7203de8666c9cc8d7caafe9b7814ea215e9f4584ac7d9a971190"
+    },
+    "lib/xmqtt/src/internal/xmqtt_client_ws_internal.h": {
+      "source": "extlibs/xmqtt/src/internal/xmqtt_client_ws_internal.h",
+      "sha256": "4f630ec6d2096bd506fb2199f421b08f0d47e60731704bd91b9ed3d7dd87d99c"
+    },
     "lib/xmqtt/src/internal/xmqtt_internal.h": {
       "source": "extlibs/xmqtt/src/internal/xmqtt_internal.h",
       "sha256": "712f2f844eba2683ae86a029a4828aa7cef4b464af23373d0583dd102e4c9af3"
+    },
+    "lib/xmqtt/src/internal/xmqtt_journal_replay.h": {
+      "source": "extlibs/xmqtt/src/internal/xmqtt_journal_replay.h",
+      "sha256": "988ba6d29b02ec4f105fabef09b16a242a8ccd0566e516a922d4e5efe05ef572"
+    },
+    "lib/xmqtt/src/internal/xmqtt_journal_worker.h": {
+      "source": "extlibs/xmqtt/src/internal/xmqtt_journal_worker.h",
+      "sha256": "af9346ab986176d45a108fc26f6db896bdacae070f2969ac248156297ea5f1f2"
+    },
+    "lib/xmqtt/src/internal/xmqtt_session_client.h": {
+      "source": "extlibs/xmqtt/src/internal/xmqtt_session_client.h",
+      "sha256": "83366d5192fde35d5c3b92cb00ef5f223749e2bd75ad9048f1be152ca5622730"
+    },
+    "lib/xmqtt/src/internal/xmqtt_session_restore.h": {
+      "source": "extlibs/xmqtt/src/internal/xmqtt_session_restore.h",
+      "sha256": "826148897944ad2d41de0482261060278fdcc367a6751751e657cb238adf2582"
+    },
+    "lib/xmqtt/src/internal/xmqtt_session_state.h": {
+      "source": "extlibs/xmqtt/src/internal/xmqtt_session_state.h",
+      "sha256": "e91d975428fb9361eb3654d4f53237100696e6994c9eda01c2018bbc512cd09c"
+    },
+    "lib/xmqtt/src/internal/xmqtt_store_compact_online.h": {
+      "source": "extlibs/xmqtt/src/internal/xmqtt_store_compact_online.h",
+      "sha256": "2e4fce1f75a27bb5fcf3bfda2234e82fcbbd0aa3c3c9854a51bc369e434017fc"
+    },
+    "lib/xmqtt/src/internal/xmqtt_store_packet.h": {
+      "source": "extlibs/xmqtt/src/internal/xmqtt_store_packet.h",
+      "sha256": "a88387467eb30dbae76f61fe38daff1ec6a5f5be24b155a5ce7989c6fdd62475"
+    },
+    "lib/xmqtt/src/internal/xmqtt_store_session_source.h": {
+      "source": "extlibs/xmqtt/src/internal/xmqtt_store_session_source.h",
+      "sha256": "173f2a8e781bb935a4619c893efaead1e9692b42a8a8b20051b22570513400b1"
+    },
+    "lib/xmqtt/src/internal/xmqtt_store_write.h": {
+      "source": "extlibs/xmqtt/src/internal/xmqtt_store_write.h",
+      "sha256": "504e7f16b27d036dfe5a6f52498eb74fca42b12d2a9a39ef52cee962715ed755"
     },
     "lib/xmqtt/src/negotiation/negotiation.c": {
       "source": "extlibs/xmqtt/src/negotiation/negotiation.c",
@@ -2394,6 +2618,38 @@
     "lib/xmqtt/src/properties/properties.c": {
       "source": "extlibs/xmqtt/src/properties/properties.c",
       "sha256": "408627470697eba6d1ecf71fab8420231aa97cdf1415446a875e655651dd1465"
+    },
+    "lib/xmqtt/src/session/journal.c": {
+      "source": "extlibs/xmqtt/src/session/journal.c",
+      "sha256": "6efdf47ab6bc080890d7d535eb7b0cb93478b234266b5d41d8ad9b403a2ab83c"
+    },
+    "lib/xmqtt/src/session/journal_worker.c": {
+      "source": "extlibs/xmqtt/src/session/journal_worker.c",
+      "sha256": "6136b3b4892be0035d2e888861d20c1ba4456af8743077bb8a65dc1e483d1f4c"
+    },
+    "lib/xmqtt/src/session/session.c": {
+      "source": "extlibs/xmqtt/src/session/session.c",
+      "sha256": "43954268c2f0f225b4da1fc793ef0e1b3b6bda7dbd4b580d81e528a49335338d"
+    },
+    "lib/xmqtt/src/session/session_image.c": {
+      "source": "extlibs/xmqtt/src/session/session_image.c",
+      "sha256": "6340c5d439a3e3068b34be2f6741ab39bac3f28c4295829d350553459125dbc8"
+    },
+    "lib/xmqtt/src/session/store_delta.c": {
+      "source": "extlibs/xmqtt/src/session/store_delta.c",
+      "sha256": "d497c025e34d8d70b0f3c851c97c53c7991349e1dc85c1cfa3814b25f0c5b1f8"
+    },
+    "lib/xmqtt/src/session/store_session.c": {
+      "source": "extlibs/xmqtt/src/session/store_session.c",
+      "sha256": "b40535f57c005223529e618eedf6f79b88ecc29cea7afa20e019ac75baf671b3"
+    },
+    "lib/xmqtt/src/session/store_state.c": {
+      "source": "extlibs/xmqtt/src/session/store_state.c",
+      "sha256": "5119036c6f0a978b907b3cf6b19f12cdd254382c37b8f975f1aafc22a85d6741"
+    },
+    "lib/xmqtt/src/session/store_write.c": {
+      "source": "extlibs/xmqtt/src/session/store_write.c",
+      "sha256": "6c0f92a26f19eda2de1f153a0722cafbb099355427b5f450324bf288d813badb"
     },
     "lib/xmqtt/src/wire/wire.c": {
       "source": "extlibs/xmqtt/src/wire/wire.c",
@@ -2521,31 +2777,67 @@
     },
     "lib/xredis/README.md": {
       "source": "extlibs/xredis/README.md",
-      "sha256": "407730d3517c0fc2d84947aca4c657a7ee71712433a5168520f1bb77aa4105a2"
+      "sha256": "6ddb7b7c882f5349beca941cadb350f4f4e6cb1a531ac50badddb9ed71b933c3"
     },
     "lib/xredis/config/modules.json": {
       "source": "extlibs/xredis/config/modules.json",
-      "sha256": "ab0a2cec0e324a09e3556a998fb67e8404ae75ebd39df139a276d913e2420672"
+      "sha256": "a2098f913f720395e3ed93038bdceaeb6cffc14c4d7e7f329e417ec529b64fa8"
     },
     "lib/xredis/config/performance_profiles.json": {
       "source": "extlibs/xredis/config/performance_profiles.json",
-      "sha256": "7eb6546525af961626fd4fb467393148d618455e1006a68aa707ef4255f9ee53"
+      "sha256": "d6fef70f9507020fce0aeb2be599c2b4f8be67233bf72b8fcfeb33dc867d372c"
     },
     "lib/xredis/config/size_profiles.json": {
       "source": "extlibs/xredis/config/size_profiles.json",
-      "sha256": "4c190c9e073cd36912b84133fa42909a88971c92d4a536f71fe8422ac0178914"
+      "sha256": "889673c01c34a55db7ce95b55b8e4cdd7af6da72612ac275d103845db53c7c8b"
     },
     "lib/xredis/include/xredis.h": {
       "source": "extlibs/xredis/include/xredis.h",
-      "sha256": "aaccf06b3100b031adda6899f23da2cd3525e8b6847583062b5ce0e9d6aae6cf"
+      "sha256": "68555b7af3e4dfdee959bb840788915867e1cf78c718c1c061fa7f64207894af"
     },
     "lib/xredis/include/xredis/client.h": {
       "source": "extlibs/xredis/include/xredis/client.h",
-      "sha256": "84e47ea2f691e02f2bc3955a1a481fdf51895767ef3117276cacab92b9d7c5a9"
+      "sha256": "e1bb0bc15f48db395813019d933be295e357ac518668871a598952b28317c2f2"
+    },
+    "lib/xredis/include/xredis/cluster_client.h": {
+      "source": "extlibs/xredis/include/xredis/cluster_client.h",
+      "sha256": "97e3ac7007df014995734aba306394d7eb49106c1d24289ea237a8981e46317e"
+    },
+    "lib/xredis/include/xredis/cluster_client_sync.h": {
+      "source": "extlibs/xredis/include/xredis/cluster_client_sync.h",
+      "sha256": "ebf1f463450b5018ff376500f67526b85f33454b6c722b87fa425964b3150ca4"
+    },
+    "lib/xredis/include/xredis/cluster_command.h": {
+      "source": "extlibs/xredis/include/xredis/cluster_command.h",
+      "sha256": "81f7a2a87c8e0b939c7b03cc2cd9c2a78ccab4062f66b8fef0c63b7c8676bd87"
+    },
+    "lib/xredis/include/xredis/cluster_command_sync.h": {
+      "source": "extlibs/xredis/include/xredis/cluster_command_sync.h",
+      "sha256": "8a5dcd86b1b46acecdbd97f13ee67b0f572b54ee5eb9a92a09d133d685e5fef7"
+    },
+    "lib/xredis/include/xredis/cluster_nodes.h": {
+      "source": "extlibs/xredis/include/xredis/cluster_nodes.h",
+      "sha256": "3dceee5d52865910855b602976646fe5f545d9118b3c8f5b3b85b45034e4a063"
+    },
+    "lib/xredis/include/xredis/cluster_refresh.h": {
+      "source": "extlibs/xredis/include/xredis/cluster_refresh.h",
+      "sha256": "0430b7902d93884d12fddcfebeec19bc4e4a31203c0d082e17859043d4482c88"
+    },
+    "lib/xredis/include/xredis/cluster_route.h": {
+      "source": "extlibs/xredis/include/xredis/cluster_route.h",
+      "sha256": "3be299ff7fa9ec1244ce03736ff116c0c1b794e90104eb92a78c5e0e56497043"
+    },
+    "lib/xredis/include/xredis/cluster_topology.h": {
+      "source": "extlibs/xredis/include/xredis/cluster_topology.h",
+      "sha256": "8db9fbe6e8d73afb1a676bd73670b68d5e297736000383cb30843e5d422dc6cd"
     },
     "lib/xredis/include/xredis/command.h": {
       "source": "extlibs/xredis/include/xredis/command.h",
       "sha256": "ecb80e7240fb417e9eafbf291044442477b6a61db2587f0f156f71fe0810c730"
+    },
+    "lib/xredis/include/xredis/command_keys.h": {
+      "source": "extlibs/xredis/include/xredis/command_keys.h",
+      "sha256": "d2229e06f55ca78473a845278d0ed8a7ac3f24b3ea7bd553f42c88a8cdd59ac8"
     },
     "lib/xredis/include/xredis/dial.h": {
       "source": "extlibs/xredis/include/xredis/dial.h",
@@ -2557,15 +2849,31 @@
     },
     "lib/xredis/include/xredis/features.h": {
       "source": "extlibs/xredis/include/xredis/features.h",
-      "sha256": "99c655cfa3b85e7e1b1a18dd549f97e9262929efb0c106d7cf75ee3792a4d9c4"
+      "sha256": "98ddd91de4587445d73e6cbcfaa68bb49b8b2c79efe6ed4bdc13995c2e84f254"
     },
     "lib/xredis/include/xredis/pool.h": {
       "source": "extlibs/xredis/include/xredis/pool.h",
       "sha256": "e3cfd21ee568772fd5cbbd01364355ce17c5aa9abd0e05162283fc5729b25c7d"
     },
+    "lib/xredis/include/xredis/pool_asking.h": {
+      "source": "extlibs/xredis/include/xredis/pool_asking.h",
+      "sha256": "b8ea94c81b67b0bdfaca7630383124b5a3cc6a492efd64cdb85bb674aa3e1c26"
+    },
     "lib/xredis/include/xredis/pool_connect.h": {
       "source": "extlibs/xredis/include/xredis/pool_connect.h",
       "sha256": "1c66813901bbdb396ba8e6ea043f1b57e62622ef1935f86bab11741a3ec244bf"
+    },
+    "lib/xredis/include/xredis/pool_shared.h": {
+      "source": "extlibs/xredis/include/xredis/pool_shared.h",
+      "sha256": "d5240bf78019a1acc53a56f6c891ff817610cdd1d4fef0eaacd270fe4f6306f0"
+    },
+    "lib/xredis/include/xredis/pool_shared_asking.h": {
+      "source": "extlibs/xredis/include/xredis/pool_shared_asking.h",
+      "sha256": "25d4a9af53a447b923703582cfad745316792c11bbe7b2f861ec17dcf402f55f"
+    },
+    "lib/xredis/include/xredis/pool_shared_connect.h": {
+      "source": "extlibs/xredis/include/xredis/pool_shared_connect.h",
+      "sha256": "f79846489b66f0ee8c39251b28bef87cd363aa9d6f7b2a21308df433debe44ed"
     },
     "lib/xredis/include/xredis/pool_transaction.h": {
       "source": "extlibs/xredis/include/xredis/pool_transaction.h",
@@ -2575,6 +2883,10 @@
       "source": "extlibs/xredis/include/xredis/pool_watch.h",
       "sha256": "ebe150da444351e15445d378fa52c2d2c828510922e2267d9e7f1cdeba43b2b2"
     },
+    "lib/xredis/include/xredis/pubsub.h": {
+      "source": "extlibs/xredis/include/xredis/pubsub.h",
+      "sha256": "1374fd3fccb60bc9313194bc5f6932555672523fc7d623e1a210f88a272373e0"
+    },
     "lib/xredis/include/xredis/reader.h": {
       "source": "extlibs/xredis/include/xredis/reader.h",
       "sha256": "5e718a7a19c886102dffafae792d5be536740db526990dbae816edbae46c695d"
@@ -2583,13 +2895,53 @@
       "source": "extlibs/xredis/include/xredis/reply.h",
       "sha256": "2a91115fa651c67a1e5d8af4bb17a4e9212a0639964aafc573f12973eab8d8e1"
     },
+    "lib/xredis/include/xredis/role.h": {
+      "source": "extlibs/xredis/include/xredis/role.h",
+      "sha256": "7d57f8e7160c3b3da094372d84573c34a24647cec3bc1cb908c3059ec56b84df"
+    },
+    "lib/xredis/include/xredis/role_client.h": {
+      "source": "extlibs/xredis/include/xredis/role_client.h",
+      "sha256": "860c517b57b1f17fe2cfec5aadaca3b290c2d7ac910cb4ebef99d0a4a7430582"
+    },
+    "lib/xredis/include/xredis/sentinel.h": {
+      "source": "extlibs/xredis/include/xredis/sentinel.h",
+      "sha256": "69c30bc2ed3db9c7c8123b33d2dee68adcb8c2bef8c7b4ce599fd84552d1ae45"
+    },
+    "lib/xredis/include/xredis/sentinel_events.h": {
+      "source": "extlibs/xredis/include/xredis/sentinel_events.h",
+      "sha256": "c320952d65b4d169faffcad444fcd089173fab595966853f6330c0f010b5760c"
+    },
+    "lib/xredis/include/xredis/sentinel_pool.h": {
+      "source": "extlibs/xredis/include/xredis/sentinel_pool.h",
+      "sha256": "1f26c82f7f373e37349f86f55b2ed6a83edc7f004dca18187ad4dd1cc408ad23"
+    },
+    "lib/xredis/include/xredis/subscriber.h": {
+      "source": "extlibs/xredis/include/xredis/subscriber.h",
+      "sha256": "add4917047e46523eaa41949eaf3a2e5584d657d35eb0e1ac3ed30d154b675b5"
+    },
+    "lib/xredis/include/xredis/subscriber_notify.h": {
+      "source": "extlibs/xredis/include/xredis/subscriber_notify.h",
+      "sha256": "770bb1855347659e986a868ddf7c9137b032265df40883bb39220ab5b7603536"
+    },
+    "lib/xredis/include/xredis/subscription_session.h": {
+      "source": "extlibs/xredis/include/xredis/subscription_session.h",
+      "sha256": "f553ad81a885f47ec24a923d98407e659a910868aff0754ff8428afc72602cf0"
+    },
+    "lib/xredis/include/xredis/subscriptions.h": {
+      "source": "extlibs/xredis/include/xredis/subscriptions.h",
+      "sha256": "782a9ca709e5dab53030f72c8efd913a38be4981aac0d6f0dd857841d1e897e2"
+    },
     "lib/xredis/include/xredis/tls.h": {
       "source": "extlibs/xredis/include/xredis/tls.h",
-      "sha256": "9a82118976030b53f74db40133e51e467243d78fe2dc5c126c8be3e90f96516c"
+      "sha256": "d6d10cc2cb918f2aef8662d7deff9c33ff4005969229e15d186b0e576025bdff"
     },
     "lib/xredis/include/xredis/tls_auth.h": {
       "source": "extlibs/xredis/include/xredis/tls_auth.h",
       "sha256": "00d215a91a3c92ba52e65c97d8653f187715d4240dba9b152367c6696d9913cd"
+    },
+    "lib/xredis/include/xredis/tracking.h": {
+      "source": "extlibs/xredis/include/xredis/tracking.h",
+      "sha256": "ef3eceb882ef46cd4936a587f634f716cd1662bee481beb732890f3a13e156d0"
     },
     "lib/xredis/include/xredis/transaction.h": {
       "source": "extlibs/xredis/include/xredis/transaction.h",
@@ -2601,11 +2953,35 @@
     },
     "lib/xredis/src/client/client.c": {
       "source": "extlibs/xredis/src/client/client.c",
-      "sha256": "b96827f54902ca91e45f722d3e73688427df437bada12415881363ddd8e0da3b"
+      "sha256": "f1cfb657e758cad60a15fb4a9699a234340643aba4846b1466d514d4db36e201"
+    },
+    "lib/xredis/src/cluster_client/cluster_client.c": {
+      "source": "extlibs/xredis/src/cluster_client/cluster_client.c",
+      "sha256": "f734771c0aa9bfdbad5facf28917aa63f285ae48fcb3ed4201e1ef1f59bb674b"
+    },
+    "lib/xredis/src/cluster_nodes/cluster_nodes.c": {
+      "source": "extlibs/xredis/src/cluster_nodes/cluster_nodes.c",
+      "sha256": "b6730cd0326a079ca0a8b4b397781239ec57190e87566ff7aba604a5c83358b7"
+    },
+    "lib/xredis/src/cluster_refresh/cluster_refresh.c": {
+      "source": "extlibs/xredis/src/cluster_refresh/cluster_refresh.c",
+      "sha256": "920612914751adce4734d4d5a8cddef281f7bba792f3021b1dd20abf648a912a"
+    },
+    "lib/xredis/src/cluster_route/cluster_route.c": {
+      "source": "extlibs/xredis/src/cluster_route/cluster_route.c",
+      "sha256": "3e195109b6aab1011912bda0f96cf35a1fce2f9b4fc9820754190208b8851aad"
+    },
+    "lib/xredis/src/cluster_topology/cluster_topology.c": {
+      "source": "extlibs/xredis/src/cluster_topology/cluster_topology.c",
+      "sha256": "290c74a592b59e341e723ea497a10813402a4f720e461d16a66a761f016504b8"
     },
     "lib/xredis/src/command/command.c": {
       "source": "extlibs/xredis/src/command/command.c",
       "sha256": "7484d7692165cfd6571bdc77863c0c46bec750aafbd987fe99167d11bde362b9"
+    },
+    "lib/xredis/src/command_keys/command_keys.c": {
+      "source": "extlibs/xredis/src/command_keys/command_keys.c",
+      "sha256": "3e5f80dbcc8ba7032eca98e9d13249d2870adacef5f3b12f35defd307d21a1c3"
     },
     "lib/xredis/src/dial/dial.c": {
       "source": "extlibs/xredis/src/dial/dial.c",
@@ -2613,23 +2989,87 @@
     },
     "lib/xredis/src/internal/client_connect.h": {
       "source": "extlibs/xredis/src/internal/client_connect.h",
-      "sha256": "678afec6dbf525a1db16f724afe4594ae7e4920251541c0565a6aee06614a4bd"
+      "sha256": "e90c8857e6b0cee86e6def704cc3747421bb09da6f8b4336991f202f1e2460a3"
+    },
+    "lib/xredis/src/internal/cluster_nodes_internal.h": {
+      "source": "extlibs/xredis/src/internal/cluster_nodes_internal.h",
+      "sha256": "1afbf62333937890497d7f5eba0f61025b78d577718d6bfbdda0c634518be8c0"
+    },
+    "lib/xredis/src/internal/cluster_refresh_internal.h": {
+      "source": "extlibs/xredis/src/internal/cluster_refresh_internal.h",
+      "sha256": "e2d95259f404efd75148a1a16b3dbfc5b7dccec6f1ea0060b480dc808f157b18"
+    },
+    "lib/xredis/src/internal/cluster_reply.h": {
+      "source": "extlibs/xredis/src/internal/cluster_reply.h",
+      "sha256": "0a05261c75b80a0647fb3605798ca6de0f87896846f7a9960644b479f9d6bbe4"
+    },
+    "lib/xredis/src/internal/cluster_route_internal.h": {
+      "source": "extlibs/xredis/src/internal/cluster_route_internal.h",
+      "sha256": "ccbc45fd19a80c1b0ac5c6406d8102b859bf8c133f835676dd00cc21a1a6b987"
+    },
+    "lib/xredis/src/internal/cluster_slot.h": {
+      "source": "extlibs/xredis/src/internal/cluster_slot.h",
+      "sha256": "a4fa2b18cc6aea4515d8f0501b8e00e8b7a6237d7e8eab218f5634d85769414c"
+    },
+    "lib/xredis/src/internal/cluster_topology_internal.h": {
+      "source": "extlibs/xredis/src/internal/cluster_topology_internal.h",
+      "sha256": "3797d477a87b2a51230bfa550bd3d42a266045c9e5985e92695b7f38702f2024"
+    },
+    "lib/xredis/src/internal/command_keys_internal.h": {
+      "source": "extlibs/xredis/src/internal/command_keys_internal.h",
+      "sha256": "856da5bf53ff1698504b38bd52e5847bea2ae45446911c7ab930ec22504e0568"
     },
     "lib/xredis/src/internal/pool_admit.h": {
       "source": "extlibs/xredis/src/internal/pool_admit.h",
-      "sha256": "06f0523ddd8d02104473381a66d0a7ca80a1ba75f43918bd491a06f0898bf902"
+      "sha256": "63aae9d607ed67edc8d404dbf7a72eb65fc8e1677808e3b5c51a3c38e3a48067"
     },
     "lib/xredis/src/internal/pool_connect_internal.h": {
       "source": "extlibs/xredis/src/internal/pool_connect_internal.h",
-      "sha256": "b017ca311f3b0192ea6472a5cb4fbf1110b21942b1e32c0ad1a42903761b9944"
+      "sha256": "c0a70aaa201874af57133afc2bc7f3f9e7bdc5cc334745cca42b7455d9657733"
+    },
+    "lib/xredis/src/internal/sentinel_client.h": {
+      "source": "extlibs/xredis/src/internal/sentinel_client.h",
+      "sha256": "21c62f7466eb4c24d7a5df6d853941202dc3a60945a5195f6ffdae01ff87233e"
+    },
+    "lib/xredis/src/internal/sentinel_config.h": {
+      "source": "extlibs/xredis/src/internal/sentinel_config.h",
+      "sha256": "3eea10127dd97aae4a2dbafa3ccdf3e2b75cccee81e668f4a20bd23cc6a57f81"
+    },
+    "lib/xredis/src/internal/sentinel_events_internal.h": {
+      "source": "extlibs/xredis/src/internal/sentinel_events_internal.h",
+      "sha256": "b67f5eb3d65af81cf9503fa3a22b615fc561c802a4c0d08a50f4b74164432bb6"
+    },
+    "lib/xredis/src/internal/sentinel_pool_internal.h": {
+      "source": "extlibs/xredis/src/internal/sentinel_pool_internal.h",
+      "sha256": "5e1ad3ce00e7d75251f9a0095590f3defc4dc3926803e30033a89eea5043ec8a"
+    },
+    "lib/xredis/src/internal/subscription_replay.h": {
+      "source": "extlibs/xredis/src/internal/subscription_replay.h",
+      "sha256": "e2944b33218ead9ecff22c8330a188c8ba88761c2058f4e09089255a27c70b50"
     },
     "lib/xredis/src/pool/pool.c": {
       "source": "extlibs/xredis/src/pool/pool.c",
-      "sha256": "423e6c2d590293140f4e1458694d92e04b883b11ed576a3bdf27a0373efaf657"
+      "sha256": "d2b6709d27349a4d88bd992168038b533429249f93b30794ee5e326827e5e04f"
+    },
+    "lib/xredis/src/pool_asking/pool_asking.c": {
+      "source": "extlibs/xredis/src/pool_asking/pool_asking.c",
+      "sha256": "f4e1e59523054cfc342d1ebfec651f619340ac51a63863dc42e0db041c494d24"
     },
     "lib/xredis/src/pool_connect/pool_connect.c": {
       "source": "extlibs/xredis/src/pool_connect/pool_connect.c",
       "sha256": "fec1691682a137fe60a2d99f2bb2bbe562cb63c9063640564b460ae9efba7daf"
+    },
+    "lib/xredis/src/pool_shared/pool_shared.c": {
+      "source": "extlibs/xredis/src/pool_shared/pool_shared.c",
+      "sha256": "b58bfdd36b042e8781841892b7012c9c4918ac50fa87943219d87a41edf230dc"
+    },
+    "lib/xredis/src/pool_shared_asking/pool_shared_asking.c": {
+      "source": "extlibs/xredis/src/pool_shared_asking/pool_shared_asking.c",
+      "sha256": "e03377a18469745821e6d41eb9426cde35a0b54c1028145ae92d5bdbacf3ff04"
+    },
+    "lib/xredis/src/pool_shared_connect/pool_shared_connect.c": {
+      "source": "extlibs/xredis/src/pool_shared_connect/pool_shared_connect.c",
+      "sha256": "43944f276afb0c71850272cf1b570717e702388ae8ece502a1240a618b1565f2"
     },
     "lib/xredis/src/pool_transaction/pool_transaction.c": {
       "source": "extlibs/xredis/src/pool_transaction/pool_transaction.c",
@@ -2639,21 +3079,53 @@
       "source": "extlibs/xredis/src/pool_watch/pool_watch.c",
       "sha256": "0aa514b25dcd7e53ef2adb29df9309ec8d00dd462ab6b24edd1a45ec64e77a6c"
     },
+    "lib/xredis/src/pubsub/pubsub.c": {
+      "source": "extlibs/xredis/src/pubsub/pubsub.c",
+      "sha256": "9a7176a63503e9c9e8de579432aa810265c106e8ac2eb84dfb9fe4f22c8611d7"
+    },
     "lib/xredis/src/reader/reader.c": {
       "source": "extlibs/xredis/src/reader/reader.c",
       "sha256": "0e75eeac2954957c30fcdbe4624ad32b6f7b90530c4fba03933039b7c3e2e64e"
     },
     "lib/xredis/src/reply/reply.c": {
       "source": "extlibs/xredis/src/reply/reply.c",
-      "sha256": "01c6994f2fab53b8b0259ff5840da6ccb62ec0635937566f96228337756d0756"
+      "sha256": "bfb76e982db2adc58b80b6d542f5768a4acf443d92ff80fac2e79035edcf2135"
+    },
+    "lib/xredis/src/sentinel/sentinel.c": {
+      "source": "extlibs/xredis/src/sentinel/sentinel.c",
+      "sha256": "aa560a6ca90e6e84f9e64a0b7ab065fd0485aad5ead1cf504bc0e2904817335e"
+    },
+    "lib/xredis/src/sentinel_events/sentinel_events.c": {
+      "source": "extlibs/xredis/src/sentinel_events/sentinel_events.c",
+      "sha256": "a10d82aad2aefb0663989bad47e1907d4efd851e7635a132adcb3e4e5ec008d6"
+    },
+    "lib/xredis/src/sentinel_pool/sentinel_pool.c": {
+      "source": "extlibs/xredis/src/sentinel_pool/sentinel_pool.c",
+      "sha256": "f51d61473122d54789d04e89e125ed247f15ad83206b12a2f4c91fb0601f3710"
+    },
+    "lib/xredis/src/subscriber/subscriber.c": {
+      "source": "extlibs/xredis/src/subscriber/subscriber.c",
+      "sha256": "46bb80c4e3d646532da0e3536790566af9f522ef37751aa63260ddae4970a9c7"
+    },
+    "lib/xredis/src/subscription_session/subscription_session.c": {
+      "source": "extlibs/xredis/src/subscription_session/subscription_session.c",
+      "sha256": "53f449ab129c98b85705b5f7a58c0dc74417f86b039b570eaefccb040060f60a"
+    },
+    "lib/xredis/src/subscriptions/subscriptions.c": {
+      "source": "extlibs/xredis/src/subscriptions/subscriptions.c",
+      "sha256": "053d70be060726765535ac3a45a46c4d6258c732e0dda26befb09e5ad4c91dce"
     },
     "lib/xredis/src/tls/tls.c": {
       "source": "extlibs/xredis/src/tls/tls.c",
-      "sha256": "e08b4b6164b46f96935558ba0919ea5dd9a568fa0cf25685f50af63ac5f7da95"
+      "sha256": "f9e90c6a32f55f605c7b0797c2835cddc1fab60cd90d816c934a9c6e92eb2f4c"
     },
     "lib/xredis/src/tls_auth/tls_auth.c": {
       "source": "extlibs/xredis/src/tls_auth/tls_auth.c",
       "sha256": "f52fc0295374f9dc0746914ae7eab4a5914f2be7bd04a69a19f93e71b7674e51"
+    },
+    "lib/xredis/src/tracking/tracking.c": {
+      "source": "extlibs/xredis/src/tracking/tracking.c",
+      "sha256": "7ea9acd614a9ab5aea94f587db45303763898eeac3313447b88d998d1a8c8255"
     },
     "lib/xredis/src/transaction/transaction.c": {
       "source": "extlibs/xredis/src/transaction/transaction.c",
@@ -2665,23 +3137,23 @@
     },
     "lib/xrpc/README.md": {
       "source": "extlibs/xrpc/README.md",
-      "sha256": "aca731f64cad6f7cc91e5b1f6b04eaeb04624a8b71946d731be786d82d4899ed"
+      "sha256": "d94afbb9cf1f5a476a3b8a204d188c93e1bb48268e15633c36236118b29c6d06"
     },
     "lib/xrpc/config/modules.json": {
       "source": "extlibs/xrpc/config/modules.json",
-      "sha256": "753a424ab95c4b7d846be4bcc75b59c48c47a95e76a7540bba2ab34b3585a29c"
+      "sha256": "3c9bc481874156b600edaf3cf55460e7905acccd0f1153ae12ec8f5f3a8acfae"
     },
     "lib/xrpc/config/performance_profiles.json": {
       "source": "extlibs/xrpc/config/performance_profiles.json",
-      "sha256": "2a546e999cb82352ca1e129dec681bb94a7e102b1df55b83c3a9acf001aa176d"
+      "sha256": "f56de5bec8ee67059d9bb44851b0abddbcdd493d3565189521b345761c68c2d4"
     },
     "lib/xrpc/config/size_profiles.json": {
       "source": "extlibs/xrpc/config/size_profiles.json",
-      "sha256": "8921fc0fc08f1c73ed7f140d9066af0c4be2291e670112c169f0bcda634b22bf"
+      "sha256": "43e40a69371838476813ddc6ddf23ebd1ae686afa27ee48003e16eddc3349e8d"
     },
     "lib/xrpc/include/xrpc.h": {
       "source": "extlibs/xrpc/include/xrpc.h",
-      "sha256": "740048b404df73ab58f277c2ae2abd2f1c62ecfaf6d14ffa4bb9cba263eb3e60"
+      "sha256": "c60ab63429eb2b2fc357f3dc4fd7f6c3f9873fde39e93ac408716cb2142adee4"
     },
     "lib/xrpc/include/xrpc/call.h": {
       "source": "extlibs/xrpc/include/xrpc/call.h",
@@ -2693,7 +3165,11 @@
     },
     "lib/xrpc/include/xrpc/dispatch.h": {
       "source": "extlibs/xrpc/include/xrpc/dispatch.h",
-      "sha256": "8e3111750e0fc07f00e7c76f73bedc19928d76502c7bb5003270fbc018982d1c"
+      "sha256": "a110c4166db4fcd56abf9223c99b1eabb8b52a13882777938d2d92c2fc698cc0"
+    },
+    "lib/xrpc/include/xrpc/duplex.h": {
+      "source": "extlibs/xrpc/include/xrpc/duplex.h",
+      "sha256": "0540cf178e3fab2e1870eeeea016abd475d391348ae1554a0a99589b8d2288cd"
     },
     "lib/xrpc/include/xrpc/encode.h": {
       "source": "extlibs/xrpc/include/xrpc/encode.h",
@@ -2705,7 +3181,11 @@
     },
     "lib/xrpc/include/xrpc/features.h": {
       "source": "extlibs/xrpc/include/xrpc/features.h",
-      "sha256": "179806f0fc8036a31af312bbe009310548aa272a01e7787454e80cb723d737ab"
+      "sha256": "6f9495fe6362d87b48060a0b7c02f36f42aac3df410d8e27787f49c83ff6825c"
+    },
+    "lib/xrpc/include/xrpc/frame.h": {
+      "source": "extlibs/xrpc/include/xrpc/frame.h",
+      "sha256": "4f271e90c13bec5f3b7d2bbc99023ea8b94d2fe7f0a32e0dd947942463ef13d4"
     },
     "lib/xrpc/include/xrpc/http_client.h": {
       "source": "extlibs/xrpc/include/xrpc/http_client.h",
@@ -2751,9 +3231,45 @@
       "source": "extlibs/xrpc/include/xrpc/server.h",
       "sha256": "0a4ff59dee26533977e9241317a408bd588d13608e636b1d9c8f4105d736268a"
     },
+    "lib/xrpc/include/xrpc/tcp.h": {
+      "source": "extlibs/xrpc/include/xrpc/tcp.h",
+      "sha256": "3ee7b8bea22719caec0d38379127961beea83e228cf1ff7b09fd9d790f33d048"
+    },
+    "lib/xrpc/include/xrpc/tcp_dial.h": {
+      "source": "extlibs/xrpc/include/xrpc/tcp_dial.h",
+      "sha256": "e8fa446085e18bfdbefa0a6cf7bc5c564c89654f07593c90beb4130ae9655a2c"
+    },
+    "lib/xrpc/include/xrpc/tls.h": {
+      "source": "extlibs/xrpc/include/xrpc/tls.h",
+      "sha256": "3639b275ebe8eb38a6d94e4f763fec42a1bfa991921f29ed14ed0e6c3460443b"
+    },
+    "lib/xrpc/include/xrpc/tls_dial.h": {
+      "source": "extlibs/xrpc/include/xrpc/tls_dial.h",
+      "sha256": "c919e41fc4c6d4c012f7b18f7d7325b54e92cd6e0dea12d19acf58415f52030b"
+    },
     "lib/xrpc/include/xrpc/types.h": {
       "source": "extlibs/xrpc/include/xrpc/types.h",
       "sha256": "88368ad5f1993de1ec410e1d41f1e4d8fcc477bbbe517de9b9fcecbd7b98fcfa"
+    },
+    "lib/xrpc/include/xrpc/ws.h": {
+      "source": "extlibs/xrpc/include/xrpc/ws.h",
+      "sha256": "4a90eec89aa7f7aa11ee900602fab152c0e3a19828f294fa167eb1106dedc68f"
+    },
+    "lib/xrpc/include/xrpc/ws_deflate.h": {
+      "source": "extlibs/xrpc/include/xrpc/ws_deflate.h",
+      "sha256": "a3e3e0518db62689ffa1f1329e5babafa746278ac106e227bc37d6dec3e1b215"
+    },
+    "lib/xrpc/include/xrpc/ws_dial.h": {
+      "source": "extlibs/xrpc/include/xrpc/ws_dial.h",
+      "sha256": "2430552ce7b8d2eb2403f2e2184bac8cdf9b4d80090533b390aca1dcf4f6ad92"
+    },
+    "lib/xrpc/include/xrpc/ws_http.h": {
+      "source": "extlibs/xrpc/include/xrpc/ws_http.h",
+      "sha256": "b45e73d06c16cdbb6c5e6593aaedd2e8aa4f34af8d750bcc70876d2931d3746a"
+    },
+    "lib/xrpc/include/xrpc/ws_uri.h": {
+      "source": "extlibs/xrpc/include/xrpc/ws_uri.h",
+      "sha256": "327bf42f07135d5a0defed68bc5c321c54ea7c105b37929c290084dc6450c594"
     },
     "lib/xrpc/src/call/call.c": {
       "source": "extlibs/xrpc/src/call/call.c",
@@ -2765,11 +3281,19 @@
     },
     "lib/xrpc/src/dispatch/dispatch.c": {
       "source": "extlibs/xrpc/src/dispatch/dispatch.c",
-      "sha256": "776604fcc80aade4c92fc522a6e46bd0eeedfe596375d9011a576ad5679528e2"
+      "sha256": "957b5490871284d3d26ed41e1fa663b8d2ecfde713670c2086a9f2cb346162b2"
+    },
+    "lib/xrpc/src/duplex/duplex.c": {
+      "source": "extlibs/xrpc/src/duplex/duplex.c",
+      "sha256": "7bbf58efa94aecaf60dc026f6488d321a9ea23340f3e8f3f84d7faa86c2eb89c"
     },
     "lib/xrpc/src/encode/encode.c": {
       "source": "extlibs/xrpc/src/encode/encode.c",
       "sha256": "9f63236f105b353d23eb9c35373191dd5c9e8c025f238b98bfbf5942d43c677b"
+    },
+    "lib/xrpc/src/frame/frame.c": {
+      "source": "extlibs/xrpc/src/frame/frame.c",
+      "sha256": "3b9dc006fc41ffe485620aa1cd567f1beb4686ae6331d7b4aef0f982414a6bcd"
     },
     "lib/xrpc/src/http_client/http_client.c": {
       "source": "extlibs/xrpc/src/http_client/http_client.c",
@@ -2799,6 +3323,10 @@
       "source": "extlibs/xrpc/src/internal/xrpc_call_internal.h",
       "sha256": "c845f617724c3471b3fd3b97a4ad35188052fccfa2ead850253343d9a6f85e69"
     },
+    "lib/xrpc/src/internal/xrpc_duplex_internal.h": {
+      "source": "extlibs/xrpc/src/internal/xrpc_duplex_internal.h",
+      "sha256": "11a20ec382338d4e6f89c0480ee4cddb642cb9c07b0cf5db6bc8e6d33d1ee1ac"
+    },
     "lib/xrpc/src/internal/xrpc_http_connect.h": {
       "source": "extlibs/xrpc/src/internal/xrpc_http_connect.h",
       "sha256": "cea249fa559d0b48b7d6781b85b5453c929f1e4772077f6402d98ee0bafb0d86"
@@ -2815,9 +3343,13 @@
       "source": "extlibs/xrpc/src/internal/xrpc_json.h",
       "sha256": "07141f431a750da7da54437539b64494f477401f5a650e1e34718cf9f526c5a1"
     },
+    "lib/xrpc/src/internal/xrpc_pending_internal.h": {
+      "source": "extlibs/xrpc/src/internal/xrpc_pending_internal.h",
+      "sha256": "469cac9277e24e524cbb3d5f96a00dc7b96757af292b54f1437b32c5bc5dc5a9"
+    },
     "lib/xrpc/src/internal/xrpc_result_quota.h": {
       "source": "extlibs/xrpc/src/internal/xrpc_result_quota.h",
-      "sha256": "fb8a58fd5d2375f890cd03775f9c8cd58d5f94ae5a45687d925983f34e68b635"
+      "sha256": "a2a442288009eccbb3b85d88f4ec504440e125f1f40743878296980cf7be2947"
     },
     "lib/xrpc/src/internal/xrpc_server_internal.h": {
       "source": "extlibs/xrpc/src/internal/xrpc_server_internal.h",
@@ -2827,13 +3359,25 @@
       "source": "extlibs/xrpc/src/internal/xrpc_string.h",
       "sha256": "d55b116d251098ee631585154d13275cc6f5121c186bf122aac7c999950ebb9e"
     },
+    "lib/xrpc/src/internal/xrpc_tcp_connect.h": {
+      "source": "extlibs/xrpc/src/internal/xrpc_tcp_connect.h",
+      "sha256": "8f8c1afd3d58cd3958fcc1f25f2d1401a67ff203c6fb293e4b1833123964b85e"
+    },
+    "lib/xrpc/src/internal/xrpc_tls_connect.h": {
+      "source": "extlibs/xrpc/src/internal/xrpc_tls_connect.h",
+      "sha256": "8849b5406ba08c3fa9c21cba6752ed366806f4633ee67c8058d69a33eed542d7"
+    },
+    "lib/xrpc/src/internal/xrpc_ws_http_internal.h": {
+      "source": "extlibs/xrpc/src/internal/xrpc_ws_http_internal.h",
+      "sha256": "1e168e9d8685dbc54fd11e39e424d45313bbf1f5d5059f67d78d3b6832cda48a"
+    },
     "lib/xrpc/src/methods/methods.c": {
       "source": "extlibs/xrpc/src/methods/methods.c",
       "sha256": "d4112d5ac07cb400756d4d4a53840c571d962d9c891384296a37cd39a8594510"
     },
     "lib/xrpc/src/pending/pending.c": {
       "source": "extlibs/xrpc/src/pending/pending.c",
-      "sha256": "1d61ffbfaaf777093316f841746806e480bc6c0e760cbba9992eb6d9c546d41f"
+      "sha256": "b6fb08796e7fc340cfa9c687fd21ab54ba8d22704c8388ece157bf7a5ddbe1e6"
     },
     "lib/xrpc/src/receive/receive.c": {
       "source": "extlibs/xrpc/src/receive/receive.c",
@@ -2845,22 +3389,43 @@
     },
     "lib/xrpc/src/result_quota/result_quota.c": {
       "source": "extlibs/xrpc/src/result_quota/result_quota.c",
-      "sha256": "beaf35af3f33a3e0c21ebb5684f5333ba687900415ce121b0d60aa052733823b"
+      "sha256": "b150220f341107192a3bf0c745034fa09efdb0e3a4ea6c429e856ad321700ec7"
     },
     "lib/xrpc/src/server/server.c": {
       "source": "extlibs/xrpc/src/server/server.c",
       "sha256": "7266204c9f3e15eebc048b5f81f36c3af350f591de4e258403613b0ec9f644e5"
     },
+    "lib/xrpc/src/tcp/tcp.c": {
+      "source": "extlibs/xrpc/src/tcp/tcp.c",
+      "sha256": "80d70ad5619ae6e4d4121fde5c39595125a06c59614fdbd9b2241f7853f76b14"
+    },
+    "lib/xrpc/src/tcp_dial/tcp_dial.c": {
+      "source": "extlibs/xrpc/src/tcp_dial/tcp_dial.c",
+      "sha256": "fd1ae9fe55f9d76db753e10af42fc425c1d9b4bc859b2ef43481f32511346d60"
+    },
+    "lib/xrpc/src/tls/tls.c": {
+      "source": "extlibs/xrpc/src/tls/tls.c",
+      "sha256": "6175de2d380c9405d340ad5c5a85a55fb5a499efe60be9a707e735d124403cb2"
+    },
+    "lib/xrpc/src/tls_dial/tls_dial.c": {
+      "source": "extlibs/xrpc/src/tls_dial/tls_dial.c",
+      "sha256": "31eca07712699b89b746aa3d8ad5e7ddf1ab8e114dcd6e02687bddd2e28f39cd"
+    },
+    "lib/xrpc/src/ws/ws.c": {
+      "source": "extlibs/xrpc/src/ws/ws.c",
+      "sha256": "7ad8bfe57ef9c918a965be97cacf6de168072fd94daa16aabb9ffb982b4e82bd"
+    },
+    "lib/xrpc/src/ws_uri/uri.c": {
+      "source": "extlibs/xrpc/src/ws_uri/uri.c",
+      "sha256": "38eef17499e93ce2e3dbaee6c78fe9e2ab7ecb86df504fdb5c4c06fa749b37a0"
+    },
     "lib/xrt.h": {
       "source": "single/xrt.h",
-      "sha256": "9466f702a8da0e979c3c9d0f9ffb4b08765b6bb8656ade0a98a3f45ea84e232a",
-      "upstream_fixes": [
-        "54c59c14491dcac91e56ba24925d95afafbfdf0f"
-      ]
+      "sha256": "309cbd01b839cd862b2ccc48271991274bf22e5a70ebbb7ffe73caa5f5844654"
     },
     "lib/xrt_decl.h": {
       "source": "single/xrt_decl.h",
-      "sha256": "e54965af908c12e5c55ac2fa4409470931c9282b7711ea5eb38454c91a58f60f"
+      "sha256": "f4a6f516a00edd223a5526086cc830ed5b8b47ec99528c35158c4e9d155fddc8"
     },
     "lib/xrtshim/xrt/detail/wait.h": {
       "source": "include/xrt/detail/wait.h",
@@ -3710,6 +4275,114 @@
       "source": "extlibs/xssh/src/wire/ssh_wire.c",
       "sha256": "37bba0defe2006f0cca1dde012ebfedf04e507a1c297b92b0d37ba1d141cce23"
     },
+    "lib/xtp/LICENSE": {
+      "source": "extlibs/xtp/LICENSE",
+      "sha256": "98905b515b79667a921c4828babc2278f9fb78740da4215464d3757fc31ee9af"
+    },
+    "lib/xtp/README.md": {
+      "source": "extlibs/xtp/README.md",
+      "sha256": "7b371c75729e9af4ab38a20554ae2cd9e10236cf989f1ad15e5c1213ead12d76"
+    },
+    "lib/xtp/config/modules.json": {
+      "source": "extlibs/xtp/config/modules.json",
+      "sha256": "9fbf3a9c059b3e7965b09d947a1fe1aa0eb64fe1ae4ae8d38d3294cb1ae859dd"
+    },
+    "lib/xtp/config/performance_profiles.json": {
+      "source": "extlibs/xtp/config/performance_profiles.json",
+      "sha256": "b1c921c2b9f6fa872e0b7ead70932b11d8d4711bf6417a9181e13a052906a9df"
+    },
+    "lib/xtp/config/qualification_profiles.json": {
+      "source": "extlibs/xtp/config/qualification_profiles.json",
+      "sha256": "b48f2286b35750575f055682719bf64d6a14e63c0295eba971c8bd7410bb6003"
+    },
+    "lib/xtp/config/size_profiles.json": {
+      "source": "extlibs/xtp/config/size_profiles.json",
+      "sha256": "763196514cfc1dd5ed42d058c3030c76c5fa6511e81efdb864a43478d02694f6"
+    },
+    "lib/xtp/include/xtp.h": {
+      "source": "extlibs/xtp/include/xtp.h",
+      "sha256": "78e593a888b7ff2c678f69b075ad5ffd0fd9065b17bde452d13ac68297c54cb8"
+    },
+    "lib/xtp/include/xtp/codec.h": {
+      "source": "extlibs/xtp/include/xtp/codec.h",
+      "sha256": "ba22a1c6781ff09cab1ec1adf32bb0415f710ccf899021c5dde6ee5a812c2ff3"
+    },
+    "lib/xtp/include/xtp/export.h": {
+      "source": "extlibs/xtp/include/xtp/export.h",
+      "sha256": "9cea40e3d6a6a559bc4c171e8779bac9cbba6c8a2bf164cd19dac0f7137461ea"
+    },
+    "lib/xtp/include/xtp/features.h": {
+      "source": "extlibs/xtp/include/xtp/features.h",
+      "sha256": "63a4663ef040dffe275d9ec69e4858f1eb1fea6e429f699d5498c8f5b9fddbaa"
+    },
+    "lib/xtp/include/xtp/reader.h": {
+      "source": "extlibs/xtp/include/xtp/reader.h",
+      "sha256": "57699af9895cff7e51ffa50b9dc693b38a75c680b1d61057d63e78db0e040bc2"
+    },
+    "lib/xtp/include/xtp/session.h": {
+      "source": "extlibs/xtp/include/xtp/session.h",
+      "sha256": "0ba764a070012e24f5e0bbc2081bca046edbdbfc99d9a8f283c7484cb9ead1e9"
+    },
+    "lib/xtp/include/xtp/tcp.h": {
+      "source": "extlibs/xtp/include/xtp/tcp.h",
+      "sha256": "87978783101f72440b092248b625ddf071af4c50e6e66ffc8c627cf9fcef2b82"
+    },
+    "lib/xtp/include/xtp/tls.h": {
+      "source": "extlibs/xtp/include/xtp/tls.h",
+      "sha256": "19bd9388af5f751edab271c7e69ce270383cd271a899f2b2f1b784f7aeb3003f"
+    },
+    "lib/xtp/include/xtp/transport.h": {
+      "source": "extlibs/xtp/include/xtp/transport.h",
+      "sha256": "1e51520e607ffd5fd4774a12f0979681d144f6dec31df0f12e3ee61015c1c971"
+    },
+    "lib/xtp/include/xtp/types.h": {
+      "source": "extlibs/xtp/include/xtp/types.h",
+      "sha256": "f4fb5d6a964c2b9ba04d23574378eb56262be5c8e3ae21b671e03d4715ce8ec8"
+    },
+    "lib/xtp/include/xtp/ws.h": {
+      "source": "extlibs/xtp/include/xtp/ws.h",
+      "sha256": "13ebd12f2eddafa61741e8dd0f49b6fd0f65b42774dfdb47288e22714dbd214b"
+    },
+    "lib/xtp/include/xtp/xrudp.h": {
+      "source": "extlibs/xtp/include/xtp/xrudp.h",
+      "sha256": "10c5f5b1c3d75147491d536474ac932b753f618c9d6bff86f6aadd0968c14236"
+    },
+    "lib/xtp/src/codec/codec.c": {
+      "source": "extlibs/xtp/src/codec/codec.c",
+      "sha256": "5282dec6a359a1c4b8aafd66e430fc14078ca14c9eacfaea798bfba11873ee56"
+    },
+    "lib/xtp/src/internal/xtp_codec.h": {
+      "source": "extlibs/xtp/src/internal/xtp_codec.h",
+      "sha256": "5197352c38662a0ad62b103e79833962558eb0e933627067b641516f235825db"
+    },
+    "lib/xtp/src/reader/reader.c": {
+      "source": "extlibs/xtp/src/reader/reader.c",
+      "sha256": "6d1756515ac07ae747d3691481d6785147eedf737d8a312d25d310d927c18ca2"
+    },
+    "lib/xtp/src/session/session.c": {
+      "source": "extlibs/xtp/src/session/session.c",
+      "sha256": "c67c92447a1ae04a6e9869bbaaa545646896b724c1d9336d51161b496aeb668b"
+    },
+    "lib/xtp/src/transport/tcp.c": {
+      "source": "extlibs/xtp/src/transport/tcp.c",
+      "sha256": "98a92da35fc3dc5d4d8caa76c1c4f878bd8801e049b8d5cfde751057ab2b1349"
+    },
+    "lib/xtp/src/transport/tls.c": {
+      "source": "extlibs/xtp/src/transport/tls.c",
+      "sha256": "e754e427ffe2e8e2433620ee0f99a2c64a3351358a8acf203250997d024928ae"
+    },
+    "lib/xtp/src/transport/transport.c": {
+      "source": "extlibs/xtp/src/transport/transport.c",
+      "sha256": "6853ab44b2e90fa0c744ee2a524c5391971505d36ed39e4bc83cae3a13de6a70"
+    },
+    "lib/xtp/src/transport/ws.c": {
+      "source": "extlibs/xtp/src/transport/ws.c",
+      "sha256": "1270c813472ea4adff67778b9136ed4ab731ffe7b9b165888ac817e1e00c96a2"
+    },
+    "lib/xtp/src/transport/xrudp.c": {
+      "source": "extlibs/xtp/src/transport/xrudp.c",
+      "sha256": "31656ad39d6f2dce1a342efe0b080d9c249cbb1066f5ceb5a5a3d589a550602b"
+    },
     "lib/xwork/README.md": {
       "source": "extlibs/xwork/README.md",
       "sha256": "0d88ea8b7b77e3cb84ab0a10a29d8097089a184f80c713e345b0b14b6d805069"
@@ -3744,7 +4417,7 @@
     },
     "lib/xwork/src/work/xwork_agent.c": {
       "source": "extlibs/xwork/src/work/xwork_agent.c",
-      "sha256": "206f95571d2961a70fabd9a54842aadf19bb86fe214af77beaad2895dc8db487"
+      "sha256": "9dd3658c20a9a5937d87fab73597f09873ecd56813b6593c79b88bb3a0765534"
     },
     "lib/xwork/src/work/xwork_catalog.c": {
       "source": "extlibs/xwork/src/work/xwork_catalog.c",
@@ -4056,71 +4729,71 @@
     },
     "lib/xacme/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "bc54fe1049f1e50d8ff609cbc051ac19930f7cbd9c7564d9015c3ce8e07fffbf"
+      "sha256": "497e5ceaf172719b8be1a78cc6f6373b51db766bc394eb9ef119d4714c0f9a38"
     },
     "lib/xcron/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "49ed4f8271cd80fdbd273c47a3fab06ed639cb261975a5bbee1838cef489c827"
+      "sha256": "7638456de1c24acf5fc40685f4d36e283d100ee8c53a182aba4017ed303fe336"
     },
     "lib/xhttp-client/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "00c23310ed441acfddfefce0594982e884729cd6b79cf4e3ddcd76e30e82aeac"
+      "sha256": "ccdf6b0ee2ce51200481b70eca759c7b456992c1ee3df115af49fa0edaf103f9"
     },
     "lib/xhttp-policy/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "8ca37687d3101c48dd16558c2a1c8f59fb243088ad84ff3d0b134bef0daac309"
+      "sha256": "5485e1916fab349a8d015fbf5ab3e87e7d64e467b33a989d043133a508f4f125"
     },
     "lib/xhttp-server/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "df5fb812bfef04ae8764400404b465e66c03bf1c9ada04e1140ce7853fce5f72"
+      "sha256": "13b2c758f941575e2e913ec4ef837c396ff5dd0497361d197125ca8d9d13dfcd"
     },
     "lib/xhttp/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "24c3f06b9bc5f4716f78df82e438257ce2a6c533c526318676f07d07e11285a5"
+      "sha256": "91b646fc67e6eb6eb11d0fe152ec6427d812bf4c8a8c764f1a9d1ff35e9ab422"
     },
     "lib/ximap/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "f2c220a0a12214980f920d86b6668f00d74c4e1e4757e2abff7a95b99718aa7d"
+      "sha256": "87679a79ecf42d2caad619c55aed500d5fbac44751768dc479a4c66bae368962"
     },
     "lib/xjwt/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "fe296c871cc286e36410f8d065b3122472a6dc2b4f94566713bea6bfd71dfa76"
+      "sha256": "4a083c9343af80ed664672c03d5fa76a6e6181d29cfc8a605493c1ec23ef356d"
     },
     "lib/xllm-session/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "842581878fb479aa071b7378d8f8f9943477aa57dcf6d21191d7dee679e2313b"
+      "sha256": "bad8161ac0643e0907937d1eed33d8dc486031e26cd8295dba7747277cad6da3"
     },
     "lib/xllm/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "ea328b874b3b729bde3a03e4a1113209ce123d1e82b5f7ad7c29e5de2ee055e2"
+      "sha256": "5ffd6725d70d25b02acc8c79ffc34514543ad156ec7abff58f99d0014f4270da"
     },
     "lib/xmail/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "26caab3d6e4bc36c645ccd1a4867cf86566f0f4b225e7f8ca57464c574562c23"
+      "sha256": "1ad2694d19ad698dfa7dbef0b8cc202f9ba955f3d47cbef23317e91bca9a3d81"
     },
     "lib/xmqtt/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "d70b11baf68006c1dd8ddcbe4f14530ce9d13d009cccf4ff2fa5d8b3693e61cb"
+      "sha256": "c0040dd910bafec3c3883b2e6d2f6ab8e25070eae60c0a1da16731092889a6ea"
     },
     "lib/xoauth2/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "db6f5d9d6fd580fe8d883cdc947723f20fcb1452893b376f8a19c0a2ab924c2a"
+      "sha256": "72f7db6d4c14fce5104c8c56bd1bcf78225e9158748b2ff8f2c68d282ed100ff"
     },
     "lib/xpop3/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "6bf16d4ed09b9bd6c0e23829e08c9a9f6b5c344f5e803de9df79cd1f0eb2de6f"
+      "sha256": "35910e6d25f999fd1c4d1e26774b3a79ca863c3b58dec021b81e08f8212dfbe9"
     },
     "lib/xredis/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "d56b6e045473cd4914ac8c2ecf270cb20d0922cbfdbebe35d05d5a2090724307"
+      "sha256": "cfcebb2ac919d9445bc1823adde6b802c6f3e5ea02a96d2c27bfd960a704d02a"
     },
     "lib/xrpc/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "0b0a1e778878931da3b3738fa3afcf76b9289e9591ac2e73dfde5ec5528258ba"
+      "sha256": "4dbcd672ac7377378aec0b7c2ad287ca064b061033c5ae6bef2c312076a5d275"
     },
     "lib/xrt_version.txt": {
       "generated": true,
-      "sha256": "c49e1868de9f8f145bd9fab034fd21f1f83ea1b1dce81da8d52c4edaa5ca9ae3"
+      "sha256": "db7ee81fbd105288151f50067f231aa5edeed351e1914e0e4aebec6a74aedf30"
     },
     "lib/xrtshim/xrt/array.h": {
       "generated": true,
@@ -4364,7 +5037,7 @@
     },
     "lib/xrtshim/xrt/promote.h": {
       "generated": true,
-      "sha256": "65e9f9f09fdbd758e7b93e4354cc07eef215a3250552b8b34f7880d636dc8a4f"
+      "sha256": "b729d8a81cb5d6aeb7d3a1af4124497eebf205ef47d11335a79a1b609d384d64"
     },
     "lib/xrtshim/xrt/proxy.h": {
       "generated": true,
@@ -4528,35 +5201,39 @@
     },
     "lib/xrudp/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "edf992131525914fc7b492ee7f08009229d43e8a5a354edc7a75ab44d196cf8f"
+      "sha256": "d2ef554a8946754eaedf41c4fe5260ce87d7ccc6c8dc4277781178340069562e"
     },
     "lib/xsmtp/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "f5f0d21fbeab6729535263fd1e7c190859078c981069975e3686e1d36a74547b"
+      "sha256": "a145606fa1f64f960cb7c9999b1dfb0a0b65878de335d3ca5e8b7c46c0178ac2"
     },
     "lib/xssh/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "de05b13580ffce411a0cd4d7c9eaf3c45c9255c6405d79eac0c6c26cb9ddcaa0"
+      "sha256": "ea6d49ebfb401e6376e75ae34fec194db4bba01b5a2ca6b2a12cee8f9bc60120"
+    },
+    "lib/xtp/UPSTREAM.txt": {
+      "generated": true,
+      "sha256": "b6f12d68e2fff3bb56429877c3793087d94dcb0a52b88778bb372b723b27f958"
     },
     "lib/xwork/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "6240e7c23d1629af69b92912b77dda8ea3b925ed3534635894f758f91cfad2c1"
+      "sha256": "65955046e2d9fbcb9371b6aaf035e61167086ec71ef2c755cc930cde0fbb7d47"
     },
     "lib/xws-client/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "fce37b9cfda8120a25f03e44a5843005dcc5c2da7baff74d239ab34b60e2baa0"
+      "sha256": "f1e258d54ed33d090683285e3390975f811c88214699e5ccc73572a3072e80c2"
     },
     "lib/xws-group/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "29ca5898a24ed4543f438fb17cf1c678a1c60ea8d4f20c02ea012b9f2a79c95a"
+      "sha256": "d1f38588c7e11eaf22367bf1499048bb0bd874f20e420c3e9fcbbd3537eb9c84"
     },
     "lib/xws-server/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "a3faa9414c94e642f0d23868bf787b7dfa16dc0b173a47c0d54fd32484c44897"
+      "sha256": "6d719d5259ea5d4d7c5065457af4dd13b0a4525db03efe19abe4c850250e9047"
     },
     "lib/xws/UPSTREAM.txt": {
       "generated": true,
-      "sha256": "e2a57c6e26b97edd7f02aa7cea9382c7bbe23df31c1e40a63f5f1b07764bad97"
+      "sha256": "c59e2f62ecdf52c57525d854e5409f257026f23dd38598d5c16d683e42b5e8c2"
     },
     "src/script/import_xacme.inc": {
       "generated": true,
@@ -4564,7 +5241,7 @@
     },
     "src/script/import_xcron.inc": {
       "generated": true,
-      "sha256": "0948f7ec76385352b13c5fabbb85cb183f1cbd916c167e3e15a0ca64d34293b2"
+      "sha256": "7a9959b4ef55757ac248f707ed6c1300c0efad134a906c9ec8575d38cff4a8c0"
     },
     "src/script/import_xhttp.inc": {
       "generated": true,
@@ -4596,7 +5273,7 @@
     },
     "src/script/import_xllm_session.inc": {
       "generated": true,
-      "sha256": "38d13af82884fff21b9d5cc8372c2f40fe906b191521ee515095a62c2d518d22"
+      "sha256": "35f7aca00c8a379d2a467b8c8d48e260de0d520400777e5a5c88237e7af9359b"
     },
     "src/script/import_xmail.inc": {
       "generated": true,
@@ -4604,7 +5281,7 @@
     },
     "src/script/import_xmqtt.inc": {
       "generated": true,
-      "sha256": "d3ea17280001c31c1fe7197a30b26f61438fa4b57f73bf469699870023116e28"
+      "sha256": "4505a81d37f781f8f4f451defdcc4e27c0201866725a8918732d517c9825dee8"
     },
     "src/script/import_xoauth2.inc": {
       "generated": true,
@@ -4616,15 +5293,15 @@
     },
     "src/script/import_xredis.inc": {
       "generated": true,
-      "sha256": "922fbf39d30fa65244d5eeed0076543a90bf0f956ce2299c04354d77e0e47f86"
+      "sha256": "1b4176e494f912e9943de803fe9efd1443c9c779ef1cde4ed5d5bebcde6c7166"
     },
     "src/script/import_xrpc.inc": {
       "generated": true,
-      "sha256": "6913b9177b1a532ea64848c270ee25cda045ce0665248218a2d76daa6ff8127e"
+      "sha256": "ff4e3f330b28c840f9ad471dacc86c381763c2528f3f33d91ff86b1a5db8d108"
     },
     "src/script/import_xrt.inc": {
       "generated": true,
-      "sha256": "21de7694a7ed38ce0722702054ba90e26a854539c6572cb79e292e059199180d"
+      "sha256": "993750ef776244824a276fd5da3b7b9b2d4443fe673144d6218b1139ef648682"
     },
     "src/script/import_xrudp.inc": {
       "generated": true,
@@ -4637,6 +5314,10 @@
     "src/script/import_xssh.inc": {
       "generated": true,
       "sha256": "3369cc3fbeb7451c9da2c2e7b4440d4041267b4c33fe785302c7d13397e77fce"
+    },
+    "src/script/import_xtp.inc": {
+      "generated": true,
+      "sha256": "bdf95e84e8dafba433967b275cb26aa08ca10b3a4782f7ab694b9e491f9c9387"
     },
     "src/script/import_xwork.inc": {
       "generated": true,
@@ -4660,148 +5341,7 @@
     },
     "tools/extensions.json": {
       "generated": true,
-      "sha256": "6ee8a1526672e478ee87005b1522e4fc678d229a2af31609dc905e3cd11e5a15"
-    },
-    "lib/xtp/README.md": {
-      "source": "extlibs/xtp/README.md",
-      "sha256": "671463129f2a8eebf3f38e18f85f83a0e16829bd88f6d4db088e43642cd8defc",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/include/xtp/codec.h": {
-      "source": "extlibs/xtp/include/xtp/codec.h",
-      "sha256": "ba22a1c6781ff09cab1ec1adf32bb0415f710ccf899021c5dde6ee5a812c2ff3",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/include/xtp/export.h": {
-      "source": "extlibs/xtp/include/xtp/export.h",
-      "sha256": "9cea40e3d6a6a559bc4c171e8779bac9cbba6c8a2bf164cd19dac0f7137461ea",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/include/xtp/features.h": {
-      "source": "extlibs/xtp/include/xtp/features.h",
-      "sha256": "63a4663ef040dffe275d9ec69e4858f1eb1fea6e429f699d5498c8f5b9fddbaa",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/include/xtp/reader.h": {
-      "source": "extlibs/xtp/include/xtp/reader.h",
-      "sha256": "57699af9895cff7e51ffa50b9dc693b38a75c680b1d61057d63e78db0e040bc2",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/include/xtp/session.h": {
-      "source": "extlibs/xtp/include/xtp/session.h",
-      "sha256": "0ba764a070012e24f5e0bbc2081bca046edbdbfc99d9a8f283c7484cb9ead1e9",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/include/xtp/tcp.h": {
-      "source": "extlibs/xtp/include/xtp/tcp.h",
-      "sha256": "87978783101f72440b092248b625ddf071af4c50e6e66ffc8c627cf9fcef2b82",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/include/xtp/tls.h": {
-      "source": "extlibs/xtp/include/xtp/tls.h",
-      "sha256": "19bd9388af5f751edab271c7e69ce270383cd271a899f2b2f1b784f7aeb3003f",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/include/xtp/transport.h": {
-      "source": "extlibs/xtp/include/xtp/transport.h",
-      "sha256": "1e51520e607ffd5fd4774a12f0979681d144f6dec31df0f12e3ee61015c1c971",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/include/xtp/types.h": {
-      "source": "extlibs/xtp/include/xtp/types.h",
-      "sha256": "f4fb5d6a964c2b9ba04d23574378eb56262be5c8e3ae21b671e03d4715ce8ec8",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/include/xtp/ws.h": {
-      "source": "extlibs/xtp/include/xtp/ws.h",
-      "sha256": "13ebd12f2eddafa61741e8dd0f49b6fd0f65b42774dfdb47288e22714dbd214b",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/include/xtp/xrudp.h": {
-      "source": "extlibs/xtp/include/xtp/xrudp.h",
-      "sha256": "10c5f5b1c3d75147491d536474ac932b753f618c9d6bff86f6aadd0968c14236",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/include/xtp.h": {
-      "source": "extlibs/xtp/include/xtp.h",
-      "sha256": "78e593a888b7ff2c678f69b075ad5ffd0fd9065b17bde452d13ac68297c54cb8",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/src/codec/codec.c": {
-      "source": "extlibs/xtp/src/codec/codec.c",
-      "sha256": "5282dec6a359a1c4b8aafd66e430fc14078ca14c9eacfaea798bfba11873ee56",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/src/internal/xtp_codec.h": {
-      "source": "extlibs/xtp/src/internal/xtp_codec.h",
-      "sha256": "5197352c38662a0ad62b103e79833962558eb0e933627067b641516f235825db",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/src/reader/reader.c": {
-      "source": "extlibs/xtp/src/reader/reader.c",
-      "sha256": "6d1756515ac07ae747d3691481d6785147eedf737d8a312d25d310d927c18ca2",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/src/session/session.c": {
-      "source": "extlibs/xtp/src/session/session.c",
-      "sha256": "c67c92447a1ae04a6e9869bbaaa545646896b724c1d9336d51161b496aeb668b",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/src/transport/tcp.c": {
-      "source": "extlibs/xtp/src/transport/tcp.c",
-      "sha256": "98a92da35fc3dc5d4d8caa76c1c4f878bd8801e049b8d5cfde751057ab2b1349",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/src/transport/tls.c": {
-      "source": "extlibs/xtp/src/transport/tls.c",
-      "sha256": "e754e427ffe2e8e2433620ee0f99a2c64a3351358a8acf203250997d024928ae",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/src/transport/transport.c": {
-      "source": "extlibs/xtp/src/transport/transport.c",
-      "sha256": "6853ab44b2e90fa0c744ee2a524c5391971505d36ed39e4bc83cae3a13de6a70",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/src/transport/ws.c": {
-      "source": "extlibs/xtp/src/transport/ws.c",
-      "sha256": "1270c813472ea4adff67778b9136ed4ab731ffe7b9b165888ac817e1e00c96a2",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/src/transport/xrudp.c": {
-      "source": "extlibs/xtp/src/transport/xrudp.c",
-      "sha256": "31656ad39d6f2dce1a342efe0b080d9c249cbb1066f5ceb5a5a3d589a550602b",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/config/modules.json": {
-      "source": "extlibs/xtp/config/modules.json",
-      "sha256": "988d09410a488b2b00c31a606900927c33d73abd35820864ba15890747d58604",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/UPSTREAM.txt": {
-      "generated": true,
-      "sha256": "05c97be1bf4b9aa4ac7e77afbbed40d9a6e6e309e0e9076ea1e4f8c993132807"
-    },
-    "src/script/import_xtp.inc": {
-      "generated": true,
-      "sha256": "bdf95e84e8dafba433967b275cb26aa08ca10b3a4782f7ab694b9e491f9c9387"
-    },
-    "lib/xtp/config/performance_profiles.json": {
-      "source": "extlibs/xtp/config/performance_profiles.json",
-      "sha256": "b1c921c2b9f6fa872e0b7ead70932b11d8d4711bf6417a9181e13a052906a9df",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/config/size_profiles.json": {
-      "source": "extlibs/xtp/config/size_profiles.json",
-      "sha256": "763196514cfc1dd5ed42d058c3030c76c5fa6511e81efdb864a43478d02694f6",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
-    },
-    "lib/xtp/LICENSE": {
-      "source": "extlibs/xtp/LICENSE",
-      "sha256": "98905b515b79667a921c4828babc2278f9fb78740da4215464d3757fc31ee9af",
-      "upstream_commit": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
+      "sha256": "89c19583cb85182b032d3096f3f2e81be745ef26a3abc124e5f44d5465eb4c22"
     }
-  },
-  "library_commits": {
-    "xtp": "cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd"
   }
 }

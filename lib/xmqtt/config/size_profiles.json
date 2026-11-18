@@ -62,7 +62,171 @@
       "name": "xmqtt_client",
       "system": "client",
       "suite": "xmqtt_client",
-      "description": "MQTT TCP QoS0/1 send/receive and bounded diagnostic close, codecs/negotiation and public host TCP/Future closure; Core dependency files reported separately"
+      "description": "MQTT TCP QoS0/1 send/receive and bounded diagnostic close, codecs/negotiation and public host TCP/Future closure; Core dependency files reported separately",
+      "forbid_symbols": [
+        "xmqttClientConnectAuth",
+        "xmqttClientReauthenticate",
+        "xmqttAuthRespond",
+        "xmqttClientDial"
+      ]
+    },
+    {
+      "name": "xmqtt_client_auth",
+      "system": "client",
+      "suite": "xmqtt_client_auth",
+      "description": "Optional enhanced AUTH ticket/state/wire/reauth support plus the existing bounded MQTT TCP client and public Core closure"
+    },
+    {
+      "name": "xmqtt_client_dial",
+      "system": "client",
+      "suite": "xmqtt_client_dial",
+      "description": "Bounded DNS/prepared-address MQTT client and public Core Dial dependency closure"
+    },
+    {
+      "name": "xmqtt_client_tls",
+      "system": "client",
+      "suite": "xmqtt_client_tls",
+      "description": "Verified TLS client/Dial/native prefix retirement with AES/ChaCha, SHA256/384 and X25519/P256/P384; private-key signing backends are separate"
+    },
+    {
+      "name": "xmqtt_client_tls_resume",
+      "system": "client",
+      "suite": "xmqtt_client_tls_resume",
+      "description": "Optional bounded TLS1.3 credential handoff and authenticated resumed-handshake observation; native private-key signing backends are separate"
+    },
+    {
+      "name": "xmqtt_session",
+      "system": "session",
+      "suite": "xmqtt_session",
+      "description": "Bounded in-memory QoS/expiry/immutable-packet state with no Client, Engine, Future or transport closure",
+      "forbid_symbols": [
+        "xmqttClient",
+        "xrtNetEngine",
+        "xrtFuture",
+        "xrtPromise"
+      ]
+    },
+    {
+      "name": "xmqtt_client_inbox",
+      "system": "client",
+      "suite": "xmqtt_client_inbox",
+      "description": "Passive cross-Client message queue and shared physical object quota; numeric TCP factory, no MQTT protocol session recovery"
+    },
+    {
+      "name": "xmqtt_client_session",
+      "system": "client",
+      "suite": "xmqtt_client_session",
+      "description": "Explicit numeric TCP protocol Session and Inbox recovery with connection-scoped Futures"
+    },
+    {
+      "name": "xmqtt_client_session_dial",
+      "system": "client",
+      "suite": "xmqtt_client_session_dial",
+      "description": "Explicit hostname/prepared Session Dial without TLS/Auth; numeric Auth composition remains independently selectable"
+    },
+    {
+      "name": "xmqtt_reconnect_subscriptions",
+      "system": "client",
+      "suite": "xmqtt_reconnect_subscriptions",
+      "description": "Optional bounded subscription registry/reconciliation, immutable intent snapshots and control-result watches with the existing numeric reconnect/Session/Inbox runtime"
+    },
+    {
+      "name": "xmqtt_client_ws",
+      "system": "client_ws",
+      "suite": "xmqtt_client_ws",
+      "description": "MQTT Binary attachment/native write prefix/retirement; WSS adds native TLS closure only when selected"
+    },
+    {
+      "name": "xmqtt_client_ws_tls",
+      "system": "client_ws",
+      "suite": "xmqtt_client_ws_tls",
+      "description": "MQTT Binary attachment/native write prefix/retirement; WSS adds native TLS closure only when selected"
+    },
+    {
+      "name": "xmqtt_client_ws_connect",
+      "system": "client_ws_connect",
+      "suite": "xmqtt_client_ws_connect",
+      "description": "Ordinary Client, numeric/DNS/prepared HTTP Upgrade, bounded cold state and physical WS/TCP retirement; TLS/Auth/Session absent",
+      "forbid_symbols": [
+        "xmqttClientWssConnect",
+        "xmqttClientConnectAuth",
+        "xmqttSessionCreate",
+        "xrtTlsClientCreate"
+      ]
+    },
+    {
+      "name": "xmqtt_client_ws_connect_tls",
+      "system": "client_ws_connect",
+      "suite": "xmqtt_client_ws_connect_tls",
+      "description": "Ordinary Client, numeric/DNS/prepared HTTP Upgrade, bounded cold state and physical WS/TCP retirement; native verified TLS added"
+    },
+    {
+      "name": "xmqtt_client_ws_uri",
+      "system": "client_ws_uri",
+      "suite": "xmqtt_client_ws_uri",
+      "description": "Native URI, strict HTTP setup and ordinary MQTT Client; no additional resident URI state",
+      "forbid_symbols": [
+        "xmqttClientWssConnect",
+        "xmqttClientConnectAuth",
+        "xmqttSessionCreate",
+        "xrtTlsClientCreate"
+      ]
+    },
+    {
+      "name": "xmqtt_client_ws_uri_tls",
+      "system": "client_ws_uri",
+      "suite": "xmqtt_client_ws_uri_tls",
+      "description": "Native URI, strict HTTP setup and ordinary MQTT Client; no additional resident URI state"
+    },
+    {
+      "name": "xmqtt_store_state",
+      "system": "session",
+      "suite": "xmqtt_store_state",
+      "description": "Typed journal recovery and immutable QoS/Inbox views; no Session,Client,VFS,test threads or statistics",
+      "forbid_symbols": [
+        "xmqttSessionCreate",
+        "xmqttClientConnect",
+        "xrtVfsCreate",
+        "xrtEngineCreate"
+      ]
+    },
+    {
+      "name": "xmqtt_store_session",
+      "system": "session",
+      "suite": "xmqtt_store_session",
+      "description": "Direct immutable State import into independent Session; no Client,Engine,VFS or image serialization",
+      "forbid_symbols": [
+        "xmqttSessionImageRestore",
+        "xmqttClientConnect",
+        "xrtVfsCreate",
+        "xrtNetEngineCreate"
+      ]
+    },
+    {
+      "name": "xmqtt_journal_worker",
+      "system": "session",
+      "suite": "xmqtt_journal_worker",
+      "description": "Borrowed-pool bounded opaque Journal append; no native MQTT transport,State,Session,Engine,VFS or test code",
+      "forbid_symbols": [
+        "xmqttStoreStateRecover",
+        "xmqttSessionCreate",
+        "xmqttClientConnect",
+        "xrtNetEngineCreate",
+        "xrtVfsCreate"
+      ]
+    },
+    {
+      "name": "xmqtt_store_write",
+      "system": "session",
+      "suite": "xmqtt_store_write",
+      "description": "Bounded legal typed transactions on a borrowed host pool; no Session,Client,Engine,VFS or image serialization",
+      "forbid_symbols": [
+        "xmqttSessionCreate",
+        "xmqttClientConnect",
+        "xrtNetEngineCreate",
+        "xrtVfsCreate",
+        "xmqttSessionImageRestore"
+      ]
     }
   ]
 }

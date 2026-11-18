@@ -37,36 +37,193 @@
       {
         "name": "reply",
         "state": "retained",
-        "source_roots": ["reply"]
+        "source_roots": [
+          "reply"
+        ]
       },
       {
         "name": "client",
         "state": "retained",
-        "source_roots": ["client"]
+        "source_roots": [
+          "client"
+        ]
       },
       {
         "name": "dial",
         "state": "retained",
-        "source_roots": ["dial"]
+        "source_roots": [
+          "dial"
+        ]
       },
       {
-        "name": "tls", "state": "retained", "source_roots": ["tls"]
+        "name": "tls",
+        "state": "retained",
+        "source_roots": [
+          "tls"
+        ]
       },
       {
-        "name": "tls_auth", "state": "retained", "source_roots": ["tls_auth"]
+        "name": "tls_auth",
+        "state": "retained",
+        "source_roots": [
+          "tls_auth"
+        ]
       },
       {
-        "name": "transaction", "state": "retained", "source_roots": ["transaction"]
+        "name": "transaction",
+        "state": "retained",
+        "source_roots": [
+          "transaction"
+        ]
       },
       {
-        "name": "watch", "state": "retained", "source_roots": ["watch"]
+        "name": "watch",
+        "state": "retained",
+        "source_roots": [
+          "watch"
+        ]
       },
       {
-        "name": "pool", "state": "retained", "source_roots": ["pool"]
+        "name": "pool",
+        "state": "retained",
+        "source_roots": [
+          "pool"
+        ]
       },
-      {"name": "pool_transaction", "state": "retained", "source_roots": ["pool_transaction"]},
-      {"name": "pool_watch", "state": "retained", "source_roots": ["pool_watch"]},
-      {"name": "pool_connect", "state": "retained", "source_roots": ["pool_connect"]}
+      {
+        "name": "pool_transaction",
+        "state": "retained",
+        "source_roots": [
+          "pool_transaction"
+        ]
+      },
+      {
+        "name": "pool_watch",
+        "state": "retained",
+        "source_roots": [
+          "pool_watch"
+        ]
+      },
+      {
+        "name": "pool_connect",
+        "state": "retained",
+        "source_roots": [
+          "pool_connect"
+        ]
+      },
+      {
+        "name": "pubsub",
+        "state": "retained",
+        "source_roots": [
+          "pubsub"
+        ]
+      },
+      {
+        "name": "subscriber",
+        "state": "retained",
+        "source_roots": [
+          "subscriber"
+        ]
+      },
+      {
+        "name": "subscriptions",
+        "state": "retained",
+        "source_roots": [
+          "subscriptions"
+        ]
+      },
+      {
+        "name": "subscription_session",
+        "state": "retained",
+        "source_roots": [
+          "subscription_session"
+        ]
+      },
+      {
+        "name": "sentinel",
+        "state": "retained",
+        "source_roots": [
+          "sentinel"
+        ]
+      },
+      {
+        "name": "sentinel_pool",
+        "state": "retained",
+        "source_roots": [
+          "sentinel_pool",
+          "sentinel_events"
+        ]
+      },
+      {
+        "name": "cluster_topology",
+        "state": "retained",
+        "source_roots": [
+          "cluster_topology"
+        ]
+      },
+      {
+        "name": "pool_asking",
+        "state": "retained",
+        "source_roots": [
+          "pool_asking"
+        ]
+      },
+      {
+        "name": "pool_shared",
+        "state": "retained",
+        "source_roots": [
+          "pool_shared"
+        ]
+      },
+      {
+        "name": "pool_shared_connect",
+        "state": "retained",
+        "source_roots": [
+          "pool_shared_connect"
+        ]
+      },
+      {
+        "name": "pool_shared_asking",
+        "state": "retained",
+        "source_roots": [
+          "pool_shared_asking"
+        ]
+      },
+      {
+        "name": "cluster_route",
+        "state": "retained",
+        "source_roots": [
+          "cluster_route"
+        ]
+      },
+      {
+        "name": "cluster_nodes",
+        "state": "retained",
+        "source_roots": [
+          "cluster_nodes"
+        ]
+      },
+      {
+        "name": "cluster_refresh",
+        "state": "retained",
+        "source_roots": [
+          "cluster_refresh"
+        ]
+      },
+      {
+        "name": "cluster_client",
+        "state": "retained",
+        "source_roots": [
+          "cluster_client"
+        ]
+      },
+      {
+        "name": "command_keys",
+        "state": "retained",
+        "source_roots": [
+          "command_keys"
+        ]
+      }
     ]
   },
   "api_reference": {
@@ -335,7 +492,31 @@
         "xredis_pool",
         "xredis_pool_transaction",
         "xredis_pool_watch",
-        "xredis_pool_connect"
+        "xredis_pool_connect",
+        "xredis_tracking",
+        "xredis_pubsub",
+        "xredis_subscriber",
+        "xredis_subscriber_notify",
+        "xredis_subscriptions",
+        "xredis_subscription_session",
+        "xredis_role",
+        "xredis_role_client",
+        "xredis_sentinel",
+        "xredis_sentinel_pool",
+        "xredis_sentinel_events",
+        "xredis_cluster_topology",
+        "xredis_pool_asking",
+        "xredis_pool_shared",
+        "xredis_pool_shared_connect",
+        "xredis_pool_shared_asking",
+        "xredis_cluster_route",
+        "xredis_cluster_nodes",
+        "xredis_cluster_refresh",
+        "xredis_cluster_client",
+        "xredis_command_keys",
+        "xredis_cluster_command",
+        "xredis_cluster_client_sync",
+        "xredis_cluster_command_sync"
       ],
       "public_headers": [
         "extlibs/xredis/include/xredis.h",
@@ -357,64 +538,211 @@
       ]
     },
     {
-      "name": "xredis_transaction", "state": "developing", "feature": "XREDIS_FEATURE_XREDIS_TRANSACTION",
-      "depends": ["xredis_client"],
-      "public_headers": ["extlibs/xredis/include/xredis/transaction.h"], "internal_headers": [],
-      "sources": ["extlibs/xredis/src/transaction/transaction.c"], "tests": [], "single_tests": [],
-      "examples": ["extlibs/xredis/examples/transaction/main.c"], "benchmarks": ["extlibs/xredis/bench/bench_transaction.c"],
-      "docs": ["extlibs/xredis/README.md", "extlibs/xredis/docs/api/reference.md", "extlibs/xredis/docs/transaction.md"]
+      "name": "xredis_transaction",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_TRANSACTION",
+      "depends": [
+        "xredis_client"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/transaction.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xredis/src/transaction/transaction.c"
+      ],
+      "tests": [],
+      "single_tests": [],
+      "examples": [
+        "extlibs/xredis/examples/transaction/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_transaction.c"
+      ],
+      "docs": [
+        "extlibs/xredis/README.md",
+        "extlibs/xredis/docs/api/reference.md",
+        "extlibs/xredis/docs/transaction.md"
+      ]
     },
     {
-      "name": "xredis_transaction_tests", "state": "implemented", "feature": null,
-      "depends": ["xredis_transaction", "xredis_tls_tests"],
-      "public_headers": [], "internal_headers": [], "sources": [],
-      "tests": ["extlibs/xredis/tests/test_transaction.c"], "single_tests": ["extlibs/xredis/tests/single/test_single_xredis_transaction.c"],
-      "examples": [], "benchmarks": [], "docs": []
+      "name": "xredis_transaction_tests",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis_transaction",
+        "xredis_tls_tests"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xredis/tests/test_transaction.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_transaction.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": []
     },
     {
-      "name": "xredis_tls", "state": "implemented", "feature": "XREDIS_FEATURE_XREDIS_TLS",
-      "depends": ["xredis_dial", "tls_stream", "tls_client_resume", "tls_record_aes", "tls_record_chacha", "tls_schedule_sha256", "tls_schedule_sha384", "tls_key_exchange_x25519", "tls_key_exchange_p256", "tls_key_exchange_p384"],
-      "public_headers": ["extlibs/xredis/include/xredis/tls.h"], "internal_headers": [],
-      "sources": ["extlibs/xredis/src/tls/tls.c"], "tests": [], "single_tests": [],
-      "examples": ["extlibs/xredis/examples/tls/main.c"], "benchmarks": ["extlibs/xredis/bench/bench_tls_openloop.c"], "docs": ["extlibs/xredis/README.md", "extlibs/xredis/docs/api/reference.md", "extlibs/xredis/docs/tls.md"]
+      "name": "xredis_tls",
+      "state": "implemented",
+      "feature": "XREDIS_FEATURE_XREDIS_TLS",
+      "depends": [
+        "xredis_dial",
+        "tls_stream",
+        "tls_client_resume",
+        "tls_record_aes",
+        "tls_record_chacha",
+        "tls_schedule_sha256",
+        "tls_schedule_sha384",
+        "tls_key_exchange_x25519",
+        "tls_key_exchange_p256",
+        "tls_key_exchange_p384"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/tls.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xredis/src/tls/tls.c"
+      ],
+      "tests": [],
+      "single_tests": [],
+      "examples": [
+        "extlibs/xredis/examples/tls/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_tls_openloop.c"
+      ],
+      "docs": [
+        "extlibs/xredis/README.md",
+        "extlibs/xredis/docs/api/reference.md",
+        "extlibs/xredis/docs/tls.md"
+      ]
     },
     {
-      "name": "xredis_tls_auth", "state": "developing", "feature": "XREDIS_FEATURE_XREDIS_TLS_AUTH",
-      "depends": ["xredis_tls", "tls_client_auth"],
-      "public_headers": ["extlibs/xredis/include/xredis/tls_auth.h"], "internal_headers": [],
-      "sources": ["extlibs/xredis/src/tls_auth/tls_auth.c"], "tests": [], "single_tests": [], "examples": [], "benchmarks": ["extlibs/xredis/bench/bench_tls_auth.c"],
-      "docs": ["extlibs/xredis/README.md", "extlibs/xredis/docs/api/reference.md", "extlibs/xredis/docs/tls-auth.md"]
+      "name": "xredis_tls_auth",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_TLS_AUTH",
+      "depends": [
+        "xredis_tls",
+        "tls_client_auth"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/tls_auth.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xredis/src/tls_auth/tls_auth.c"
+      ],
+      "tests": [],
+      "single_tests": [],
+      "examples": [],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_tls_auth.c"
+      ],
+      "docs": [
+        "extlibs/xredis/README.md",
+        "extlibs/xredis/docs/api/reference.md",
+        "extlibs/xredis/docs/tls-auth.md"
+      ]
     },
     {
-      "name": "xredis_tls_auth_examples", "state": "implemented", "feature": null,
-      "depends": ["xredis_tls_auth", "tls_identity_rsa", "pem"],
-      "public_headers": [], "internal_headers": [], "sources": [], "tests": [], "single_tests": [],
-      "examples": ["extlibs/xredis/examples/tls_auth/main.c"], "benchmarks": [], "docs": []
+      "name": "xredis_tls_auth_examples",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis_tls_auth",
+        "tls_identity_rsa",
+        "pem"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [],
+      "single_tests": [],
+      "examples": [
+        "extlibs/xredis/examples/tls_auth/main.c"
+      ],
+      "benchmarks": [],
+      "docs": []
     },
     {
-      "name": "xredis_examples", "state": "implemented", "feature": null,
-      "depends": ["xredis", "xredis_tls_auth_examples"],
-      "collect_dependency_assets": ["examples"],
-      "public_headers": [], "internal_headers": [], "sources": [],
-      "tests": [], "single_tests": [], "examples": [], "benchmarks": [],
-      "docs": ["extlibs/xredis/README.md"]
+      "name": "xredis_examples",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis",
+        "xredis_tls_auth_examples"
+      ],
+      "collect_dependency_assets": [
+        "examples"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [],
+      "single_tests": [],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xredis/README.md"
+      ]
     },
     {
-      "name": "xredis_tls_auth_tests", "state": "implemented", "feature": null,
-      "depends": ["xredis_tls_auth", "xredis_tls_tests"],
-      "public_headers": [], "internal_headers": [], "sources": [],
-      "tests": ["extlibs/xredis/tests/test_tls_auth.c"],
-      "single_tests": ["extlibs/xredis/tests/single/test_single_xredis_tls_auth.c"],
-      "examples": [], "benchmarks": [], "docs": []
+      "name": "xredis_tls_auth_tests",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis_tls_auth",
+        "xredis_tls_tests"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xredis/tests/test_tls_auth.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_tls_auth.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": []
     },
     {
-      "name": "xredis_tls_tests", "state": "implemented", "feature": null,
-      "depends": ["xredis_tls", "tls_identity_rsa", "memory_stats"],
-      "public_headers": [], "internal_headers": [], "sources": [],
-      "tests": ["extlibs/xredis/tests/test_tls.c", "extlibs/xredis/tests/test_tls_openloop.c"],
-      "single_tests": ["extlibs/xredis/tests/single/test_single_xredis_tls.c", "extlibs/xredis/tests/single/test_single_xredis_tls_openloop.c"],
-      "single_test_owners": {"extlibs/xredis/tests/single/test_single_xredis_tls.c": "xredis_tls", "extlibs/xredis/tests/single/test_single_xredis_tls_openloop.c": "xredis_tls"},
-      "examples": [], "benchmarks": [], "docs": []
+      "name": "xredis_tls_tests",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis_tls",
+        "tls_identity_rsa",
+        "memory_stats"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xredis/tests/test_tls_host.c",
+        "extlibs/xredis/tests/test_tls.c",
+        "extlibs/xredis/tests/test_tls_openloop.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_tls_host.c",
+        "extlibs/xredis/tests/single/test_single_xredis_tls.c",
+        "extlibs/xredis/tests/single/test_single_xredis_tls_openloop.c"
+      ],
+      "single_test_owners": {
+        "extlibs/xredis/tests/single/test_single_xredis_tls_host.c": "xredis_tls",
+        "extlibs/xredis/tests/single/test_single_xredis_tls.c": "xredis_tls",
+        "extlibs/xredis/tests/single/test_single_xredis_tls_openloop.c": "xredis_tls"
+      },
+      "examples": [],
+      "benchmarks": [],
+      "docs": []
     },
     {
       "state": "implemented",
@@ -486,43 +814,117 @@
       "name": "xredis_reply",
       "state": "implemented",
       "feature": "XREDIS_FEATURE_XREDIS_REPLY",
-      "depends": ["xredis_reader", "atomic", "number_float"],
-      "public_headers": ["extlibs/xredis/include/xredis/reply.h"],
-      "internal_headers": [],
-      "sources": ["extlibs/xredis/src/reply/reply.c"],
-      "tests": ["extlibs/xredis/tests/test_reply.c"],
-      "single_tests": ["extlibs/xredis/tests/single/test_single_xredis_reply.c"],
-      "examples": ["extlibs/xredis/examples/reply/main.c"],
-      "benchmarks": ["extlibs/xredis/bench/bench_reply.c"],
-      "docs": ["extlibs/xredis/README.md", "extlibs/xredis/docs/api/reference.md", "extlibs/xredis/docs/reply.md"]
+      "depends": [
+        "xredis_reader",
+        "atomic",
+        "number_float"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/reply.h"
+      ],
+      "internal_headers": [
+        "extlibs/xredis/src/internal/cluster_reply.h"
+      ],
+      "sources": [
+        "extlibs/xredis/src/reply/reply.c"
+      ],
+      "tests": [
+        "extlibs/xredis/tests/test_reply.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_reply.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/reply/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_reply.c"
+      ],
+      "docs": [
+        "extlibs/xredis/README.md",
+        "extlibs/xredis/docs/api/reference.md",
+        "extlibs/xredis/docs/reply.md"
+      ]
     },
     {
       "name": "xredis_client",
       "state": "implemented",
       "feature": "XREDIS_FEATURE_XREDIS_CLIENT",
-      "depends": ["xredis_command", "xredis_reply", "net_tcp", "future", "number_integer"],
-      "public_headers": ["extlibs/xredis/include/xredis/client.h"],
-      "internal_headers": ["extlibs/xredis/src/internal/client_connect.h"],
-      "sources": ["extlibs/xredis/src/client/client.c"],
-      "tests": ["extlibs/xredis/tests/test_client.c", "extlibs/xredis/tests/test_client_init.c", "extlibs/xredis/tests/test_openloop.c"],
-      "single_tests": ["extlibs/xredis/tests/single/test_single_xredis_client.c", "extlibs/xredis/tests/single/test_single_xredis_client_init.c", "extlibs/xredis/tests/single/test_single_xredis_openloop.c"],
-      "examples": ["extlibs/xredis/examples/client/main.c", "extlibs/xredis/examples/client_init/main.c"],
-      "benchmarks": ["extlibs/xredis/bench/bench_client.c", "extlibs/xredis/bench/bench_client_init.c", "extlibs/xredis/bench/bench_client_openloop.c"],
-      "docs": ["extlibs/xredis/README.md", "extlibs/xredis/docs/api/reference.md", "extlibs/xredis/docs/client.md", "extlibs/xredis/docs/client-init.md", "extlibs/xredis/docs/client-performance.md"]
+      "depends": [
+        "xredis_command",
+        "xredis_reply",
+        "net_tcp",
+        "future",
+        "number_integer"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/client.h"
+      ],
+      "internal_headers": [
+        "extlibs/xredis/src/internal/client_connect.h"
+      ],
+      "sources": [
+        "extlibs/xredis/src/client/client.c"
+      ],
+      "tests": [
+        "extlibs/xredis/tests/test_client.c",
+        "extlibs/xredis/tests/test_client_init.c",
+        "extlibs/xredis/tests/test_openloop.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_client.c",
+        "extlibs/xredis/tests/single/test_single_xredis_client_init.c",
+        "extlibs/xredis/tests/single/test_single_xredis_openloop.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/client/main.c",
+        "extlibs/xredis/examples/client_init/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_client.c",
+        "extlibs/xredis/bench/bench_client_init.c",
+        "extlibs/xredis/bench/bench_client_openloop.c"
+      ],
+      "docs": [
+        "extlibs/xredis/README.md",
+        "extlibs/xredis/docs/api/reference.md",
+        "extlibs/xredis/docs/client.md",
+        "extlibs/xredis/docs/client-init.md",
+        "extlibs/xredis/docs/client-performance.md"
+      ]
     },
     {
       "name": "xredis_dial",
       "state": "implemented",
       "feature": "XREDIS_FEATURE_XREDIS_DIAL",
-      "depends": ["xredis_client", "net_tcp_dial"],
-      "public_headers": ["extlibs/xredis/include/xredis/dial.h"],
+      "depends": [
+        "xredis_client",
+        "net_tcp_dial"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/dial.h"
+      ],
       "internal_headers": [],
-      "sources": ["extlibs/xredis/src/dial/dial.c"],
-      "tests": ["extlibs/xredis/tests/test_dial.c"],
-      "single_tests": ["extlibs/xredis/tests/single/test_single_xredis_dial.c"],
-      "examples": ["extlibs/xredis/examples/dial/main.c"],
-      "benchmarks": ["extlibs/xredis/bench/bench_dial.c"],
-      "docs": ["extlibs/xredis/README.md", "extlibs/xredis/docs/api/reference.md", "extlibs/xredis/docs/dial.md"]
+      "sources": [
+        "extlibs/xredis/src/dial/dial.c"
+      ],
+      "tests": [
+        "extlibs/xredis/tests/test_dial.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_dial.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/dial/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_dial.c"
+      ],
+      "docs": [
+        "extlibs/xredis/README.md",
+        "extlibs/xredis/docs/api/reference.md",
+        "extlibs/xredis/docs/dial.md"
+      ]
     },
     {
       "state": "implemented",
@@ -536,7 +938,28 @@
         "xredis_watch_tests",
         "xredis_pool_tests",
         "xredis_pool_sessions_tests",
-        "xredis_pool_connect_tests"
+        "xredis_pool_connect_tests",
+        "xredis_caching_tests",
+        "xredis_subscriber_tests",
+        "xredis_subscriber_notify_tests",
+        "xredis_subscriptions_tests",
+        "xredis_subscription_session_tests",
+        "xredis_role_client_tests",
+        "xredis_sentinel_tests",
+        "xredis_sentinel_pool_tests",
+        "xredis_sentinel_events_tests",
+        "xredis_cluster_topology",
+        "xredis_pool_asking_tests",
+        "xredis_pool_shared_tests",
+        "xredis_pool_shared_connect_tests",
+        "xredis_pool_shared_asking_tests",
+        "xredis_cluster_route_tests",
+        "xredis_cluster_nodes_tests",
+        "xredis_cluster_refresh_tests",
+        "xredis_cluster_client_tests",
+        "xredis_command_keys_tests",
+        "xredis_cluster_command_tests",
+        "xredis_cluster_sync_tests"
       ],
       "public_headers": [],
       "internal_headers": [],
@@ -556,7 +979,31 @@
         "extlibs/xredis/tests/test_watch.c",
         "extlibs/xredis/tests/test_pool.c",
         "extlibs/xredis/tests/test_pool_sessions.c",
-        "extlibs/xredis/tests/test_pool_connect.c"
+        "extlibs/xredis/tests/test_pool_connect.c",
+        "extlibs/xredis/tests/test_tracking.c",
+        "extlibs/xredis/tests/test_caching.c",
+        "extlibs/xredis/tests/test_pubsub.c",
+        "extlibs/xredis/tests/test_subscriber.c",
+        "extlibs/xredis/tests/test_subscriber_notify.c",
+        "extlibs/xredis/tests/test_subscriptions.c",
+        "extlibs/xredis/tests/test_subscription_session.c",
+        "extlibs/xredis/tests/test_role.c",
+        "extlibs/xredis/tests/test_role_client.c",
+        "extlibs/xredis/tests/test_sentinel.c",
+        "extlibs/xredis/tests/test_sentinel_pool.c",
+        "extlibs/xredis/tests/test_sentinel_events.c",
+        "extlibs/xredis/tests/test_cluster_topology.c",
+        "extlibs/xredis/tests/test_pool_asking.c",
+        "extlibs/xredis/tests/test_pool_shared.c",
+        "extlibs/xredis/tests/test_pool_shared_connect.c",
+        "extlibs/xredis/tests/test_pool_shared_asking.c",
+        "extlibs/xredis/tests/test_cluster_route.c",
+        "extlibs/xredis/tests/test_cluster_nodes.c",
+        "extlibs/xredis/tests/test_cluster_refresh.c",
+        "extlibs/xredis/tests/test_cluster_client.c",
+        "extlibs/xredis/tests/test_command_keys.c",
+        "extlibs/xredis/tests/test_cluster_command.c",
+        "extlibs/xredis/tests/test_cluster_sync.c"
       ],
       "single_tests": [
         "extlibs/xredis/tests/single/test_single_xredis_command.c",
@@ -573,7 +1020,45 @@
         "extlibs/xredis/tests/single/test_single_xredis_watch.c",
         "extlibs/xredis/tests/single/test_single_xredis_pool.c",
         "extlibs/xredis/tests/single/test_single_xredis_pool_sessions.c",
-        "extlibs/xredis/tests/single/test_single_xredis_pool_connect.c"
+        "extlibs/xredis/tests/single/test_single_xredis_pool_connect.c",
+        "extlibs/xredis/tests/single/test_single_xredis_tracking.c",
+        "extlibs/xredis/tests/single/test_single_xredis_caching.c",
+        "extlibs/xredis/tests/single/test_single_xredis_caching_tls.c",
+        "extlibs/xredis/tests/single/test_single_xredis_pubsub.c",
+        "extlibs/xredis/tests/single/test_single_xredis_subscriber.c",
+        "extlibs/xredis/tests/single/test_single_xredis_subscriber_tls.c",
+        "extlibs/xredis/tests/single/test_single_xredis_subscriber_notify.c",
+        "extlibs/xredis/tests/single/test_single_xredis_subscriber_notify_tls.c",
+        "extlibs/xredis/tests/single/test_single_xredis_subscriptions.c",
+        "extlibs/xredis/tests/single/test_single_xredis_subscriptions_tls.c",
+        "extlibs/xredis/tests/single/test_single_xredis_subscription_session.c",
+        "extlibs/xredis/tests/single/test_single_xredis_subscription_session_tls.c",
+        "extlibs/xredis/tests/single/test_single_xredis_role.c",
+        "extlibs/xredis/tests/single/test_single_xredis_role_client.c",
+        "extlibs/xredis/tests/single/test_single_xredis_role_client_tls.c",
+        "extlibs/xredis/tests/single/test_single_xredis_sentinel.c",
+        "extlibs/xredis/tests/single/test_single_xredis_sentinel_tls.c",
+        "extlibs/xredis/tests/single/test_single_xredis_sentinel_pool.c",
+        "extlibs/xredis/tests/single/test_single_xredis_sentinel_pool_tls.c",
+        "extlibs/xredis/tests/single/test_single_xredis_sentinel_events.c",
+        "extlibs/xredis/tests/single/test_single_xredis_sentinel_events_tls.c",
+        "extlibs/xredis/tests/single/test_single_xredis_cluster_topology.c",
+        "extlibs/xredis/tests/single/test_single_xredis_pool_asking.c",
+        "extlibs/xredis/tests/single/test_single_xredis_pool_asking_tls.c",
+        "extlibs/xredis/tests/single/test_single_xredis_pool_shared.c",
+        "extlibs/xredis/tests/single/test_single_xredis_pool_shared_tls.c",
+        "extlibs/xredis/tests/single/test_single_xredis_pool_shared_connect.c",
+        "extlibs/xredis/tests/single/test_single_xredis_pool_shared_connect_tls.c",
+        "extlibs/xredis/tests/single/test_single_xredis_pool_shared_asking.c",
+        "extlibs/xredis/tests/single/test_single_xredis_pool_shared_asking_tls.c",
+        "extlibs/xredis/tests/single/test_single_xredis_cluster_route.c",
+        "extlibs/xredis/tests/single/test_single_xredis_cluster_nodes.c",
+        "extlibs/xredis/tests/single/test_single_xredis_cluster_refresh.c",
+        "extlibs/xredis/tests/single/test_single_xredis_cluster_client.c",
+        "extlibs/xredis/tests/single/test_single_xredis_command_keys.c",
+        "extlibs/xredis/tests/single/test_single_xredis_cluster_command.c",
+        "extlibs/xredis/tests/single/test_single_xredis_cluster_client_sync.c",
+        "extlibs/xredis/tests/single/test_single_xredis_cluster_command_sync.c"
       ],
       "examples": [],
       "benchmarks": [],
@@ -597,8 +1082,1330 @@
         "extlibs/xredis/tests/single/test_single_xredis_watch.c": "xredis_watch_tests",
         "extlibs/xredis/tests/single/test_single_xredis_pool.c": "xredis_pool_tests",
         "extlibs/xredis/tests/single/test_single_xredis_pool_sessions.c": "xredis_pool_sessions_tests",
-        "extlibs/xredis/tests/single/test_single_xredis_pool_connect.c": "xredis_pool_connect_tests"
+        "extlibs/xredis/tests/single/test_single_xredis_pool_connect.c": "xredis_pool_connect_tests",
+        "extlibs/xredis/tests/single/test_single_xredis_tracking.c": "xredis_tracking",
+        "extlibs/xredis/tests/single/test_single_xredis_caching.c": "xredis_tracking",
+        "extlibs/xredis/tests/single/test_single_xredis_caching_tls.c": "xredis_caching_tests",
+        "extlibs/xredis/tests/single/test_single_xredis_pubsub.c": "xredis_pubsub",
+        "extlibs/xredis/tests/single/test_single_xredis_subscriber.c": "xredis_subscriber",
+        "extlibs/xredis/tests/single/test_single_xredis_subscriber_tls.c": "xredis_subscriber_tests",
+        "extlibs/xredis/tests/single/test_single_xredis_subscriber_notify.c": "xredis_subscriber_notify",
+        "extlibs/xredis/tests/single/test_single_xredis_subscriber_notify_tls.c": "xredis_subscriber_notify_tests",
+        "extlibs/xredis/tests/single/test_single_xredis_subscriptions.c": "xredis_subscriptions",
+        "extlibs/xredis/tests/single/test_single_xredis_subscriptions_tls.c": "xredis_subscriptions_tests",
+        "extlibs/xredis/tests/single/test_single_xredis_subscription_session.c": "xredis_subscription_session",
+        "extlibs/xredis/tests/single/test_single_xredis_subscription_session_tls.c": "xredis_subscription_session_tests",
+        "extlibs/xredis/tests/single/test_single_xredis_role.c": "xredis_role",
+        "extlibs/xredis/tests/single/test_single_xredis_role_client.c": "xredis_role_client",
+        "extlibs/xredis/tests/single/test_single_xredis_role_client_tls.c": "xredis_role_client_tests",
+        "extlibs/xredis/tests/single/test_single_xredis_sentinel.c": "xredis_sentinel",
+        "extlibs/xredis/tests/single/test_single_xredis_sentinel_tls.c": "xredis_sentinel_tests",
+        "extlibs/xredis/tests/single/test_single_xredis_sentinel_pool.c": "xredis_sentinel_pool",
+        "extlibs/xredis/tests/single/test_single_xredis_sentinel_pool_tls.c": "xredis_sentinel_pool_tests",
+        "extlibs/xredis/tests/single/test_single_xredis_sentinel_events.c": "xredis_sentinel_events",
+        "extlibs/xredis/tests/single/test_single_xredis_sentinel_events_tls.c": "xredis_sentinel_events_tests",
+        "extlibs/xredis/tests/single/test_single_xredis_cluster_topology.c": "xredis_cluster_topology",
+        "extlibs/xredis/tests/single/test_single_xredis_pool_asking.c": "xredis_pool_asking",
+        "extlibs/xredis/tests/single/test_single_xredis_pool_asking_tls.c": "xredis_pool_asking_tests",
+        "extlibs/xredis/tests/single/test_single_xredis_pool_shared.c": "xredis_pool_shared",
+        "extlibs/xredis/tests/single/test_single_xredis_pool_shared_tls.c": "xredis_pool_shared_tests",
+        "extlibs/xredis/tests/single/test_single_xredis_pool_shared_connect.c": "xredis_pool_shared_connect",
+        "extlibs/xredis/tests/single/test_single_xredis_pool_shared_connect_tls.c": "xredis_pool_shared_connect_tests",
+        "extlibs/xredis/tests/single/test_single_xredis_pool_shared_asking.c": "xredis_pool_shared_asking",
+        "extlibs/xredis/tests/single/test_single_xredis_pool_shared_asking_tls.c": "xredis_pool_shared_asking_tests",
+        "extlibs/xredis/tests/single/test_single_xredis_cluster_route.c": "xredis_cluster_route",
+        "extlibs/xredis/tests/single/test_single_xredis_cluster_nodes.c": "xredis_cluster_nodes",
+        "extlibs/xredis/tests/single/test_single_xredis_cluster_refresh.c": "xredis_cluster_refresh",
+        "extlibs/xredis/tests/single/test_single_xredis_cluster_client.c": "xredis_cluster_client",
+        "extlibs/xredis/tests/single/test_single_xredis_command_keys.c": "xredis_command_keys",
+        "extlibs/xredis/tests/single/test_single_xredis_cluster_command.c": "xredis_cluster_command",
+        "extlibs/xredis/tests/single/test_single_xredis_cluster_client_sync.c": "xredis_cluster_client_sync",
+        "extlibs/xredis/tests/single/test_single_xredis_cluster_command_sync.c": "xredis_cluster_command_sync"
       }
+    },
+    {
+      "name": "xredis_tracking",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_TRACKING",
+      "depends": [
+        "xredis_client"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/tracking.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xredis/src/tracking/tracking.c"
+      ],
+      "tests": [
+        "extlibs/xredis/tests/test_tracking.c",
+        "extlibs/xredis/tests/test_caching.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_tracking.c",
+        "extlibs/xredis/tests/single/test_single_xredis_caching.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/tracking/main.c",
+        "extlibs/xredis/examples/caching/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_tracking.c",
+        "extlibs/xredis/bench/bench_caching.c"
+      ],
+      "docs": [
+        "extlibs/xredis/README.md",
+        "extlibs/xredis/docs/api/reference.md",
+        "extlibs/xredis/docs/tracking.md",
+        "extlibs/xredis/docs/caching.md"
+      ]
+    },
+    {
+      "name": "xredis_caching_tests",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis_tracking",
+        "xredis_transaction",
+        "xredis_tls",
+        "tls_identity_rsa",
+        "memory_stats"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xredis/tests/test_caching.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_caching_tls.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": []
+    },
+    {
+      "name": "xredis_pubsub",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_PUBSUB",
+      "depends": [
+        "xredis_command",
+        "xredis_reply"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/pubsub.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xredis/src/pubsub/pubsub.c"
+      ],
+      "tests": [
+        "extlibs/xredis/tests/test_pubsub.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_pubsub.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/pubsub/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_pubsub.c"
+      ],
+      "docs": [
+        "extlibs/xredis/README.md",
+        "extlibs/xredis/docs/api/reference.md",
+        "extlibs/xredis/docs/pubsub.md"
+      ]
+    },
+    {
+      "name": "xredis_subscriber",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_SUBSCRIBER",
+      "depends": [
+        "xredis_client",
+        "xredis_pubsub",
+        "hash64"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/subscriber.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xredis/src/subscriber/subscriber.c"
+      ],
+      "tests": [
+        "extlibs/xredis/tests/test_subscriber.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_subscriber.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/subscriber/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_subscriber.c"
+      ],
+      "docs": [
+        "extlibs/xredis/README.md",
+        "extlibs/xredis/docs/api/reference.md",
+        "extlibs/xredis/docs/subscriber.md"
+      ]
+    },
+    {
+      "name": "xredis_subscriber_tests",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis_subscriber",
+        "xredis_tls",
+        "tls_identity_rsa",
+        "memory_stats"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xredis/tests/test_subscriber.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_subscriber_tls.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": []
+    },
+    {
+      "name": "xredis_subscriber_notify",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_SUBSCRIBER_NOTIFY",
+      "depends": [
+        "xredis_subscriber"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/subscriber_notify.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xredis/src/client/client.c"
+      ],
+      "tests": [
+        "extlibs/xredis/tests/test_subscriber_notify.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_subscriber_notify.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/subscriber_notify/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_subscriber_notify.c"
+      ],
+      "docs": [
+        "extlibs/xredis/README.md",
+        "extlibs/xredis/docs/api/reference.md",
+        "extlibs/xredis/docs/subscriber_notify.md"
+      ]
+    },
+    {
+      "name": "xredis_subscriber_notify_tests",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis_subscriber_notify",
+        "xredis_tls",
+        "tls_identity_rsa",
+        "memory_stats"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xredis/tests/test_subscriber_notify.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_subscriber_notify_tls.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": []
+    },
+    {
+      "name": "xredis_subscriptions",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_SUBSCRIPTIONS",
+      "depends": [
+        "xredis_subscriber"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/subscriptions.h"
+      ],
+      "internal_headers": [
+        "extlibs/xredis/src/internal/subscription_replay.h",
+        "extlibs/xredis/src/internal/cluster_slot.h"
+      ],
+      "sources": [
+        "extlibs/xredis/src/subscriptions/subscriptions.c"
+      ],
+      "tests": [
+        "extlibs/xredis/tests/test_subscriptions.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_subscriptions.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/subscriptions/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_subscriptions.c"
+      ],
+      "docs": [
+        "extlibs/xredis/README.md",
+        "extlibs/xredis/docs/api/reference.md",
+        "extlibs/xredis/docs/subscriptions.md"
+      ]
+    },
+    {
+      "name": "xredis_subscriptions_tests",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis_subscriptions",
+        "xredis_tls",
+        "tls_identity_rsa",
+        "memory_stats"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xredis/tests/test_subscriptions.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_subscriptions_tls.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": []
+    },
+    {
+      "name": "xredis_subscription_session",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_SUBSCRIPTION_SESSION",
+      "depends": [
+        "xredis_subscriptions"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/subscription_session.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xredis/src/subscription_session/subscription_session.c"
+      ],
+      "tests": [
+        "extlibs/xredis/tests/test_subscription_session.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_subscription_session.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/subscription_session/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_subscription_session.c"
+      ],
+      "docs": [
+        "extlibs/xredis/docs/subscription_session.md",
+        "extlibs/xredis/docs/api/reference.md"
+      ]
+    },
+    {
+      "name": "xredis_subscription_session_tests",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis_subscription_session",
+        "xredis_tls",
+        "tls_identity_rsa",
+        "memory_stats",
+        "time"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xredis/tests/test_subscription_session.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_subscription_session_tls.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": []
+    },
+    {
+      "name": "xredis_role",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_ROLE",
+      "depends": [
+        "xredis_reply"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/role.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xredis/src/reply/reply.c"
+      ],
+      "tests": [
+        "extlibs/xredis/tests/test_role.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_role.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/role/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_role.c"
+      ],
+      "docs": [
+        "extlibs/xredis/docs/role.md",
+        "extlibs/xredis/docs/api/reference.md",
+        "extlibs/xredis/examples/role/README.md"
+      ]
+    },
+    {
+      "name": "xredis_role_client",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_ROLE_CLIENT",
+      "depends": [
+        "xredis_client",
+        "xredis_role"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/role_client.h"
+      ],
+      "internal_headers": [],
+      "sources": [
+        "extlibs/xredis/src/client/client.c"
+      ],
+      "tests": [
+        "extlibs/xredis/tests/test_role_client.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_role_client.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/role_client/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_role_client.c"
+      ],
+      "docs": [
+        "extlibs/xredis/docs/role_client.md",
+        "extlibs/xredis/docs/api/reference.md",
+        "extlibs/xredis/examples/role_client/README.md"
+      ]
+    },
+    {
+      "name": "xredis_role_client_tests",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis_role_client",
+        "xredis_tls_tests"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xredis/tests/test_role_client.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_role_client_tls.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xredis/docs/role_client.md"
+      ]
+    },
+    {
+      "name": "xredis_sentinel",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_SENTINEL",
+      "depends": [
+        "xredis_client",
+        "xredis_role"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/sentinel.h"
+      ],
+      "internal_headers": [
+        "extlibs/xredis/src/internal/sentinel_client.h",
+        "extlibs/xredis/src/internal/sentinel_config.h"
+      ],
+      "sources": [
+        "extlibs/xredis/src/sentinel/sentinel.c",
+        "extlibs/xredis/src/client/client.c"
+      ],
+      "tests": [
+        "extlibs/xredis/tests/test_sentinel.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_sentinel.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/sentinel/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_sentinel.c"
+      ],
+      "docs": [
+        "extlibs/xredis/docs/sentinel.md",
+        "extlibs/xredis/docs/api/reference.md",
+        "extlibs/xredis/examples/sentinel/README.md"
+      ]
+    },
+    {
+      "name": "xredis_sentinel_tests",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis_sentinel",
+        "xredis_tls_tests"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xredis/tests/test_sentinel.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_sentinel_tls.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xredis/docs/sentinel.md"
+      ]
+    },
+    {
+      "name": "xredis_sentinel_pool",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_SENTINEL_POOL",
+      "depends": [
+        "xredis_sentinel",
+        "xredis_pool_connect"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/sentinel_pool.h"
+      ],
+      "internal_headers": [
+        "extlibs/xredis/src/internal/sentinel_pool_internal.h"
+      ],
+      "sources": [
+        "extlibs/xredis/src/pool/pool.c",
+        "extlibs/xredis/src/sentinel_pool/sentinel_pool.c"
+      ],
+      "tests": [
+        "extlibs/xredis/tests/test_sentinel_pool.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_sentinel_pool.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/sentinel_pool/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_sentinel_pool.c"
+      ],
+      "docs": [
+        "extlibs/xredis/docs/sentinel_pool.md",
+        "extlibs/xredis/docs/api/reference.md",
+        "extlibs/xredis/examples/sentinel_pool/README.md"
+      ]
+    },
+    {
+      "name": "xredis_sentinel_pool_tests",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis_sentinel_pool",
+        "xredis_tls_tests"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xredis/tests/test_sentinel_pool.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_sentinel_pool_tls.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xredis/docs/sentinel_pool.md"
+      ]
+    },
+    {
+      "name": "xredis_sentinel_events",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_SENTINEL_EVENTS",
+      "depends": [
+        "xredis_sentinel_pool",
+        "xredis_subscription_session",
+        "xredis_subscriber_notify"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/sentinel_events.h"
+      ],
+      "internal_headers": [
+        "extlibs/xredis/src/internal/sentinel_events_internal.h"
+      ],
+      "sources": [
+        "extlibs/xredis/src/sentinel_events/sentinel_events.c"
+      ],
+      "tests": [
+        "extlibs/xredis/tests/test_sentinel_events.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_sentinel_events.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/sentinel_events/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_sentinel_events.c"
+      ],
+      "docs": [
+        "extlibs/xredis/docs/sentinel_events.md",
+        "extlibs/xredis/docs/api/reference.md",
+        "extlibs/xredis/examples/sentinel_events/README.md"
+      ]
+    },
+    {
+      "name": "xredis_sentinel_events_tests",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis_sentinel_events",
+        "xredis_tls_tests"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xredis/tests/test_sentinel_events.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_sentinel_events_tls.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": []
+    },
+    {
+      "name": "xredis_cluster_topology",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_CLUSTER_TOPOLOGY",
+      "depends": [
+        "xredis_reply"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/cluster_topology.h"
+      ],
+      "internal_headers": [
+        "extlibs/xredis/src/internal/cluster_slot.h",
+        "extlibs/xredis/src/internal/cluster_reply.h",
+        "extlibs/xredis/src/internal/cluster_topology_internal.h"
+      ],
+      "sources": [
+        "extlibs/xredis/src/cluster_topology/cluster_topology.c"
+      ],
+      "tests": [
+        "extlibs/xredis/tests/test_cluster_topology.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_cluster_topology.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/cluster_topology/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_cluster_topology.c"
+      ],
+      "docs": [
+        "extlibs/xredis/docs/cluster_topology.md",
+        "extlibs/xredis/docs/api/reference.md",
+        "extlibs/xredis/examples/cluster_topology/README.md"
+      ]
+    },
+    {
+      "name": "xredis_pool_asking",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_POOL_ASKING",
+      "depends": [
+        "xredis_pool"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/pool_asking.h"
+      ],
+      "internal_headers": [
+        "extlibs/xredis/src/internal/pool_admit.h",
+        "extlibs/xredis/src/internal/client_connect.h"
+      ],
+      "sources": [
+        "extlibs/xredis/src/client/client.c",
+        "extlibs/xredis/src/pool/pool.c",
+        "extlibs/xredis/src/pool_asking/pool_asking.c"
+      ],
+      "tests": [
+        "extlibs/xredis/tests/test_pool_asking.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_pool_asking.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/pool_asking/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_pool_asking.c"
+      ],
+      "docs": [
+        "extlibs/xredis/docs/pool_asking.md",
+        "extlibs/xredis/docs/api/reference.md",
+        "extlibs/xredis/examples/pool_asking/README.md"
+      ]
+    },
+    {
+      "name": "xredis_pool_asking_tests",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis_pool_asking",
+        "xredis_tls_tests"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xredis/tests/test_pool_asking.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_pool_asking_tls.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xredis/docs/pool_asking.md"
+      ]
+    },
+    {
+      "name": "xredis_pool_shared",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_POOL_SHARED",
+      "depends": [
+        "xredis_pool"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/pool_shared.h"
+      ],
+      "internal_headers": [
+        "extlibs/xredis/src/internal/pool_admit.h"
+      ],
+      "sources": [
+        "extlibs/xredis/src/pool/pool.c",
+        "extlibs/xredis/src/pool_shared/pool_shared.c"
+      ],
+      "tests": [
+        "extlibs/xredis/tests/test_pool_shared.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_pool_shared.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/pool_shared/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_pool_shared.c"
+      ],
+      "docs": [
+        "extlibs/xredis/docs/pool_shared.md",
+        "extlibs/xredis/examples/pool_shared/README.md",
+        "extlibs/xredis/docs/api/reference.md"
+      ]
+    },
+    {
+      "name": "xredis_pool_shared_tests",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis_pool_shared",
+        "xredis_tls_tests",
+        "memory_stats",
+        "thread"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xredis/tests/test_pool_shared.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_pool_shared_tls.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xredis/docs/pool_shared.md"
+      ]
+    },
+    {
+      "name": "xredis_pool_shared_connect",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_POOL_SHARED_CONNECT",
+      "depends": [
+        "xredis_pool_shared",
+        "xredis_pool_connect"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/pool_shared_connect.h"
+      ],
+      "internal_headers": [
+        "extlibs/xredis/src/internal/pool_connect_internal.h"
+      ],
+      "sources": [
+        "extlibs/xredis/src/pool/pool.c",
+        "extlibs/xredis/src/pool_shared_connect/pool_shared_connect.c"
+      ],
+      "tests": [
+        "extlibs/xredis/tests/test_pool_shared_connect.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_pool_shared_connect.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/pool_shared_connect/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_pool_shared_connect.c"
+      ],
+      "docs": [
+        "extlibs/xredis/docs/pool_shared_connect.md",
+        "extlibs/xredis/examples/pool_shared_connect/README.md",
+        "extlibs/xredis/docs/api/reference.md"
+      ]
+    },
+    {
+      "name": "xredis_pool_shared_connect_tests",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis_pool_shared_connect",
+        "xredis_tls_tests",
+        "memory_stats",
+        "thread"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xredis/tests/test_pool_shared_connect.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_pool_shared_connect_tls.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xredis/docs/pool_shared_connect.md"
+      ]
+    },
+    {
+      "name": "xredis_pool_shared_asking",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_POOL_SHARED_ASKING",
+      "depends": [
+        "xredis_pool_shared",
+        "xredis_pool_asking"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/pool_shared_asking.h"
+      ],
+      "internal_headers": [
+        "extlibs/xredis/src/internal/pool_admit.h"
+      ],
+      "sources": [
+        "extlibs/xredis/src/pool/pool.c",
+        "extlibs/xredis/src/pool_shared_asking/pool_shared_asking.c"
+      ],
+      "tests": [
+        "extlibs/xredis/tests/test_pool_shared_asking.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_pool_shared_asking.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/pool_shared_asking/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_pool_shared_asking.c"
+      ],
+      "docs": [
+        "extlibs/xredis/docs/pool_shared_asking.md",
+        "extlibs/xredis/examples/pool_shared_asking/README.md",
+        "extlibs/xredis/docs/api/reference.md"
+      ]
+    },
+    {
+      "name": "xredis_pool_shared_asking_tests",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis_pool_shared_asking",
+        "xredis_tls_tests",
+        "memory_stats",
+        "thread"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xredis/tests/test_pool_shared_asking.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_pool_shared_asking_tls.c"
+      ],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xredis/docs/pool_shared_asking.md"
+      ]
+    },
+    {
+      "name": "xredis_cluster_route",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_CLUSTER_ROUTE",
+      "depends": [
+        "xredis_cluster_topology",
+        "xredis_pool_shared_asking"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/cluster_route.h"
+      ],
+      "internal_headers": [
+        "extlibs/xredis/src/internal/pool_admit.h",
+        "extlibs/xredis/src/internal/cluster_reply.h",
+        "extlibs/xredis/src/internal/cluster_topology_internal.h",
+        "extlibs/xredis/src/internal/cluster_route_internal.h"
+      ],
+      "sources": [
+        "extlibs/xredis/src/cluster_route/cluster_route.c"
+      ],
+      "tests": [
+        "extlibs/xredis/tests/test_cluster_route.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_cluster_route.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/cluster_route/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_cluster_route.c"
+      ],
+      "docs": [
+        "extlibs/xredis/docs/cluster_route.md",
+        "extlibs/xredis/examples/cluster_route/README.md",
+        "extlibs/xredis/docs/api/reference.md"
+      ]
+    },
+    {
+      "name": "xredis_cluster_route_tests",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis_cluster_route",
+        "memory_stats",
+        "thread"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xredis/tests/test_cluster_route.c"
+      ],
+      "single_tests": [],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xredis/docs/cluster_route.md"
+      ]
+    },
+    {
+      "name": "xredis_cluster_nodes",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_CLUSTER_NODES",
+      "depends": [
+        "xredis_cluster_route",
+        "xredis_pool_shared_connect"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/cluster_nodes.h"
+      ],
+      "internal_headers": [
+        "extlibs/xredis/src/internal/cluster_nodes_internal.h"
+      ],
+      "sources": [
+        "extlibs/xredis/src/cluster_nodes/cluster_nodes.c"
+      ],
+      "tests": [
+        "extlibs/xredis/tests/test_cluster_nodes.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_cluster_nodes.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/cluster_nodes/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_cluster_nodes.c"
+      ],
+      "docs": [
+        "extlibs/xredis/docs/cluster_nodes.md",
+        "extlibs/xredis/examples/cluster_nodes/README.md",
+        "extlibs/xredis/docs/api/reference.md"
+      ]
+    },
+    {
+      "name": "xredis_cluster_nodes_tests",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis_cluster_nodes",
+        "memory_stats",
+        "thread"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xredis/tests/test_cluster_nodes.c"
+      ],
+      "single_tests": [],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xredis/docs/cluster_nodes.md"
+      ]
+    },
+    {
+      "name": "xredis_cluster_refresh",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_CLUSTER_REFRESH",
+      "depends": [
+        "xredis_cluster_nodes"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/cluster_refresh.h"
+      ],
+      "internal_headers": [
+        "extlibs/xredis/src/internal/pool_admit.h",
+        "extlibs/xredis/src/internal/cluster_topology_internal.h",
+        "extlibs/xredis/src/internal/cluster_refresh_internal.h"
+      ],
+      "sources": [
+        "extlibs/xredis/src/cluster_refresh/cluster_refresh.c"
+      ],
+      "tests": [
+        "extlibs/xredis/tests/test_cluster_refresh.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_cluster_refresh.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/cluster_refresh/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_cluster_refresh.c"
+      ],
+      "docs": [
+        "extlibs/xredis/docs/cluster_refresh.md",
+        "extlibs/xredis/examples/cluster_refresh/README.md",
+        "extlibs/xredis/docs/api/reference.md"
+      ]
+    },
+    {
+      "name": "xredis_cluster_refresh_tests",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis_cluster_refresh",
+        "memory_stats",
+        "thread"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xredis/tests/test_cluster_refresh.c"
+      ],
+      "single_tests": [],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xredis/docs/cluster_refresh.md"
+      ]
+    },
+    {
+      "name": "xredis_cluster_client",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_CLUSTER_CLIENT",
+      "depends": [
+        "xredis_cluster_refresh"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/cluster_client.h"
+      ],
+      "internal_headers": [
+        "extlibs/xredis/src/internal/cluster_route_internal.h",
+        "extlibs/xredis/src/internal/cluster_refresh_internal.h",
+        "extlibs/xredis/src/internal/cluster_nodes_internal.h"
+      ],
+      "sources": [
+        "extlibs/xredis/src/cluster_client/cluster_client.c"
+      ],
+      "tests": [
+        "extlibs/xredis/tests/test_cluster_client.c"
+      ],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_cluster_client.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/cluster_client/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_cluster_client.c"
+      ],
+      "docs": [
+        "extlibs/xredis/docs/cluster_client.md",
+        "extlibs/xredis/examples/cluster_client/README.md",
+        "extlibs/xredis/docs/api/reference.md"
+      ]
+    },
+    {
+      "name": "xredis_cluster_client_tests",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis_cluster_client",
+        "memory_stats",
+        "thread"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xredis/tests/test_cluster_client.c"
+      ],
+      "single_tests": [],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xredis/docs/cluster_client.md"
+      ]
+    },
+    {
+      "name": "xredis_command_keys",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_COMMAND_KEYS",
+      "depends": [
+        "xredis_reply"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/command_keys.h"
+      ],
+      "internal_headers": [
+        "extlibs/xredis/src/internal/cluster_slot.h",
+        "extlibs/xredis/src/internal/cluster_reply.h",
+        "extlibs/xredis/src/internal/command_keys_internal.h"
+      ],
+      "sources": [
+        "extlibs/xredis/src/command_keys/command_keys.c"
+      ],
+      "tests": [],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_command_keys.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/command_keys/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_command_keys.c"
+      ],
+      "docs": [
+        "extlibs/xredis/docs/command_keys.md",
+        "extlibs/xredis/examples/command_keys/README.md",
+        "extlibs/xredis/docs/api/reference.md"
+      ]
+    },
+    {
+      "name": "xredis_command_keys_tests",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis_command_keys",
+        "memory_stats",
+        "thread"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xredis/tests/test_command_keys.c"
+      ],
+      "single_tests": [],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xredis/docs/command_keys.md"
+      ]
+    },
+    {
+      "name": "xredis_cluster_command",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_CLUSTER_COMMAND",
+      "depends": [
+        "xredis_cluster_client",
+        "xredis_command_keys"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/cluster_command.h"
+      ],
+      "internal_headers": [
+        "extlibs/xredis/src/internal/command_keys_internal.h"
+      ],
+      "sources": [],
+      "tests": [],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_cluster_command.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/cluster_command/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_cluster_command.c"
+      ],
+      "docs": [
+        "extlibs/xredis/docs/cluster_command.md",
+        "extlibs/xredis/examples/cluster_command/README.md",
+        "extlibs/xredis/docs/api/reference.md"
+      ]
+    },
+    {
+      "name": "xredis_cluster_command_tests",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis_cluster_command",
+        "memory_stats",
+        "thread"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xredis/tests/test_cluster_command.c"
+      ],
+      "single_tests": [],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xredis/docs/cluster_command.md"
+      ]
+    },
+    {
+      "name": "xredis_cluster_client_sync",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_CLUSTER_CLIENT_SYNC",
+      "depends": [
+        "xredis_cluster_client"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/cluster_client_sync.h"
+      ],
+      "internal_headers": [
+        "extlibs/xredis/src/internal/cluster_nodes_internal.h"
+      ],
+      "sources": [],
+      "tests": [],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_cluster_client_sync.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/cluster_sync/main.c"
+      ],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xredis/docs/cluster_sync.md",
+        "extlibs/xredis/examples/cluster_sync/README.md",
+        "extlibs/xredis/docs/api/reference.md"
+      ]
+    },
+    {
+      "name": "xredis_cluster_command_sync",
+      "state": "developing",
+      "feature": "XREDIS_FEATURE_XREDIS_CLUSTER_COMMAND_SYNC",
+      "depends": [
+        "xredis_cluster_client_sync",
+        "xredis_cluster_command"
+      ],
+      "public_headers": [
+        "extlibs/xredis/include/xredis/cluster_command_sync.h"
+      ],
+      "internal_headers": [
+        "extlibs/xredis/src/internal/cluster_nodes_internal.h"
+      ],
+      "sources": [],
+      "tests": [],
+      "single_tests": [
+        "extlibs/xredis/tests/single/test_single_xredis_cluster_command_sync.c"
+      ],
+      "examples": [
+        "extlibs/xredis/examples/cluster_command_sync/main.c"
+      ],
+      "benchmarks": [
+        "extlibs/xredis/bench/bench_cluster_sync.c"
+      ],
+      "docs": [
+        "extlibs/xredis/docs/cluster_sync.md",
+        "extlibs/xredis/examples/cluster_command_sync/README.md",
+        "extlibs/xredis/docs/api/reference.md"
+      ]
+    },
+    {
+      "name": "xredis_cluster_sync_tests",
+      "state": "implemented",
+      "feature": null,
+      "depends": [
+        "xredis_cluster_command_sync",
+        "memory_stats",
+        "thread"
+      ],
+      "public_headers": [],
+      "internal_headers": [],
+      "sources": [],
+      "tests": [
+        "extlibs/xredis/tests/test_cluster_sync.c"
+      ],
+      "single_tests": [],
+      "examples": [],
+      "benchmarks": [],
+      "docs": [
+        "extlibs/xredis/docs/cluster_sync.md"
+      ]
     }
   ]
 }

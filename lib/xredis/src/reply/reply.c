@@ -1,4 +1,8 @@
 #include <xredis/reply.h>
+#include <xredis/tracking.h>
+#include <xredis/pubsub.h>
+#include <xredis/role.h>
+#include "../internal/cluster_reply.h"
 #include <xrt/atomic.h>
 #include <xrt/memory.h>
 #include <xrt/number.h>
@@ -59,6 +63,11 @@ static bool xredisReplyOverlap(const xredisreply* Reply, const void* Data, size_
 			Reply->NodeCapacity * sizeof(*Reply->Nodes), Data, Bytes)) ||
 		(Reply->Data != Reply->InlineData && xrtMemRangesOverlap(Reply->Data, Reply->DataCapacity, Data, Bytes)));
 }
+
+#if defined(XREDIS_FEATURE_XREDIS_CLUSTER_TOPOLOGY) || defined(XREDIS_FEATURE_XREDIS_COMMAND_KEYS)
+bool __xredisClusterReplyOutput(const xredisreply* Reply,const void* Output,size_t Bytes)
+{return Reply && Output && xrtMemRangeValid(Output,Bytes) && !xredisReplyOverlap(Reply,Output,Bytes);}
+#endif
 
 static bool xredisReplyReaderOverlap(const xredisreplyreader* Reader, const void* Data, size_t Bytes)
 {
@@ -365,5 +374,229 @@ XREDIS_API bool xredisReplyReaderFinish(xredisreplyreader* Reader)
 	if (!xredisReaderFinish(Reader->Parser)) return xredisReplyParserFailure(Reader);
 	return true;
 }
+
+#if defined(XREDIS_FEATURE_XREDIS_PUBSUB)
+static bool xredisPubSubString(const xredisreplynode* N)
+{return (N->Type==XREDIS_REPLY_BULK_STRING || N->Type==XREDIS_REPLY_SIMPLE_STRING) && !(N->Flags&XREDIS_REPLY_NULL_VALUE);}
+static bool xredisPubSubWord(const xredisreplynode* N,const xredisreply* R,cstr Word,size_t Length)
+{return xredisPubSubString(N) && N->Bytes==Length && !memcmp(R->Data+N->Offset,Word,Length);}
+static xbytesview xredisPubSubView(const xredisreplynode* N,const xredisreply* R)
+{return (xbytesview){R->Data+N->Offset,N->Bytes};}
+static bool xredisPubSubNullName(const xredisreplynode* N)
+{return N->Type==XREDIS_REPLY_NULL || (N->Type==XREDIS_REPLY_BULK_STRING && (N->Flags&XREDIS_REPLY_NULL_VALUE));}
+static bool xredisPubSubOutput(const xredisreply* R,xredispubsubevent* Output)
+{
+    if(!R || !Output || !xrtMemRangeValid(Output,sizeof(*Output)) || xredisReplyOverlap(R,Output,sizeof(*Output))){
+        xrtSetErrorInfo(XERR_ARGUMENT,"xrt.redis",XREDIS_PUBSUB_ARGUMENT,"invalid Pub/Sub event output");return false;
+    }
+    return true;
+}
+static xredispubsubstatus xredisPubSubRead(const xredisreply* R,xredispubsubevent* Output)
+{
+    const xredisreplynode* Root=R->Nodes+R->Root;
+    if((Root->Type!=XREDIS_REPLY_ARRAY && Root->Type!=XREDIS_REPLY_PUSH) || !Root->ChildCount)return XREDIS_PUBSUB_OTHER;
+    const xredisreplynode* Tag=R->Nodes+Root->FirstChild;
+    static const xbytesview Tags[]={XRT_BYTES_LITERAL("message"),XRT_BYTES_LITERAL("pmessage"),XRT_BYTES_LITERAL("smessage"),
+        XRT_BYTES_LITERAL("subscribe"),XRT_BYTES_LITERAL("psubscribe"),XRT_BYTES_LITERAL("ssubscribe"),
+        XRT_BYTES_LITERAL("unsubscribe"),XRT_BYTES_LITERAL("punsubscribe"),XRT_BYTES_LITERAL("sunsubscribe"),XRT_BYTES_LITERAL("pong")};
+    _Static_assert(sizeof(Tags)/sizeof(*Tags)==XREDIS_PUBSUB_PONG+1,"tag table follows public event kinds");
+    size_t Kind;
+    for(Kind=0;Kind<sizeof(Tags)/sizeof(*Tags);++Kind)
+        if(xredisPubSubWord(Tag,R,(cstr)Tags[Kind].Data,Tags[Kind].Size))break;
+    if(Kind==sizeof(Tags)/sizeof(*Tags))return XREDIS_PUBSUB_OTHER;
+    size_t Arity=Kind==XREDIS_PUBSUB_PMESSAGE?4:Kind==XREDIS_PUBSUB_PONG?2:3;
+    if(Root->ChildCount!=Arity)return XREDIS_PUBSUB_MALFORMED;
+    xredispubsubevent E={0};E.Reply=R;E.Kind=(xredispubsubkind)Kind;E.Envelope=Root->Type;E.PayloadNode=XREDIS_REPLY_NONE;
+    const xredisreplynode* Name=R->Nodes+Tag->Next;
+    if(Kind>=XREDIS_PUBSUB_SUBSCRIBE && Kind<=XREDIS_PUBSUB_SUNSUBSCRIBE){
+        const xredisreplynode* Count=R->Nodes+Name->Next;
+        if(Count->Type!=XREDIS_REPLY_INTEGER || Count->Integer<0 || (Kind<=XREDIS_PUBSUB_SSUBSCRIBE && !Count->Integer))return XREDIS_PUBSUB_MALFORMED;
+        if(xredisPubSubNullName(Name)){
+            if(Kind<XREDIS_PUBSUB_UNSUBSCRIBE)return XREDIS_PUBSUB_MALFORMED;
+            E.Flags=XREDIS_PUBSUB_NAME_ABSENT;
+        }else {
+            if(!xredisPubSubString(Name))return XREDIS_PUBSUB_MALFORMED;
+            if(Kind==XREDIS_PUBSUB_PSUBSCRIBE || Kind==XREDIS_PUBSUB_PUNSUBSCRIBE)E.Pattern=xredisPubSubView(Name,R);
+            else E.Channel=xredisPubSubView(Name,R);
+        }
+        E.Subscriptions=(uint64)Count->Integer;
+    }else if(Kind==XREDIS_PUBSUB_PONG){
+        if(!xredisPubSubString(Name))return XREDIS_PUBSUB_MALFORMED;
+        E.Payload=xredisPubSubView(Name,R);E.PayloadNode=Tag->Next;
+    }else{
+        if(!xredisPubSubString(Name))return XREDIS_PUBSUB_MALFORMED;
+        const xredisreplynode* Channel=Name;
+        if(Kind==XREDIS_PUBSUB_PMESSAGE){E.Pattern=xredisPubSubView(Name,R);Channel=R->Nodes+Name->Next;if(!xredisPubSubString(Channel))return XREDIS_PUBSUB_MALFORMED;}
+        E.Channel=xredisPubSubView(Channel,R);E.PayloadNode=Channel->Next;const xredisreplynode* Payload=R->Nodes+E.PayloadNode;
+        if(xredisPubSubString(Payload))E.Payload=xredisPubSubView(Payload,R);
+        else {
+            if(Kind!=XREDIS_PUBSUB_MESSAGE || Root->Type!=XREDIS_REPLY_ARRAY || !xredisPubSubWord(Channel,R,"__redis__:invalidate",20))return XREDIS_PUBSUB_MALFORMED;
+            bool Null=Payload->Type==XREDIS_REPLY_NULL || ((Payload->Type==XREDIS_REPLY_ARRAY || Payload->Type==XREDIS_REPLY_BULK_STRING) && (Payload->Flags&XREDIS_REPLY_NULL_VALUE));
+            if(!Null){
+                if(Payload->Type!=XREDIS_REPLY_ARRAY)return XREDIS_PUBSUB_MALFORMED;
+                for(size_t N=Payload->FirstChild;N!=XREDIS_REPLY_NONE;N=R->Nodes[N].Next)
+                    if(R->Nodes[N].Type!=XREDIS_REPLY_BULK_STRING || (R->Nodes[N].Flags&XREDIS_REPLY_NULL_VALUE))return XREDIS_PUBSUB_MALFORMED;
+            }
+            E.Flags=XREDIS_PUBSUB_STRUCTURED;
+        }
+    }
+    *Output=E;return XREDIS_PUBSUB_EVENT;
+}
+XREDIS_API xredispubsubstatus xredisPubSubEventRead(const xredisreply* R,xredispubsubevent* Output)
+{
+    if(!xredisPubSubOutput(R,Output))return XREDIS_PUBSUB_ERROR;
+    return xredisPubSubRead(R,Output);
+}
+XREDIS_API xredispubsubstatus xredisPubSubPongRead(const xredisreply* R,const xbytesview* Expected,xredispubsubevent* Output)
+{
+    if(!xredisPubSubOutput(R,Output))return XREDIS_PUBSUB_ERROR;
+    if(Expected && (!xrtMemRangeValid(Expected,sizeof(*Expected)) || xrtMemRangesOverlap(Output,sizeof(*Output),Expected,sizeof(*Expected)) ||
+        !xrtMemRangeValid(Expected->Data,Expected->Size) || xrtMemRangesOverlap(Output,sizeof(*Output),Expected->Data,Expected->Size))){
+        xrtSetErrorInfo(XERR_ARGUMENT,"xrt.redis",XREDIS_PUBSUB_ARGUMENT,"invalid Pub/Sub expected PING payload");return XREDIS_PUBSUB_ERROR;
+    }
+    const xredisreplynode* Root=R->Nodes+R->Root;xredispubsubevent E;
+    if(Root->Type==XREDIS_REPLY_ARRAY || Root->Type==XREDIS_REPLY_PUSH){
+        xredispubsubstatus Status=xredisPubSubRead(R,&E);
+        if(Status!=XREDIS_PUBSUB_EVENT)return Status;
+        if(E.Kind!=XREDIS_PUBSUB_PONG)return XREDIS_PUBSUB_OTHER;
+    }else{
+        if(Root->Type==XREDIS_REPLY_SIMPLE_ERROR || Root->Type==XREDIS_REPLY_BULK_ERROR)return XREDIS_PUBSUB_OTHER;
+        E=(xredispubsubevent){0};E.Reply=R;E.Kind=XREDIS_PUBSUB_PONG;E.Envelope=Root->Type;E.PayloadNode=R->Root;
+        if(!Expected){if(!xredisPubSubWord(Root,R,"PONG",4) || Root->Type!=XREDIS_REPLY_SIMPLE_STRING)return XREDIS_PUBSUB_MALFORMED;}
+        else {if(Root->Type!=XREDIS_REPLY_BULK_STRING || !xredisPubSubString(Root))return XREDIS_PUBSUB_MALFORMED;E.Payload=xredisPubSubView(Root,R);}
+    }
+    size_t Size=Expected?Expected->Size:0;
+    if(E.Payload.Size!=Size || (Size && memcmp(E.Payload.Data,Expected->Data,Size)))return XREDIS_PUBSUB_MALFORMED;
+    *Output=E;return XREDIS_PUBSUB_EVENT;
+}
+#endif
+
+#if defined(XREDIS_FEATURE_XREDIS_TRACKING)
+static bool xredisTrackingWord(const xredisreplynode* N,const xredisreply* R,cstr Word,size_t Length)
+{
+    return (N->Type==XREDIS_REPLY_BULK_STRING || N->Type==XREDIS_REPLY_SIMPLE_STRING) && !(N->Flags&XREDIS_REPLY_NULL_VALUE) &&
+        N->Bytes==Length && !memcmp(R->Data+N->Offset,Word,Length);
+}
+XREDIS_API xredistrackingstatus xredisTrackingEventRead(const xredisreply* R,xredistrackingevent* Output)
+{
+    if(!R || !Output || !xrtMemRangeValid(Output,sizeof(*Output)) || xredisReplyOverlap(R,Output,sizeof(*Output))){
+        xredisReplyReport(XERR_ARGUMENT,XREDIS_REPLY_ARGUMENT,"invalid tracking event output");return XREDIS_TRACKING_ERROR;
+    }
+    const xredisreplynode* Root=R->Nodes+R->Root;
+    if((Root->Type!=XREDIS_REPLY_PUSH && Root->Type!=XREDIS_REPLY_ARRAY) || !Root->ChildCount)return XREDIS_TRACKING_OTHER;
+    size_t First=Root->FirstChild;const xredisreplynode* Tag=R->Nodes+First;
+    bool Keys=Root->Type==XREDIS_REPLY_PUSH && xredisTrackingWord(Tag,R,"invalidate",10);
+    bool Broken=Root->Type==XREDIS_REPLY_PUSH && xredisTrackingWord(Tag,R,"tracking-redir-broken",21);
+    size_t Payload=Tag->Next;
+    if(Root->Type==XREDIS_REPLY_ARRAY && xredisTrackingWord(Tag,R,"message",7) && Root->ChildCount>=2){
+        const xredisreplynode* Channel=R->Nodes+Payload;
+        if(xredisTrackingWord(Channel,R,"__redis__:invalidate",20)){
+            if(Root->ChildCount!=3)return XREDIS_TRACKING_MALFORMED;
+            Keys=true;Payload=Channel->Next;
+        }
+    }
+    if(!Keys && !Broken)return XREDIS_TRACKING_OTHER;
+    if(Root->Type==XREDIS_REPLY_PUSH && Root->ChildCount!=2)return XREDIS_TRACKING_MALFORMED;
+    const xredisreplynode* Value=R->Nodes+Payload;
+    xredistrackingevent E={R,XREDIS_TRACKING_KEYS,XREDIS_REPLY_NONE,0,0};
+    if(Broken){
+        if(Value->Type!=XREDIS_REPLY_INTEGER || Value->Integer<0)return XREDIS_TRACKING_MALFORMED;
+        E.Kind=XREDIS_TRACKING_REDIRECT_BROKEN;E.Redirect=(uint64)Value->Integer;
+    }else if(Value->Type==XREDIS_REPLY_NULL ||
+        ((Value->Type==XREDIS_REPLY_ARRAY || Value->Type==XREDIS_REPLY_BULK_STRING) && (Value->Flags&XREDIS_REPLY_NULL_VALUE)))E.Kind=XREDIS_TRACKING_FLUSH;
+    else {
+        if(Value->Type!=XREDIS_REPLY_ARRAY)return XREDIS_TRACKING_MALFORMED;
+        E.FirstKey=Value->FirstChild;E.Keys=Value->ChildCount;
+        for(size_t N=E.FirstKey;N!=XREDIS_REPLY_NONE;N=R->Nodes[N].Next)
+            if(R->Nodes[N].Type!=XREDIS_REPLY_BULK_STRING || (R->Nodes[N].Flags&XREDIS_REPLY_NULL_VALUE))return XREDIS_TRACKING_MALFORMED;
+    }
+    *Output=E;return XREDIS_TRACKING_EVENT;
+}
+#endif
+
+
+#if defined(XREDIS_FEATURE_XREDIS_ROLE)
+static bool xredisRoleArgument(cstr Text)
+{return xredisReplyReport(XERR_ARGUMENT,XREDIS_REPLY_ARGUMENT,Text);}
+static bool xredisRoleString(const xredisreplynode* N)
+{return (N->Type==XREDIS_REPLY_BULK_STRING || N->Type==XREDIS_REPLY_SIMPLE_STRING) && !(N->Flags&XREDIS_REPLY_NULL_VALUE);}
+static xbytesview xredisRoleView(const xredisreply* R,const xredisreplynode* N)
+{return (xbytesview){N->Bytes?R->Data+N->Offset:NULL,N->Bytes};}
+static bool xredisRoleWord(const xredisreply* R,const xredisreplynode* N,cstr Text)
+{return xredisRoleString(N) && N->Bytes==strlen(Text) && !memcmp(R->Data+N->Offset,Text,N->Bytes);}
+static bool xredisRoleArray(const xredisreplynode* N,size_t Count)
+{return N->Type==XREDIS_REPLY_ARRAY && !(N->Flags&XREDIS_REPLY_NULL_VALUE) && N->ChildCount==Count;}
+static bool xredisRoleUnsigned(const xredisreply* R,const xredisreplynode* V,int64* Output)
+{
+    if(V->Type==XREDIS_REPLY_INTEGER){if(V->Integer<0)return false;*Output=V->Integer;return true;}
+    if(!xredisRoleString(V) || !V->Bytes)return false;
+    uint64 N=0;for(size_t I=0;I<V->Bytes;++I){unsigned C=R->Data[V->Offset+I];if(C<'0' || C>'9' || N>((uint64)INT64_MAX-(C-'0'))/10)return false;N=N*10+C-'0';}*Output=(int64)N;return true;
+}
+static bool xredisRoleTuple(const xredisreply* R,size_t Node,xredisrolereplica* Output,size_t* Next)
+{
+    if(Node>=R->Count)return false;
+    const xredisreplynode* T=R->Nodes+Node;if(!xredisRoleArray(T,3))return false;
+    const xredisreplynode* H=R->Nodes+T->FirstChild;const xredisreplynode* P=R->Nodes+H->Next;const xredisreplynode* O=R->Nodes+P->Next;
+    int64 Port,Offset;if(!xredisRoleString(H) || !xredisRoleUnsigned(R,P,&Port) || Port>65535 || !xredisRoleUnsigned(R,O,&Offset))return false;
+    *Output=(xredisrolereplica){xredisRoleView(R,H),(uint16)Port,Offset};*Next=T->Next;return true;
+}
+XREDIS_API bool xredisRoleLimitsInit(xredisrolelimits* K)
+{
+    if(!K || !xrtMemRangeValid(K,sizeof(*K)))return xredisRoleArgument("invalid ROLE limits output");
+    *K=(xredisrolelimits){sizeof(*K),4096,1024u*1024u};return true;
+}
+XREDIS_API xredisrolestatus xredisRoleRead(const xredisreply* R,const xredisrolelimits* Config,xredisroleinfo* Output)
+{
+    if(!R || !Output || !xrtMemRangeValid(Output,sizeof(*Output)) || xredisReplyOverlap(R,Output,sizeof(*Output)) ||
+        (Config && (!xrtMemRangeValid(Config,sizeof(*Config)) || Config->Size!=sizeof(*Config) || xrtMemRangesOverlap(Config,sizeof(*Config),Output,sizeof(*Output))))){xredisRoleArgument("invalid ROLE arguments/limits");return XREDIS_ROLE_ERROR;}
+    xredisrolelimits K=Config?*Config:(xredisrolelimits){sizeof(K),4096,1024u*1024u};
+    const xredisreplynode* Root=R->Nodes+R->Root;
+    if(Root->Type==XREDIS_REPLY_SIMPLE_ERROR || Root->Type==XREDIS_REPLY_BULK_ERROR)return XREDIS_ROLE_SERVER_ERROR;
+    if(Root->Type!=XREDIS_REPLY_ARRAY || (Root->Flags&XREDIS_REPLY_NULL_VALUE) || !Root->ChildCount)return XREDIS_ROLE_OTHER;
+    const xredisreplynode* Word=R->Nodes+Root->FirstChild;
+    xredisrolekind Kind=xredisRoleWord(R,Word,"master")?XREDIS_ROLE_MASTER:xredisRoleWord(R,Word,"slave")?XREDIS_ROLE_REPLICA:xredisRoleWord(R,Word,"sentinel")?XREDIS_ROLE_SENTINEL:0;
+    if(!Kind)return XREDIS_ROLE_OTHER;
+    if(R->DataBytes>K.MaxPayloadBytes)return XREDIS_ROLE_LIMIT;
+    if(!xredisRoleArray(Root,Kind==XREDIS_ROLE_MASTER?3:Kind==XREDIS_ROLE_REPLICA?5:2))return XREDIS_ROLE_MALFORMED;
+    xredisroleinfo V={0};V.Kind=Kind;V.Replicas.Next=V.Monitored.Next=XREDIS_REPLY_NONE;
+    const xredisreplynode* A=R->Nodes+Word->Next;
+    if(Kind==XREDIS_ROLE_REPLICA){
+        const xredisreplynode* B=R->Nodes+A->Next;const xredisreplynode* C=R->Nodes+B->Next;const xredisreplynode* D=R->Nodes+C->Next;
+        if(!xredisRoleString(A) || B->Type!=XREDIS_REPLY_INTEGER || B->Integer<0 || B->Integer>65535 || !xredisRoleString(C) || D->Type!=XREDIS_REPLY_INTEGER || D->Integer< -1)return XREDIS_ROLE_MALFORMED;
+        V.MasterHost=xredisRoleView(R,A);V.MasterPort=(uint16)B->Integer;V.Offset=D->Integer;V.LinkText=xredisRoleView(R,C);
+        V.Link=xredisRoleWord(R,C,"connect")?XREDIS_ROLE_LINK_CONNECT:xredisRoleWord(R,C,"connecting")?XREDIS_ROLE_LINK_CONNECTING:xredisRoleWord(R,C,"sync")?XREDIS_ROLE_LINK_SYNC:xredisRoleWord(R,C,"connected")?XREDIS_ROLE_LINK_CONNECTED:XREDIS_ROLE_LINK_OTHER;
+    }else{
+        const xredisreplynode* B=A;
+        if(Kind==XREDIS_ROLE_MASTER){if(A->Type!=XREDIS_REPLY_INTEGER || A->Integer<0)return XREDIS_ROLE_MALFORMED;V.Offset=A->Integer;B=R->Nodes+A->Next;}
+        if(B->Type!=XREDIS_REPLY_ARRAY || (B->Flags&XREDIS_REPLY_NULL_VALUE))return XREDIS_ROLE_MALFORMED;
+        if(B->ChildCount>K.MaxEntries)return XREDIS_ROLE_LIMIT;
+        size_t Node=B->FirstChild;for(size_t N=0;N<B->ChildCount;++N){
+            if(Kind==XREDIS_ROLE_MASTER){xredisrolereplica Peer;size_t Next;if(!xredisRoleTuple(R,Node,&Peer,&Next))return XREDIS_ROLE_MALFORMED;Node=Next;}
+            else{const xredisreplynode* Name=R->Nodes+Node;if(!xredisRoleString(Name))return XREDIS_ROLE_MALFORMED;Node=Name->Next;}
+        }
+        xredisrolecursor Cursor={R,B->FirstChild,B->ChildCount,(uint32)Kind};if(Kind==XREDIS_ROLE_MASTER)V.Replicas=Cursor;else V.Monitored=Cursor;
+    }
+    *Output=V;return XREDIS_ROLE_VALUE;
+}
+static bool xredisRoleCursorValid(xredisrolecursor* C,ptr Output,size_t Bytes,xredisrolekind Kind)
+{
+    if(!C || !Output || !xrtMemRangeValid(C,sizeof(*C)) || !xrtMemRangeValid(Output,Bytes) || xrtMemRangesOverlap(C,sizeof(*C),Output,Bytes) || !C->Source || C->Kind!=(uint32)Kind ||
+        xredisReplyOverlap(C->Source,C,sizeof(*C)) || xredisReplyOverlap(C->Source,Output,Bytes) || C->Remaining>C->Source->Count || (!C->Remaining && C->Next!=XREDIS_REPLY_NONE))return xredisRoleArgument("invalid ROLE cursor/output");
+    return true;
+}
+XREDIS_API bool xredisRoleReplicaNext(xredisrolecursor* C,xredisrolereplica* Output)
+{
+    if(!xredisRoleCursorValid(C,Output,sizeof(*Output),XREDIS_ROLE_MASTER) || !C->Remaining)return false;
+    xredisrolereplica V;size_t Next;if(!xredisRoleTuple(C->Source,C->Next,&V,&Next) || (C->Remaining==1)!=(Next==XREDIS_REPLY_NONE))return xredisRoleArgument("invalid ROLE replica cursor chain");
+    *Output=V;C->Next=Next;--C->Remaining;return true;
+}
+XREDIS_API bool xredisRoleMasterNext(xredisrolecursor* C,xbytesview* Output)
+{
+    if(!xredisRoleCursorValid(C,Output,sizeof(*Output),XREDIS_ROLE_SENTINEL) || !C->Remaining)return false;
+    if(C->Next>=C->Source->Count)return xredisRoleArgument("invalid ROLE monitor cursor index");
+    const xredisreplynode* N=C->Source->Nodes+C->Next;if(!xredisRoleString(N) || (C->Remaining==1)!=(N->Next==XREDIS_REPLY_NONE))return xredisRoleArgument("invalid ROLE monitor cursor chain");
+    *Output=xredisRoleView(C->Source,N);C->Next=N->Next;--C->Remaining;return true;
+}
+#endif
 
 #endif

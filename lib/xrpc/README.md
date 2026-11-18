@@ -21,8 +21,17 @@ per-offer traces. Performance acceptance remains open.
 The client supports [immutable bounded request headers](docs/http_headers.md),
 including explicit Authorization transport with owned-copy erasure. Server
 authorization is explicit; challenge/refresh negotiation and richer response metadata remain pending.
-Remaining client/server runtime, bidirectional transport, WebSocket/framed stdio,
+The [duplex message runtime](docs/duplex.md) supports concurrent bounded call/
+notification/batch admission in both directions, a shared business executor and
+independent retained wire/results. The [framed TCP adapter](docs/tcp.md) adds
+automatic numeric connect/accepted-stream attachment using the host Engine,
+bounded copy sends and physical peer retirement. The developing [TLS peer](docs/tls.md) adds native encrypted bidirectional framing, snapshotted client/server policy and typed partial-write/lifetime handling. [TCP dial](docs/tcp_dial.md) adds host-owned async DNS/prepared candidates and cold source retirement. [TLS dial](docs/tls_dial.md) adds the same candidate controller with an explicit TLS policy snapshot. The [WS peer](docs/ws.md) and optional [HTTP Upgrade](docs/ws_http.md) add bidirectional Text mapping, same-handle native TCP/TLS handshake, route/shared-executor authorization and original setup clocks. [WS/WSS dial](docs/ws_dial.md) and [URI input](docs/ws_uri.md) compose native setup. Framed stdio,
 deadline/cancellation negotiation and production acceptance remain pending.
+
+Optional [WS compression](docs/ws_deflate.md) now covers negotiation and explicit
+thresholded output. Defaults stay off; dictionaries, buffers and CPU are counted.
+WS config gained two unconditional fields, so rebuild checked-Size users with
+the matching headers/libraries. [WS/WSS URI input](docs/ws_uri.md) is available; framed stdio remains open.
 
 Select `XRPC_MODULE_XRPC_DECODE`. `xrpcDecode` scans one complete document into
 caller-owned message scratch. It classifies calls, notifications, success/error
@@ -208,7 +217,8 @@ returns owned response Futures. Pending and retained result capacities share
 explicit limits, including reallocation peaks. Close drains, Cancel cooperates
 and drops queued jobs, and Destroy physically joins workers. Handler code/User
 remain borrowed through successful Destroy. This is the execution component;
-server HTTP/WebSocket/stdio transports and final acceptance remain pending.
+See the HTTP and framed TCP/TLS adapters below and the [WS/HTTP guide](docs/ws_http.md);
+stdio transport and final acceptance remain pending.
 
 
 Select `XRPC_MODULE_XRPC_HTTP_SERVER` for the bounded HTTP/1 server. It copies
@@ -238,3 +248,24 @@ factory deadlines and request deadlines/cancellation remain independent. See
 [HTTP dial](docs/http_dial.md) and the runnable [dial example](examples/http_dial/main.c).
 The optional TLS module composes with numeric, DNS and prepared setup.
 Remaining recovery/transport features and full acceptance remain pending.
+
+Optional [stream framing](docs/frame.md) supplies explicit Content-Length and
+uint32 big-endian profiles, incremental bounded buffers, complete-input borrowed
+views, atomic writers and typed EOF/failure. [The example](examples/frame/README.md)
+uses five-byte fragments; independent stdin/stdout tests compose the production
+framer with dispatch. The duplex runtime and framed TCP/TLS adapters are available;
+a production process adapter remains required. The framing leaf adds no thread,
+Future, JSON or transport.
+
+The optional [WS/WSS dial leaf](docs/ws_dial.md) creates one peer directly from a
+numeric endpoint, borrowed asynchronous Resolver or retained prepared endpoints.
+It composes verified TLS and checked HTTP Upgrade under one original setup clock,
+with queued RPC operations, native typed results and physical close/owner joins.
+Run [the client-establishment example](examples/ws_dial/README.md). Negotiated
+remote extensions and production/performance qualification remain open.
+
+Optional [WS/WSS URI input](docs/ws_uri.md) adds bounded zero-heap syntax parsing
+and same-peer ws/wss factories with exact authority/resource preservation, decoded
+routing, default TLS identity and the existing original setup clock/retirement.
+See [the runnable URI example](examples/ws_uri/README.md). This remains developing;
+production and performance acceptance are separate outstanding gates.

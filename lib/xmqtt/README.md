@@ -1,6 +1,68 @@
 # xmqtt (developing)
 
 Independent pure-C MQTT 5.0 / 3.1.1 client extension using public XRT APIs.
+The developing [committed state recovery](docs/store_state.md) validates the
+whole typed journal prefix before publishing independent QoS/Inbox views.
+[Direct Session import](docs/store_session.md) now constructs a disconnected
+ordinary Session with one retained wire copy and native parse per outgoing
+packet. Slot/generation/identity and trusted clocks are checked; fresh
+CONNACK is required. The host must retire the previous transport first and
+preserve pending Inbox payloads separately. See the [real-file passive example](examples/store_session/README.md).
+Live durable ACK/commit/lease integration and controlled performance/72h
+qualification remain required.
+The developing [Session image codec](docs/session_image.md) checkpoints bounded
+outgoing QoS/committed incoming identities under an explicit broker/principal/slot
+binding, validates corruption and quotas, and restores independent clock epochs
+and server-assigned MQTT5 identity. See the [offline example](examples/session_image/README.md).
+The developing [transactional journal](docs/journal.md) adds bounded, checksummed
+records with two sync barriers and redundant latest commit witnesses on an
+explicitly supplied, already published XRT file. See the [storage-worker example](examples/journal/README.md).
+Full file publication/compaction, live transactional Inbox and acknowledgement
+durability remain pending.
+The developing [typed store-delta codec](docs/store_delta.md) validates bounded
+MQTT5/3.1.1 transaction batches with explicit flow/delivery keys, session epochs,
+canonical packets and distinct protocol/delivery completion records. See its
+[three-record receive example](examples/store_delta/README.md). It does not yet
+apply recovered state, drive live commits or emit MQTT acknowledgements.
+Optional [WSS credential handoff](docs/client_ws_tls_resume.md) now connects
+native ticket-only events to the existing bounded TLS resume cache across
+direct/HTTP/URI channels and ordinary reconnect factories. See the
+[two-channel trusted example](examples/ws_tls_resume/README.md).
+The developing [automatic WS/WSS recovery](docs/reconnect_ws.md) composes the
+existing controller and ordinary connection factories with retained Session/Inbox,
+generation leases, bounded outage clocks and physical retirement. See the
+[two-generation native CLI](examples/reconnect_ws/README.md) and its source-bound
+local/broker/gateway evidence. No new production runtime or public API is added.
+The developing [WS/WSS URI factories](docs/client_ws_uri.md) now compose strict
+ws/wss parsing, numeric/decoded-DNS routing, native Upgrade and ordinary MQTT
+readiness under the original setup clock, with explicit TLS identity policy.
+See the [native URI CLI](examples/ws_uri/README.md).
+The developing [native WS/WSS connection factories](docs/client_ws_connect.md)
+now compose numeric/DNS/prepared native TCP/verified TLS, strict HTTP Upgrade and
+ordinary MQTT readiness under one original setup clock. Clean broker-close
+qualification and final production/
+performance acceptance remain required. See the [native CLI](examples/ws_connect/README.md).
+
+The developing [WS/WSS attachment](docs/client_ws.md) now reuses the ordinary
+Client for Binary MQTT traffic, QoS, subscriptions, selected enhanced auth and
+explicit Session/Inbox recovery. The host supplies an already checked Upgrade
+and native OPEN connection to these attachment APIs; the connection factories
+above perform native network/HTTP setup. URI input uses the separate factory;
+automatic reconnect composition uses the controller adapter above. See the [local runnable example](examples/ws/README.md).
+The independent [in-memory session state](docs/session.md) leaf now implements
+bounded QoS state, cross-connection replay decisions, incoming identity retention
+and expiry. The optional [Client Session factory](docs/client_session.md) now attaches it
+to numeric TCP with explicit reconnect and a shared Inbox. Optional
+[TLS Client Session](docs/client_session_tls.md) composes numeric, hostname and
+prepared-address TLS, including MQTT5 challenge/final-proof authentication.
+[TCP Dial/Auth Session](docs/client_session_dial.md) adds hostname/prepared TCP
+recovery and numeric/hostname/prepared enhanced-auth factories. The developing
+[automatic reconnect controller](docs/reconnect.md) adds generation leases, bounded
+backoff/deadlines and physical cleanup over a borrowed Engine/task pool. Durable
+[automatic recovery](docs/reconnect_store.md) composes the same controller with
+an Inbox Writer and a fresh or journal-restored Session. The transport callback
+selects a durable Client factory. Subscription intent after session loss remains
+an application responsibility.
 **Wire primitives, bounded framing, MQTT 5.0 properties and full MQTT 5.0/3.1.1
 packet codecs and negotiated connection constraints are implemented.** A developing
 [bounded TCP client](docs/client.md) now covers CONNECT/CONNACK, basic credentials,
@@ -9,8 +71,20 @@ SUBSCRIBE/UNSUBSCRIBE with owned per-filter reasons, shared outgoing identifiers
 MQTT5 incoming Topic Aliases are opt-in through CONNECT; outgoing aliases
 snapshot logical topics and select safe compact/full frames. See the
 [local receive-alias example](examples/receive_alias/README.md).
-Enhanced authentication, reconnect, durable
-sessions and TLS/WebSocket remain pending.
+Optional [MQTT5 enhanced authentication](docs/client_auth.md) now provides
+bounded multi-round AUTH, explicit final-proof verification and reauthentication
+with concurrent ordinary traffic. Optional [verified TLS](docs/client_tls.md)
+provides TLS 1.2/1.3, mutual authentication and the same MQTT operations over
+numeric, hostname and prepared-address factories. Optional
+[TLS1.3 credential handoff](docs/client_tls_resume.md) supplies a bounded latest
+ticket for explicit subsequent connections, including WSS with the separate leaf.
+Durable sessions, application cache policy and complete WebSocket acceptance remain pending.
+The developing WS/WSS stages above have separate evidence. Optional [hostname/prepared-address Dial](docs/client_dial.md)
+uses bounded Core DNS and candidate racing with the original setup deadline.
+Optional [Client Inbox](docs/client_inbox.md) preserves accepted PUBLISH messages
+and one shared physical object quota through sequential Client/Engine destruction.
+Its ordinary factory preserves application payloads; the optional Client Session
+factories additionally restore protocol state over numeric/hostname/prepared TCP or verified TLS.
 No broker or production/performance acceptance is claimed.
 
 Run the [offline TCP client example](examples/client/main.c) with the xmqtt
@@ -174,3 +248,62 @@ MQTT 3.1.1 binary PUBLISH decode/encode.
 Two negotiation variants measure independent handshake descriptor preflights
 plus one outbound check for MQTT 5 and 3.1.1. They do not establish network delivery throughput, tail latency, QoS sessions,
 durability or performance parity.
+
+Automatic reconnect TLS/Dial composition now has a [dedicated qualification stage](tests/results/reconnect-transports-20261110.json):3456 independent TLS/Mosquitto
+proxy cases plus local enhanced-auth proof/ownership tests. Algorithm/plugin,
+system-DNS, native-broker TLS and production/performance acceptance remain open.
+
+The optional [subscription intent registry](docs/reconnect_subscriptions.md)
+restores MQTT 5/3.1.1 subscriptions after a lost session, preserves confirmed
+subscriptions on resume, and reconciles offline changes and uncertain ACKs.
+It preserves options and group properties, exposes per-filter outcomes and full
+control-result callbacks, and bounds snapshots, entries and actual watcher owners.
+The [runnable loopback example](examples/reconnect_subscriptions/README.md) forces
+an outage and verifies restoration. This is volatile intent; publication offline
+queues and durable/crash state remain separate work. Automatic WS/WSS registry
+composition has separate [qualification evidence](docs/reconnect_ws.md).
+
+The `xmqtt_subscription_batches` performance profile measures acknowledged MQTT5
+intent updates with 32, 128 and 1024 filters per request against the loopback peer.
+Run `tools/measure_performance.py --config extlibs/xmqtt/config/performance_profiles.json --profiles xmqtt_subscription_batches --repeats 7 --warmups 1` with the selected compiler/architecture.
+`bench_subscriptions.c` accepts `updates version filters batch instrument [batch_updates]`;
+the final optional flag defaults to zero (single-filter updates). Setting it to
+one updates a full batch; filters must be divisible by batch. Heap measurements
+cover the entire loopback process. The existing 3% MAD/6% central-span gates apply;
+closed-loop observations do not qualify fixed-arrival production tails.
+
+The developing [committed-state recovery](docs/store_state.md) now applies typed
+journal history into bounded immutable outgoing-QoS, incoming-QoS2 and pending
+Inbox views. It rejects stale epochs/keys and illegal transitions, stages the
+whole committed prefix before publication, and keeps accepted delivery payloads
+through protocol reset/expiry. A [real-file example](examples/store_state/README.md)
+and separate adversarial/OOM/crash/ownership/performance workloads are included.
+Direct [State-to-Session import](docs/store_session.md) and bounded
+[Journal submission](docs/journal_worker.md) on a borrowed host task pool are
+now developing components, with [runnable worker example](examples/journal_worker/README.md).
+The developing [durable Client](docs/client_store.md) gates MQTT protocol
+progress on journal commits. [Inbox leases](docs/store_inbox.md) govern
+application delivery. Namespace publication, compaction and controlled
+production acceptance remain open.
+
+The developing [mutable typed store](docs/store_write.md) now stages legal changes
+on that borrowed host pool and atomically installs committed metadata before
+result publication,with allocation-free copied reads. Its [real-file example](examples/store_write/README.md)
+ACKs a recovered Inbox record and verifies fresh recovery. Final selected Windows
+and WSL unit,legacy,delivery,ABI,process-cut and cross-OS checks pass; WSL ASan/
+UBSan/leaks and Clang21 TSan also pass. The
+[follow-up evidence](../../docs/development/xmqtt-store-write-revalidation-20261118.json)
+retains diagnostic noise failures and actual allocation costs.
+
+The [durable TLS adapter](docs/client_store_tls.md) adds verified numeric,
+hostname and prepared-address connections for MQTT 5.0 and 3.1.1. Graceful
+Disconnect observes both authenticated transport closure and the committed END.
+Controlled performance and 72-hour native acceptance remain open.
+
+[Durable MQTT 5 enhanced authentication](docs/client_store_auth.md) gates
+session changes on application proof acceptance and committed OPEN. It supports
+numeric TCP and the three verified TLS endpoint forms.
+
+[Durable WS/WSS URI connections](docs/client_store_ws.md) reuse the existing
+Upgrade and verification paths. Graceful Disconnect waits for native
+WebSocket/TLS closure and committed END.

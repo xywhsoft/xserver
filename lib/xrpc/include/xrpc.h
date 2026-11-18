@@ -58,4 +58,48 @@
 #error "XRPC_FEATURE_XRPC requires http_server_tls"
 #endif
 #include <xrpc/http_server_tls.h>
+#if defined(XRPC_FEATURE_XRPC) && !defined(XRPC_FEATURE_XRPC_FRAME)
+#error "XRPC_FEATURE_XRPC requires frame"
+#endif
+#include <xrpc/frame.h>
+#if defined(XRPC_FEATURE_XRPC) && !defined(XRPC_FEATURE_XRPC_DUPLEX)
+#error "XRPC_FEATURE_XRPC requires duplex"
+#endif
+#include <xrpc/duplex.h>
+#if defined(XRPC_FEATURE_XRPC) && !defined(XRPC_FEATURE_XRPC_TCP)
+#error "XRPC_FEATURE_XRPC requires tcp"
+#endif
+#include <xrpc/tcp.h>
+#if defined(XRPC_FEATURE_XRPC) && !defined(XRPC_FEATURE_XRPC_TLS)
+#error "XRPC_FEATURE_XRPC requires tls"
+#endif
+#include <xrpc/tls.h>
+#if defined(XRPC_FEATURE_XRPC) && !defined(XRPC_FEATURE_XRPC_TCP_DIAL)
+#error "XRPC_FEATURE_XRPC requires tcp_dial"
+#endif
+#include <xrpc/tcp_dial.h>
+#if defined(XRPC_FEATURE_XRPC) && !defined(XRPC_FEATURE_XRPC_TLS_DIAL)
+#error "XRPC_FEATURE_XRPC requires tls_dial"
+#endif
+#include <xrpc/tls_dial.h>
+
+#if defined(XRPC_FEATURE_XRPC_WS)
+#include <xrpc/ws.h>
+#endif
+#if defined(XRPC_FEATURE_XRPC) && !defined(XRPC_FEATURE_XRPC_WS_HTTP_TLS)
+#error "XRPC_FEATURE_XRPC requires WS HTTP Upgrade"
+#endif
+#include <xrpc/ws_http.h>
+#if defined(XRPC_FEATURE_XRPC) && !defined(XRPC_FEATURE_XRPC_WS_HTTP_DEFLATE)
+#error "XRPC_FEATURE_XRPC requires optional WS HTTP compression support"
+#endif
+#include <xrpc/ws_deflate.h>
+#if defined(XRPC_FEATURE_XRPC) && !defined(XRPC_FEATURE_XRPC_WS_DIAL_TLS)
+#error "XRPC_FEATURE_XRPC requires WS/WSS connection setup"
+#endif
+#include <xrpc/ws_dial.h>
+#if defined(XRPC_FEATURE_XRPC) && !defined(XRPC_FEATURE_XRPC_WS_URI_TLS)
+#error "XRPC_FEATURE_XRPC requires WS/WSS URI input"
+#endif
+#include <xrpc/ws_uri.h>
 #endif

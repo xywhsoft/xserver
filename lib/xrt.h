@@ -55,6 +55,84 @@
 #ifndef XRT_FEATURES_H
 #define XRT_FEATURES_H
 
+/* websocket_stream_tls_ticket 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_STREAM_TLS_TICKET)
+#ifndef XRT_FEATURE_WEBSOCKET_STREAM_TLS_TICKET
+#define XRT_FEATURE_WEBSOCKET_STREAM_TLS_TICKET
+#endif
+#ifndef XRT_MODULE_WEBSOCKET_STREAM_TLS
+#define XRT_MODULE_WEBSOCKET_STREAM_TLS
+#endif
+#ifndef XRT_MODULE_TLS_CLIENT_RESUME
+#define XRT_MODULE_TLS_CLIENT_RESUME
+#endif
+#endif
+
+/* websocket_stream_tls_write_progress 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_STREAM_TLS_WRITE_PROGRESS)
+#ifndef XRT_FEATURE_WEBSOCKET_STREAM_TLS_WRITE_PROGRESS
+#define XRT_FEATURE_WEBSOCKET_STREAM_TLS_WRITE_PROGRESS
+#endif
+#ifndef XRT_MODULE_WEBSOCKET_STREAM_WRITE_PROGRESS
+#define XRT_MODULE_WEBSOCKET_STREAM_WRITE_PROGRESS
+#endif
+#ifndef XRT_MODULE_WEBSOCKET_STREAM_TLS
+#define XRT_MODULE_WEBSOCKET_STREAM_TLS
+#endif
+#ifndef XRT_MODULE_TLS_STREAM_WRITE_PROGRESS
+#define XRT_MODULE_TLS_STREAM_WRITE_PROGRESS
+#endif
+#endif
+
+/* websocket_stream_write_progress 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_STREAM_WRITE_PROGRESS)
+#ifndef XRT_FEATURE_WEBSOCKET_STREAM_WRITE_PROGRESS
+#define XRT_FEATURE_WEBSOCKET_STREAM_WRITE_PROGRESS
+#endif
+#ifndef XRT_MODULE_WEBSOCKET_STREAM
+#define XRT_MODULE_WEBSOCKET_STREAM
+#endif
+#ifndef XRT_MODULE_NET_TCP_WRITE_PROGRESS
+#define XRT_MODULE_NET_TCP_WRITE_PROGRESS
+#endif
+#endif
+
+/* websocket_stream_tls_exchange 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_STREAM_TLS_EXCHANGE)
+#ifndef XRT_FEATURE_WEBSOCKET_STREAM_TLS_EXCHANGE
+#define XRT_FEATURE_WEBSOCKET_STREAM_TLS_EXCHANGE
+#endif
+#ifndef XRT_MODULE_WEBSOCKET_STREAM_TLS
+#define XRT_MODULE_WEBSOCKET_STREAM_TLS
+#endif
+#ifndef XRT_MODULE_TLS_STREAM_EVENT_EXCHANGE
+#define XRT_MODULE_TLS_STREAM_EVENT_EXCHANGE
+#endif
+#endif
+
+/* tls_stream_event_exchange 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_STREAM_EVENT_EXCHANGE)
+#ifndef XRT_FEATURE_TLS_STREAM_EVENT_EXCHANGE
+#define XRT_FEATURE_TLS_STREAM_EVENT_EXCHANGE
+#endif
+#ifndef XRT_MODULE_TLS_STREAM
+#define XRT_MODULE_TLS_STREAM
+#endif
+#endif
+
+/* websocket_stream_retire 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_WEBSOCKET_STREAM_RETIRE)
+#ifndef XRT_FEATURE_WEBSOCKET_STREAM_RETIRE
+#define XRT_FEATURE_WEBSOCKET_STREAM_RETIRE
+#endif
+#ifndef XRT_MODULE_WEBSOCKET_STREAM
+#define XRT_MODULE_WEBSOCKET_STREAM
+#endif
+#ifndef XRT_MODULE_NET_TCP_RETIRE
+#define XRT_MODULE_NET_TCP_RETIRE
+#endif
+#endif
+
 /* event_waiter 及其直接依赖。 */
 #if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_EVENT_WAITER)
 #ifndef XRT_FEATURE_EVENT_WAITER
@@ -1501,6 +1579,19 @@
 #endif
 #endif
 
+/* tls_stream_write_progress 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_STREAM_WRITE_PROGRESS)
+#ifndef XRT_FEATURE_TLS_STREAM_WRITE_PROGRESS
+#define XRT_FEATURE_TLS_STREAM_WRITE_PROGRESS
+#endif
+#ifndef XRT_MODULE_TLS_STREAM
+#define XRT_MODULE_TLS_STREAM
+#endif
+#ifndef XRT_MODULE_NET_TCP_WRITE_PROGRESS
+#define XRT_MODULE_NET_TCP_WRITE_PROGRESS
+#endif
+#endif
+
 /* tls_stream_future 及其直接依赖。 */
 #if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_STREAM_FUTURE)
 #ifndef XRT_FEATURE_TLS_STREAM_FUTURE
@@ -1514,6 +1605,19 @@
 #endif
 #ifndef XRT_MODULE_NET_BUFFER
 #define XRT_MODULE_NET_BUFFER
+#endif
+#endif
+
+/* tls_stream_retire 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_TLS_STREAM_RETIRE)
+#ifndef XRT_FEATURE_TLS_STREAM_RETIRE
+#define XRT_FEATURE_TLS_STREAM_RETIRE
+#endif
+#ifndef XRT_MODULE_TLS_STREAM
+#define XRT_MODULE_TLS_STREAM
+#endif
+#ifndef XRT_MODULE_NET_TCP_RETIRE
+#define XRT_MODULE_NET_TCP_RETIRE
 #endif
 #endif
 
@@ -1589,6 +1693,16 @@
 #endif
 #ifndef XRT_MODULE_COND
 #define XRT_MODULE_COND
+#endif
+#endif
+
+/* net_tcp_write_progress 及其直接依赖。 */
+#if defined(XRT_MODULE_ALL) || defined(XRT_MODULE_NET_TCP_WRITE_PROGRESS)
+#ifndef XRT_FEATURE_NET_TCP_WRITE_PROGRESS
+#define XRT_FEATURE_NET_TCP_WRITE_PROGRESS
+#endif
+#ifndef XRT_MODULE_NET_TCP
+#define XRT_MODULE_NET_TCP
 #endif
 #endif
 
@@ -5684,6 +5798,19 @@ XRT_API const xerror* xrtGetError(void);
 /* 取走当前执行上下文的错误对象。 */
 XRT_API xerror* xrtTakeError(void);
 
+/* Quiet owning-reference exchange in the current serialized execution context.
+ * Unlike SetError/SetErrorTake, never notifies the configured error handler.
+ * Success takes Error (NULL allowed), transfers the previous slot owner through
+ * Previous, and neither retains nor frees either object. Caller must free or
+ * transfer Previous afterwards. Previous is valid independent caller storage,
+ * disjoint from error/context storage; never pass a borrowed GetError pointer
+ * as Error without first acquiring an owning reference. False leaves the slot,
+ * input ownership and Previous unchanged (invalid output/native TLS failure).
+ * No new diagnostic, XRT allocation or user callback. This is not a diagnostic
+ * suppression scope: errors published during an isolated operation may still
+ * notify their handler before a later quiet restoration. */
+XRT_API bool xrtTrySwapErrorTake(xerror* Error,xerror** Previous);
+
 
 
 /* 将错误对象设置到当前执行上下文，函数会增加引用。 */
@@ -6799,6 +6926,11 @@ typedef union xmutex {
 	uint64 Alignment;
 	uint8 Storage[XRT_MUTEX_STORAGE_SIZE];
 } xmutex;
+
+/* An immediate attempt has no clock/deadline dependency. */
+typedef enum xmutextryresult {
+    XMUTEX_TRY_ERROR=-1, XMUTEX_TRY_OK=0, XMUTEX_TRY_BUSY=1
+} xmutextryresult;
 #endif
 
 
@@ -6875,6 +7007,16 @@ XRT_API bool xrtMutexLock(xmutex* pMutex);
 
 /* 尝试获得互斥锁；锁正忙时返回 false 且不设置错误。 */
 XRT_API bool xrtMutexTryLock(xmutex* pMutex);
+
+/* Same immediate lock attempt with an explicit result: XMUTEX_TRY_OK transfers the lock
+ * to this native thread, XMUTEX_TRY_BUSY is ordinary contention (including own lock),
+ * XMUTEX_TRY_ERROR is invalid/uninitialized storage or native failure. Ready/pending keep
+ * the exact ambient error without redelivery; errors remain distinguishable
+ * even when old/new diagnostics share the same static/fallback identity.
+ * No normal-path allocation, waiting, recursion or extra ownership; failures
+ * may allocate diagnostics. Normal Unlock/Unit
+ * lifetime rules apply. The original bool TryLock contract is unchanged. */
+XRT_API xmutextryresult xrtMutexTryLockResult(xmutex* pMutex);
 
 
 
@@ -9674,6 +9816,13 @@ XRT_API bool xrtNetAddrLoopback(xnetaddr* pAddr, xnetfamily Family, uint16 iPort
 
 /* 严格解析数字 IPv4 或 IPv6；接口模块启用时 IPv6 Scope 也接受接口名称。 */
 XRT_API bool xrtNetAddrParse(xnetaddr* pAddr, cstr sIP, uint16 iPort);
+
+
+
+/* Quiet counted numeric IPv4/IPv6 parsing; numeric scopes only, no OS lookup.
+ * No allocation, error-slot access or handler notification on any result.
+ * Input/output spans must be valid and disjoint; false leaves output intact. */
+XRT_API bool xrtNetAddrTryParse(xnetaddr* pAddr, xstrview IP, uint16 iPort);
 
 
 
@@ -14685,7 +14834,12 @@ enum {
 	/* Data snapshots copy container data, not logical identities/lifecycle.
 	 * Unhandled opaque handles are retained, NOT cloned: the downstream
 	 * serializer/consumer still owns its unsupported-value policy. */
-	XVALUE_GRAPH_COPY_DATA_V1 = 1u
+	XVALUE_GRAPH_COPY_DATA_V1 = 1u,
+	/* Requires DATA. Reject raw pointers and unhandled opaque handles during
+	 * the same traversal, without invoking their Clone callbacks. Explicit
+	 * CopyHandle/CopyObject adapters remain trusted data projections and must
+	 * recurse through Next so nested unsupported values fail and roll back. */
+	XVALUE_GRAPH_COPY_STRICT_DATA_V1 = 2u
 };
 typedef struct xvaluegraphcopyv1 {
 	size_t Size;
@@ -17998,6 +18152,14 @@ XRT_API bool xrtFileLock(xfile File, xfilelock Mode, bool bWait);
 
 /* 解除整个文件锁。 */
 XRT_API bool xrtFileUnlock(xfile File);
+
+/* Try one exclusive, whole-file lock on a synchronous writable native file.
+ * Conflicting independent opens report XERR_AGAIN, even in the same process.
+ * Acquire once per open. Release by closing File. Independent closes keep
+ * this lock intact. Do not duplicate/inherit the held native handle or mix
+ * unlock APIs on it. Windows and Linux with open-file-description lock support.
+ * Linux locks are advisory. Protect pathname replacement separately. */
+XRT_API bool xrtFileTryLockExclusiveUntilClose(xfile File);
 
 #endif
 
@@ -25861,6 +26023,15 @@ XRT_API void xrtNetStreamDestroy(xnetstream* pStream);
  * also keep the result pending. Any worker of the same Engine is rejected.
  * No polling, allocation, cancellation or graph freeze; timeout preserves owner. */
 XRT_API xwaitresult xrtNetStreamWaitRetired(xnetstream* pStream,int64 iTimeout);
+/* Immediate physical-retirement query, including from Engine workers. Returns
+ * OK for CLOSED with exactly the caller's one strong reference, TIMEOUT while
+ * references/state or the predicate lock are busy, ERROR on invalid input or
+ * synchronization failure. It does not close/retain/consume the Stream, wait for
+ * progress, allocate a waiter, read the Engine or freeze ownership. A try-lock
+ * observes the final reference-notification tail; normal ready/pending preserves
+ * ambient error without invoking its handler. Keep the caller owner stable and
+ * stop other API/ref entries before interpreting OK as final retirement. */
+XRT_API xwaitresult xrtNetStreamPollRetired(xnetstream* pStream);
 #endif
 
 
@@ -26753,6 +26924,9 @@ XRT_EXTERN_C_END
 #ifndef XRT_TLS_H
 #define XRT_TLS_H
 
+
+/* Shared opaque identity used by both client and server configurations. */
+typedef struct xtlsresume xtlsresume;
 
 
 
@@ -31538,7 +31712,6 @@ XRT_EXTERN_C_END
 
 #if defined(XRT_FEATURE_TLS_RESUME)
 
-typedef struct xtlsresume xtlsresume;
 
 
 
@@ -31662,9 +31835,6 @@ XRT_EXTERN_C_END
 typedef struct xtlsverifier xtlsverifier;
 #endif
 
-#if !defined(XRT_FEATURE_TLS_CLIENT_RESUME)
-typedef struct xtlsresume xtlsresume;
-#endif
 
 
 
@@ -31808,6 +31978,14 @@ XRT_API size_t xrtTlsResumePeerCertificateCountV1(const xtlsresume* pResume);
 XRT_API const xx509cert* xrtTlsResumePeerCertificateV1(
 	const xtlsresume* pResume, size_t iIndex
 );
+
+/* Immutable configured native queue capacity, independent of its current
+ * Count. Zero means capture was disabled (including native ClientAuth policy).
+ * A capacity does not attest handshake readiness/version or promise a ticket.
+ * Borrow a live client Session under its normal synchronization. No allocation,
+ * queue mutation, copy or error change on valid input; invalid role/session
+ * follows the checked Count/Take diagnostics and returns zero. */
+XRT_API size_t xrtTlsClientResumeCapacity(const xtlssession* pSession);
 
 /* 返回等待调用方接管的恢复对象数量。 */
 XRT_API size_t xrtTlsClientResumeCount(const xtlssession* pSession);
@@ -32107,10 +32285,6 @@ XRT_EXTERN_C_END
 
 
 
-/* 关闭会话恢复实现时仍保留公开配置使用的不透明类型。 */
-#if !defined(XRT_FEATURE_TLS_SERVER_RESUME)
-typedef struct xtlsresume xtlsresume;
-#endif
 
 
 
@@ -32340,6 +32514,10 @@ XRT_EXTERN_C_END
 
 
 
+#if defined(XRT_FEATURE_TLS_STREAM_EVENT_EXCHANGE) && !defined(XRT_FEATURE_TLS_STREAM)
+	#error "TLS event exchange requires TLS Stream"
+#endif
+
 #if defined(XRT_FEATURE_TLS_STREAM) && \
 	(!defined(XRT_FEATURE_NET_TCP) || \
 	 !defined(XRT_FEATURE_TLS_CLIENT) || \
@@ -32362,6 +32540,11 @@ XRT_EXTERN_C_END
 #if defined(XRT_FEATURE_TLS_STREAM_FUTURE) && \
 	(!defined(XRT_FEATURE_TLS_STREAM) || !defined(XRT_FEATURE_FUTURE))
 	#error "XRT TLS Stream Future support requires TLS Stream and Future"
+#endif
+
+#if defined(XRT_FEATURE_TLS_STREAM_WRITE_PROGRESS) && \
+	(!defined(XRT_FEATURE_TLS_STREAM) || !defined(XRT_FEATURE_NET_TCP_WRITE_PROGRESS))
+	#error "XRT TLS write progress requires TLS Stream and native write progress"
 #endif
 
 #if defined(XRT_FEATURE_TLS_STREAM_DIAL_FUTURE) && \
@@ -32510,6 +32693,16 @@ typedef struct xtlsstreamevents {
 	void (*Ticket)(xtlsstream* pStream, ptr pData);
 } xtlsstreamevents;
 
+/* Ciphertext byte cursors in one Stream-local epoch, not plaintext delivery
+ * acknowledgements. Compare a saved Produced cursor with a later Completed
+ * cursor while the stream is live. Later output does not extend the saved cut. */
+typedef struct xtlswriteprogress {
+	size_t Size;
+	uint64 Produced;
+	uint64 Completed;
+} xtlswriteprogress;
+typedef void (*xtlsstreamwriteproc)(xtlsstream* pStream, ptr pData);
+
 /* One real owner for event data AND every borrowed callback/configuration
  * context used by this session. The descriptor/code stays resident; Ops must
  * enumerate actual references, including shared owner records (never flatten
@@ -32523,6 +32716,15 @@ typedef struct xtlsstreamownershipv1 {
 	void (*Drop)(const void* pData);
 	const xrtownershipops* Ops;
 } xtlsstreamownershipv1;
+
+/* Borrowed identities when used as Expected; one actual event-data credit when
+ * returned as Previous by Exchange. The session/configuration owner is separate.
+ * A returned owner must be released exactly once through Policy->Drop(Data),
+ * outside ownership claims/mutations after the composite handoff has returned. */
+typedef struct xtlsstreambindingv1 {
+	ptr Data;
+	const xtlsstreamownershipv1* Policy;
+} xtlsstreambindingv1;
 
 #if defined(XRT_FEATURE_TLS_STREAM_DIAL)
 /* One aggregate owner for Done, final Stream events and every borrowed TLS
@@ -32614,6 +32816,30 @@ typedef struct xtlslistenerstats {
 
 
 XRT_EXTERN_C_BEGIN
+
+#if defined(XRT_FEATURE_TLS_STREAM_WRITE_PROGRESS)
+/* Owning Worker only, after TCP opens. First success starts a permanent cursor
+ * epoch covering all currently pending output, including handshake/control
+ * records. Registration does not replay earlier progress: query immediately.
+ * No allocation or per-write watch node. Replacing/removing the callback
+ * preserves the epoch. NULL polls without notifications. Data is the current
+ * event Data; the same owner/code lifetime contract applies through destruction.
+ * Notifications coalesce and are deferred outside Send/SendVec and native write
+ * completion; no callback acknowledges peer receipt. Closing or replacing TLS events clears
+ * the callback; replacing native events invalidates the epoch. An observer is
+ * opaque to ownership graph admission: remove it before certified collection.
+ * Never write directly to the borrowed TCP transport while TLS owns it. */
+XRT_API bool xrtTlsStreamSetWriteProgress(xtlsstream* pStream,
+	xtlsstreamwriteproc pProgress);
+/* Owning Worker snapshot. Size must match; all outputs stay unchanged on error.
+ * Requires an enabled epoch and a live, non-aborting transport. Produced includes
+ * the TLS ciphertext queue plus TCP accepted output. Pending async plaintext is
+ * outside the cut: first observe its successful write result. Failure/abort/close invalidates
+ * success comparisons: settle the enclosing protocol operation with that outcome.
+ * Counter overflow is a range error, never wraparound or false completion. */
+XRT_API bool xrtTlsStreamWriteProgress(xtlsstream* pStream,
+	xtlswriteprogress* pProgress);
+#endif
 
 
 
@@ -32939,6 +33165,26 @@ XRT_API xtlsstream* xrtTlsStreamRef(xtlsstream* pStream);
 /* 释放 TLS Stream 引用；关闭必须另行请求。 */
 XRT_API void xrtTlsStreamDestroy(xtlsstream* pStream);
 
+#if defined(XRT_FEATURE_TLS_STREAM_RETIRE)
+#if !defined(XRT_FEATURE_TLS_STREAM) || !defined(XRT_FEATURE_NET_TCP_RETIRE)
+#error "TLS retirement requires TLS stream and native TCP retirement"
+#endif
+/* Nonblocking try-lock query: terminal TLS, exactly the caller's sole TLS
+ * reference and fully retired native TCP. CLOSED/FAILED alone is insufficient.
+ * No ownership Count/Trace/Busy policy is used as a lifecycle shortcut.
+ * Keep one stable caller owner, stop new entries/aliases before treating OK as
+ * final, and retain callback code/configuration through Destroy. Session/event
+ * context ownership remains until Destroy; destructor callbacks are separate.
+ * Poll is allowed on Workers, allocates nothing and preserves ambient error
+ * on OK/TIMEOUT. The Stream is not consumed. NULL is ERROR. */
+XRT_API xwaitresult xrtTlsStreamPollRetired(xtlsstream* pStream);
+/* One monotonic timeout covers TLS references and native TCP callback tails.
+ * Reject every Worker of the same Engine, including zero-timeout calls.
+ * Other host threads may wait concurrently while the sole caller owner is
+ * stable. Does not close, drive IO, cancel, destroy or release the caller. */
+XRT_API xwaitresult xrtTlsStreamWaitRetired(xtlsstream* pStream, int64 Timeout);
+#endif
+
 /* Owned counterparts preserve ordinary constructor/transfer/time contracts.
  * Only the explicit Data credit is additional. Attach still requires exclusive
  * session/transport IO access; the descriptor covers all session callbacks. */
@@ -32963,6 +33209,20 @@ XRT_API xrtownershipref xrtTlsStreamOwnership(const xtlsstream* pStream);
  * or pending read may overlap. Both exact policies participate in tracing. */
 XRT_API bool xrtTlsStreamBindEventsOwnedV1(xtlsstream* pStream, ptr pData,
 	const xtlsstreamownershipv1* pPolicy);
+#if defined(XRT_FEATURE_TLS_STREAM_EVENT_EXCHANGE)
+/* Exclusive idle OPEN Worker transaction. Expected must match the current
+ * additional event binding exactly; original session/configuration Data stays
+ * unchanged. No active callback/drive/send/incremental or async read. Consumes
+ * one NewData credit and returns the previous credit only on success; false
+ * changes neither binding nor Previous and consumes no new credit. Does not
+ * call Drop/Retain, replay buffered data, allocate, or reset a caller quota.
+ * Previous storage must be separate from Expected/Stream/descriptors/contexts.
+ * Retain the returned owner through completion of the higher protocol factory;
+ * its later Drop can reenter this stream. Both descriptors/code stay resident. */
+XRT_API bool xrtTlsStreamExchangeEventsOwnedV1(xtlsstream* pStream,
+	const xtlsstreambindingv1* pExpected, ptr pNewData,
+	const xtlsstreamownershipv1* pPolicy, xtlsstreambindingv1* pPrevious);
+#endif
 XRT_API const xnetruntimeownershipv1* xrtTlsStreamRuntimeOwnershipV1Get(void);
 XRT_API const xnetstreameventsownershipv1* xrtTlsStreamTransportOwnershipV1Get(void);
 XRT_API const xrtownershipquiescencev1* xrtTlsStreamOwnershipQuiescenceV1Get(void);
@@ -33240,6 +33500,18 @@ XRT_EXTERN_C_END
 	#error "XRT WebSocket TLS Stream requires WebSocket Stream and TLS Stream"
 #endif
 
+#if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_TICKET) && \
+    (!defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS) || \
+     !defined(XRT_FEATURE_TLS_CLIENT_RESUME))
+    #error "WebSocket TLS ticket notification requires TLS Stream and client resumption"
+#endif
+
+#if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_EXCHANGE) && \
+	(!defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS) || \
+	 !defined(XRT_FEATURE_TLS_STREAM_EVENT_EXCHANGE))
+	#error "WebSocket TLS exchange requires TLS Stream and owned event exchange"
+#endif
+
 #if defined(XRT_FEATURE_WEBSOCKET_STREAM_DEFLATE) && \
 	(!defined(XRT_FEATURE_WEBSOCKET_STREAM) || \
 	 !defined(XRT_FEATURE_WEBSOCKET_INFLATER) || \
@@ -33381,6 +33653,19 @@ typedef struct xwsstreamevents {
 	);
 } xwsstreamevents;
 
+#if defined(XRT_FEATURE_WEBSOCKET_STREAM_WRITE_PROGRESS)
+#if !defined(XRT_FEATURE_NET_TCP_WRITE_PROGRESS)
+#error "WebSocket write progress requires native TCP write progress"
+#endif
+/* Native TCP byte cursors, ciphertext for WSS. They certify local physical
+ * write retirement only, never peer receipt or application effects. */
+typedef struct xwswriteprogress {size_t Size;uint64 Produced,Completed;bool Staged;} xwswriteprogress;
+typedef void (*xwsstreamwriteproc)(xwsstream*,ptr);
+#endif
+#if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_WRITE_PROGRESS) && (!defined(XRT_FEATURE_WEBSOCKET_STREAM_WRITE_PROGRESS) || !defined(XRT_FEATURE_TLS_STREAM_WRITE_PROGRESS) || !defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS))
+#error "WSS write progress requires WS progress and native TLS write progress"
+#endif
+
 /* Permanent native descriptor. Success of an owned Attach consumes exactly
  * one Data credit; failures consume none. Ops traces every actual Data edge.
  * Retire, if present, only disables application callbacks through atomic
@@ -33478,6 +33763,20 @@ XRT_API xwsstream* xrtWsStreamAttachOwnedV1(xnetstream* pTransport,
 XRT_API xwsstream* xrtWsStreamAttachTlsOwnedV1(xtlsstream* pTransport,
 	xnetbuf* pInitial, const xwsstreamconfig* pConfig,
 	ptr pData, const xwsstreamownershipv1* pPolicy);
+#if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_EXCHANGE)
+/* As AttachTlsOwnedV1, but replace an exact existing owned event binding
+ * (e.g. HTTP Upgrade). Success takes transport/Initial/new Data and returns
+ * the previous event owner; false preserves all inputs and Previous. Expected
+ * is borrowed; Previous storage must be separate from inputs and contexts.
+ * No old Drop is called inside this composite factory. Publish the returned
+ * WS in its facade before calling Previous.Policy->Drop(Previous.Data), outside
+ * claims/mutations. Session/configuration owner and buffered suffix stay intact.
+ * Existing attach APIs retain their one-time binding rule. */
+XRT_API xwsstream* xrtWsStreamAttachTlsExchangeOwnedV1(xtlsstream* pTransport,
+	xnetbuf* pInitial, const xwsstreamconfig* pConfig, ptr pData,
+	const xwsstreamownershipv1* pPolicy, const xtlsstreambindingv1* pExpected,
+	xtlsstreambindingv1* pPrevious);
+#endif
 XRT_API const xtlsstreamownershipv1* xrtWsStreamTlsEventsOwnershipV1Get(void);
 #endif
 XRT_API xrtownershipref xrtWsStreamOwnership(const xwsstream* pStream);
@@ -33564,7 +33863,8 @@ XRT_API bool xrtWsStreamSendSize(const xwsstream* pStream, size_t iPayload,
 
 
 
-/* 在当前消息分块结束后暂停应用数据事件。 */
+/* 在当前消息分块结束后暂停应用数据事件。正常输入 EOF 等待已缓冲分块及
+ * MessageEnd 交付；暂停时由 Resume 继续，放弃读取时调用 Close/Abort。 */
 XRT_API void xrtWsStreamPause(xwsstream* pStream);
 
 
@@ -33573,6 +33873,47 @@ XRT_API void xrtWsStreamPause(xwsstream* pStream);
 XRT_API bool xrtWsStreamResume(xwsstream* pStream);
 
 
+
+#if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_TICKET)
+/* Owning Worker, OPEN WSS client only. Direct bounded notification from the
+ * native TLS ticket callback, using the existing WS event Data/owner lifetime.
+ * Take credentials on this Worker via WsStreamTls -> TlsStreamSession ->
+ * TlsClientTakeResume; the bounded native queue remains authoritative. No
+ * credential/payload copy, allocation, timer or per-ticket work item is added.
+ * NULL removes observation. Registration never replays an existing queue.
+ * Callback may remove itself or Abort/Destroy its caller reference; retain the
+ * borrowed owner/code through actual native retirement. Never replace native
+ * events. An opaque observer prevents owned-graph admission until removed;
+ * an existing ownership claim rejects changes. Close clears it before Close.
+ * Failure leaves the current callback unchanged. */
+typedef void (*xwsstreamtlsticketproc)(xwsstream*, ptr);
+XRT_API bool xrtWsStreamSetTlsTicket(xwsstream*, xwsstreamtlsticketproc);
+#endif
+
+#if defined(XRT_FEATURE_WEBSOCKET_STREAM_WRITE_PROGRESS)
+/* Owning Worker, live OPEN only. First success establishes a permanent cursor
+ * epoch including output already pending in its native transport. NULL enables
+ * polling/removes notification without resetting the epoch. Notifications
+ * coalesce outside Send/native completion and use the existing event Data;
+ * callback/code/context obey its owner lifetime. No allocation or per-write
+ * watch. Opaque observers prevent owned-graph admission until removed.
+ * Never write directly to the borrowed TCP/TLS transport. WSS requires the
+ * separate websocket_stream_tls_write_progress selection. */
+XRT_API bool xrtWsStreamSetWriteProgress(xwsstream*,xwsstreamwriteproc);
+/* Checked Size, owning Worker, enabled epoch. OK always snapshots current
+ * native Produced/Completed. Staged means WSS still owns an unsent local frame
+ * suffix, not included in Produced: previous saved cuts remain comparable,
+ * but do not take Produced as the complete cut for a new message until Staged
+ * clears. Pause further ordinary writes while obtaining such a cut. Async
+ * submission alone is outside a cut: first observe its successful native write
+ * result. Handshake/control bytes may conservatively extend the cut taken then.
+ * Later output does not extend an already saved cut. CLOSED invalidates success
+ * comparisons after close/abort; ERROR includes invalid output/owner, unsupported
+ * selection, replaced binding or overflow. All non-OK results preserve every
+ * output byte; normal OK/CLOSED preserve ambient error. Native completion may
+ * certify a batch at once, not every message separately. Not payload counters. */
+XRT_API xnetresult xrtWsStreamWriteProgress(xwsstream*,xwswriteprogress* Output);
+#endif
 
 /* 返回接收侧当前是否被应用暂停。 */
 XRT_API bool xrtWsStreamPaused(const xwsstream* pStream);
@@ -33731,6 +34072,26 @@ XRT_API const xerror* xrtWsStreamError(const xwsstream* pStream);
 #endif
 
 
+
+#if defined(XRT_FEATURE_WEBSOCKET_STREAM_RETIRE)
+#if !defined(XRT_FEATURE_WEBSOCKET_STREAM) || !defined(XRT_FEATURE_NET_TCP_RETIRE)
+#error "WebSocket physical retirement requires Stream and TCP retirement"
+#endif
+/* Nonblocking physical barrier. Keep the sole caller owner stable, stop new
+ * entries/Ref acquisition before treating OK as final. CLOSED is not enough:
+ * actual owned operations, drive/timer/callback references and retained native
+ * TCP duties must retire. Owned TLS event binding references keep WS alive through
+ * native TLS session/binding destruction; no extra TLS alias is retained.
+ * Extra WS/TLS/TCP aliases can delay retirement. Does not close or consume WS,
+ * does not release the owned application Data, allocate or wait for its mutex.
+ * Native host Engine/storage, external callers and code unload join separately.
+ * Normal TIMEOUT/OK preserve the ambient error. NULL is invalid. */
+XRT_API xwaitresult xrtWsStreamPollRetired(xwsstream* Stream);
+/* One original monotonic millisecond budget (-1 forever,0 poll). Rejects every
+ * Worker of the same Engine, including zero timeout. Concurrent waiters borrow
+ * the stable sole owner; join them before Destroy. No timer/runtime is created. */
+XRT_API xwaitresult xrtWsStreamWaitRetired(xwsstream* Stream,int64 Timeout);
+#endif
 
 XRT_EXTERN_C_END
 
@@ -53287,6 +53648,7 @@ enum
 #if defined(XRT_FEATURE_NET_TCP) || \
 	defined(XRT_FEATURE_NET_TCP_DIAL) || \
 	defined(XRT_FEATURE_NET_PROXY_DIAL) || \
+	defined(XRT_FEATURE_NET_TCP_WRITE_PROGRESS) || \
 	defined(XRT_FEATURE_NET_TCP_RETIRE) || \
 	defined(XRT_FEATURE_NET_TCP_FILE)
 #ifndef XRT_INTERNAL_TCP_H
@@ -53480,6 +53842,12 @@ struct xnetstream {
 	xnetstreamconfig Config;
 	xnetstreamevents Events;
 	xatomicptr Data;
+	#if defined(XRT_FEATURE_NET_TCP_WRITE_PROGRESS)
+		/* Internal protocol hook. Its context borrows the current event owner;
+		 * replacement clears both fields before retiring that owner. */
+		void (*WriteProgress)(xnetstream*, size_t, ptr);
+		ptr WriteProgressData;
+	#endif
 	__xrt_net_stream_events_owner* EventOwner;
 	__xrt_net_stream_events_owner* RetiredEventOwners;
 	__xrt_net_stream_events_owner* RetiredEventOwnersTail;
@@ -53505,6 +53873,7 @@ struct xnetstream {
 	bool ReadPending;
 	bool ReadDirect;
 	bool WritePending;
+	bool WriteConsuming; /* Worker-only: releasers may append, not drive this prefix again. */
 	bool WatchPending;
 	bool WriteDrained;
 	bool OpenEmitted;
@@ -53690,7 +54059,12 @@ bool __xrtNetListenerFutureAccept(
 #if defined(XRT_FEATURE_WEBSOCKET_STREAM) || \
 	defined(XRT_FEATURE_WEBSOCKET_STREAM_REF) || \
 	defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS) || \
-	defined(XRT_FEATURE_WEBSOCKET_STREAM_DEFLATE)
+	defined(XRT_FEATURE_WEBSOCKET_STREAM_DEFLATE) || \
+	defined(XRT_FEATURE_WEBSOCKET_STREAM_RETIRE) || \
+	defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_EXCHANGE) || \
+	defined(XRT_FEATURE_WEBSOCKET_STREAM_WRITE_PROGRESS) || \
+	defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_WRITE_PROGRESS) || \
+	defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_TICKET)
 #ifndef XRT_INTERNAL_WEBSOCKET_STREAM_H
 #define XRT_INTERNAL_WEBSOCKET_STREAM_H
 
@@ -53896,6 +54270,14 @@ struct xwsstream {
 	xatomic64 OutputBytes;
 	xatomic32 ReadPaused;
 	xatomic32 DrivePosted;
+    #if defined(XRT_FEATURE_WEBSOCKET_STREAM_WRITE_PROGRESS)
+        xwsstreamwriteproc WriteProgress;
+        uint64 WriteCompleted;
+        bool WriteProgressEnabled,WriteProgressPending,WriteProgressOverflow;
+    #endif
+	#if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_TICKET)
+		xwsstreamtlsticketproc TlsTicket;
+	#endif
 	uint64 CloseTimer;
 	__xrt_net_engine_internal DriveCommand;
 	bool FrameActive;
@@ -53907,11 +54289,41 @@ struct xwsstream {
 	bool ProtocolFailed;
 	bool ProtocolPeerActivity;
 	bool TransportClosing;
+	bool InputEnded;
+	bool NativeCloseDeferred;
 	bool Backpressured;
 	bool DrainPending;
 	bool ErrorEmitted;
 	bool CloseEmitted;
+	#if defined(XRT_FEATURE_WEBSOCKET_STREAM_RETIRE)
+		xmutex RetirementLock;
+		xcond RetirementReady;
+		/* Retain TCP, including beneath TLS. Retaining TLS itself would cycle
+		 * with its owned WebSocket event binding until TLS destruction. */
+		xnetstream* RetirementTcp;
+	#endif
 };
+
+#if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_TICKET)
+void __xrtWsStreamTlsTicket(xtlsstream*, ptr);
+#endif
+
+#if defined(XRT_FEATURE_WEBSOCKET_STREAM_RETIRE)
+/* Used by both ordinary and owned-operation releases. No Stream access may
+ * follow a successful fast decrement. Caller still ends its mutation scope. */
+static inline bool __xrtWsStreamReferenceRelease(xwsstream* S)
+{
+    #if !defined(__TINYC__) || defined(_WIN32) || defined(_WIN64)
+    int32 Count=__xrtAtomicRefLoad(&S->References);
+    while(Count>2){int32 Seen=__xrtAtomicRefCompareExchange(&S->References,Count-1,Count);if(Seen==Count)return false;Count=Seen;}
+    #endif
+    if(!xrtMutexLock(&S->RetirementLock))abort();
+    bool Last=xrtRefRelease(&S->References)==0;
+    if(!Last && __xrtAtomicRefLoad(&S->References)==1 && !xrtCondBroadcast(&S->RetirementReady))abort();
+    if(!xrtMutexUnlock(&S->RetirementLock))abort();
+    return Last;
+}
+#endif
 
 bool __xrtWsStreamOwnershipEnter(xwsstream* pStream, bool bSubmit);
 void __xrtWsStreamOwnershipLeave(xwsstream* pStream);
@@ -53919,6 +54331,9 @@ void __xrtWsOwnedRuntimeRelease(xwsstream* pStream);
 extern const xrtownershipops __xrtWsStreamOwnershipOps;
 void __xrtWsStreamFree(xwsstream* pStream);
 bool __xrtWsStreamDrivePrepare(xwsstream* pStream);
+#if defined(XRT_FEATURE_WEBSOCKET_STREAM_WRITE_PROGRESS)
+void __xrtWsStreamPublishWriteProgress(xwsstream* Stream);
+#endif
 bool __xrtWsStreamAttachBudget(xwsstream* pStream,ptr pTransport);
 bool __xrtWsStreamInitialTake(xnetbuf* pInitial,const xnetbuf* pTransport,xnetbuf* pDraft);
 bool __xrtWsStreamAbortBody(xwsstream* pStream);
@@ -56218,13 +56633,16 @@ bool __xrtTlsServerResumeSelect(
 /* ========================================================================== */
 
 #if defined(XRT_FEATURE_TLS_STREAM) || \
+	defined(XRT_FEATURE_TLS_STREAM_RETIRE) || \
 	defined(XRT_FEATURE_TLS_STREAM_FUTURE) || \
+	defined(XRT_FEATURE_TLS_STREAM_WRITE_PROGRESS) || \
 	defined(XRT_FEATURE_TLS_STREAM_LISTENER) || \
 	defined(XRT_FEATURE_TLS_STREAM_LISTENER_FUTURE) || \
 	defined(XRT_FEATURE_TLS_STREAM_LISTENER_SYNC) || \
 	defined(XRT_FEATURE_TLS_STREAM_DIAL) || \
 	defined(XRT_FEATURE_TLS_STREAM_DIAL_PROXY) || \
-	defined(XRT_FEATURE_TLS_STREAM_DIAL_FUTURE)
+	defined(XRT_FEATURE_TLS_STREAM_DIAL_FUTURE) || \
+	defined(XRT_FEATURE_TLS_STREAM_EVENT_EXCHANGE)
 #ifndef XRT_INTERNAL_TLS_STREAM_H
 #define XRT_INTERNAL_TLS_STREAM_H
 
@@ -56244,6 +56662,10 @@ typedef struct __xrt_tls_listener_stream __xrt_tls_listener_stream;
 /* 组合对象只在所属 Worker 修改协议字段，原子字段提供跨线程快照和门。 */
 struct xtlsstream {
 	volatile int32 References;
+	#if defined(XRT_FEATURE_TLS_STREAM_RETIRE)
+		xmutex RetirementLock;
+		xcond RetirementReady;
+	#endif
 	xatomicptr OwnershipClaim;
 	xatomic32 OwnershipState;
 	xatomic32 OwnershipActive;
@@ -56271,6 +56693,13 @@ struct xtlsstream {
 	/* A protocol handoff never replaces the session's original context. */
 	const xtlsstreamownershipv1* EventPolicy;
 	xatomicptr EventData;
+	#if defined(XRT_FEATURE_TLS_STREAM_WRITE_PROGRESS)
+		uint64 WriteCompleted;
+		xtlsstreamwriteproc WriteProgress;
+		bool WriteProgressEnabled;
+		bool WriteProgressPending;
+		bool WriteProgressOverflow;
+	#endif
 	xerror* Error;
 	uint64 HandshakeTimer;
 	uint64 CloseTimer;
@@ -69337,6 +69766,27 @@ XRT_API xerror* xrtTakeError(void)
 	return pError;
 }
 
+XRT_API bool xrtTrySwapErrorTake(xerror* pError,xerror** pPrevious)
+{
+	if (pPrevious==NULL || !xrtMemRangeValid(pPrevious,sizeof(*pPrevious))) return false;
+	if (!__xrtErrorTlsEnsure()) return false;
+	xerror* pOld=__xrtCurrentErrorGet();
+	xrt_error_context* pContext=__xrtBoundErrorContextGet();
+	if ((pError!=NULL && xrtMemRangesOverlap(pPrevious,sizeof(*pPrevious),pError,sizeof(*pError))) ||
+		(pOld!=NULL && xrtMemRangesOverlap(pPrevious,sizeof(*pPrevious),pOld,sizeof(*pOld))) ||
+		(pContext!=NULL && xrtMemRangesOverlap(pPrevious,sizeof(*pPrevious),pContext,sizeof(*pContext)))) return false;
+	if (pContext!=NULL) pContext->Error=pError;
+	else {
+#if defined(_WIN32) || defined(_WIN64)
+		if (!FlsSetValue(__xrtErrorTlsError,pError)) return false;
+#else
+		if (pthread_setspecific(__xrtErrorTlsError,pError)!=0) return false;
+#endif
+	}
+	*pPrevious=pOld;
+	return true;
+}
+
 
 
 /* 将错误对象设置到当前执行上下文，函数会增加引用。 */
@@ -70079,6 +70529,19 @@ bool __xrtNetAddrTryParse(
 	return __xrtNetAddrParseView(
 		pAddr, IP, iPort, false
 	) == __XRT_NET_ADDR_PARSE_OK;
+}
+
+
+
+/* Public pure view parser; preserve the internal parser's no-lookup contract. */
+XRT_API bool xrtNetAddrTryParse(xnetaddr* pAddr, xstrview IP, uint16 iPort)
+{
+	if ( !pAddr || !xrtMemRangeValid(pAddr, sizeof(*pAddr)) ||
+		!xrtMemRangeValid(IP.Data, IP.Size) ||
+		xrtMemRangesOverlap(pAddr, sizeof(*pAddr), IP.Data, IP.Size) ) {
+		return false;
+	}
+	return __xrtNetAddrTryParse(pAddr, IP, iPort);
 }
 
 
@@ -78041,6 +78504,42 @@ XRT_API bool xrtMutexTryLock(xmutex* pMutex)
 	#endif
 	__xrtMutexOwnerStore(pImpl, iCurrent);
 	return true;
+}
+
+
+
+/* 显式区分成功、普通争用和真正的同步错误；不改变原 bool 入口。 */
+XRT_API xmutextryresult xrtMutexTryLockResult(xmutex* pMutex)
+{
+	xrt_mutex_impl* pImpl = __xrtMutexRequire(pMutex);
+	uint64 iCurrent;
+
+	if ( pImpl == NULL ) {
+		return XMUTEX_TRY_ERROR;
+	}
+	iCurrent = __xrtCurrentThreadId();
+	if ( __xrtMutexOwnerLoad(pImpl) == iCurrent ) {
+		return XMUTEX_TRY_BUSY;
+	}
+	#if defined(_WIN32) || defined(_WIN64)
+		if ( !TryAcquireSRWLockExclusive(&pImpl->Lock) ) {
+			return XMUTEX_TRY_BUSY;
+		}
+	#else
+		{
+			int iResult = pthread_mutex_trylock(&pImpl->Lock);
+
+			if ( iResult == EBUSY ) {
+				return XMUTEX_TRY_BUSY;
+			}
+			if ( iResult != 0 ) {
+				__xrtSyncSetSystemError("mutex.try-result", iResult, "mutex try-lock failed");
+				return XMUTEX_TRY_ERROR;
+			}
+		}
+	#endif
+	__xrtMutexOwnerStore(pImpl, iCurrent);
+	return XMUTEX_TRY_OK;
 }
 
 
@@ -116010,6 +116509,10 @@ static xvalue* __xrtValueDeepClone(
 		return NULL;
 	}
 	Type = (xvaluetype)pSource->Type;
+	if (Type == XVALUE_POINTER &&
+		(pContext->Config.Flags & XVALUE_GRAPH_COPY_STRICT_DATA_V1)) {
+		__xrtErrorSetUnsupported(); return NULL;
+	}
 	for (size_t i = 0; i < pContext->Config.SequenceCount; ++i) {
 		const xvaluegraphsequencev1* pSequence = &pContext->Config.Sequences[i];
 		if (pSource->TypeId != pSequence->TypeId) continue;
@@ -116042,6 +116545,9 @@ static xvalue* __xrtValueDeepClone(
 		}
 		/* A listed native sequence has no opaque-handle retention fallback. */
 		if (bSequence) { __xrtErrorSetType(); return NULL; }
+		if (pContext->Config.Flags & XVALUE_GRAPH_COPY_STRICT_DATA_V1) {
+			__xrtErrorSetUnsupported(); return NULL;
+		}
 		if (pContext->Config.Flags & XVALUE_GRAPH_COPY_DATA_V1) {
 			pTarget = xrtValueRetain(pSource);
 			if (pTarget && (!__xrtValueCloneStart(pContext, pSource, pTarget) ||
@@ -116130,7 +116636,9 @@ static xvalue* __xrtOwnershipBody_ValueGraphCopy(const xvalue* pValue,
 	}
 	memset(&Context, 0, sizeof(Context));
 	if (pConfig != NULL) memcpy(&Context.Config, pConfig, iConfigSize);
-	if ((Context.Config.Flags & ~XVALUE_GRAPH_COPY_DATA_V1) != 0 ||
+	if ((Context.Config.Flags & ~(XVALUE_GRAPH_COPY_DATA_V1 | XVALUE_GRAPH_COPY_STRICT_DATA_V1)) != 0 ||
+		((Context.Config.Flags & XVALUE_GRAPH_COPY_STRICT_DATA_V1) &&
+		 !(Context.Config.Flags & XVALUE_GRAPH_COPY_DATA_V1)) ||
 		Context.Config.SequenceCount > SIZE_MAX / sizeof(xvaluegraphsequencev1) ||
 		(Context.Config.SequenceCount != 0 &&
 		(!(Context.Config.Flags & XVALUE_GRAPH_COPY_DATA_V1) ||
@@ -161101,6 +161609,7 @@ XRT_API void xrtWsDeflaterDestroy(
 /* ========================================================================== */
 
 #if defined(XRT_FEATURE_NET_TCP) || \
+	defined(XRT_FEATURE_NET_TCP_WRITE_PROGRESS) || \
 	defined(XRT_FEATURE_NET_TCP_FILE)
 
 #if !defined(_WIN32) && !defined(_WIN64)
@@ -161844,12 +162353,16 @@ static bool __xrtNetStreamConsumeWrite(
 	size_t iSize
 )
 {
+	/* Buffer releasers can submit more data on this Worker. Keep the just-sent
+	 * prefix private until BOTH its views and byte credit have retired. */
+	pStream->WriteConsuming = true;
 	size_t iConsumed = xrtNetBufConsume(
 		&pStream->WriteBuffer,
 		iSize
 	);
 
 	if ( iConsumed != iSize ) {
+		pStream->WriteConsuming = false;
 		__xrtNetStreamSetError(
 			XERR_INTERNAL,
 			XNET_ERROR_STREAM_WRITE,
@@ -161860,6 +162373,11 @@ static bool __xrtNetStreamConsumeWrite(
 		return false;
 	}
 	__xrtNetStreamReleaseSendBudget(pStream, iConsumed);
+	pStream->WriteConsuming = false;
+	#if defined(XRT_FEATURE_NET_TCP_WRITE_PROGRESS)
+		if (pStream->WriteProgress)
+			pStream->WriteProgress(pStream, iConsumed, pStream->WriteProgressData);
+	#endif
 	return true;
 }
 
@@ -162570,6 +163088,13 @@ static void __xrtNetStreamTryFinish(xnetstream* pStream)
 		return;
 	}
 	if ( pStream->Socket != NULL ) {
+		/* A partial ready event may have left the other direction armed
+		 * after WatchPending was cleared. Retire it before reusing the fd. */
+		xnetport* pPort = __xrtNetWorkerPortBorrow(pStream->Worker);
+		if ( (xrtNetPortCapabilities(pPort) & XNET_PORT_CAP_READINESS) != 0 &&
+			 !xrtNetPortUnwatch(pPort, pStream->Socket) ) {
+			xrtClearError();
+		}
 		if ( pStream->AbortRequested ) {
 			(void)xrtNetSocketSet(
 				pStream->Socket,
@@ -162614,6 +163139,10 @@ static void __xrtNetStreamTryFinish(xnetstream* pStream)
 		XNET_STREAM_CLOSED,
 		XMEMORY_RELEASE
 	);
+	#if defined(XRT_FEATURE_NET_TCP_WRITE_PROGRESS)
+		pStream->WriteProgress = NULL;
+		pStream->WriteProgressData = NULL;
+	#endif
 	if ( pStream->Events.Close != NULL ) {
 		pStream->Events.Close(
 			pStream,
@@ -163127,7 +163656,7 @@ static void __xrtNetStreamDriveWrite(xnetstream* pStream)
 {
 	xnetstreamstate State = xrtNetStreamState(pStream);
 
-	if ( pStream->WritePending ||
+	if ( pStream->WriteConsuming || pStream->WritePending ||
 		 pStream->AbortRequested ||
 		 xrtAtomic32Load(&pStream->AbortGate, XMEMORY_ACQUIRE) ||
 		 ((State != XNET_STREAM_OPEN) &&
@@ -163755,7 +164284,7 @@ static void __xrtNetStreamStartConnect(
 		return;
 	}
 	pStream->BuffersReady = true;
-	if ( pStream->Config.ConnectTimeout != 0 ) {
+	if ( pStream->Config.ConnectTimeout > 0 ) {
 		xrtNetStreamRef(pStream);
 		pStream->ConnectTimer = xrtNetEngineAfter(
 			pStream->Engine,
@@ -164122,6 +164651,10 @@ static bool __xrtNetStreamSetEvents(
 		#endif
 		return false;
 	}
+	#if defined(XRT_FEATURE_NET_TCP_WRITE_PROGRESS)
+		pStream->WriteProgress = NULL;
+		pStream->WriteProgressData = NULL;
+	#endif
 	__xrtNetStreamRetireEvents(pStream);
 	pStream->EventOwner = pOwner;
 	memset(&pStream->Events, 0, sizeof(pStream->Events));
@@ -167550,6 +168083,11 @@ static bool __xrtNetStreamCount(const void* pData, size_t* pCount)
 		pStream->RetiredEventOwners || pStream->RetiredEventOwnersTail || !__xrtNetStreamEventsOwned(pStream) ||
 		pStream->ActiveDepth || pStream->StartPending ||
 		xrtAtomic32Load(&pStream->ControlRequests, XMEMORY_ACQUIRE)) return false;
+	#if defined(XRT_FEATURE_NET_TCP_WRITE_PROGRESS)
+		if (pStream->WriteProgress && (!pStream->EventOwner ||
+			pStream->WriteProgressData != pStream->EventOwner->Data)) return false;
+		if (!pStream->WriteProgress && pStream->WriteProgressData) return false;
+	#endif
 	if (!__xrtNetStreamBuffersOwnership(pStream, NULL, NULL)) return false;
 	#if defined(XRT_FEATURE_NET_TCP_DIAL)
 		if (!__xrtNetDialControlOwnership(pStream, NULL, NULL)) return false;
@@ -168211,6 +168749,10 @@ void __xrtWsStreamFree(xwsstream* pConnection)
 	if ( pConnection == NULL ) {
 		return;
 	}
+	#if defined(XRT_FEATURE_WEBSOCKET_STREAM_RETIRE)
+		if(!xrtCondUnit(&pConnection->RetirementReady) || !xrtMutexUnit(&pConnection->RetirementLock))abort();
+		xrtNetStreamDestroy(pConnection->RetirementTcp);
+	#endif
 	__xrtWsStreamOutputClear(pConnection);
 	xrtNetBufClear(&pConnection->Initial);
 	#if defined(XRT_FEATURE_WEBSOCKET_STREAM_DEFLATE)
@@ -169077,6 +169619,27 @@ static void __xrtWsStreamCloseTransport(xwsstream* pConnection)
 	__xrtWsStreamCloseTransportStart(pConnection);
 }
 
+static void __xrtWsStreamTransportClose(xwsstream*,ptr,xnetresult,const xerror*);
+
+/* EOF must follow already buffered application chunks, including an End still
+ * pending after a Data callback paused at the final byte. Resume owns progress
+ * while paused; Close/Abort can always terminate an abandoned reader. */
+static void __xrtWsStreamInputFinish(xwsstream* pConnection)
+{
+	if ( pConnection->InputEnded && !pConnection->Reading &&
+		(xrtWsStreamState(pConnection) != XWS_STREAM_CLOSED) &&
+		!xrtAtomic32Load(&pConnection->ReadPaused, XMEMORY_ACQUIRE) ) {
+		if ( pConnection->NativeCloseDeferred ) {
+			pConnection->NativeCloseDeferred = false;
+			__xrtWsStreamTransportClose(pConnection,
+				xrtAtomicPtrLoad(&pConnection->Transport, XMEMORY_ACQUIRE),
+				XNET_RESULT_OK, NULL);
+		} else {
+			__xrtWsStreamCloseTransportStart(pConnection);
+		}
+	}
+}
+
 
 
 /* 关闭计时器只在远端没有回应时把握手变为明确超时。 */
@@ -169409,6 +169972,7 @@ static bool __xrtWsStreamConsume(
 /* TLS 在保留不完整帧头时显式请求继续累积受限明文。 */
 static bool __xrtWsStreamReadMore(xwsstream* pConnection)
 {
+	if ( pConnection->InputEnded ) return true;
 	(void)pConnection;
 	#if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS)
 		if ( pConnection->TransportKind ==
@@ -170099,6 +170663,7 @@ static void __xrtWsStreamRead(xwsstream* pConnection)
 		pConnection->FrameOffset += iChunk;
 	}
 	pConnection->Reading = false;
+	__xrtWsStreamInputFinish(pConnection);
 	xrtWsStreamDestroy(pConnection);
 }
 
@@ -170118,12 +170683,26 @@ static void __xrtWsStreamDrive(
 		0,
 		XMEMORY_RELEASE
 	);
+	/* Abort may arrive from any thread after TLS already published its one
+	 * Close. Finish on the Worker even if its application reader is paused. */
+	if ( pConnection->NativeCloseDeferred &&
+		(xrtWsStreamState(pConnection) != XWS_STREAM_OPEN) ) {
+		pConnection->NativeCloseDeferred = false;
+		__xrtWsStreamTransportClose(pConnection,
+			xrtAtomicPtrLoad(&pConnection->Transport, XMEMORY_ACQUIRE),
+			XNET_RESULT_CANCELLED, NULL);
+		xrtWsStreamDestroy(pConnection);
+		return;
+	}
 	if ( !xrtAtomic32Load(
 		&pConnection->ReadPaused,
 		XMEMORY_ACQUIRE
 	) ) {
 		__xrtWsStreamRead(pConnection);
 	}
+    #if defined(XRT_FEATURE_WEBSOCKET_STREAM_WRITE_PROGRESS)
+        __xrtWsStreamPublishWriteProgress(pConnection);
+    #endif
 	#if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS)
 		if ( pConnection->TransportKind ==
 			__XRT_WS_TRANSPORT_TLS ) {
@@ -170323,12 +170902,13 @@ static void __xrtWsStreamTcpEnd(
 	xwsstream* pConnection = (xwsstream*)pData;
 
 	(void)pStream;
-	if ( !pConnection->CloseReceived ) {
-		pConnection->TransportClosing = true;
-		if ( !xrtNetStreamClose(pStream) ) {
-			xrtClearError();
-			(void)xrtNetStreamAbort(pStream);
-		}
+	pConnection->InputEnded = true;
+	if ( pConnection->ProtocolFailed ) {
+		__xrtWsStreamCloseTransportStart(pConnection);
+	} else {
+		/* Resume can clear ReadPaused before its posted drive runs. Drain
+		 * here too; the flag alone does not prove buffered input is done. */
+		__xrtWsStreamRead(pConnection);
 	}
 }
 
@@ -170527,6 +171107,13 @@ static void __xrtWsStreamTransportClose(
 	__xrtWsStreamOutputClear(pConnection);
 	if ( !pConnection->CloseEmitted ) {
 		pConnection->CloseEmitted = true;
+        #if defined(XRT_FEATURE_WEBSOCKET_STREAM_WRITE_PROGRESS)
+            pConnection->WriteProgress = NULL;
+            pConnection->WriteProgressPending = false;
+        #endif
+		#if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_TICKET)
+			pConnection->TlsTicket = NULL;
+		#endif
 		__xrtWsStreamCloseSnapshot(pConnection, &Close);
 		if ( pConnection->Events.Close != NULL ) {
 			pConnection->Events.Close(
@@ -170618,6 +171205,14 @@ static void __xrtWsStreamTlsRead(
 		__xrtWsStreamCloseTransport(pConnection);
 		return;
 	}
+	/* Consume can drive TLS synchronously while this WS reader is active.
+	 * TLS then marks its plaintext notification as delivered even though the
+	 * reentrant reader cannot enter. Preserve that wake on the existing
+	 * coalesced drive node; the outer reader publishes its cursor first. */
+	if ( pConnection->Reading ) {
+		__xrtWsStreamDriveSchedule(pConnection);
+		return;
+	}
 	__xrtWsStreamRead(pConnection);
 }
 
@@ -170663,12 +171258,12 @@ static void __xrtWsStreamTlsEnd(
 {
 	xwsstream* pConnection = (xwsstream*)pData;
 
-	if ( !pConnection->TransportClosing ) {
-		pConnection->TransportClosing = true;
-		if ( !xrtTlsStreamClose(pStream) ) {
-			xrtClearError();
-			(void)xrtTlsStreamAbort(pStream);
-		}
+	(void)pStream;
+	pConnection->InputEnded = true;
+	if ( pConnection->ProtocolFailed ) {
+		__xrtWsStreamCloseTransportStart(pConnection);
+	} else {
+		__xrtWsStreamRead(pConnection);
 	}
 }
 
@@ -170682,8 +171277,20 @@ static void __xrtWsStreamTlsClose(
 	ptr pData
 )
 {
+	xwsstream* pConnection = (xwsstream*)pData;
+	/* TLS can complete close_notify reentrantly from Consume at the final
+	 * payload byte, before the outer WS reader can publish MessageEnd.
+	 * Keep the existing TLS owner (and its buffered plaintext) until Resume
+	 * finishes parsing. Errors and explicit abort always terminate promptly. */
+	if ( (Result == XNET_RESULT_OK) && (pError == NULL) &&
+		(xrtWsStreamState(pConnection) == XWS_STREAM_OPEN) &&
+		(pConnection->Reading || xrtWsStreamPaused(pConnection)) ) {
+		pConnection->InputEnded = true;
+		pConnection->NativeCloseDeferred = true;
+		return;
+	}
 	__xrtWsStreamTransportClose(
-		(xwsstream*)pData,
+		pConnection,
 		pStream,
 		Result,
 		pError
@@ -170698,7 +171305,13 @@ XRT_API const xtlsstreamownershipv1* xrtWsStreamTlsEventsOwnershipV1Get(void)
  static const xtlsstreamownershipv1 policy={sizeof(policy),
   {.Open=NULL,.Read=__xrtWsStreamTlsRead,.End=__xrtWsStreamTlsEnd,
    .Writable=__xrtWsStreamTlsWritable,.Drain=__xrtWsStreamTlsDrain,
-   .Close=__xrtWsStreamTlsClose,.Ticket=NULL},
+   .Close=__xrtWsStreamTlsClose,.Ticket=
+#if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_TICKET)
+   __xrtWsStreamTlsTicket
+#else
+   NULL
+#endif
+  },
   __xrtWsStreamOwnedTransportDrop,&__xrtWsStreamOwnershipOps};
  return &policy;
 }
@@ -170779,6 +171392,10 @@ xwsstream* __xrtWsStreamCreate(
 		);
 		return NULL;
 	}
+	#if defined(XRT_FEATURE_WEBSOCKET_STREAM_RETIRE)
+		if(!xrtMutexInit(&pConnection->RetirementLock)){xrtFree(pConnection);return NULL;}
+		if(!xrtCondInit(&pConnection->RetirementReady)){xrtMutexUnit(&pConnection->RetirementLock);xrtFree(pConnection);return NULL;}
+	#endif
 	pConnection->References = 2;
 	xrtAtomic32Init(&pConnection->State, XWS_STREAM_OPEN);
 	xrtAtomic32Init(
@@ -170829,6 +171446,9 @@ xwsstream* __xrtWsStreamCreate(
 		&MessageConfig
 	) ) {
 		__xrtSpinUnit(&pConnection->TransportLock);
+		#if defined(XRT_FEATURE_WEBSOCKET_STREAM_RETIRE)
+			xrtCondUnit(&pConnection->RetirementReady);xrtMutexUnit(&pConnection->RetirementLock);
+		#endif
 		xrtFree(pConnection);
 		return NULL;
 	}
@@ -170851,6 +171471,9 @@ xwsstream* __xrtWsStreamCreate(
 				__xrtSpinUnit(
 					&pConnection->TransportLock
 				);
+				#if defined(XRT_FEATURE_WEBSOCKET_STREAM_RETIRE)
+					xrtCondUnit(&pConnection->RetirementReady);xrtMutexUnit(&pConnection->RetirementLock);
+				#endif
 				xrtFree(pConnection);
 				(void)__xrtWsStreamRemember(
 					NULL,
@@ -170862,6 +171485,18 @@ xwsstream* __xrtWsStreamCreate(
 				);
 				return NULL;
 			}
+		}
+	#endif
+	#if defined(XRT_FEATURE_WEBSOCKET_STREAM_RETIRE)
+		xnetstream* RetirementTcp=pTransport;
+		#if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS)
+			if(TransportKind==__XRT_WS_TRANSPORT_TLS)RetirementTcp=xrtTlsStreamTransport(pTransport);
+		#endif
+		pConnection->RetirementTcp=xrtNetStreamRef(RetirementTcp);
+		if(!pConnection->RetirementTcp){
+			xerror* Failure=xrtTakeError();
+			/* Unpublished draft still borrows its input transport. */
+			__xrtWsStreamFree(pConnection);xrtClearError();xrtSetErrorTake(Failure);return NULL;
 		}
 	#endif
 	return pConnection;
@@ -171277,7 +171912,11 @@ XRT_API void xrtWsStreamDestroy(xwsstream* pConnection)
 	xrtownershipscope Mutation={0};
 	bool owned=pConnection->OwnershipPolicy!=NULL;
 	if(owned&&!xrtOwnershipMutationBegin(&Mutation))abort();
+	#if defined(XRT_FEATURE_WEBSOCKET_STREAM_RETIRE)
+	bool last=__xrtWsStreamReferenceRelease(pConnection);
+	#else
 	bool last=xrtRefRelease(&pConnection->References)==0;
+	#endif
 	if(owned&&!xrtOwnershipScopeEnd(&Mutation))abort();
 	if(last)__xrtWsStreamFree(pConnection);
 }
@@ -172235,6 +172874,13 @@ static xnetresult xrtWsStreamCloseBody(
 		(xrtWsStreamState(pConnection) != XWS_STREAM_OPEN) ) {
 		return XNET_RESULT_CLOSED;
 	}
+	if ( pConnection->NativeCloseDeferred ) {
+		pConnection->NativeCloseDeferred = false;
+		__xrtWsStreamTransportClose(pConnection,
+			xrtAtomicPtrLoad(&pConnection->Transport, XMEMORY_ACQUIRE),
+			XNET_RESULT_OK, NULL);
+		return XNET_RESULT_CLOSED;
+	}
 	if ( !xrtWsCloseWrite(
 		iCode,
 		Reason,
@@ -172317,6 +172963,10 @@ bool __xrtWsStreamAbortBody(xwsstream* pConnection)
 			bAccepted = xrtTlsStreamAbort(
 				(xtlsstream*)pTransport
 			);
+			if ( xrtTlsStreamState((xtlsstream*)pTransport) ==
+				XTLS_STREAM_CLOSED ) {
+				__xrtWsStreamDriveSchedule(pConnection);
+			}
 		} else
 	#endif
 	{
@@ -172434,7 +173084,11 @@ void __xrtWsStreamOwnershipLeave(xwsstream* s)
     xrtownershipscope mutation={0};
     if(!xrtOwnershipMutationBegin(&mutation))abort();
     if(!xrtAtomic32FetchSub(&s->OwnershipActive,1,XMEMORY_ACQ_REL))abort();
+    #if defined(XRT_FEATURE_WEBSOCKET_STREAM_RETIRE)
+    bool last=__xrtWsStreamReferenceRelease(s);
+    #else
     bool last=xrtRefRelease(&s->References)==0;
+    #endif
     if(!xrtOwnershipScopeEnd(&mutation))abort();
     if(last)__xrtWsStreamFree(s);
 }
@@ -172451,6 +173105,12 @@ static bool __xrtWsOwnedCount(const void* data,size_t* result)
     if(!s||!result||__xrtWsOwnedBusy(s)||!s->OwnershipPolicy||!s->OwnershipDataHeld||!s->Data||
        !s->OwnershipStorageHeld||!s->OwnershipEngine||s->Reading||
        (xrtAtomic32Load(&s->OwnershipState,XMEMORY_ACQUIRE)&__XRT_WS_OWN_CLEARED))return false;
+    #if defined(XRT_FEATURE_WEBSOCKET_STREAM_WRITE_PROGRESS)
+    if(s->WriteProgress)return false;
+    #endif
+    #if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_TICKET)
+    if(s->TlsTicket)return false;
+    #endif
     if(s->RuntimeHeld){
         if(!s->OwnershipEngineHeld||s->RuntimeOwner.Data!=s||!s->RuntimeOwner.Previous||
            s->RuntimeOwner.Engine!=s->OwnershipEngine||s->RuntimeOwner.Policy!=xrtWsStreamRuntimeOwnershipV1Get())return false;
@@ -172477,6 +173137,9 @@ static bool __xrtWsOwnedTrace(const void* data,xrtownershipvisitor visit,ptr con
         #endif
         if(!visit(xrtNetStreamOwnership(transport),context))return false;
     }
+    #if defined(XRT_FEATURE_WEBSOCKET_STREAM_RETIRE)
+    if(s->RetirementTcp && !visit(xrtNetStreamOwnership(s->RetirementTcp),context))return false;
+    #endif
     xerror* error=xrtAtomicPtrLoad(&s->Error,XMEMORY_ACQUIRE);
     return !error||visit(xrtErrorOwnership(error),context);
 }
@@ -172604,9 +173267,15 @@ static bool __xrtWsOwnedFinish(const void* data,const void* token)
     ptr owner=s->OwnershipDataHeld?s->Data:NULL;s->Data=NULL;s->OwnershipDataHeld=false;
     xnetengine* engine=s->OwnershipEngine;bool storage=s->OwnershipStorageHeld;
     s->OwnershipEngine=NULL;s->OwnershipStorageHeld=false;
+    #if defined(XRT_FEATURE_WEBSOCKET_STREAM_RETIRE)
+    xnetstream* retirement=s->RetirementTcp;s->RetirementTcp=NULL;
+    #endif
     xerror* error=xrtAtomicPtrExchange(&s->Error,NULL,XMEMORY_ACQ_REL);
     if(!xrtOwnershipScopeEnd(&mutation))abort();
     xerror* prior=xrtTakeError();
+    #if defined(XRT_FEATURE_WEBSOCKET_STREAM_RETIRE)
+    xrtNetStreamDestroy(retirement);
+    #endif
     xrtErrorFree(error);
     if(owner)s->OwnershipPolicy->Drop(owner);
     if(storage)__xrtNetEngineStorageRelease(engine);
@@ -172644,10 +173313,26 @@ static void __xrtWsOwnedDiscard(xwsstream* s)
     xrtWsStreamDestroy(s);xrtWsStreamDestroy(s);
 }
 static xwsstream* __xrtWsOwnedAttach(ptr transport,__xrt_ws_transport kind,xnetbuf* initial,
-    const xwsstreamconfig* config,ptr data,const xwsstreamownershipv1* policy)
+    const xwsstreamconfig* config,ptr data,const xwsstreamownershipv1* policy
+    #if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_EXCHANGE)
+    ,const xtlsstreambindingv1* expected,xtlsstreambindingv1* previous
+    #endif
+    )
 {
     if(!transport||!data||!policy||policy->size!=sizeof(*policy)||!policy->Drop||
        !policy->Ops||!policy->Ops->Count||!policy->Ops->Trace){__xrtErrorSetInvalidArgument();return NULL;}
+    #if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_EXCHANGE)
+    if(expected || previous){
+        if(kind!=__XRT_WS_TRANSPORT_TLS || !__xrtRangeValid(expected,sizeof(*expected)) ||
+           !__xrtRangeValid(previous,sizeof(*previous)) ||
+           (initial&&xrtMemRangesOverlap(initial,sizeof(*initial),previous,sizeof(*previous))) ||
+           (config&&xrtMemRangesOverlap(config,sizeof(*config),previous,sizeof(*previous))) ||
+           xrtMemRangesOverlap(policy,sizeof(*policy),previous,sizeof(*previous)) ||
+           xrtMemRangesOverlap(data,1,previous,sizeof(*previous))){
+            __xrtErrorSetInvalidArgument();return NULL;
+        }
+    }
+    #endif
     xnetworker* worker=NULL;const xnetbuf* buffered=NULL;
     #if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS)
     if(kind==__XRT_WS_TRANSPORT_TLS){worker=xrtNetStreamWorker(xrtTlsStreamTransport(transport));}else
@@ -172686,7 +173371,12 @@ static xwsstream* __xrtWsOwnedAttach(ptr transport,__xrt_ws_transport kind,xnetb
     if(!__xrtWsStreamDrivePrepare(s))goto fail;
     bool bound;
     #if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS)
-    if(kind==__XRT_WS_TRANSPORT_TLS)bound=xrtTlsStreamBindEventsOwnedV1(transport,s,xrtWsStreamTlsEventsOwnershipV1Get());else
+    if(kind==__XRT_WS_TRANSPORT_TLS){
+        #if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_EXCHANGE)
+        if(expected)bound=xrtTlsStreamExchangeEventsOwnedV1(transport,expected,s,xrtWsStreamTlsEventsOwnershipV1Get(),previous);else
+        #endif
+        bound=xrtTlsStreamBindEventsOwnedV1(transport,s,xrtWsStreamTlsEventsOwnershipV1Get());
+    }else
     #endif
     bound=xrtNetStreamSetEventsOwnedV1(transport,s,xrtWsStreamTcpEventsOwnershipV1Get());
     if(!bound)goto fail;
@@ -172701,11 +173391,28 @@ fail:
 }
 XRT_API xwsstream* xrtWsStreamAttachOwnedV1(xnetstream* transport,xnetbuf* initial,
     const xwsstreamconfig* config,ptr data,const xwsstreamownershipv1* policy)
-{return __xrtWsOwnedAttach(transport,__XRT_WS_TRANSPORT_TCP,initial,config,data,policy);}
+{return __xrtWsOwnedAttach(transport,__XRT_WS_TRANSPORT_TCP,initial,config,data,policy
+    #if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_EXCHANGE)
+    ,NULL,NULL
+    #endif
+    );}
 #if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS)
 XRT_API xwsstream* xrtWsStreamAttachTlsOwnedV1(xtlsstream* transport,xnetbuf* initial,
     const xwsstreamconfig* config,ptr data,const xwsstreamownershipv1* policy)
-{return __xrtWsOwnedAttach(transport,__XRT_WS_TRANSPORT_TLS,initial,config,data,policy);}
+{return __xrtWsOwnedAttach(transport,__XRT_WS_TRANSPORT_TLS,initial,config,data,policy
+    #if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_EXCHANGE)
+    ,NULL,NULL
+    #endif
+    );}
+#if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_EXCHANGE)
+XRT_API xwsstream* xrtWsStreamAttachTlsExchangeOwnedV1(xtlsstream* transport,xnetbuf* initial,
+    const xwsstreamconfig* config,ptr data,const xwsstreamownershipv1* policy,
+    const xtlsstreambindingv1* expected,xtlsstreambindingv1* previous)
+{
+    if(!expected || !previous){__xrtErrorSetInvalidArgument();return NULL;}
+    return __xrtWsOwnedAttach(transport,__XRT_WS_TRANSPORT_TLS,initial,config,data,policy,expected,previous);
+}
+#endif
 #endif
 #endif
 #endif
@@ -198802,7 +199509,8 @@ xtlsresult __xrtTlsServer12ChangeCipherSpec(
 /* source: src/tls/stream.c */
 /* ========================================================================== */
 
-#if defined(XRT_FEATURE_TLS_STREAM)
+#if defined(XRT_FEATURE_TLS_STREAM) || \
+	defined(XRT_FEATURE_TLS_STREAM_WRITE_PROGRESS)
 #if defined(XRT_FEATURE_TLS_CLIENT_RESUME)
 #endif
 
@@ -198825,6 +199533,9 @@ static void __xrtTlsStreamTransportDrop(const void*);
 
 static void __xrtTlsStreamDrive(xtlsstream* pStream);
 static void __xrtTlsStreamProgressClose(xtlsstream* pStream);
+#if defined(XRT_FEATURE_TLS_STREAM_WRITE_PROGRESS)
+static void __xrtTlsStreamPublishWriteProgress(xtlsstream* pStream);
+#endif
 
 
 
@@ -198979,11 +199690,31 @@ XRT_API void xrtTlsStreamDestroy(xtlsstream* pStream)
 	}
 	xrtownershipscope Mutation = {0};
 	if (!xrtOwnershipMutationBegin(&Mutation)) abort();
+	#if defined(XRT_FEATURE_TLS_STREAM_RETIRE)
+		/* Above two, this release cannot publish the caller-only predicate.
+		 * No Stream access follows the successful fast decrement. */
+		#if !defined(__TINYC__) || defined(_WIN32) || defined(_WIN64)
+			int32 Count = __xrtAtomicRefLoad(&pStream->References);
+			while (Count > 2) {
+				int32 Seen = __xrtAtomicRefCompareExchange(&pStream->References, Count-1, Count);
+				if (Seen == Count) {if (!xrtOwnershipScopeEnd(&Mutation)) abort();return;}
+				Count = Seen;
+			}
+		#endif
+		if (!xrtMutexLock(&pStream->RetirementLock)) abort();
+	#endif
 	bool bLast = xrtRefRelease(&pStream->References) == 0;
 	if (bLast && (pStream->RuntimeOwner.Data || pStream->RuntimeOwner.Previous ||
 		xrtAtomic32Load(&pStream->OwnershipActive, XMEMORY_ACQUIRE))) abort();
+	#if defined(XRT_FEATURE_TLS_STREAM_RETIRE)
+		if (!bLast && __xrtAtomicRefLoad(&pStream->References)==1 && !xrtCondBroadcast(&pStream->RetirementReady)) abort();
+		if (!xrtMutexUnlock(&pStream->RetirementLock)) abort();
+	#endif
 	if (!xrtOwnershipScopeEnd(&Mutation)) abort();
 	if (!bLast) return;
+	#if defined(XRT_FEATURE_TLS_STREAM_RETIRE)
+		if (!xrtCondUnit(&pStream->RetirementReady) || !xrtMutexUnit(&pStream->RetirementLock)) abort();
+	#endif
 	pTransport = (xnetstream*)xrtAtomicPtrLoad(
 		&pStream->Transport,
 		XMEMORY_ACQUIRE
@@ -199104,6 +199835,10 @@ xtlsstream* __xrtTlsStreamCreate(
 	if ( pStream == NULL ) {
 		return NULL;
 	}
+	#if defined(XRT_FEATURE_TLS_STREAM_RETIRE)
+		if (!xrtMutexInit(&pStream->RetirementLock)) {xrtFree(pStream);return NULL;}
+		if (!xrtCondInit(&pStream->RetirementReady)) {xrtMutexUnit(&pStream->RetirementLock);xrtFree(pStream);return NULL;}
+	#endif
 	pStream->References = 2;
 	xrtAtomicPtrInit(&pStream->OwnershipClaim, NULL);
 	xrtAtomic32Init(&pStream->OwnershipState, 0);
@@ -199834,6 +200569,9 @@ static void __xrtTlsStreamDriveTask(xnetworker* pWorker, ptr pData)
 	(void)pWorker;
 	pStream->DrivePosted = false;
 	__xrtTlsStreamDrive(pStream);
+	#if defined(XRT_FEATURE_TLS_STREAM_WRITE_PROGRESS)
+		__xrtTlsStreamPublishWriteProgress(pStream);
+	#endif
 	xrtTlsStreamDestroy(pStream);
 }
 
@@ -199863,6 +200601,92 @@ static void __xrtTlsStreamScheduleDrive(xtlsstream* pStream)
 		xrtTlsStreamDestroy(pStream);
 	}
 }
+
+#if defined(XRT_FEATURE_TLS_STREAM_WRITE_PROGRESS)
+/* This hook runs after the native prefix and its byte credit are consistent.
+ * It never calls application code or reads optional diagnostic statistics. */
+static void __xrtTlsStreamWritten(xnetstream* pTransport, size_t iSize, ptr pData)
+{
+	(void)pTransport;
+	xtlsstream* s = pData;
+	if ((uint64)iSize > UINT64_MAX - s->WriteCompleted)
+		s->WriteProgressOverflow = true;
+	else s->WriteCompleted += (uint64)iSize;
+	if (s->WriteProgress) {
+		s->WriteProgressPending = true;
+		__xrtTlsStreamScheduleDrive(s);
+	}
+}
+
+static bool __xrtTlsStreamProgressTransport(xtlsstream* s, xnetstream* tcp)
+{
+	const xnetstreamevents* e = &xrtTlsStreamTransportOwnershipV1Get()->Events;
+	return tcp && xrtAtomicPtrLoad(&tcp->Data, XMEMORY_RELAXED) == s &&
+		tcp->Events.Read == e->Read && tcp->Events.Close == e->Close &&
+		!xrtAtomic32Load(&tcp->AbortGate, XMEMORY_ACQUIRE) &&
+		!xrtAtomic32Load(&tcp->CloseGate, XMEMORY_ACQUIRE) &&
+		xrtNetStreamState(tcp) == XNET_STREAM_OPEN &&
+		xrtTlsStreamState(s) != XTLS_STREAM_FAILED &&
+		xrtTlsStreamState(s) != XTLS_STREAM_CLOSED && !s->CloseEmitted &&
+		!xrtAtomic32Load(&s->AbortGate, XMEMORY_ACQUIRE);
+}
+
+XRT_API bool xrtTlsStreamSetWriteProgress(xtlsstream* s, xtlsstreamwriteproc proc)
+{
+	if (!__xrtTlsStreamWorker(s, "set-tls-write-progress")) return false;
+	xnetstream* tcp = xrtAtomicPtrLoad(&s->Transport, XMEMORY_ACQUIRE);
+	if (!__xrtTlsStreamProgressTransport(s, tcp) ||
+		(s->WriteProgressEnabled && (tcp->WriteProgress != __xrtTlsStreamWritten ||
+		 tcp->WriteProgressData != s)) ||
+		(!s->WriteProgressEnabled && tcp->WriteProgress)) {
+		__xrtErrorSetInvalidState(); return false;
+	}
+	if (!s->WriteProgressEnabled) {
+		s->WriteProgressEnabled = true;
+		tcp->WriteProgressData = s;
+		tcp->WriteProgress = __xrtTlsStreamWritten;
+	}
+	s->WriteProgress = proc;
+	s->WriteProgressPending = false;
+	return true;
+}
+
+XRT_API bool xrtTlsStreamWriteProgress(xtlsstream* s, xtlswriteprogress* out)
+{
+	if (!__xrtTlsStreamWorker(s, "get-tls-write-progress")) return false;
+	xnetstream* tcp = xrtAtomicPtrLoad(&s->Transport, XMEMORY_ACQUIRE);
+	if (!out || !xrtMemRangeValid(out, sizeof(*out)) || out->Size != sizeof(*out) ||
+		xrtMemRangesOverlap(out, sizeof(*out), s, sizeof(*s)) ||
+		xrtMemRangesOverlap(out, sizeof(*out), s->Session, sizeof(*s->Session)) ||
+		xrtMemRangesOverlap(out, sizeof(*out), tcp, sizeof(*tcp))) {
+		__xrtErrorSetInvalidArgument(); return false;
+	}
+	if (!s->WriteProgressEnabled || !__xrtTlsStreamProgressTransport(s, tcp) ||
+		tcp->WriteProgress != __xrtTlsStreamWritten || tcp->WriteProgressData != s) {
+		__xrtErrorSetInvalidState(); return false;
+	}
+	uint64 pending = (uint64)xrtNetStreamPending(tcp);
+	uint64 cipher = (uint64)xrtTlsSessionSendSize(s->Session);
+	if (s->WriteProgressOverflow || pending > UINT64_MAX - s->WriteCompleted ||
+		cipher > UINT64_MAX - s->WriteCompleted - pending) {
+		__xrtTlsStreamSetError(XERR_RANGE, XTLS_ERROR_LIMIT, "get-tls-write-progress",
+			"TLS write progress cursor overflow", NULL); return false;
+	}
+	xtlswriteprogress value = {sizeof(value), s->WriteCompleted + pending + cipher,
+		s->WriteCompleted};
+	*out = value;
+	return true;
+}
+
+static void __xrtTlsStreamPublishWriteProgress(xtlsstream* s)
+{
+	if (!s->WriteProgressPending || !s->WriteProgress || s->CloseEmitted ||
+		xrtTlsStreamState(s) == XTLS_STREAM_FAILED ||
+		xrtAtomic32Load(&s->AbortGate, XMEMORY_ACQUIRE)) return;
+	s->WriteProgressPending = false;
+	s->WriteProgress(s, __xrtTlsStreamEventDataCurrent(s));
+}
+#endif
 
 
 
@@ -199940,7 +200764,10 @@ static void __xrtTlsStreamDrive(xtlsstream* pStream)
 			break;
 		}
 		__xrtTlsStreamOpen(pStream);
-		if ( __xrtTlsStreamPlain(pStream) ) {
+		/* The Read callback may retain an incomplete prefix and request more
+		 * plaintext while this driver is active. Honor that request within the
+		 * bounded drive loop instead of parking on the prefix with no wake. */
+		if ( __xrtTlsStreamPlain(pStream) && !pStream->ReadMore ) {
 			break;
 		}
 		__xrtTlsStreamEnd(pStream);
@@ -200151,6 +200978,10 @@ static void __xrtTlsStreamTransportClose(
 		return;
 	}
 	pStream->CloseEmitted = true;
+	#if defined(XRT_FEATURE_TLS_STREAM_WRITE_PROGRESS)
+		pStream->WriteProgress = NULL;
+		pStream->WriteProgressPending = false;
+	#endif
 	__xrtTlsStreamCancelTimer(pStream, pStream->HandshakeTimer);
 	__xrtTlsStreamCancelTimer(pStream, pStream->CloseTimer);
 	if ( bClean ) {
@@ -200342,6 +201173,10 @@ XRT_API bool xrtTlsStreamSetEvents(
 			return false;
 		}
 	#endif
+	#if defined(XRT_FEATURE_TLS_STREAM_WRITE_PROGRESS)
+		pStream->WriteProgress = NULL;
+		pStream->WriteProgressPending = false;
+	#endif
 	memset(&pStream->Events, 0, sizeof(pStream->Events));
 	if ( pEvents != NULL ) {
 		pStream->Events = *pEvents;
@@ -200427,6 +201262,9 @@ XRT_API bool xrtTlsStreamBindEventsOwnedV1(xtlsstream* s, ptr data,
 		} else
 		#endif
 		{
+			#if defined(XRT_FEATURE_TLS_STREAM_WRITE_PROGRESS)
+				s->WriteProgress=NULL;s->WriteProgressPending=false;
+			#endif
 			s->Events=policy->Events;s->EventPolicy=policy;
 			xrtAtomicPtrStore(&s->EventData,data,XMEMORY_RELEASE);
 			ok=true;
@@ -200438,6 +201276,62 @@ XRT_API bool xrtTlsStreamBindEventsOwnedV1(xtlsstream* s, ptr data,
 	}
 	__xrtTlsStreamOwnershipLeave(s);return ok;
 }
+#if defined(XRT_FEATURE_TLS_STREAM_EVENT_EXCHANGE)
+XRT_API bool xrtTlsStreamExchangeEventsOwnedV1(xtlsstream* s,
+    const xtlsstreambindingv1* expected, ptr data,
+    const xtlsstreamownershipv1* policy, xtlsstreambindingv1* previous)
+{
+    if(!s || !__xrtTlsStreamOwnedPolicyValid(data,policy) ||
+       !__xrtRangeValid(expected,sizeof(*expected)) || !__xrtRangeValid(previous,sizeof(*previous)) ||
+       xrtMemRangesOverlap(expected,sizeof(*expected),previous,sizeof(*previous)) ||
+       xrtMemRangesOverlap(s,sizeof(*s),previous,sizeof(*previous)) ||
+       xrtMemRangesOverlap(policy,sizeof(*policy),previous,sizeof(*previous))){
+        __xrtErrorSetInvalidArgument();return false;
+    }
+    xtlsstreambindingv1 old;memcpy(&old,expected,sizeof(old));
+    if(!old.Data || !old.Policy ||
+       xrtMemRangesOverlap(old.Policy,sizeof(*old.Policy),previous,sizeof(*previous)) ||
+       xrtMemRangesOverlap(old.Data,1,previous,sizeof(*previous)) ||
+       xrtMemRangesOverlap(data,1,previous,sizeof(*previous))){
+        __xrtErrorSetInvalidArgument();return false;
+    }
+    if(!__xrtTlsStreamOwnershipEnter(s,true))return false;
+    bool ok=false;
+    if(!xrtNetWorkerIsCurrent(xrtNetStreamWorker(xrtAtomicPtrLoad(&s->Transport,XMEMORY_ACQUIRE))) ||
+       !s->OwnershipPolicy || !s->OwnershipDataHeld || s->EventPolicy!=old.Policy ||
+       xrtAtomicPtrLoad(&s->EventData,XMEMORY_ACQUIRE)!=old.Data ||
+       xrtTlsStreamState(s)!=XTLS_STREAM_OPEN || !s->OpenEmitted ||
+       xrtAtomic32Load(&s->CloseGate,XMEMORY_ACQUIRE) || xrtAtomic32Load(&s->AbortGate,XMEMORY_ACQUIRE) ||
+       s->ActiveDepth || s->Driving || s->Sending || s->ReadMore){
+        __xrtErrorSetInvalidState();
+    }else{
+        xrtownershipscope mutation={0};
+        if(!xrtOwnershipMutationBegin(&mutation)){__xrtTlsStreamOwnershipLeave(s);return false;}
+        #if defined(XRT_FEATURE_TLS_STREAM_FUTURE)
+        __xrtSpinLock(&s->AsyncLock);
+        if(xrtAtomic32Load(&s->AsyncReads,XMEMORY_ACQUIRE)){
+            __xrtErrorSetInvalidState();
+        }else
+        #endif
+        {
+            #if defined(XRT_FEATURE_TLS_STREAM_WRITE_PROGRESS)
+            s->WriteProgress=NULL;s->WriteProgressPending=false;
+            #endif
+            /* Move only the event slot. Old Data is now a caller owner, not a
+             * callback to invoke before a composite protocol has published. */
+            s->Events=policy->Events;s->EventPolicy=policy;
+            xrtAtomicPtrStore(&s->EventData,data,XMEMORY_RELEASE);
+            memcpy(previous,&old,sizeof(old));ok=true;
+        }
+        #if defined(XRT_FEATURE_TLS_STREAM_FUTURE)
+        __xrtSpinUnlock(&s->AsyncLock);
+        #endif
+        if(!xrtOwnershipScopeEnd(&mutation))abort();
+    }
+    __xrtTlsStreamOwnershipLeave(s);return ok;
+}
+#endif
+
 static xtlsstream* __xrtTlsStreamCreateOwned(xnetengine* engine,
 	xtlssession* session, bool server, const xtlsstreamconfig* config,
 	const xtlsstreamevents* events, ptr data, const xtlsstreamownershipv1* policy)
@@ -201802,6 +202696,10 @@ static bool __xrtTlsStreamOwnershipCount(const void* pData, size_t* pCount)
 		!s->OwnershipPolicy || !s->OwnershipStorageHeld || !s->OwnershipEngine ||
 		!s->OwnershipDataHeld || !xrtAtomicPtrLoad(&s->Data, XMEMORY_ACQUIRE) || !s->Session ||
 		s->ActiveDepth || s->Driving || s->Sending) return false;
+	#if defined(XRT_FEATURE_TLS_STREAM_WRITE_PROGRESS)
+		/* V1 does not certify an independently registered observer function. */
+		if (s->WriteProgress) return false;
+	#endif
 	#if defined(XRT_FEATURE_TLS_STREAM_LISTENER)
 		if (s->ManagedOpen || s->ManagedClose || s->ManagedData) return false;
 	#endif
@@ -217537,6 +218435,17 @@ void __xrtTlsClientResumeClear(xtlsclientstate* pState)
 		xrtTlsResumeRelease(pResume);
 	}
 	pState->ResumeHead = 0;
+}
+
+
+
+/* 配置容量不随排队、移交、淘汰或握手状态改变。 */
+XRT_API size_t xrtTlsClientResumeCapacity(const xtlssession* pSession)
+{
+    xtlsclientstate* pState = __xrtTlsClientResumeState(
+        pSession, "get-tls-client-resume-capacity"
+    );
+    return pState != NULL ? pState->ResumeLimit : 0;
 }
 
 
@@ -253646,7 +254555,7 @@ static void __xrtNetDialStartTask(xnetworker* pWorker, ptr pData)
 	(void)pWorker;
 	pDial->Started = true;
 	if ( __xrtNetDialCanDrive(pDial) &&
-		 (pDial->Config.Timeout != 0) ) {
+		 (pDial->Config.Timeout > 0) ) {
 		if ( __xrtNetDialResourceAdd(pDial) ) {
 			pDial->DeadlineTimer = __xrtNetEngineSchedule(
 				pDial->Engine,
@@ -262611,6 +263520,17 @@ bool __xrtNetListenerWaitOwnershipWalk(const xnetlistener* pListener, xrtownersh
 #error "TCP retirement waiting requires TCP and condition variables"
 #endif
 
+XRT_API xwaitresult xrtNetStreamPollRetired(xnetstream* Stream)
+{
+    if(!Stream){__xrtErrorSetInvalidArgument();return XWAIT_ERROR;}
+    xmutextryresult Lock=xrtMutexTryLockResult(&Stream->RetirementLock);
+    if(Lock!=XMUTEX_TRY_OK)return Lock==XMUTEX_TRY_BUSY?XWAIT_TIMEOUT:XWAIT_ERROR;
+    xwaitresult Result=xrtNetStreamState(Stream)==XNET_STREAM_CLOSED &&
+        __xrtAtomicRefLoad(&Stream->References)==1?XWAIT_OK:XWAIT_TIMEOUT;
+    if(!xrtMutexUnlock(&Stream->RetirementLock))return XWAIT_ERROR;
+    return Result;
+}
+
 XRT_API xwaitresult xrtNetStreamWaitRetired(xnetstream* Stream,int64 Timeout)
 {
     if (!Stream || Timeout<XRT_WAIT_FOREVER) {
@@ -264641,6 +265561,47 @@ XRT_API xnetstream* xrtNetServerAcceptWait(
 )
 {
     return __xrtNetServerAcceptWait(pServer, __xrtWaitAfter(iTimeout), pCancel);
+}
+#endif
+#endif
+
+
+/* ========================================================================== */
+/* source: src/tls/stream_retire.c */
+/* ========================================================================== */
+
+#if defined(XRT_FEATURE_TLS_STREAM_RETIRE)
+#if defined(XRT_FEATURE_TLS_STREAM_RETIRE)
+static bool __xrtTlsStreamTerminal(const xtlsstream* S)
+{xtlsstreamstate State=xrtTlsStreamState(S);return State==XTLS_STREAM_CLOSED || State==XTLS_STREAM_FAILED;}
+XRT_API xwaitresult xrtTlsStreamPollRetired(xtlsstream* S)
+{
+    if(!S){__xrtErrorSetInvalidArgument();return XWAIT_ERROR;}
+    xmutextryresult Lock=xrtMutexTryLockResult(&S->RetirementLock);
+    if(Lock!=XMUTEX_TRY_OK)return Lock==XMUTEX_TRY_BUSY?XWAIT_TIMEOUT:XWAIT_ERROR;
+    bool Ready=__xrtTlsStreamTerminal(S) && __xrtAtomicRefLoad(&S->References)==1;
+    if(!xrtMutexUnlock(&S->RetirementLock))return XWAIT_ERROR;
+    if(!Ready)return XWAIT_TIMEOUT;
+    xnetstream* TCP=xrtTlsStreamTransport(S);return TCP?xrtNetStreamPollRetired(TCP):XWAIT_OK;
+}
+XRT_API xwaitresult xrtTlsStreamWaitRetired(xtlsstream* S,int64 Timeout)
+{
+    if(!S || Timeout<XRT_WAIT_FOREVER){__xrtErrorSetInvalidArgument();return XWAIT_ERROR;}
+    xnetstream* TCP=xrtTlsStreamTransport(S);xnetworker* Current=__xrtNetEngineCurrentThread();
+    if(Current && Current->Engine==(TCP?TCP->Engine:S->OwnershipEngine)){__xrtErrorSetInvalidState();return XWAIT_ERROR;}
+    if(!Timeout)return xrtTlsStreamPollRetired(S);
+    double Deadline=__xrtWaitAfter(Timeout);if(!__xrtWaitValid(Deadline))return XWAIT_ERROR;
+    if(!xrtMutexLock(&S->RetirementLock))return XWAIT_ERROR;
+    xwaitresult Result=XWAIT_OK;
+    while(!__xrtTlsStreamTerminal(S) || __xrtAtomicRefLoad(&S->References)!=1){
+        if(__xrtWaitExpired(Deadline)){Result=XWAIT_TIMEOUT;break;}
+        Result=xrtCondWaitFor(&S->RetirementReady,&S->RetirementLock,__xrtWaitRemaining(Deadline));
+        if(Result==XWAIT_ERROR)break;
+    }
+    if(Result!=XWAIT_ERROR && __xrtTlsStreamTerminal(S) && __xrtAtomicRefLoad(&S->References)==1)Result=XWAIT_OK;
+    if(!xrtMutexUnlock(&S->RetirementLock))return XWAIT_ERROR;
+    if(Result!=XWAIT_OK)return Result;
+    return TCP?xrtNetStreamWaitRetired(TCP,__xrtWaitRemaining(Deadline)):XWAIT_OK;
 }
 #endif
 #endif
@@ -281194,6 +282155,10 @@ XRT_API bool xrtTimeParseAny(xstrview Text, xtime* pTime)
 /* ========================================================================== */
 
 #if defined(XRT_FEATURE_FILE_LOCK)
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+	#define _GNU_SOURCE
+#endif
+
 #if !defined(_WIN32) && !defined(_WIN64) && !defined(_POSIX_C_SOURCE)
 	#define _POSIX_C_SOURCE 200809L
 #endif
@@ -281250,6 +282215,43 @@ static void __xrtFileLockBusy(cstr sOperation, int iCode)
 
 
 
+#if !defined(_WIN32) && !defined(_WIN64)
+static bool __xrtFileLockPosix(intptr_t hFile, xfilelock Mode,
+	uint64 iOffset, uint64 iSize, int iCommand, bool bWait)
+{
+	struct flock Lock;
+	int iResult;
+
+	memset(&Lock, 0, sizeof(Lock));
+	Lock.l_type = (Mode == XFILE_LOCK_SHARED) ? F_RDLCK : F_WRLCK;
+	Lock.l_whence = SEEK_SET;
+	Lock.l_start = (off_t)iOffset;
+	Lock.l_len = (off_t)iSize;
+	do {
+		iResult = fcntl((int)hFile, iCommand, &Lock);
+	} while ( bWait && (iResult != 0) && (errno == EINTR) );
+	if ( iResult == 0 ) {
+		return true;
+	}
+	int iCode = errno;
+	if ( !bWait && ((iCode == EACCES) || (iCode == EAGAIN)) ) {
+		__xrtFileLockBusy("lock", iCode);
+	}
+#if defined(__linux__) && defined(F_OFD_SETLK)
+	else if ( (iCommand == F_OFD_SETLK) && ((iCode == EINVAL) || (iCode == EOPNOTSUPP)) ) {
+		__xrtFileSetKindError(XERR_UNSUPPORTED, XFILE_ERROR_LOCK,
+			"lock", "open file description locks are unavailable", iCode);
+	}
+#endif
+	else {
+		__xrtFileSetError(XFILE_ERROR_LOCK, "lock",
+			"failed to lock the file range", iCode);
+	}
+	return false;
+}
+#endif
+
+
 /* 锁定一个文件字节区间。 */
 XRT_API bool xrtFileLockRange(xfile File, xfilelock Mode,
 	uint64 iOffset, uint64 iSize, bool bWait)
@@ -281290,32 +282292,9 @@ XRT_API bool xrtFileLockRange(xfile File, xfilelock Mode,
 			}
 		}
 	#else
-		{
-			struct flock Lock;
-			int iCommand = bWait ? F_SETLKW : F_SETLK;
-			int iResult;
-
-			memset(&Lock, 0, sizeof(Lock));
-			Lock.l_type = (Mode == XFILE_LOCK_SHARED) ?
-				F_RDLCK : F_WRLCK;
-			Lock.l_whence = SEEK_SET;
-			Lock.l_start = (off_t)iOffset;
-			Lock.l_len = (off_t)iSize;
-			do {
-				iResult = fcntl((int)hFile, iCommand, &Lock);
-			} while ( bWait && (iResult != 0) && (errno == EINTR) );
-			if ( iResult != 0 ) {
-				int iCode = errno;
-
-				if ( !bWait &&
-					 ((iCode == EACCES) || (iCode == EAGAIN)) ) {
-					__xrtFileLockBusy("lock", iCode);
-				} else {
-					__xrtFileSetError(XFILE_ERROR_LOCK, "lock",
-						"failed to lock the file range", iCode);
-				}
-				return false;
-			}
+		if ( !__xrtFileLockPosix(hFile, Mode, iOffset, iSize,
+			bWait ? F_SETLKW : F_SETLK, bWait) ) {
+			return false;
 		}
 	#endif
 	return true;
@@ -281399,6 +282378,31 @@ XRT_API bool xrtFileLock(xfile File, xfilelock Mode, bool bWait)
 XRT_API bool xrtFileUnlock(xfile File)
 {
 	return xrtFileUnlockRange(File, 0u, 0u);
+}
+
+
+
+XRT_API bool xrtFileTryLockExclusiveUntilClose(xfile File)
+{
+	if ( !__xrtFileLockCheck(File, XFILE_LOCK_EXCLUSIVE, 0u, 0u) ) {
+		return false;
+	}
+	if ( (xrtFileFlags(File) & XFILE_ASYNC) != 0u ) {
+		__xrtFileError(XERR_UNSUPPORTED, XFILE_ERROR_LOCK, "lock-until-close",
+			"handle ownership locks require a synchronous file");
+		return false;
+	}
+#if defined(_WIN32) || defined(_WIN64)
+	return xrtFileLock(File, XFILE_LOCK_EXCLUSIVE, false);
+#elif defined(__linux__) && defined(F_OFD_SETLK)
+	intptr_t hFile = __xrtFileControlNative(File);
+	return (hFile != (intptr_t)-1) && __xrtFileLockPosix(hFile,
+		XFILE_LOCK_EXCLUSIVE, 0u, 0u, F_OFD_SETLK, false);
+#else
+	__xrtFileError(XERR_UNSUPPORTED, XFILE_ERROR_LOCK, "lock-until-close",
+		"open file description locks are unavailable");
+	return false;
+#endif
 }
 
 #endif
@@ -347897,6 +348901,200 @@ XRT_API bool xrtEventWaiterGet(const xeventwaiter* W,xeventwaiterinfo* Info)
         0
 #endif
     };return true;
+}
+#endif
+#endif
+
+
+/* ========================================================================== */
+/* source: src/websocket/stream_retire.c */
+/* ========================================================================== */
+
+#if defined(XRT_FEATURE_WEBSOCKET_STREAM_RETIRE)
+#if defined(XRT_FEATURE_WEBSOCKET_STREAM_RETIRE)
+XRT_API xwaitresult xrtWsStreamPollRetired(xwsstream* S)
+{
+    if(!S || !__xrtWsStreamRangeValid(S)){__xrtErrorSetInvalidArgument();return XWAIT_ERROR;}
+    xmutextryresult Lock=xrtMutexTryLockResult(&S->RetirementLock);
+    if(Lock!=XMUTEX_TRY_OK)return Lock==XMUTEX_TRY_BUSY?XWAIT_TIMEOUT:XWAIT_ERROR;
+    bool Ready=xrtWsStreamState(S)==XWS_STREAM_CLOSED && __xrtAtomicRefLoad(&S->References)==1;
+    xnetstream* TCP=S->RetirementTcp;
+    if(!xrtMutexUnlock(&S->RetirementLock))return XWAIT_ERROR;
+    if(!Ready)return XWAIT_TIMEOUT;
+    if(!TCP){__xrtErrorSetInvalidState();return XWAIT_ERROR;}
+    return xrtNetStreamPollRetired(TCP);
+}
+XRT_API xwaitresult xrtWsStreamWaitRetired(xwsstream* S,int64 Timeout)
+{
+    if(!S || !__xrtWsStreamRangeValid(S) || Timeout<XRT_WAIT_FOREVER){__xrtErrorSetInvalidArgument();return XWAIT_ERROR;}
+    xnetstream* TCP=S->RetirementTcp;if(!TCP){__xrtErrorSetInvalidState();return XWAIT_ERROR;}
+    xnetworker* Current=__xrtNetEngineCurrentThread();if(Current && Current->Engine==TCP->Engine){__xrtErrorSetInvalidState();return XWAIT_ERROR;}
+    if(!Timeout)return xrtWsStreamPollRetired(S);
+    double Deadline=__xrtWaitAfter(Timeout);if(!__xrtWaitValid(Deadline))return XWAIT_ERROR;
+    if(!xrtMutexLock(&S->RetirementLock))return XWAIT_ERROR;
+    xwaitresult Result=XWAIT_OK;
+    while(xrtWsStreamState(S)!=XWS_STREAM_CLOSED || __xrtAtomicRefLoad(&S->References)!=1){
+        if(__xrtWaitExpired(Deadline)){Result=XWAIT_TIMEOUT;break;}
+        Result=xrtCondWaitFor(&S->RetirementReady,&S->RetirementLock,__xrtWaitRemaining(Deadline));if(Result==XWAIT_ERROR)break;
+    }
+    if(Result!=XWAIT_ERROR && xrtWsStreamState(S)==XWS_STREAM_CLOSED && __xrtAtomicRefLoad(&S->References)==1)Result=XWAIT_OK;
+    if(!xrtMutexUnlock(&S->RetirementLock))return XWAIT_ERROR;
+    return Result==XWAIT_OK?xrtNetStreamWaitRetired(TCP,__xrtWaitRemaining(Deadline)):Result;
+}
+#endif
+#endif
+
+
+/* ========================================================================== */
+/* source: src/websocket/stream_write_progress.c */
+/* ========================================================================== */
+
+#if defined(XRT_FEATURE_WEBSOCKET_STREAM_WRITE_PROGRESS)
+#if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_WRITE_PROGRESS)
+#endif
+#if defined(XRT_FEATURE_WEBSOCKET_STREAM_WRITE_PROGRESS)
+static bool __xrtWsProgressLive(xwsstream* S)
+{
+    return xrtWsStreamState(S)==XWS_STREAM_OPEN && !S->CloseEmitted &&
+        !S->TransportClosing && xrtAtomicPtrLoad(&S->Transport,XMEMORY_ACQUIRE);
+}
+static bool __xrtWsProgressTcp(xwsstream* S,xnetstream* T)
+{
+    const xnetstreamevents* E=&xrtWsStreamTcpEventsOwnershipV1Get()->Events;
+    return T && xrtAtomicPtrLoad(&T->Data,XMEMORY_RELAXED)==S &&
+        T->Events.Read==E->Read && T->Events.Close==E->Close &&
+        !xrtAtomic32Load(&T->AbortGate,XMEMORY_ACQUIRE) &&
+        !xrtAtomic32Load(&T->CloseGate,XMEMORY_ACQUIRE) &&
+        xrtNetStreamState(T)==XNET_STREAM_OPEN;
+}
+static void __xrtWsProgressWritten(xnetstream* T,size_t N,ptr Data)
+{
+    (void)T;xwsstream* S=Data;
+    if((uint64)N>UINT64_MAX-S->WriteCompleted)S->WriteProgressOverflow=true;
+    else S->WriteCompleted+=(uint64)N;
+    if(S->WriteProgress){S->WriteProgressPending=true;(void)__xrtWsStreamDrivePrepare(S);}
+}
+#if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_WRITE_PROGRESS)
+static void __xrtWsProgressTlsWritten(xtlsstream* T,ptr Data)
+{
+    (void)T;xwsstream* S=Data;
+    if(S->WriteProgress){S->WriteProgressPending=true;(void)__xrtWsStreamDrivePrepare(S);}
+}
+#endif
+static bool __xrtWsProgressSet(xwsstream* S,xwsstreamwriteproc Proc)
+{
+    if(!__xrtWsProgressLive(S)){__xrtErrorSetInvalidState();return false;}
+    ptr Native=xrtAtomicPtrLoad(&S->Transport,XMEMORY_ACQUIRE);
+    if(S->TransportKind==__XRT_WS_TRANSPORT_TLS){
+#if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_WRITE_PROGRESS)
+        if(!xrtTlsStreamSetWriteProgress(Native,Proc?__xrtWsProgressTlsWritten:NULL))return false;
+#else
+        __xrtWsStreamReject(XERR_UNSUPPORTED,XWS_STREAM_ERROR_STATE,"set-websocket-write-progress","WSS write progress selection is required",NULL);return false;
+#endif
+    }else{
+        xnetstream* T=Native;
+        if(!__xrtWsProgressTcp(S,T) || (S->WriteProgressEnabled &&
+           (T->WriteProgress!=__xrtWsProgressWritten||T->WriteProgressData!=S)) ||
+           (!S->WriteProgressEnabled&&T->WriteProgress)){__xrtErrorSetInvalidState();return false;}
+        if(!S->WriteProgressEnabled){T->WriteProgressData=S;T->WriteProgress=__xrtWsProgressWritten;}
+    }
+    S->WriteProgressEnabled=true;S->WriteProgress=Proc;S->WriteProgressPending=false;return true;
+}
+XRT_API bool xrtWsStreamSetWriteProgress(xwsstream* S,xwsstreamwriteproc Proc)
+{
+    if(!__xrtWsStreamWorker(S,"set-websocket-write-progress"))return false;
+    bool Owned=S->OwnershipPolicy!=NULL;
+    if(Owned&&!__xrtWsStreamOwnershipEnter(S,true))return false;
+    bool OK=__xrtWsProgressSet(S,Proc);
+    if(Owned)__xrtWsStreamOwnershipLeave(S);
+    return OK;
+}
+XRT_API xnetresult xrtWsStreamWriteProgress(xwsstream* S,xwswriteprogress* Out)
+{
+    if(!__xrtWsStreamWorker(S,"get-websocket-write-progress"))return XNET_RESULT_ERROR;
+    size_t Bytes=0;ptr Native=xrtAtomicPtrLoad(&S->Transport,XMEMORY_ACQUIRE);
+    if(!Out||!xrtMemRangeValid(Out,sizeof(*Out))||Out->Size!=sizeof(*Out)||
+       !__xrtWsStreamStorageRange(S,&Bytes)||xrtMemRangesOverlap(Out,sizeof(*Out),S,Bytes)){
+        __xrtErrorSetInvalidArgument();return XNET_RESULT_ERROR;}
+    if(!__xrtWsProgressLive(S))return XNET_RESULT_CLOSED;
+    if(!S->WriteProgressEnabled){__xrtErrorSetInvalidState();return XNET_RESULT_ERROR;}
+    xwswriteprogress Value={.Size=sizeof(Value)};
+    if(S->TransportKind==__XRT_WS_TRANSPORT_TLS){
+#if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_WRITE_PROGRESS)
+        xtlsstream* T=Native;xnetstream* TCP=xrtTlsStreamTransport(T);
+        if(xrtMemRangesOverlap(Out,sizeof(*Out),T,sizeof(*T))||xrtMemRangesOverlap(Out,sizeof(*Out),T->Session,sizeof(*T->Session))||
+           xrtMemRangesOverlap(Out,sizeof(*Out),TCP,sizeof(*TCP))){__xrtErrorSetInvalidArgument();return XNET_RESULT_ERROR;}
+        if(xrtTlsStreamState(T)!=XTLS_STREAM_OPEN||T->CloseEmitted||xrtAtomic32Load(&T->AbortGate,XMEMORY_ACQUIRE)||!TCP||xrtNetStreamState(TCP)!=XNET_STREAM_OPEN||xrtAtomic32Load(&TCP->AbortGate,XMEMORY_ACQUIRE)||xrtAtomic32Load(&TCP->CloseGate,XMEMORY_ACQUIRE))return XNET_RESULT_CLOSED;
+        Value.Staged=S->OutputHead!=NULL;
+        xtlswriteprogress W={sizeof(W),0,0};if(!xrtTlsStreamWriteProgress(T,&W))return XNET_RESULT_ERROR;
+        Value.Produced=W.Produced;Value.Completed=W.Completed;
+#else
+        __xrtWsStreamReject(XERR_UNSUPPORTED,XWS_STREAM_ERROR_STATE,"get-websocket-write-progress","WSS write progress selection is required",NULL);return XNET_RESULT_ERROR;
+#endif
+    }else{
+        xnetstream* T=Native;
+        if(xrtMemRangesOverlap(Out,sizeof(*Out),T,sizeof(*T))){__xrtErrorSetInvalidArgument();return XNET_RESULT_ERROR;}
+        if(!__xrtWsProgressTcp(S,T))return XNET_RESULT_CLOSED;
+        if(T->WriteProgress!=__xrtWsProgressWritten||T->WriteProgressData!=S){__xrtErrorSetInvalidState();return XNET_RESULT_ERROR;}
+        uint64 Pending=(uint64)xrtNetStreamPending(T);
+        if(S->WriteProgressOverflow||Pending>UINT64_MAX-S->WriteCompleted){
+            __xrtWsStreamReject(XERR_RANGE,XWS_STREAM_ERROR_LIMIT,"get-websocket-write-progress","WebSocket write cursor overflow",NULL);return XNET_RESULT_ERROR;}
+        Value.Produced=S->WriteCompleted+Pending;Value.Completed=S->WriteCompleted;
+    }
+    *Out=Value;return XNET_RESULT_OK;
+}
+void __xrtWsStreamPublishWriteProgress(xwsstream* S)
+{
+    if(!S->WriteProgressPending||!S->WriteProgress||!__xrtWsProgressLive(S))return;
+    S->WriteProgressPending=false;S->WriteProgress(S,S->Data);
+}
+#endif
+#endif
+
+
+/* ========================================================================== */
+/* source: src/websocket/stream_tls_ticket.c */
+/* ========================================================================== */
+
+#if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_TICKET)
+#if defined(XRT_FEATURE_WEBSOCKET_STREAM_TLS_TICKET)
+static bool __xrtWsTicketLive(xwsstream* S)
+{
+    return xrtWsStreamState(S)==XWS_STREAM_OPEN && !S->CloseEmitted &&
+        !S->TransportClosing && S->TransportKind==__XRT_WS_TRANSPORT_TLS;
+}
+static bool __xrtWsTicketSet(xwsstream* S,xwsstreamtlsticketproc Proc)
+{
+    if(!__xrtWsTicketLive(S)){__xrtErrorSetInvalidState();return false;}
+    xtlsstream* T=xrtAtomicPtrLoad(&S->Transport,XMEMORY_ACQUIRE);
+    const xtlsstreamevents* E=&xrtWsStreamTlsEventsOwnershipV1Get()->Events;
+    if(!T || xrtTlsStreamState(T)!=XTLS_STREAM_OPEN ||
+       xrtTlsSessionRole(xrtTlsStreamSession(T))!=XTLS_CLIENT ||
+       (T->EventPolicy ? (T->EventPolicy!=xrtWsStreamTlsEventsOwnershipV1Get() ||
+        xrtAtomicPtrLoad(&T->EventData,XMEMORY_ACQUIRE)!=S) : xrtTlsStreamData(T)!=S) ||
+       T->CloseEmitted ||
+       xrtAtomic32Load(&T->AbortGate,XMEMORY_ACQUIRE) ||
+       T->Events.Open!=E->Open || T->Events.Read!=E->Read ||
+       T->Events.End!=E->End || T->Events.Writable!=E->Writable ||
+       T->Events.Drain!=E->Drain || T->Events.Close!=E->Close ||
+       T->Events.Ticket!=E->Ticket){__xrtErrorSetInvalidState();return false;}
+    S->TlsTicket=Proc;return true;
+}
+XRT_API bool xrtWsStreamSetTlsTicket(xwsstream* S,xwsstreamtlsticketproc Proc)
+{
+    if(!__xrtWsStreamWorker(S,"set-websocket-tls-ticket"))return false;
+    bool Owned=S->OwnershipPolicy!=NULL;
+    if(Owned&&!__xrtWsStreamOwnershipEnter(S,true))return false;
+    bool OK=__xrtWsTicketSet(S,Proc);
+    if(Owned)__xrtWsStreamOwnershipLeave(S);
+    return OK;
+}
+void __xrtWsStreamTlsTicket(xtlsstream* T,ptr Data)
+{
+    xwsstream* S=Data;
+    if(__xrtWsTicketLive(S) && S->TlsTicket &&
+       xrtAtomicPtrLoad(&S->Transport,XMEMORY_ACQUIRE)==T)
+        S->TlsTicket(S,S->Data);
 }
 #endif
 #endif

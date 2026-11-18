@@ -14,14 +14,16 @@ typedef enum xmqttclientstatus {
     XMQTT_STATUS_OK=0,XMQTT_STATUS_REJECTED,XMQTT_STATUS_TIMEOUT,XMQTT_STATUS_CANCELLED,
     XMQTT_STATUS_CLOSED,XMQTT_STATUS_TRANSPORT,XMQTT_STATUS_PROTOCOL,XMQTT_STATUS_LIMIT,
     XMQTT_STATUS_MEMORY,XMQTT_STATUS_UNSUPPORTED,XMQTT_STATUS_SESSION,
-    XMQTT_STATUS_INITIALIZATION,XMQTT_STATUS_SERVER_DISCONNECT,XMQTT_STATUS_RESTRICTED
+    XMQTT_STATUS_INITIALIZATION,XMQTT_STATUS_SERVER_DISCONNECT,XMQTT_STATUS_RESTRICTED,
+    XMQTT_STATUS_AUTHENTICATION
 } xmqttclientstatus;
 typedef enum xmqttdelivery {XMQTT_NOT_SENT=0,XMQTT_MAY_HAVE_REACHED_PEER,XMQTT_PEER_ACCEPTED,XMQTT_PEER_REJECTED} xmqttdelivery;
 typedef enum xmqttclientadmission {XMQTT_ADMISSION_ERROR=-1,XMQTT_ADMISSION_ACCEPTED=0,XMQTT_ADMISSION_OVERLOADED,XMQTT_ADMISSION_CLOSED} xmqttclientadmission;
 /* A resolved Future is a typed outcome, not necessarily operation success.
  * QoS-0 OK observes complete native write-buffer retirement while open; it
  * does not acknowledge broker receipt, routing, storage or subscriber delivery.
- * Accepting ANY prefix into TCP makes delivery uncertain. Never auto-replayed.
+ * Accepting ANY plaintext prefix into the selected TCP/TLS transport makes
+ * delivery uncertain. AcceptedBytes counts that plaintext. Never auto-replayed.
  * QoS-1 completes after a corresponding PUBACK; PEER_ACCEPTED/REJECTED denotes
  * its decision, not subscriber delivery or durable storage. Puback (if present)
  * owns its reason/properties and may be separately retained. Local metadata
@@ -33,7 +35,8 @@ typedef enum xmqttclientadmission {XMQTT_ADMISSION_ERROR=-1,XMQTT_ADMISSION_ACCE
  * A negative PUBCOMP (including id-not-found) does not prove non-delivery.
  * Negative PUBREC ends with REJECTED; otherwise completion requires PUBCOMP and
  * any partial repeated PUBREL frame. No timer-based PUBLISH/PUBREL retransmission,
- * reconnect or persistence. AcceptedBytes counts only the original PUBLISH.
+ * reconnect or persistence in the ordinary Client. See client_store.h for the
+ * developing durable Client. AcceptedBytes counts only the original PUBLISH.
  * The original four-field/Puback prefixes stay fixed; callers must rebuild for
  * the appended QoS2 metadata (write result 40 -> 64 bytes on supported x64). */
 typedef struct xmqttwriteresult {
@@ -84,7 +87,8 @@ XRT_EXTERN_C_BEGIN
  * close timeout. CloseTimeout must be positive; all durations use milliseconds. */
 XMQTT_API bool xmqttClientConfigInit(xmqttclientconfig* Config);
 /* One numeric TCP connection on a running host Engine, no TLS/DNS/fallback or
- * implicit replay. CONNECT is fully encoded/copied before return; callbacks may
+ * implicit replay. Optional client_dial supplies hostname/prepared-address setup.
+ * CONNECT is fully encoded/copied before return; callbacks may
  * run before return. Setup timeout starts at factory entry. Caller owns one
  * unique Client; Close/Wait/Destroy it before destroying Engine. Output changes
  * only on success. Startup wire is wiped after handshake/stops AND its final
@@ -109,8 +113,8 @@ XMQTT_API bool xmqttClientConfigInit(xmqttclientconfig* Config);
  * topic to their existing allocation, charged to object/message bytes. Packet
  * Topic is logical/resolved; Wire preserves the original alias-bearing frame.
  * Rebinding/Destroy never changes retained messages. Aliases are connection-only,
- * including when QoS2 duplicate delivery is suppressed. Enhanced auth remains
- * explicitly unsupported;
+ * including when QoS2 duplicate delivery is suppressed. Enhanced authentication uses the optional
+ * client_auth factory and ticket API;
  * Subscriptions operate on this connection; automatic resubscription, reconnect
  * and durable sessions remain separate pending work.
  * No state is restored: MQTT 5 SessionPresent without local state closes.
@@ -155,7 +159,7 @@ XMQTT_API xfuture* xmqttClientReady(xmqttclient* Client);
  * Cancelling/timing out an already accepted prefix retires the connection. */
 XMQTT_API xmqttclientadmission xmqttClientPublishAsync(xmqttclient* Client,
     const xmqttpacket* Packet,int64 Timeout,xfuture** Future);
-/* Same operation/deadline; rejects ANY worker of the same Engine. */
+/* Same operation/deadline; rejects workers of the Engine or attached store pool. */
 XMQTT_API xmqttclientadmission xmqttClientPublish(xmqttclient* Client,
     const xmqttpacket* Packet,int64 Timeout,xfuture** Future);
 /* Immutable encoded SUBSCRIBE/UNSUBSCRIBE snapshot, with the same deadline,
@@ -173,7 +177,7 @@ XMQTT_API xmqttclientadmission xmqttClientSubscribeAsync(xmqttclient* Client,
     const xmqttpacket* Packet,int64 Timeout,xfuture** Future);
 XMQTT_API xmqttclientadmission xmqttClientUnsubscribeAsync(xmqttclient* Client,
     const xmqttpacket* Packet,int64 Timeout,xfuture** Future);
-/* Blocking wrappers reject every worker of the same Engine. */
+/* Blocking wrappers reject workers of the Engine or attached store pool. */
 XMQTT_API xmqttclientadmission xmqttClientSubscribe(xmqttclient* Client,
     const xmqttpacket* Packet,int64 Timeout,xfuture** Future);
 XMQTT_API xmqttclientadmission xmqttClientUnsubscribe(xmqttclient* Client,
@@ -188,19 +192,23 @@ XMQTT_API xmqttclientadmission xmqttClientUnsubscribe(xmqttclient* Client,
  * Timeout is finite >=0 ms from entry, covering admission, drain and native close;
  * 0 expires immediately. Cancellation/Close/errors abort without reopening.
  * ACCEPTED returns a typed xmqttwriteresult Future: OK means the native queue
- * drained and TCP closed normally, NOT a broker ACK/Will-suppression guarantee.
+ * drained and the selected transport closed normally (authenticated close for
+ * TLS). The durable Client also requires a committed END. The broker gives no
+ * acknowledgement of DISCONNECT or guarantee of Will suppression.
  * AcceptedBytes and MAY_HAVE_REACHED_PEER are uncertain even on OK; Reason is
  * the requested reason, Identifier=0 and Puback=NULL. Failure preserves first
  * error and any accepted prefix. The result may outlive Client/Engine. WaitFor
  * additionally observes all actual references. Counters include this request. */
 XMQTT_API xmqttclientadmission xmqttClientDisconnectAsync(xmqttclient* Client,
     const xmqttpacket* Packet,int64 Timeout,xfuture** Future);
-/* Same operation/deadline; blocking wrapper rejects every same-Engine worker. */
+/* Same operation/deadline; rejects workers of the Engine or attached store pool. */
 XMQTT_API xmqttclientadmission xmqttClientDisconnect(xmqttclient* Client,
     const xmqttpacket* Packet,int64 Timeout,xfuture** Future);
 /* Transfer one queued message reference, false/unchanged on empty. Overfull
  * receive/object budgets close rather than silently dropping a packet. Already
  * queued messages remain available after Close; Destroy releases untaken ones.
+ * Optional Client Inbox factories instead preserve their shared queue through
+ * Client/Engine destruction; Take then consumes that same cross-Client queue.
  * Server DISCONNECT's reason is in Info, not added to the PUBLISH queue. */
 XMQTT_API bool xmqttClientTakeMessage(xmqttclient* Client,xmqttmessage** Message);
 XMQTT_API const xmqttpacket* xmqttMessagePacket(const xmqttmessage* Message);
@@ -217,6 +225,16 @@ XMQTT_API bool xmqttClientInfo(xmqttclient* Client,xmqttclientinfo* Info);
  * waiters borrow the same stable caller owner; stop all API entries before Destroy.
  * Wait/Destroy reject Engine workers. Repeated Close on CLOSED posts no new work. */
 XMQTT_API bool xmqttClientClose(xmqttclient* Client);
+/* Nonwaiting physical retirement query, allowed on every Engine worker. OK
+ * observes logical CLOSED, no request/startup ownership, all Client callback/
+ * producer references and the native Stream's final notification tail. TIMEOUT
+ * means still active or a predicate mutex is busy; ERROR means invalid input or
+ * synchronization failure. No close, retain, consume, timer or waiter allocation.
+ * Normal OK/TIMEOUT preserve the ambient error without redelivery. Caller keeps
+ * its unique owner live; stop other API entries before treating OK as final.
+ * Queued messages/retained results may remain. This does not authorize worker
+ * Destroy: hand cleanup to an external owner. Wait/Destroy keep their restriction. */
+XMQTT_API xwaitresult xmqttClientPollRetired(xmqttclient* Client);
 XMQTT_API xwaitresult xmqttClientWaitFor(xmqttclient* Client,int64 Timeout);
 XMQTT_API bool xmqttClientDestroy(xmqttclient* Client);
 XRT_EXTERN_C_END

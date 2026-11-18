@@ -177,3 +177,117 @@ See [the offline example](examples/command/main.c),
 [the full development contract](../../docs/development/service-extensions-plan.md).
 The public command frame follows the
 [Redis protocol specification](https://redis.io/docs/latest/develop/reference/protocol-spec/).
+
+Optional [Tracking observations](docs/tracking.md) preserve command-reply and
+invalidation wire order on existing Client transports, with copied configuration,
+borrowed event views and bounded opt-in storage. The [example](examples/tracking/README.md)
+shows collection in a different order and retention after physical shutdown.
+
+[Adjacent CACHING/query groups](docs/caching.md) let concurrent producers submit
+OPTIN/OPTOUT queries with one queue credit, deadline and Future. Prefix and query
+outcomes remain independent, including a prefix error followed by an executed
+query. The [runnable example](examples/caching/README.md) retains both results
+after physical shutdown; no application cache or uncertain replay is implied.
+
+The developing [Pub/Sub wire module](docs/pubsub.md) encodes all six subscription
+controls and PING, and classifies binary RESP2/RESP3 messages, ACKs and contextual
+PONG without allocating. [Offline example](examples/pubsub/README.md). The native
+subscriber supplies dedicated scheduling, ACK correlation and bounded delivery;
+recovery remains pending. Ordinary Client calls reject subscription mode changes.
+
+The developing [native subscriber](docs/subscriber.md) dedicates an idle ready
+Client, pipelines validated controls and transfers separately owned messages.
+Confirmed/reserved names, requests and delivery bytes are bounded; sent local
+stops drain their remaining ACKs. Native reconnect/replay and final production
+qualification remain pending. [Runnable example](examples/subscriber/README.md).
+
+Optional `xredis_subscriber_notify` provides shared readability Futures and owned
+batch delivery. See [receive ownership](docs/subscriber_notify.md) and the
+[offline example](examples/subscriber_notify/README.md).
+
+The developing [desired subscriptions/replay](docs/subscriptions.md) leaf commits
+versioned local intent and restores it in bounded native batches onto replacement
+Clients. Snapshots share immutable names. Stale/cancel/error paths retire partial
+connections; automatic factories/backoff and Cluster/Sentinel routing remain open.
+[Runnable offline example](examples/subscriptions/README.md).
+
+`xredis_subscription_session` autonomously reconnects a private subscriber with
+bounded jittered backoff and restores desired intent. Live edits apply incremental
+deltas on the same transport; native receive remains direct. See
+[session contracts](docs/subscription_session.md). HA topology and the complete
+production/long-run gates remain open.
+
+Optional [ROLE inspection](docs/role.md) supplies bounded borrowed role/list views; role-gated initialization and discovery are described below.
+
+Optional [role-verified initialization](docs/role_client.md) withholds readiness and queued business until the requested role is validated under the original setup deadline.
+
+Optional [Sentinel discovery](docs/sentinel.md) implements bounded master discovery,
+ROLE validation and stale-role re-resolution; full automatic HA remains developing.
+
+[Automatic Sentinel pools](docs/sentinel_pool.md) discover each replacement and
+fence/retire all old members when the verified master endpoint changes.
+
+[Cluster topology](docs/cluster_topology.md) provides bounded immutable SHARDS/
+SLOTS snapshots, constant-time slot lookup, binary key slots and MOVED/ASK views.
+Bounded request execution is available in [Cluster routes](docs/cluster_route.md);
+coalesced metadata fetching is described below.
+
+[Leased ASKING groups](docs/pool_asking.md) execute an adjacent ASKING/query with
+one native request/Future and explicit control/query outcomes. The native FIFO
+and physical lease boundary contain one-shot state through timeout/cancel.
+[Cluster routes](docs/cluster_route.md) provide bounded address/redirect execution.
+
+[Native shared pools](docs/pool_shared.md) multiplex ordinary calls over fixed
+ready members with one native request/Future and bounded selection, without
+per-call leases. Maintained pools and bounded Cluster routes are described below.
+
+[Automatic shared pools](docs/pool_shared_connect.md) maintain and refill shared
+node connections with bounded setup/retry and physical generation retirement.
+Accepted business calls never replay. Coalesced metadata fetching is described below.
+
+[Shared ASKING groups](docs/pool_shared_asking.md) execute adjacent native
+ASKING/query pairs on fixed or maintained shared pools, with one Future and
+separate control/query outcomes. Bounded Cluster routing is described below.
+
+[Cluster route execution](docs/cluster_route.md) selects a master and follows
+bounded MOVED/ASK redirects under one original deadline using authorized shared
+node pools. Maintained node pools and coalesced refresh are described below; the managed facade remains work.
+
+[Maintained Cluster nodes](docs/cluster_nodes.md) cache authorized node pools with
+bounded aggregate quotas, coalesced setup, allocation-free hits and explicit
+physical retirement. Coalesced metadata fetching is described below.
+
+[Cluster metadata refresh](docs/cluster_refresh.md) fetches SHARDS or explicit SLOTS,
+coalesces concurrent demands, publishes bounded immutable generation/origin maps,
+and retains old views through failure. Explicit-seed bootstrap and invalidation
+are caller-driven; full automatic MOVED wiring and the managed facade remain work.
+
+[Asynchronous Cluster clients](docs/cluster_client.md) drive explicit-seed bootstrap,
+coalesced MOVED refresh and native routes on an existing worker. Admission bounds
+requests and bytes; parent cancellation and close preserve independent physical
+duties. Replica policy and synchronous Cluster calls remain work.
+
+Cluster refresh automatically retains bounded discovered masters, query origin
+and explicit bootstrap fallbacks; failed cohorts rotate start candidates.
+See [metadata seed contracts](docs/cluster_refresh.md).
+
+Select `XREDIS_MODULE_XREDIS_COMMAND_KEYS` for an immutable COMMAND/COMMAND INFO
+catalogue and allocation-free key extraction. It supports legacy and modern
+rules, subcommands, binary keys and complete cross-slot checks with bounded
+search/key-byte work. Unknown/incomplete rules require explicit server help;
+they are never treated as keyless. See [contracts](docs/command_keys.md) and
+the [runnable offline example](examples/command_keys/README.md).
+
+`XREDIS_MODULE_XREDIS_CLUSTER_COMMAND` adds metadata-checked asynchronous
+`xredisClusterClientCallCommand`: complete key/slot checks before native
+admission, typed refusals, explicit keyless routing and one entry deadline.
+Catalogue ownership stays with the caller and is not retained by pending work.
+See [contracts](docs/cluster_command.md) and the
+[local-peer example](examples/cluster_command/README.md).
+
+Optional [synchronous Cluster facades](docs/cluster_sync.md) provide explicit-slot
+and metadata-routed blocking calls on the existing async runtime. Both dependent
+Engines refuse worker blocking. Admission, actual native wait and typed Redis
+outcome remain separate; an accepted Future transfers even after wait failure.
+Runnable [explicit](examples/cluster_sync/README.md) and
+[metadata](examples/cluster_command_sync/README.md) examples own local peers.

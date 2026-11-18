@@ -1,4 +1,5 @@
 Source: xrt extlibs/xtp
-Snapshot: cf24b0155bc5fabc958d5d10baf3e6e36d8e96bd
-Byte-for-byte committed extension snapshot; core and other libraries retain their own pins.
-Per-file source commits and SHA256 are recorded in ../xrt_sources.lock.json.
+Snapshot: f0958579699937cdc5cbcf795a2aa86ca0ea2fc3
+Upstream source bytes and SHA256 are recorded in ../xrt_sources.lock.json.
+Native sources, public headers and module configuration are vendored.
+Native module sources compile separately; single-header implementations are not used.
