@@ -3,6 +3,7 @@
 #include "../internal/cluster_reply.h"
 #include "../internal/cluster_topology_internal.h"
 #include "../internal/cluster_route_internal.h"
+#include "../internal/pool_connect_internal.h"
 #include <xrt/memory.h>
 #include <math.h>
 #include <string.h>
@@ -13,7 +14,11 @@ struct xredisclusterroute {
     xredisclusterrouteresult Result;
     xfuture* Future; xbytesview* Arguments; unsigned char *Host, *AttemptHost, *HostHeap;
     size_t Count, StorageBytes, HostCapacity; double Entered, Deadline, Due;
-    unsigned Phase; bool NativeAsking;
+    uint32 PrimaryHostSize; uint16 PrimaryPort; uint8 Phase;
+    bool NativeAsking:1;
+#if defined(XREDIS_FEATURE_XREDIS_CLUSTER_CLIENT)
+    bool Managed:1, PrimaryOutage:1;
+#endif
 };
 static bool xredisRouteError(xerrkind Kind, cstr Text)
 {xrtSetErrorInfo(Kind,"xrt.redis",Kind==XERR_STATE?XREDIS_CLIENT_STATE:XREDIS_CLIENT_ARGUMENT,Text);return false;}
@@ -65,9 +70,78 @@ bool __xredisClusterRouteConfig(const xredisclusterrouteconfig* C)
         C->MaxStorageBytes && C->MaxStorageBytes<=128u*1024u*1024u && C->Timeout>=0 && C->Timeout<=86400000 && C->RetryDelay>0 && C->RetryDelay<=60000;
 }
 size_t __xredisClusterRouteBaseBytes(void){return sizeof(xredisclusterroute);}
-static xredisadmission xredisRouteCreate(const xredisclustertopology* T,xbytesview Origin,uint16 Slot,
+static xredisclusteraddress xredisRouteEndpoint(const xredisclusternode* Node,xbytesview Origin,
+    uint16 Slot,xredisclusterformat Format,const xredisclusterrouteconfig* C)
+{
+    xredisclusteraddress Address={.Slot=Slot,.Tls=C->Tls};
+    if((Node->Health!=XREDIS_CLUSTER_ONLINE && Node->Health!=XREDIS_CLUSTER_UNREPORTED) ||
+        Node->Endpoint==XREDIS_CLUSTER_ENDPOINT_UNKNOWN)return Address;
+    xbytesview Host=Node->Endpoint==XREDIS_CLUSTER_ENDPOINT_SOURCE?Origin:Node->Host;
+    uint16 Port=Format==XREDIS_CLUSTER_LEGACY_SLOTS?Node->Port:C->Tls?Node->TlsPort:Node->Port;
+    if(Port && Host.Size<=C->MaxHostBytes && xredisRouteHost(Host)){Address.Host=Host;Address.Port=Port;}
+    return Address;
+}
+static xredisclusteraddress xredisRouteReplica(const xredisclustertopology* T,size_t Shard,
+    xbytesview Origin,uint16 Slot,xredisclusterformat Format,const xredisclusterrouteconfig* C,uint32 Cursor)
+{
+    size_t Count;
+    const xredisclusternode* Nodes=__xredisClusterTopologyShardNodes(T,Shard,&Count);
+    size_t Index=(Cursor-1u)%Count;
+    for(size_t Seen=0;Seen<Count;++Seen){
+        if(Nodes[Index].Role==XREDIS_CLUSTER_REPLICA){
+            xredisclusteraddress Address=xredisRouteEndpoint(&Nodes[Index],Origin,Slot,Format,C);
+            if(Address.Port){Address.Reason=XREDIS_CLUSTER_REPLICA_READ;return Address;}
+        }
+        if(++Index==Count)Index=0;
+    }
+    return (xredisclusteraddress){0};
+}
+typedef struct xredisroutechoice {
+    xredisclusteraddress Address;
+    xbytesview FallbackHost;
+    uint16 FallbackPort;
+    bool FailedPrimary;
+} xredisroutechoice;
+static bool xredisRouteChoose(const xredisclustertopology* T,xbytesview Origin,uint16 Slot,uint32 Cursor,
+    const xredisclusterrouteconfig* C,xredisroutechoice* Choice)
+{
+    xredisclusternode N={0};
+    xredisclusterstatus Found=xredisClusterTopologyLookup(T,Slot,&N);
+    if(Found<0)return false;
+    Choice->Address=(xredisclusteraddress){.Slot=Slot,.Tls=C->Tls};
+    if(Found!=XREDIS_CLUSTER_VALUE || N.Role!=XREDIS_CLUSTER_MASTER)return true;
+    xredisclustertopologyinfo TI={.Size=sizeof(TI)};
+    if(!xredisClusterTopologyInfo(T,&TI))return false;
+    Choice->FailedPrimary=N.Health==XREDIS_CLUSTER_FAILED;
+    Choice->Address=xredisRouteEndpoint(&N,Origin,Slot,TI.Format,C);
+    if(Cursor){
+        xredisclusteraddress Replica=xredisRouteReplica(T,N.Shard,Origin,Slot,TI.Format,C,Cursor);
+        if(Replica.Port){
+            Choice->FallbackHost=Choice->Address.Host;Choice->FallbackPort=Choice->Address.Port;
+            Choice->Address=Replica;
+        }
+    }
+    return true;
+}
+static void xredisRouteBind(xredisclusterroute* R,const xredisroutechoice* Choice)
+{
+    R->Phase=XCR_RESOLVE;
+    R->Result.Size=sizeof(R->Result);R->Result.StorageBytes=R->StorageBytes;
+    R->Result.Address=Choice->Address;R->Result.Admission=XREDIS_ADMISSION_ACCEPTED;
+    R->PrimaryHostSize=(uint32)Choice->FallbackHost.Size;R->PrimaryPort=Choice->FallbackPort;
+    if(R->PrimaryHostSize)
+        memcpy(R->Host+2*R->HostCapacity,Choice->FallbackHost.Data,R->PrimaryHostSize);
+#if defined(XREDIS_FEATURE_XREDIS_CLUSTER_CLIENT)
+    R->PrimaryOutage=R->Managed && Choice->FailedPrimary && !Choice->Address.Port;
+#endif
+    if(!Choice->Address.Port){xredisRouteFinish(R,XREDIS_CLUSTER_ROUTE_NO_ROUTE);return;}
+    memcpy(R->Host,Choice->Address.Host.Data,Choice->Address.Host.Size);
+    R->Result.Address.Host.Data=R->Host;R->Due=R->Deadline;
+    if(xrtTimer()>=R->Deadline)xredisRouteFinish(R,XREDIS_CLUSTER_ROUTE_TIMEOUT);
+}
+static xredisadmission xredisRouteCreate(const xredisclustertopology* T,xbytesview Origin,uint16 Slot,uint32 Cursor,
     const xbytesview* A,size_t Count,const xredisclusterrouteconfig* Config,xredisclusterroute** Out,double Entered,xredisclusterroutestatus* Failure,
-    size_t Prefix,ptr* Context)
+    size_t Prefix,ptr* Context,bool Managed)
 {
     if(Failure)*Failure=XREDIS_CLUSTER_ROUTE_MEMORY;
     xredisclusterrouteconfig C;
@@ -83,50 +157,76 @@ static xredisadmission xredisRouteCreate(const xredisclustertopology* T,xbytesvi
         if(xrtMemRangesOverlap(A[I].Data,A[I].Size,Out,sizeof(*Out)) || A[I].Size>C.MaxCommandBytes-Payload){xredisRouteError(XERR_ARGUMENT,"Cluster route payload/output overlap");return XREDIS_ADMISSION_ERROR;}
         Payload+=A[I].Size;
     }
-    xredisclusternode N={0};xredisclusterstatus Found=xredisClusterTopologyLookup(T,Slot,&N);
-    if(Found<0)return XREDIS_ADMISSION_ERROR;
-    xredisclustertopologyinfo TI={0};TI.Size=sizeof(TI);if(!xredisClusterTopologyInfo(T,&TI))return XREDIS_ADMISSION_ERROR;
-    xbytesview Host=N.Endpoint==XREDIS_CLUSTER_ENDPOINT_SOURCE?Origin:N.Host;
-    uint16 Port=TI.Format==XREDIS_CLUSTER_LEGACY_SLOTS?N.Port:C.Tls?N.TlsPort:N.Port;
-    bool Eligible=Found==XREDIS_CLUSTER_VALUE && N.Role==XREDIS_CLUSTER_MASTER && (N.Health==XREDIS_CLUSTER_ONLINE || N.Health==XREDIS_CLUSTER_UNREPORTED) &&
-        N.Endpoint!=XREDIS_CLUSTER_ENDPOINT_UNKNOWN && Port && Host.Size<=C.MaxHostBytes && xredisRouteHost(Host);
-    size_t HostCapacity=Eligible?Host.Size:1;
-    size_t Bytes=sizeof(xredisclusterroute)+Count*sizeof(*A)+Payload+2*HostCapacity;
+    xredisroutechoice Choice={0};
+    if(!xredisRouteChoose(T,Origin,Slot,Cursor,&C,&Choice))return XREDIS_ADMISSION_ERROR;
+    size_t HostCapacity=Choice.Address.Host.Size;
+    if(HostCapacity<Choice.FallbackHost.Size)HostCapacity=Choice.FallbackHost.Size;
+    if(!HostCapacity)HostCapacity=1;
+    size_t Bytes=sizeof(xredisclusterroute)+Count*sizeof(*A)+Payload+2*HostCapacity+Choice.FallbackHost.Size;
     if(Bytes>C.MaxStorageBytes){if(Failure)*Failure=XREDIS_CLUSTER_ROUTE_LIMIT;xredisRouteError(XERR_RANGE,"Cluster route storage limit");return XREDIS_ADMISSION_ERROR;}
     unsigned char* Block=xrtCalloc(1,Prefix+Bytes);if(!Block)return XREDIS_ADMISSION_ERROR;
     xredisclusterroute* R=(xredisclusterroute*)(Block+Prefix);if(Prefix)C.Data=Block;
     R->Config=C;R->Entered=Entered;R->Deadline=xredisRouteDue(Entered,C.Timeout);R->StorageBytes=Bytes;R->Count=Count;R->Arguments=(xbytesview*)(R+1);
+#if defined(XREDIS_FEATURE_XREDIS_CLUSTER_CLIENT)
+    R->Managed=Managed;
+#else
+    (void)Managed;
+#endif
     unsigned char* P=(unsigned char*)(R->Arguments+Count);
     for(size_t I=0;I<Count;++I){R->Arguments[I]=(xbytesview){P,A[I].Size};if(A[I].Size)memcpy(P,A[I].Data,A[I].Size);P+=A[I].Size;}
-    R->Host=P;R->HostCapacity=HostCapacity;R->AttemptHost=P+HostCapacity;R->Result.Size=sizeof(R->Result);R->Result.StorageBytes=Bytes;R->Result.Address.Slot=Slot;R->Result.Address.Tls=C.Tls;R->Result.Admission=XREDIS_ADMISSION_ACCEPTED;
-    if(!Eligible)xredisRouteFinish(R,XREDIS_CLUSTER_ROUTE_NO_ROUTE);
-    else {memcpy(R->Host,Host.Data,Host.Size);R->Result.Address.Host=(xbytesview){R->Host,Host.Size};R->Result.Address.Port=Port;R->Due=R->Deadline;}
-    if(R->Phase!=XCR_DONE && xrtTimer()>=R->Deadline)xredisRouteFinish(R,XREDIS_CLUSTER_ROUTE_TIMEOUT);
+    R->Host=P;R->HostCapacity=HostCapacity;R->AttemptHost=P+HostCapacity;
+    xredisRouteBind(R,&Choice);
     if(Context)*Context=Block;
     *Out=R;return XREDIS_ADMISSION_ACCEPTED;
 }
-xredisadmission __xredisClusterRouteCreate(const xredisclustertopology* T,xbytesview Origin,uint16 Slot,
+xredisadmission __xredisClusterRouteCreate(const xredisclustertopology* T,xbytesview Origin,uint16 Slot,uint32 Cursor,
     const xbytesview* A,size_t Count,const xredisclusterrouteconfig* C,xredisclusterroute** Out,double Entered,xredisclusterroutestatus* Failure)
-{return xredisRouteCreate(T,Origin,Slot,A,Count,C,Out,Entered,Failure,0,NULL);}
-xredisadmission __xredisClusterRouteCreateContext(const xredisclustertopology* T,xbytesview Origin,uint16 Slot,
+{return xredisRouteCreate(T,Origin,Slot,Cursor,A,Count,C,Out,Entered,Failure,0,NULL,true);}
+xredisadmission __xredisClusterRouteCreateContext(const xredisclustertopology* T,xbytesview Origin,uint16 Slot,uint32 Cursor,
     const xbytesview* A,size_t Count,const xredisclusterrouteconfig* C,size_t Prefix,ptr* Context,xredisclusterroute** Out,double Entered)
 {
     if(!Prefix || Prefix>128u*1024u*1024u || Prefix%_Alignof(max_align_t) || !Context){xredisRouteError(XERR_ARGUMENT,"invalid Cluster route context prefix");return XREDIS_ADMISSION_ERROR;}
-    return xredisRouteCreate(T,Origin,Slot,A,Count,C,Out,Entered,NULL,Prefix,Context);
+    return xredisRouteCreate(T,Origin,Slot,Cursor,A,Count,C,Out,Entered,NULL,Prefix,Context,true);
 }
 XREDIS_API xredisadmission xredisClusterRouteCreate(const xredisclustertopology* T,xbytesview Origin,uint16 Slot,
     const xbytesview* A,size_t Count,const xredisclusterrouteconfig* Config,xredisclusterroute** Out)
-{return __xredisClusterRouteCreate(T,Origin,Slot,A,Count,Config,Out,xrtTimer(),NULL);}
+{return xredisRouteCreate(T,Origin,Slot,0,A,Count,Config,Out,xrtTimer(),NULL,0,NULL,false);}
 xredisadmission __xredisClusterRouteRetryMissing(xredisclusterroute* R,const xredisclustertopology* T,
-    xbytesview Origin,const xredisclusterrouteconfig* C,xredisclusterroute** Out,xredisclusterroutestatus* Failure)
+    xbytesview Origin,uint32 Cursor,const xredisclusterrouteconfig* C,xredisclusterroute** Out,xredisclusterroutestatus* Failure)
 {
     if(!R || R->Result.Status!=XREDIS_CLUSTER_ROUTE_NO_ROUTE || R->Result.Attempts){xredisRouteError(XERR_STATE,"only unsubmitted missing routes can restart");return XREDIS_ADMISSION_ERROR;}
-    return __xredisClusterRouteCreate(T,Origin,R->Result.Address.Slot,R->Arguments,R->Count,C,Out,R->Entered,Failure);
+    xredisroutechoice Choice={0};
+    if(!xredisRouteChoose(T,Origin,R->Result.Address.Slot,Cursor,C,&Choice))return XREDIS_ADMISSION_ERROR;
+    size_t Waits=R->Result.Waits,ProviderCalls=R->Result.ProviderCalls;
+    size_t FallbackCapacity=R->StorageBytes-(size_t)(R->Host-(unsigned char*)R)-2*R->HostCapacity;
+    xredisclusterroute* Next=R;
+    if(Choice.Address.Host.Size<=R->HostCapacity && Choice.FallbackHost.Size<=FallbackCapacity && Choice.FallbackHost.Size<=R->HostCapacity){
+        R->Config=*C;
+        memset(&R->Result,0,sizeof(R->Result));
+        xredisRouteBind(R,&Choice);
+    }else if(__xredisClusterRouteCreate(T,Origin,R->Result.Address.Slot,Cursor,R->Arguments,R->Count,C,&Next,R->Entered,Failure)!=XREDIS_ADMISSION_ACCEPTED)
+        return XREDIS_ADMISSION_ERROR;
+    Next->Result.Waits=Waits;Next->Result.ProviderCalls=ProviderCalls;
+    *Out=Next;return XREDIS_ADMISSION_ACCEPTED;
 }
+#if defined(XREDIS_FEATURE_XREDIS_CLUSTER_CLIENT)
+bool __xredisClusterRoutePrimaryOutage(const xredisclusterroute* Route)
+{return Route->PrimaryOutage;}
+#endif
 static void xredisRouteWait(xredisclusterroute* R)
 {
     if(R->Result.Waits>=R->Config.MaxWaits){xredisRouteFinish(R,XREDIS_CLUSTER_ROUTE_OVERLOADED);return;}
     ++R->Result.Waits;R->Due=fmin(R->Deadline,xredisRouteDue(xrtTimer(),R->Config.RetryDelay));R->Phase=XCR_BACKOFF;
+}
+static bool xredisRouteFallback(xredisclusterroute* R)
+{
+    if(!R->PrimaryPort || R->Result.Attempts || R->Result.Address.Reason!=XREDIS_CLUSTER_REPLICA_READ)return false;
+    /* Before any native attempt the two host buffers still occupy the
+     * original allocation, immediately before the saved primary host. */
+    memcpy(R->Host,R->Host+2*R->HostCapacity,R->PrimaryHostSize);
+    R->Result.Address.Host.Size=R->PrimaryHostSize;
+    R->Result.Address.Port=R->PrimaryPort;R->Result.Address.Reason=0;R->PrimaryPort=0;
+    return true;
 }
 static void xredisRouteResolve(xredisclusterroute* R)
 {
@@ -135,6 +235,8 @@ static void xredisRouteResolve(xredisclusterroute* R)
     R->Result.Provider=R->Config.GetPool(&R->Result.Address,Timeout,R->Config.Data,&Pool);
     if(xrtTimer()>=R->Deadline){if(R->Result.Provider==XREDIS_CLUSTER_POOL_READY && Pool)xredisPoolRelease(Pool);xredisRouteFinish(R,XREDIS_CLUSTER_ROUTE_TIMEOUT);return;}
     if(R->Result.Provider!=XREDIS_CLUSTER_POOL_READY){
+        if((R->Result.Provider==XREDIS_CLUSTER_POOL_WAIT || R->Result.Provider==XREDIS_CLUSTER_POOL_DENIED) &&
+            xredisRouteFallback(R))return;
         if(R->Result.Provider==XREDIS_CLUSTER_POOL_WAIT)xredisRouteWait(R);
         else xredisRouteFinish(R,R->Result.Provider==XREDIS_CLUSTER_POOL_DENIED?XREDIS_CLUSTER_ROUTE_POLICY:
             R->Result.Provider==XREDIS_CLUSTER_POOL_CLOSED?XREDIS_CLUSTER_ROUTE_CLOSED:
@@ -146,6 +248,12 @@ static void xredisRouteResolve(xredisclusterroute* R)
     R->Result.AdmissionObserved=true;
     R->Result.Admission=Asking?__xredisSharedPoolAsking(Pool,R->Arguments,R->Count,R->Config.Timeout,&F,R->Entered,false):
         __xredisSharedPoolCall(Pool,R->Arguments,R->Count,R->Config.Timeout,&F,R->Entered,false);
+#if defined(XREDIS_FEATURE_XREDIS_CLUSTER_CLIENT)
+    /* Ask only for a refused, initial primary admission. Busy members and
+     * ordinary cold setup remain in the existing bounded wait path. */
+    bool Unreachable=R->Managed && R->Result.Admission==XREDIS_ADMISSION_OVERLOADED &&
+        !R->Result.Attempts && !R->Result.Address.Reason && __xredisSharedPoolDisconnected(Pool);
+#endif
     xredisPoolRelease(Pool);
     if(R->Result.Admission==XREDIS_ADMISSION_ACCEPTED){
         xrtFutureDestroy(R->Future);R->Future=F;R->NativeAsking=Asking;R->Result.UsedAsking=Asking;
@@ -155,6 +263,11 @@ static void xredisRouteResolve(xredisclusterroute* R)
         ++R->Result.Attempts;R->Phase=XCR_NATIVE;R->Due=R->Deadline;
         if(xrtTimer()>=R->Deadline)xredisRouteFinish(R,XREDIS_CLUSTER_ROUTE_TIMEOUT);
     }else if(xrtTimer()>=R->Deadline)xredisRouteFinish(R,XREDIS_CLUSTER_ROUTE_TIMEOUT);
+#if defined(XREDIS_FEATURE_XREDIS_CLUSTER_CLIENT)
+    else if(Unreachable){R->PrimaryOutage=true;xredisRouteFinish(R,XREDIS_CLUSTER_ROUTE_NO_ROUTE);}
+#endif
+    else if((R->Result.Admission==XREDIS_ADMISSION_OVERLOADED || R->Result.Admission==XREDIS_ADMISSION_CLOSED) &&
+        xredisRouteFallback(R))return;
     else if(R->Result.Admission==XREDIS_ADMISSION_OVERLOADED)xredisRouteWait(R);
     else xredisRouteFinish(R,R->Result.Admission==XREDIS_ADMISSION_CLOSED?XREDIS_CLUSTER_ROUTE_CLOSED:XREDIS_CLUSTER_ROUTE_ADMISSION_ERROR);
 }

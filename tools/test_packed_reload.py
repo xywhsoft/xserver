@@ -11,12 +11,25 @@ import subprocess
 import tempfile
 import time
 
+from test_extensions_runtime import SQLITE_ADDON_PROBE
+
 ROOT = Path(__file__).resolve().parents[1]
 PROBE = r'''
 #include <xsbase.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(XS_USE_GRAPHQLITE) || defined(XS_USE_SQLITE_VEC)
+#include <sqlite3.h>
+#ifdef XS_USE_GRAPHQLITE
+#include <graphqlite.h>
+#endif
+#ifdef XS_USE_SQLITE_VEC
+#include <sqlite-vec.h>
+#endif
+#define REQUIRE(x) do { if (!(x)) { fprintf(stderr, "SQLite reload probe: %s\n", #x); exit(5); } } while (0)
+''' + SQLITE_ADDON_PROBE + r'''
+#endif
 #define PROBE_VERSION "pack-v1"
 XS_RequestResult RequestProc(XS_HttpReq* req) {
     char path[128], body[160], response[512];
@@ -25,7 +38,12 @@ XS_RequestResult RequestProc(XS_HttpReq* req) {
     XS_ReloadId id = 0;
     if (n >= sizeof(path)) return XS_FALLBACK;
     memcpy(path, req->head->Target.Data, n); path[n] = 0;
-    if (!strcmp(path, "/revision")) snprintf(body, sizeof(body), "%s", PROBE_VERSION);
+    if (!strcmp(path, "/revision")) {
+#if defined(XS_USE_GRAPHQLITE) || defined(XS_USE_SQLITE_VEC)
+        CheckExtensionDb(OpenExtensionDb());
+#endif
+        snprintf(body, sizeof(body), "%s", PROBE_VERSION);
+    }
     else if (!strcmp(path, "/submit/all")) id = xsReloadAllSubmit();
     else if (!strcmp(path, "/submit/server")) id = xsReloadServerSubmit("t");
     else if (!strcmp(path, "/submit/host")) {

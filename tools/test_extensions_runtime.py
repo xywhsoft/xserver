@@ -28,6 +28,9 @@ PROTOCOL_PROBES = {
     "xmqtt": """
         xmqttcodecconfig config;
         REQUIRE(xmqttCodecConfigInit(&config));
+        xmqttserverconfig server;
+        REQUIRE(xmqttServerConfigInit(&server));
+        REQUIRE(server.ConnectTimeout > 0 && server.MaxConnections > 0);
     """,
     "xredis": """
         xredisreaderconfig config;
@@ -109,6 +112,48 @@ PROTOCOL_PROBES = {
     """,
 }
 
+SQLITE_ADDON_PROBE = '''
+sqlite3* OpenExtensionDb(void) {
+    sqlite3 *db = NULL;
+    char *error = NULL;
+    REQUIRE(sqlite3_open(":memory:", &db) == SQLITE_OK);
+#ifdef XS_USE_GRAPHQLITE
+    REQUIRE(sqlite3_graphqlite_init(db, &error, NULL) == SQLITE_OK);
+    REQUIRE(sqlite3_exec(db, "SELECT cypher('CREATE (:XSProbe)')", NULL, NULL, NULL) == SQLITE_OK);
+#endif
+#ifdef XS_USE_SQLITE_VEC
+    REQUIRE(sqlite3_vec_init(db, &error, NULL) == SQLITE_OK);
+    REQUIRE(sqlite3_exec(db, "CREATE VIRTUAL TABLE embeddings USING vec0(value float[2]);"
+                            "INSERT INTO embeddings(rowid,value) VALUES (1,'[1,0]')",
+                         NULL, NULL, NULL) == SQLITE_OK);
+#endif
+    sqlite3_free(error);
+    return db;
+}
+
+static void RequireSqlInteger(sqlite3 *db, const char *sql, int expected) {
+    sqlite3_stmt *s = NULL;
+    REQUIRE(sqlite3_prepare_v2(db, sql, -1, &s, NULL) == SQLITE_OK);
+    REQUIRE(sqlite3_step(s) == SQLITE_ROW && sqlite3_column_int(s, 0) == expected);
+    REQUIRE(sqlite3_finalize(s) == SQLITE_OK);
+}
+
+void CheckExtensionDb(sqlite3 *db) {
+    sqlite3 *plain = NULL;
+    REQUIRE(sqlite3_open(":memory:", &plain) == SQLITE_OK);
+    RequireSqlInteger(plain, "SELECT count(*) FROM sqlite_schema", 0);
+    RequireSqlInteger(plain, "SELECT count(*) FROM pragma_function_list WHERE name IN ('cypher','vec_version')", 0);
+    REQUIRE(sqlite3_close(plain) == SQLITE_OK);
+#ifdef XS_USE_GRAPHQLITE
+    RequireSqlInteger(db, "SELECT json_array_length(cypher('MATCH (n:XSProbe) RETURN n'))", 1);
+#endif
+#ifdef XS_USE_SQLITE_VEC
+    RequireSqlInteger(db, "SELECT rowid FROM embeddings WHERE value MATCH '[1,0]' AND k=1", 1);
+#endif
+    REQUIRE(sqlite3_close(db) == SQLITE_OK);
+}
+'''
+
 
 def check_public_sdk(exe: Path, selected: dict, directory: Path) -> None:
     """Resolve every selected public export in both outer and nested TCC."""
@@ -137,12 +182,24 @@ def check_public_sdk(exe: Path, selected: dict, directory: Path) -> None:
         if name in selected:
             code += "{\n" + body + "}\n"
     code += '}\n'
+    sqlite_addons = {'graphqlite', 'sqlite-vec'} & selected.keys()
+    if sqlite_addons:
+        code += SQLITE_ADDON_PROBE
     source = code + '#include <libtcc.h>\nvoid ServiceInit(XS_HostInfo* host) {\n'
     source += '(void)host; CheckSDK();\nTCCState* nested = xsCreateTCC();\nREQUIRE(nested != NULL);\n'
     source += f'REQUIRE(tcc_compile_string(nested, {json.dumps(code)}) == 0);\n'
     source += 'REQUIRE(tcc_relocate(nested) == 0);\n'
     source += 'void (*run)(void) = (void(*)(void))tcc_get_symbol(nested, "CheckSDK");\n'
-    source += 'REQUIRE(run != NULL); run(); xsDestroyTCC(nested);\n'
+    source += 'REQUIRE(run != NULL); run();\n'
+    if sqlite_addons:
+        source += ('CheckExtensionDb(OpenExtensionDb());\n'
+                   'sqlite3 *(*open_db)(void) = (sqlite3 *(*)(void))tcc_get_symbol(nested, "OpenExtensionDb");\n'
+                   'REQUIRE(open_db != NULL); sqlite3 *retained = open_db();\n'
+                   'REQUIRE(retained != NULL); xsDestroyTCC(nested);\n'
+                   'CheckExtensionDb(retained);\n'
+                   'printf("[sdk] SQLite extension callbacks survive nested TCC retirement\\n");\n')
+    else:
+        source += 'xsDestroyTCC(nested);\n'
     source += 'printf("[sdk] outer + nested ok exports=%u\\n", (unsigned)(sizeof(exports)/sizeof(exports[0])-1)); fflush(stdout); exit(0); }\n'
     proc = invoke(exe, source, directory, "public-sdk")
     if proc.returncode != 0 or "[sdk] outer + nested ok" not in proc.stdout:
@@ -150,6 +207,11 @@ def check_public_sdk(exe: Path, selected: dict, directory: Path) -> None:
     count = re.search(r"\[sdk\] outer \+ nested ok exports=(\d+)", proc.stdout)
     if count is None:
         raise RuntimeError(f"public SDK export count missing:\n{proc.stdout}")
+    if sqlite_addons:
+        marker = '[sdk] SQLite extension callbacks survive nested TCC retirement'
+        if marker not in proc.stdout:
+            raise RuntimeError(f"SQLite extension retirement evidence missing:\n{proc.stdout}{proc.stderr}")
+        print('PASS SQLite extension queries, connection isolation and nested TCC retirement', flush=True)
     if "xtp" in selected:
         marker = "[sdk] xtp3 codec+four-shapes+callback-ABI+RPC+PUSH+NOTIFY+batch ok"
         if proc.stdout.count(marker) != 2:
@@ -803,6 +865,10 @@ def check(exe: Path, names: list[str]) -> None:
                                f"{version.stdout}{version.stderr}")
         print(f"PASS version banner + --version: {expected_list}", flush=True)
         absent = {
+            "graphqlite": ("graphqlite.h", "extern int sqlite3_graphqlite_init(void*, void*, void*);",
+                           "sqlite3_graphqlite_init(0, 0, 0)"),
+            "sqlite-vec": ("sqlite-vec.h", "extern int sqlite3_vec_init(void*, void*, void*);",
+                           "sqlite3_vec_init(0, 0, 0)"),
             "xcron": ("xcron.h", "extern int xcronExpressionCompile(void*, int, void*, void*);",
                       "xcronExpressionCompile(0, 1, 0, 0)"),
             "xmqtt": ("xmqtt.h", "extern int xmqttCodecConfigInit(void*);", "xmqttCodecConfigInit(0)"),

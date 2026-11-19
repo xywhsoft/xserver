@@ -1,5 +1,5 @@
 /* 由 tools/gen_xrt_symbols.py 生成，勿手改。xrt 锁定版本见 lib/xrt_version.txt */
-/* xrt commit: f0958579699937cdc5cbcf795a2aa86ca0ea2fc3 | 登记公共函数 3486 个 */
+/* xrt commit: f575188765c7f98ac945e2eb7035054df157b816 | 登记公共函数 3493 个 */
 XS_XRT_SYMBOL(xrtAVLClear)
 XS_XRT_SYMBOL(xrtAVLFind)
 XS_XRT_SYMBOL(xrtAVLFirst)
@@ -1900,6 +1900,13 @@ XS_XRT_SYMBOL(xrtProcessNative)
 XS_XRT_SYMBOL(xrtProcessOpen)
 XS_XRT_SYMBOL(xrtProcessOwnership)
 XS_XRT_SYMBOL(xrtProcessOwnershipAdapterV1)
+XS_XRT_SYMBOL(xrtProcessPipeCloseInput)
+XS_XRT_SYMBOL(xrtProcessPipeDestroy)
+XS_XRT_SYMBOL(xrtProcessPipeRead)
+XS_XRT_SYMBOL(xrtProcessPipeSpawn)
+XS_XRT_SYMBOL(xrtProcessPipeWait)
+XS_XRT_SYMBOL(xrtProcessPipeWake)
+XS_XRT_SYMBOL(xrtProcessPipeWrite)
 XS_XRT_SYMBOL(xrtProcessPipeline)
 XS_XRT_SYMBOL(xrtProcessPipelineOptionsInit)
 XS_XRT_SYMBOL(xrtProcessPipelineResultUnit)

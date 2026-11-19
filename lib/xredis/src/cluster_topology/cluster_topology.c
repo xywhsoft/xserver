@@ -8,7 +8,7 @@
 #if defined(XREDIS_FEATURE_XREDIS_CLUSTER_TOPOLOGY)
 struct xredisclustertopology {
     xatomic32 References;xredisreply* Reply;xredisclustertopologyinfo Info;
-    xredisclusternode* Nodes;xredisclusterrange* Ranges;
+    xredisclusternode* Nodes;xredisclusterrange* Ranges;uint16* ShardStarts;
     uint16 Slots[XREDIS_CLUSTER_SLOTS];
 };
 typedef struct xredisclusterbuild {
@@ -124,7 +124,9 @@ static xredisclusterstatus xredisClusterReadNode(xredisclusterbuild* B,size_t In
         if(F[4]!=XREDIS_REPLY_NONE && !xredisClusterPort(xredisClusterGet(R,F[4]),&N->Port))return XREDIS_CLUSTER_MALFORMED;
         if(F[5]!=XREDIS_REPLY_NONE && !xredisClusterPort(xredisClusterGet(R,F[5]),&N->TlsPort))return XREDIS_CLUSTER_MALFORMED;
         N->Role=xredisClusterWord(N->RoleText,"master")?XREDIS_CLUSTER_MASTER:xredisClusterWord(N->RoleText,"replica")?XREDIS_CLUSTER_REPLICA:XREDIS_CLUSTER_ROLE_OTHER;
-        N->Health=xredisClusterWord(N->HealthText,"online")?XREDIS_CLUSTER_ONLINE:xredisClusterWord(N->HealthText,"failed")?XREDIS_CLUSTER_FAILED:xredisClusterWord(N->HealthText,"loading")?XREDIS_CLUSTER_LOADING:XREDIS_CLUSTER_HEALTH_OTHER;
+        N->Health=xredisClusterWord(N->HealthText,"online")?XREDIS_CLUSTER_ONLINE:
+            (xredisClusterWord(N->HealthText,"fail") || xredisClusterWord(N->HealthText,"failed"))?XREDIS_CLUSTER_FAILED:
+            xredisClusterWord(N->HealthText,"loading")?XREDIS_CLUSTER_LOADING:XREDIS_CLUSTER_HEALTH_OTHER;
     }
     N->Endpoint=xredisClusterEndpoint(N->Host);return XREDIS_CLUSTER_VALUE;
 }
@@ -144,7 +146,10 @@ static xredisclusterstatus xredisClusterBuild(xredisclusterbuild* B,xredisreplyv
     if(!xredisClusterArray(Root))return XREDIS_CLUSTER_MALFORMED;
     for(size_t Row=Root.FirstChild;Row!=XREDIS_REPLY_NONE;){
         if(B->Shards==B->Limits->MaxShards)return XREDIS_CLUSTER_LIMIT;
-        xredisreplyvalue Item=xredisClusterGet(B->Reply,Row),Ranges={0},Nodes={0};size_t Node,Count;size_t Master=SIZE_MAX;
+        xredisreplyvalue Item=xredisClusterGet(B->Reply,Row),Ranges={0},Nodes={0};size_t Node,Count;
+        size_t Master=SIZE_MAX,FailedMaster=SIZE_MAX;
+        xredisclusterhealth MasterHealth=XREDIS_CLUSTER_HEALTH_OTHER;
+        bool SeveralFailed=false;
         if(Legacy){if(!xredisClusterArray(Item) || Item.ChildCount<3)return XREDIS_CLUSTER_MALFORMED;
             xredisreplyvalue First=xredisClusterGet(B->Reply,Item.FirstChild),Last=xredisClusterGet(B->Reply,First.Next);Node=Last.Next;Count=Item.ChildCount-2;
         }else{static const cstr Names[]={"slots","nodes"};size_t F[2];
@@ -154,11 +159,21 @@ static xredisclusterstatus xredisClusterBuild(xredisclusterbuild* B,xredisreplyv
             Node=Nodes.FirstChild;Count=Nodes.ChildCount;
         }
         if(Count>B->Limits->MaxNodes-B->Nodes)return XREDIS_CLUSTER_LIMIT;
+        if(B->Output)B->Output->ShardStarts[B->Shards]=(uint16)B->Nodes;
         for(size_t K=0;K<Count;++K){xredisclusternode N;xredisclusterstatus S=xredisClusterReadNode(B,Node,Legacy,K==0,&N);if(S!=XREDIS_CLUSTER_VALUE)return S;
-            if(N.Role==XREDIS_CLUSTER_MASTER){if(Master!=SIZE_MAX)return XREDIS_CLUSTER_MALFORMED;Master=B->Nodes;}
+            if(N.Role==XREDIS_CLUSTER_MASTER){
+                if(N.Health==XREDIS_CLUSTER_FAILED){SeveralFailed|=FailedMaster!=SIZE_MAX;FailedMaster=B->Nodes;}
+                else {if(Master!=SIZE_MAX)return XREDIS_CLUSTER_MALFORMED;Master=B->Nodes;MasterHealth=N.Health;}
+            }
             if(B->Output)B->Output->Nodes[B->Nodes]=N;
             ++B->Nodes;Node=xredisClusterGet(B->Reply,Node).Next;
         }
+        /* A completed election can leave failed predecessor records with the
+         * master role. Select a unique online replacement in this shape. */
+        if(Master==SIZE_MAX){
+            if(SeveralFailed)return XREDIS_CLUSTER_MALFORMED;
+            Master=FailedMaster;
+        }else if(FailedMaster!=SIZE_MAX && MasterHealth!=XREDIS_CLUSTER_ONLINE)return XREDIS_CLUSTER_MALFORMED;
         if(Master==SIZE_MAX)return XREDIS_CLUSTER_MALFORMED;
         if(Legacy){xredisreplyvalue First=xredisClusterGet(B->Reply,Item.FirstChild);xredisclusterstatus S=xredisClusterBuildRange(B,First,xredisClusterGet(B->Reply,First.Next),Master);if(S!=XREDIS_CLUSTER_VALUE)return S;}
         else for(size_t Pair=Ranges.FirstChild;Pair!=XREDIS_REPLY_NONE;){xredisreplyvalue First=xredisClusterGet(B->Reply,Pair),Last=xredisClusterGet(B->Reply,First.Next);xredisclusterstatus S=xredisClusterBuildRange(B,First,Last,Master);if(S!=XREDIS_CLUSTER_VALUE)return S;Pair=Last.Next;}
@@ -180,10 +195,12 @@ XREDIS_API xredisclusterstatus xredisClusterTopologyCreate(xredisreply* R,xredis
     if(Root.Type==XREDIS_REPLY_SIMPLE_ERROR || Root.Type==XREDIS_REPLY_BULK_ERROR)return XREDIS_CLUSTER_SERVER_ERROR;
     xredisclusterbuild B={0};B.Reply=R;B.Limits=&K;
     xredisclusterstatus S=xredisClusterBuild(&B,Root,Format==XREDIS_CLUSTER_LEGACY_SLOTS);if(S!=XREDIS_CLUSTER_VALUE)return S;
-    size_t Bytes=sizeof(xredisclustertopology)+B.Nodes*sizeof(xredisclusternode)+B.Ranges*sizeof(xredisclusterrange);
+    size_t Bytes=sizeof(xredisclustertopology)+B.Nodes*sizeof(xredisclusternode)+B.Ranges*sizeof(xredisclusterrange)+
+        (B.Shards+1)*sizeof(uint16);
     if(Bytes>K.MaxOwnedBytes || I.ReservedBytes>K.MaxOwnedBytes-Bytes)return XREDIS_CLUSTER_LIMIT;
     xredisclustertopology* T=xrtCalloc(1,Bytes);if(!T)return XREDIS_CLUSTER_MEMORY;
     T->Nodes=(xredisclusternode*)(T+1);T->Ranges=(xredisclusterrange*)(T->Nodes+B.Nodes);
+    T->ShardStarts=(uint16*)(T->Ranges+B.Ranges);T->ShardStarts[B.Shards]=(uint16)B.Nodes;
     T->Info=(xredisclustertopologyinfo){sizeof(T->Info),B.Shards,B.Nodes,B.Ranges,B.Assigned,Bytes,I.ReservedBytes,Format};
     xredisclusterbuild Fill={0};Fill.Reply=R;Fill.Limits=&K;Fill.Output=T;
     S=xredisClusterBuild(&Fill,Root,Format==XREDIS_CLUSTER_LEGACY_SLOTS);
@@ -207,6 +224,11 @@ static bool xredisClusterOutput(const xredisclustertopology* T,const void* Outpu
 }
 bool __xredisClusterTopologyOutput(const xredisclustertopology* T,const void* Output,size_t Bytes)
 {return xredisClusterOutput(T,Output,Bytes);}
+const xredisclusternode* __xredisClusterTopologyShardNodes(const xredisclustertopology* T,size_t Shard,size_t* Count)
+{
+    uint16 First=T->ShardStarts[Shard];*Count=T->ShardStarts[Shard+1]-First;
+    return T->Nodes+First;
+}
 XREDIS_API bool xredisClusterTopologyInfo(const xredisclustertopology* T,xredisclustertopologyinfo* I)
 {if(!xredisClusterOutput(T,I,sizeof(*I)) || I->Size!=sizeof(*I))return xredisClusterArgument("invalid Cluster topology info size");*I=T->Info;return true;}
 XREDIS_API xredisclusterstatus xredisClusterTopologyLookup(const xredisclustertopology* T,uint16 Slot,xredisclusternode* N)

@@ -1,0 +1,4 @@
+Source: https://github.com/laurikari/tre
+Version: v0.9.0
+Commit: d0e0c997336b3210f05b3e1daa7bb5cb9900d274
+SHA256: ../sqlite_extensions.lock.json

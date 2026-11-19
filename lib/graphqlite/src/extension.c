@@ -1,0 +1,774 @@
+/*
+ * GraphQLite SQLite Extension
+ * Based on working old architecture pattern
+ */
+
+#include <sqlite3ext.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <regex.h>
+#include <time.h>
+#include <stdbool.h>
+
+/* MSYS2/MinGW's <time.h> doesn't expose `timegm`; the Microsoft CRT
+ * equivalent is `_mkgmtime`. Provide a portable alias so the temporal
+ * UDFs compile on Windows. */
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+#  define timegm(tm) _mkgmtime(tm)
+#endif
+#include "executor/cypher_schema.h"
+#include "executor/cypher_executor.h"
+#include "executor/agtype.h"
+#include "executor/graph_algorithms.h"
+#include "parser/cypher_parser.h"
+#include "parser/cypher_debug.h"
+#include "runtime/udf_register.h"
+#include "runtime/gql_error.h"
+#include "runtime/cypher_rows_vtab.h"
+
+/*
+ * Define the sqlite3_api pointer with external linkage.
+ * SQLITE_EXTENSION_INIT1 defines this as static, but we need it accessible
+ * from other compilation units when building as an extension.
+ * Other files access this via SQLITE_EXTENSION_INIT3 (extern declaration)
+ * in graphqlite_sqlite.h.
+ */
+#ifndef SQLITE_CORE
+const sqlite3_api_routines *sqlite3_api = 0;
+#endif
+
+/* The result text of cypher(), with infinite and NaN floats as Infinity,
+ * -Infinity and NaN in every form (GQLITE-T-0484). */
+static void gql_result_json_text(sqlite3_context *context, const char *json)
+{
+    char *fixed = gql_result_float_tokens(json);
+    sqlite3_result_text(context, fixed ? fixed : json, -1, SQLITE_TRANSIENT);
+    free(fixed);
+}
+
+/* Error helper + GQL_ERR_* macros: moved to runtime/gql_error.h (I-0040 M6) */
+
+
+/* Per-connection executor cache structure */
+typedef struct {
+    sqlite3 *db;
+    cypher_executor *executor;
+    csr_graph *cached_graph;  /* Cached CSR graph for algorithm acceleration */
+} connection_cache;
+
+/* Return the connection's executor, creating it on first use, and keep
+ * its CSR-cache pointer in sync. Shared by cypher() and cypher_rows. */
+/* Append `s` to buf at off as the inside of a JSON string: quote, backslash
+ * and control characters escaped. Column names are Cypher aliases and can hold
+ * any character (GQLITE-T-0396). Returns the new offset; never writes past
+ * size - 1. */
+static size_t json_put_escaped(char *buf, size_t size, size_t off, const char *s)
+{
+    for (; s && *s; s++) {
+        unsigned char ch = (unsigned char)*s;
+        char tmp[8];
+        const char *esc = NULL;
+        switch (ch) {
+            case '"':  esc = "\\\""; break;
+            case '\\': esc = "\\\\"; break;
+            case '\n': esc = "\\n"; break;
+            case '\r': esc = "\\r"; break;
+            case '\t': esc = "\\t"; break;
+            case '\b': esc = "\\b"; break;
+            case '\f': esc = "\\f"; break;
+            default:
+                if (ch < 0x20) { snprintf(tmp, sizeof(tmp), "\\u%04x", ch); esc = tmp; }
+                break;
+        }
+        if (esc) {
+            size_t elen = strlen(esc);
+            if (off + elen >= size) break;
+            memcpy(buf + off, esc, elen);
+            off += elen;
+        } else {
+            if (off + 1 >= size) break;
+            buf[off++] = (char)ch;
+        }
+    }
+    return off;
+}
+
+/* Bytes a column name can take in the JSON output, escaped, per row. */
+/* A JSON result text that grows as it is written (GQLITE-T-0496). The
+ * result writer sized one buffer up front and wrote with
+ * offset += snprintf(...): a null cell was not in the size, so a result with
+ * many null cells wrote past the buffer (heap overflow, found by the fuzzer). */
+typedef struct {
+    char *p;
+    size_t off, cap;
+    bool oom;
+} json_writer;
+
+static bool jw_reserve(json_writer *w, size_t n)
+{
+    if (w->oom) return false;
+    if (w->off + n + 1 <= w->cap) return true;
+    size_t cap = w->cap ? w->cap : 1024;
+    while (cap < w->off + n + 1) cap *= 2;
+    char *q = realloc(w->p, cap);
+    if (!q) { w->oom = true; return false; }
+    w->p = q;
+    w->cap = cap;
+    return true;
+}
+
+static void jw_put(json_writer *w, const char *s, size_t n)
+{
+    if (!jw_reserve(w, n)) return;
+    memcpy(w->p + w->off, s, n);
+    w->off += n;
+    w->p[w->off] = '\0';
+}
+
+static void jw_puts(json_writer *w, const char *s)
+{
+    jw_put(w, s, strlen(s));
+}
+
+/* `s` as the inside of a JSON string (json_put_escaped). */
+static void jw_escaped(json_writer *w, const char *s)
+{
+    if (!s || !jw_reserve(w, strlen(s) * 6)) return;
+    w->off = json_put_escaped(w->p, w->cap, w->off, s);
+    w->p[w->off] = '\0';
+}
+
+/* Hand the text to SQLite and free it; an allocation failure is an error. */
+static void jw_result(sqlite3_context *context, json_writer *w)
+{
+    if (w->oom || !w->p)
+        graphqlite_result_error(context, "Memory allocation failed for result formatting", GQL_ERR_MEMORY);
+    else
+        gql_result_json_text(context, w->p);
+    free(w->p);
+    w->p = NULL;
+}
+
+static cypher_executor *cache_get_executor(void *arg) {
+    connection_cache *cache = (connection_cache *)arg;
+    if (!cache) return NULL;
+    if (!cache->executor) {
+        CYPHER_DEBUG("Creating new executor for db=%p", (void*)cache->db);
+        cache->executor = cypher_executor_create(cache->db);
+        if (!cache->executor) return NULL;
+    }
+    cache->executor->cached_graph = cache->cached_graph;
+    cache->executor->cached_graph_slot = &cache->cached_graph;
+    return cache->executor;
+}
+
+/* Destructor called when database connection closes */
+static void connection_cache_destroy(void *data) {
+    connection_cache *cache = (connection_cache *)data;
+    if (cache) {
+        if (cache->cached_graph) {
+            CYPHER_DEBUG("Connection closing - freeing cached graph %p", (void*)cache->cached_graph);
+            csr_graph_free(cache->cached_graph);
+        }
+        if (cache->executor) {
+            CYPHER_DEBUG("Connection closing - freeing executor %p", (void*)cache->executor);
+            cypher_executor_free(cache->executor);
+        }
+        free(cache);
+    }
+}
+
+/* Simple test function */
+static void simple_test_func(sqlite3_context *context, int argc, sqlite3_value **argv) {
+    (void)argc;
+    (void)argv;
+    sqlite3_result_text(context, "GraphQLite extension loaded successfully!", -1, SQLITE_STATIC);
+}
+
+/* Cypher function - full implementation with cached executor */
+static void graphqlite_cypher_func(sqlite3_context *context, int argc, sqlite3_value **argv) {
+    if (argc < 1 || argc > 2) {
+        graphqlite_result_error(context, "cypher() requires 1 or 2 arguments: (query) or (query, params_json)", GQL_ERR_VALIDATION);
+        return;
+    }
+
+    if (sqlite3_value_type(argv[0]) != SQLITE_TEXT) {
+        graphqlite_result_error(context, "cypher() first argument (query) must be text", GQL_ERR_VALIDATION);
+        return;
+    }
+
+    const char *query = (const char*)sqlite3_value_text(argv[0]);
+    if (!query) {
+        graphqlite_result_error(context, "cypher() query cannot be null", GQL_ERR_VALIDATION);
+        return;
+    }
+
+    /* Optional parameters JSON */
+    const char *params_json = NULL;
+    if (argc == 2) {
+        if (sqlite3_value_type(argv[1]) == SQLITE_NULL) {
+            /* NULL is allowed - treat as no params */
+        } else if (sqlite3_value_type(argv[1]) != SQLITE_TEXT) {
+            graphqlite_result_error(context, "cypher() second argument (params) must be JSON text or NULL", GQL_ERR_VALIDATION);
+            return;
+        } else {
+            params_json = (const char*)sqlite3_value_text(argv[1]);
+        }
+    }
+
+    /* Get per-connection cache from user data; the executor is created on
+     * first use and shared with the cypher_rows virtual table. */
+    connection_cache *cache = (connection_cache *)sqlite3_user_data(context);
+    cypher_executor *executor = cache_get_executor(cache);
+    if (!executor) {
+        graphqlite_result_error(context, "Failed to create cypher executor", GQL_ERR_INTERNAL);
+        return;
+    }
+
+    /* Execute query (with or without parameters) */
+    cypher_result *result;
+    if (params_json) {
+        result = cypher_executor_execute_params(executor, query, params_json);
+    } else {
+        result = cypher_executor_execute(executor, query);
+    }
+    if (!result) {
+        /* Don't free cached executor on error */
+        graphqlite_result_error(context, "Failed to execute cypher query", GQL_ERR_EXECUTION);
+        return;
+    }
+    
+    /* Format result based on success/failure */
+    if (result->success) {
+        if (result->row_count > 0 && result->use_agtype && result->agtype_data) {
+            /* Use AGE-compatible format */
+            if (result->row_count == 1 && result->column_count == 1) {
+                /* Single result - wrap with column name for consistent format.
+                 * T-0309: when agtype cell is unset (varlen edge JSON array
+                 * lives in result->data verbatim), agtype_value_to_string(NULL)
+                 * returns 'null' — we want the text data instead. */
+                int use_text_fallback = (result->agtype_data[0][0] == NULL &&
+                                          result->data && result->data[0] && result->data[0][0]);
+                char *agtype_str = use_text_fallback ? NULL : agtype_value_to_string(result->agtype_data[0][0]);
+                const char *text_val = use_text_fallback ? result->data[0][0] : NULL;
+                if (agtype_str || text_val) {
+                    const char *render = agtype_str ? agtype_str : text_val;
+                    const char *col_name = (result->column_names && result->column_names[0])
+                        ? result->column_names[0] : "result";
+                    size_t json_size = strlen(render) + strlen(col_name) * 6 + 32;
+                    char *json_result = malloc(json_size);
+                    if (json_result) {
+                        size_t o = (size_t)snprintf(json_result, json_size, "[{\"");
+                        o = json_put_escaped(json_result, json_size, o, col_name);
+                        snprintf(json_result + o, json_size - o, "\": %s}]", render);
+                        gql_result_json_text(context, json_result);
+                        free(json_result);
+                    } else {
+                        gql_result_json_text(context, render);
+                    }
+                    free(agtype_str);
+                } else {
+                    sqlite3_result_text(context, "[{\"result\": null}]", -1, SQLITE_STATIC);
+                }
+            } else {
+                /* Multiple results - return as JSON array */
+                json_writer w = {0};
+
+                jw_puts(&w, "[");
+
+                for (int row = 0; row < result->row_count; row++) {
+                    if (row > 0) jw_puts(&w, ",");
+
+                    if (result->column_count == 1) {
+                        /* Single column - wrap with column name for consistent format */
+                        jw_puts(&w, "{\"");
+                        if (result->column_names && result->column_names[0]) {
+                            jw_escaped(&w, result->column_names[0]);
+                        } else {
+                            jw_puts(&w, "result");
+                        }
+                        jw_puts(&w, "\":");
+                        /* T-0309: when agtype cell unset (varlen edge JSON
+                         * array in result->data), fall back to text data
+                         * verbatim. agtype_value_to_string(NULL) returns
+                         * 'null' — so the fallback must check the agtype
+                         * pointer itself, not the rendered string. */
+                        if (result->agtype_data[row][0] == NULL &&
+                            result->data && result->data[row] && result->data[row][0]) {
+                            const char *txt = result->data[row][0];
+                            size_t slen = strlen(txt);
+                            jw_put(&w, txt, slen);
+                        } else {
+                            char *agtype_str = agtype_value_to_string(result->agtype_data[row][0]);
+                            if (agtype_str) {
+                                size_t slen = strlen(agtype_str);
+                                jw_put(&w, agtype_str, slen);
+                                free(agtype_str);
+                            } else {
+                                jw_puts(&w, "null");
+                            }
+                        }
+                        jw_puts(&w, "}");
+                    } else {
+                        /* Multiple columns - create object */
+                        jw_puts(&w, "{");
+                        for (int col = 0; col < result->column_count; col++) {
+                            if (col > 0) jw_puts(&w, ",");
+
+                            jw_puts(&w, "\"");
+                            if (result->column_names && result->column_names[col]) {
+                                jw_escaped(&w, result->column_names[col]);
+                            } else {
+                                char col_name[32];
+                                snprintf(col_name, sizeof(col_name), "column_%d", col);
+                                size_t slen = strlen(col_name);
+                                jw_put(&w, col_name, slen);
+                            }
+                            jw_puts(&w, "\":");
+
+                            /* T-0309: agtype_value_to_string(NULL) returns
+                             * 'null' — so the text-fallback path must be
+                             * gated on agtype_data being NULL, not the
+                             * return value. */
+                            if (result->agtype_data[row][col] == NULL &&
+                                result->data && result->data[row] && result->data[row][col]) {
+                                const char *txt = result->data[row][col];
+                                size_t slen = strlen(txt);
+                                jw_put(&w, txt, slen);
+                            } else {
+                                char *agtype_str = agtype_value_to_string(result->agtype_data[row][col]);
+                                if (agtype_str) {
+                                    size_t slen = strlen(agtype_str);
+                                    jw_put(&w, agtype_str, slen);
+                                    free(agtype_str);
+                                } else {
+                                    jw_puts(&w, "null");
+                                }
+                            }
+                        }
+                        jw_puts(&w, "}");
+                    }
+                }
+                jw_puts(&w, "]");
+
+                jw_result(context, &w);
+            }
+        } else if (result->row_count > 0 && result->data) {
+            /* Format results as JSON with column names */
+            json_writer w = {0};
+
+            jw_puts(&w, "[");
+
+            for (int row = 0; row < result->row_count; row++) {
+                if (row > 0) jw_puts(&w, ",");
+                jw_puts(&w, "{");
+
+                for (int col = 0; col < result->column_count; col++) {
+                    if (col > 0) jw_puts(&w, ",");
+
+                    jw_puts(&w, "\"");
+                    if (result->column_names && result->column_names[col]) {
+                        jw_escaped(&w, result->column_names[col]);
+                    } else {
+                        char col_name[32];
+                        snprintf(col_name, sizeof(col_name), "column_%d", col);
+                        size_t slen = strlen(col_name);
+                        jw_put(&w, col_name, slen);
+                    }
+                    jw_puts(&w, "\":");
+
+                    if (result->data[row][col]) {
+                        const char *val = result->data[row][col];
+                        /* Get SQLite type if available */
+                        int col_type = SQLITE_TEXT;
+                        if (result->data_types && result->data_types[row]) {
+                            col_type = result->data_types[row][col];
+                        }
+
+                        /* GQLITE-A-0007: a cell known to be a string is
+                         * quoted even when it looks like JSON; a JSON cell
+                         * is raw. Untagged text keeps the old rule. */
+                        if (col_type == GQL_COL_TYPE_STRING) {
+                            col_type = SQLITE_TEXT;
+                            goto render_string;
+                        }
+                        if (col_type == GQL_COL_TYPE_BOOLEAN) {
+                            const char *b = (strcmp(val, "1") == 0) ? "true"
+                                          : (strcmp(val, "0") == 0) ? "false" : val;
+                            size_t slen = strlen(b);
+                            jw_put(&w, b, slen);
+                        } else
+                        /* Check if value is already JSON (starts with [, { or "). */
+                        if (col_type == GQL_COL_TYPE_JSON || val[0] == '[' || val[0] == '{' || val[0] == '"') {
+                            size_t slen = strlen(val);
+                            jw_put(&w, val, slen);
+                        } else if (col_type == SQLITE_INTEGER) {
+                            size_t slen = strlen(val);
+                            jw_put(&w, val, slen);
+                        } else if (col_type == SQLITE_FLOAT) {
+                            /* Cypher distinguishes Float from Integer in result
+                             * type. Whole-number floats must render with a
+                             * trailing ".0" so 20.0 doesn't look like the
+                             * integer 20. Append ".0" if val has no decimal
+                             * point or exponent marker. */
+                            size_t slen = strlen(val);
+                            jw_put(&w, val, slen);
+                            bool has_frac = false;
+                            for (const char *p = val; *p; p++) {
+                                if (*p == '.' || *p == 'e' || *p == 'E') { has_frac = true; break; }
+                            }
+                            if (!has_frac) jw_puts(&w, ".0");
+                        } else if (col_type == GQL_COL_TYPE_BOOLEAN) {
+                            /* UDF-tagged boolean — emit unquoted JSON
+                             * true/false. Replaces the historical
+                             * strcmp(val, "true") heuristic which mis-tagged
+                             * legitimate string values "true"/"false"
+                             * (e.g. toString(true) result). I-0040 M13. */
+                            size_t slen = strlen(val);
+                            jw_put(&w, val, slen);
+                        } else if (strcmp(val, GQL_NAN_SENTINEL) == 0) {
+                            /* NaN sentinel (GQLITE-T-0340) — emit unquoted NaN. */
+                            jw_puts(&w, "NaN");
+                        } else {
+                            render_string:
+                            /* String value - quote and escape. Control
+                             * characters must be escaped too or the output is
+                             * not valid JSON (perf review C1: RETURN 'a\\nb' and
+                             * EXPLAIN output were unparseable). */
+                            jw_puts(&w, "\"");
+                            while (*val) {
+                                unsigned char ch = (unsigned char)*val;
+                                const char *esc = NULL;
+                                char ubuf[8];
+                                switch (ch) {
+                                    case '"':  esc = "\\\""; break;
+                                    case '\\': esc = "\\\\"; break;
+                                    case '\n': esc = "\\n"; break;
+                                    case '\r': esc = "\\r"; break;
+                                    case '\t': esc = "\\t"; break;
+                                    case '\b': esc = "\\b"; break;
+                                    case '\f': esc = "\\f"; break;
+                                    default:
+                                        if (ch < 0x20) {
+                                            snprintf(ubuf, sizeof(ubuf), "\\u%04x", ch);
+                                            esc = ubuf;
+                                        }
+                                        break;
+                                }
+                                if (esc) {
+                                    size_t elen = strlen(esc);
+                                    jw_put(&w, esc, elen);
+                                } else {
+                                    jw_put(&w, val, 1);
+                                }
+                                val++;
+                            }
+                            jw_puts(&w, "\"");
+                        }
+                    } else {
+                        jw_puts(&w, "null");
+                    }
+                }
+                jw_puts(&w, "}");
+            }
+            jw_puts(&w, "]");
+
+            jw_result(context, &w);
+        } else if (result->column_count > 0) {
+            /* Query with RETURN clause but zero rows - return empty array */
+            sqlite3_result_text(context, "[]", -1, SQLITE_STATIC);
+        } else {
+            /* Modification query without RETURN - return a structured
+             * statistics object. A leading '{' distinguishes it from a
+             * result set ('[') so callers can branch on the first byte
+             * (GitHub #116). */
+            char response[256];
+            snprintf(response, sizeof(response),
+                     "{\"nodes_created\":%d,\"relationships_created\":%d,"
+                     "\"nodes_deleted\":%d,\"relationships_deleted\":%d,"
+                     "\"properties_set\":%d}",
+                     result->nodes_created, result->relationships_created,
+                     result->nodes_deleted, result->relationships_deleted,
+                     result->properties_set);
+            sqlite3_result_text(context, response, -1, SQLITE_TRANSIENT);
+        }
+    } else {
+        /* Prefer the code the executor attached (parse / validation stage);
+         * fall back to message sniffing for errors raised deeper in the
+         * transform and execution layers, which are not yet classified. */
+        const char *err_code = result->error_code;
+        if (!err_code) {
+            err_code = GQL_ERR_EXECUTION;
+            if (result->error_message && (strstr(result->error_message, "syntax error") || strstr(result->error_message, "Line "))) {
+                err_code = GQL_ERR_PARSE;
+            } else if (result->error_message && strstr(result->error_message, "not yet implemented")) {
+                err_code = GQL_ERR_NOT_IMPL;
+            }
+        }
+        const char *err_msg = result->error_message ? result->error_message : "Query execution failed";
+        /* The renderer JSON-escapes the message, so no quote sanitizing here. */
+        graphqlite_result_error_at(context, err_msg, err_code,
+                                   result->error_line, result->error_column);
+        /* A busy error keeps SQLite's code, so a caller can retry on it
+         * (GQLITE-T-0533). */
+        if (err_code == GQL_ERR_BUSY || (err_code && strcmp(err_code, GQL_ERR_BUSY) == 0))
+            sqlite3_result_error_code(context, SQLITE_BUSY);
+    }
+    
+    /* Cleanup - only free result, executor is cached */
+    cypher_result_free(result);
+}
+
+/* Create schema function matching old architecture */
+static int create_schema(sqlite3 *db) {
+    cypher_schema_manager *schema_manager = cypher_schema_create_manager(db);
+    if (!schema_manager) {
+        return -1;
+    }
+
+    int result = cypher_schema_initialize(schema_manager);
+    cypher_schema_free_manager(schema_manager);
+
+    return result;
+}
+
+/*
+ * Graph Cache Management Functions
+ * Provide per-connection CSR graph caching for algorithm acceleration.
+ */
+
+/* gql_load_graph() - Build CSR from SQLite and cache in connection memory */
+char *schema_check_constraints_db(sqlite3 *db);
+
+/* gql_check_constraints(): NULL when the data meets the constraints, else
+ * an error naming the violation. For writers outside cypher(), such as the
+ * bulk importers, which check before they commit (GQLITE-T-0445). */
+static void gql_check_constraints_func(sqlite3_context *context, int argc, sqlite3_value **argv) {
+    (void)argc; (void)argv;
+    char *err = schema_check_constraints_db(sqlite3_context_db_handle(context));
+    if (err) {
+        sqlite3_result_error(context, err, -1);
+        free(err);
+        return;
+    }
+    sqlite3_result_null(context);
+}
+
+static void gql_load_graph_func(sqlite3_context *context, int argc, sqlite3_value **argv) {
+    (void)argc;
+    (void)argv;
+
+    connection_cache *cache = (connection_cache *)sqlite3_user_data(context);
+    if (!cache) {
+        graphqlite_result_error(context, "No connection cache available", GQL_ERR_INTERNAL);
+        return;
+    }
+
+    sqlite3 *db = sqlite3_context_db_handle(context);
+
+    /* If already loaded, return current stats */
+    if (cache->cached_graph) {
+        char response[256];
+        snprintf(response, sizeof(response),
+                 "{\"status\":\"already_loaded\",\"nodes\":%d,\"edges\":%d}",
+                 cache->cached_graph->node_count,
+                 cache->cached_graph->edge_count);
+        sqlite3_result_text(context, response, -1, SQLITE_TRANSIENT);
+        return;
+    }
+
+    /* Load graph from SQLite */
+    csr_graph *graph = csr_graph_load(db);
+    if (!graph) {
+        sqlite3_result_text(context, "{\"status\":\"loaded\",\"nodes\":0,\"edges\":0}", -1, SQLITE_STATIC);
+        return;
+    }
+
+    /* Cache the graph */
+    cache->cached_graph = graph;
+
+    /* Also update executor if it exists */
+    if (cache->executor) {
+        cache->executor->cached_graph = graph;
+        cache->executor->graph_dirty = false;
+    }
+
+    char response[256];
+    snprintf(response, sizeof(response),
+             "{\"status\":\"loaded\",\"nodes\":%d,\"edges\":%d}",
+             graph->node_count, graph->edge_count);
+    sqlite3_result_text(context, response, -1, SQLITE_TRANSIENT);
+}
+
+/* gql_unload_graph() - Free cached graph memory */
+static void gql_unload_graph_func(sqlite3_context *context, int argc, sqlite3_value **argv) {
+    (void)argc;
+    (void)argv;
+
+    connection_cache *cache = (connection_cache *)sqlite3_user_data(context);
+    if (!cache) {
+        graphqlite_result_error(context, "No connection cache available", GQL_ERR_INTERNAL);
+        return;
+    }
+
+    if (cache->cached_graph) {
+        csr_graph_free(cache->cached_graph);
+        cache->cached_graph = NULL;
+
+        /* Also clear executor reference */
+        if (cache->executor) {
+            cache->executor->cached_graph = NULL;
+        }
+
+        sqlite3_result_text(context, "{\"status\":\"unloaded\"}", -1, SQLITE_STATIC);
+    } else {
+        sqlite3_result_text(context, "{\"status\":\"not_loaded\"}", -1, SQLITE_STATIC);
+    }
+}
+
+/* gql_reload_graph() - Invalidate cache and rebuild from current database state */
+static void gql_reload_graph_func(sqlite3_context *context, int argc, sqlite3_value **argv) {
+    (void)argc;
+    (void)argv;
+
+    connection_cache *cache = (connection_cache *)sqlite3_user_data(context);
+    if (!cache) {
+        graphqlite_result_error(context, "No connection cache available", GQL_ERR_INTERNAL);
+        return;
+    }
+
+    sqlite3 *db = sqlite3_context_db_handle(context);
+
+    int prev_nodes = 0, prev_edges = 0;
+
+    /* Free existing cache if present */
+    if (cache->cached_graph) {
+        prev_nodes = cache->cached_graph->node_count;
+        prev_edges = cache->cached_graph->edge_count;
+        csr_graph_free(cache->cached_graph);
+        cache->cached_graph = NULL;
+    }
+
+    /* Load fresh graph from SQLite */
+    csr_graph *graph = csr_graph_load(db);
+    cache->cached_graph = graph;
+
+    /* Also update executor if it exists */
+    if (cache->executor) {
+        cache->executor->cached_graph = graph;
+        cache->executor->graph_dirty = false;
+    }
+
+    int new_nodes = graph ? graph->node_count : 0;
+    int new_edges = graph ? graph->edge_count : 0;
+
+    char response[512];
+    snprintf(response, sizeof(response),
+             "{\"status\":\"reloaded\",\"previous_nodes\":%d,\"previous_edges\":%d,\"nodes\":%d,\"edges\":%d}",
+             prev_nodes, prev_edges, new_nodes, new_edges);
+    sqlite3_result_text(context, response, -1, SQLITE_TRANSIENT);
+}
+
+/* gql_graph_loaded() - Return cache status */
+static void gql_graph_loaded_func(sqlite3_context *context, int argc, sqlite3_value **argv) {
+    (void)argc;
+    (void)argv;
+
+    connection_cache *cache = (connection_cache *)sqlite3_user_data(context);
+    if (!cache) {
+        graphqlite_result_error(context, "No connection cache available", GQL_ERR_INTERNAL);
+        return;
+    }
+
+    if (cache->cached_graph) {
+        char response[256];
+        snprintf(response, sizeof(response),
+                 "{\"loaded\":true,\"nodes\":%d,\"edges\":%d}",
+                 cache->cached_graph->node_count,
+                 cache->cached_graph->edge_count);
+        sqlite3_result_text(context, response, -1, SQLITE_TRANSIENT);
+    } else {
+        sqlite3_result_text(context, "{\"loaded\":false,\"nodes\":0,\"edges\":0}", -1, SQLITE_STATIC);
+    }
+}
+
+/* SQLite's `.load <path>` looks up the entry point by name from the
+ * shared library's exported symbol table. On Windows DLLs, only
+ * symbols marked with `__declspec(dllexport)` are exported by
+ * default (or via a .def file or `--export-all-symbols`). Without
+ * this, `.load build/graphqlite` fails with
+ * "The specified procedure could not be found." */
+#if defined(_WIN32) && !defined(SQLITE_CORE)
+__declspec(dllexport)
+#endif
+int sqlite3_graphqlite_init(
+  sqlite3 *db,
+  char **pzErrMsg,
+  const sqlite3_api_routines *pApi
+){
+  int rc = SQLITE_OK;
+  SQLITE_EXTENSION_INIT2(pApi);
+  if (!db) return SQLITE_MISUSE;
+
+  /* Create per-connection cache that will be freed when connection closes */
+  connection_cache *cache = calloc(1, sizeof(connection_cache));
+  if (!cache) {
+    return SQLITE_NOMEM;
+  }
+  cache->db = db;
+  cache->executor = NULL;
+
+  /* After create_function_v2, SQLite owns the cache even on failure. */
+
+  rc = sqlite3_create_function(db, "graphqlite_test", 0, SQLITE_UTF8, 0,
+                         simple_test_func, 0, 0);
+  if (rc != SQLITE_OK) { free(cache); return rc; }
+
+  rc = sqlite3_create_function_v2(db, "cypher", -1, SQLITE_UTF8, cache,
+                             graphqlite_cypher_func, 0, 0,
+                             connection_cache_destroy);
+  if (rc != SQLITE_OK) return rc;
+
+  rc = graphqlite_register_helper_udfs(db);
+  if (rc != SQLITE_OK) return rc;
+
+  /* Perf review F10: cypher_rows table-valued interface */
+  rc = graphqlite_register_cypher_rows(db, cache_get_executor, cache);
+  if (rc != SQLITE_OK) return rc;
+
+  rc = sqlite3_create_function(db, "gql_load_graph", 0, SQLITE_UTF8, cache,
+                         gql_load_graph_func, 0, 0);
+  if (rc != SQLITE_OK) return rc;
+
+  rc = sqlite3_create_function(db, "gql_check_constraints", 0, SQLITE_UTF8, NULL,
+                         gql_check_constraints_func, 0, 0);
+  if (rc != SQLITE_OK) return rc;
+
+  rc = sqlite3_create_function(db, "gql_unload_graph", 0, SQLITE_UTF8, cache,
+                         gql_unload_graph_func, 0, 0);
+  if (rc != SQLITE_OK) return rc;
+
+  rc = sqlite3_create_function(db, "gql_reload_graph", 0, SQLITE_UTF8, cache,
+                         gql_reload_graph_func, 0, 0);
+  if (rc != SQLITE_OK) return rc;
+
+  rc = sqlite3_create_function(db, "gql_graph_loaded", 0, SQLITE_UTF8, cache,
+                         gql_graph_loaded_func, 0, 0);
+  if (rc != SQLITE_OK) return rc;
+
+  /* Keep partially created schema out of the database on failure. The
+   * caller must close the connection on error to discard its UDFs. */
+  rc = sqlite3_exec(db, "SAVEPOINT graphqlite_init", NULL, NULL, pzErrMsg);
+  if (rc != SQLITE_OK) return rc;
+  if (create_schema(db) != 0) {
+    if (pzErrMsg) *pzErrMsg = sqlite3_mprintf("GraphQLite schema initialization failed: %s", sqlite3_errmsg(db));
+    rc = SQLITE_ERROR;
+  } else {
+    rc = sqlite3_exec(db, "RELEASE graphqlite_init", NULL, NULL, pzErrMsg);
+  }
+  if (rc != SQLITE_OK) {
+    sqlite3_exec(db, "ROLLBACK TO graphqlite_init; RELEASE graphqlite_init", NULL, NULL, NULL);
+  }
+  return rc;
+}

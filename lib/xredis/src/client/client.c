@@ -69,10 +69,10 @@ static const uint8 xredisAskingWire[]="*1\r\n$6\r\nASKING\r\n";
 #define XREDIS_CALL_MODE_PARAMETER bool Control
 #endif
 enum { XREDIS_R_SUBMITTED, XREDIS_R_PENDING, XREDIS_R_SENT, XREDIS_R_DONE };
-enum { XREDIS_I_HELLO, XREDIS_I_AUTH, XREDIS_I_NAME, XREDIS_I_SELECT, XREDIS_I_END };
+/* END remains the four-slot wire table/idle tag; ROLE and READONLY are fixed tail slices. */
+enum { XREDIS_I_HELLO, XREDIS_I_AUTH, XREDIS_I_NAME, XREDIS_I_SELECT, XREDIS_I_END, XREDIS_I_ROLE, XREDIS_I_READONLY };
+static const unsigned char xredisReadonlyWire[] = "*1\r\n$8\r\nREADONLY\r\n";
 #if defined(XREDIS_FEATURE_XREDIS_ROLE_CLIENT)
-/* END remains the four-slot wire table/idle tag; ROLE is a fixed tail slice. */
-enum { XREDIS_I_ROLE = XREDIS_I_END + 1, XREDIS_I_ROLE_DONE };
 #define XREDIS_INIT_ROLES (XREDIS_INIT_REQUIRE_MASTER|XREDIS_INIT_REQUIRE_REPLICA|XREDIS_INIT_REQUIRE_SENTINEL)
 static const unsigned char xredisRoleWire[] = "*1\r\n$4\r\nROLE\r\n";
 #endif
@@ -330,7 +330,7 @@ XREDIS_API bool xredisClientInitConfigInit(xredisclientinitconfig* Init)
 
 static bool xredisClientInitValid(const xredisclientinitconfig* Init, const xredisclientconfig* Config)
 {
-	uint32 Known = XREDIS_INIT_AUTH | XREDIS_INIT_USERNAME | XREDIS_INIT_SETNAME | XREDIS_INIT_SELECT;
+	uint32 Known = XREDIS_INIT_AUTH | XREDIS_INIT_USERNAME | XREDIS_INIT_SETNAME | XREDIS_INIT_SELECT | XREDIS_INIT_CLUSTER_READONLY;
 #if defined(XREDIS_FEATURE_XREDIS_ROLE_CLIENT)
     Known |= XREDIS_INIT_ROLES;
     uint32 Roles = Init->Flags & XREDIS_INIT_ROLES;
@@ -351,6 +351,10 @@ static bool xredisClientInitValid(const xredisclientinitconfig* Init, const xred
 			return xredisClientReport(XERR_ARGUMENT, XREDIS_CLIENT_ARGUMENT, "invalid initialization input span");
 	return true;
 }
+#if defined(XREDIS_FEATURE_XREDIS_POOL_CONNECT)
+bool __xredisClientInitReadonly(const xredisclient* Client)
+{ return (Client->InitFlags & XREDIS_INIT_CLUSTER_READONLY) != 0; }
+#endif
 
 static bool xredisClientInitBuild(xredisclient* Client, const xredisclientinitconfig* Init)
 {
@@ -404,6 +408,12 @@ static bool xredisClientInitBuild(xredisclient* Client, const xredisclientinitco
         Total += Bytes;
     }
 #endif
+	if (Init->Flags & XREDIS_INIT_CLUSTER_READONLY) {
+		size_t Bytes = sizeof(xredisReadonlyWire) - 1u;
+		if (Bytes > Client->Config.Stream.WriteLimit || Bytes > Init->MaxWireBytes - Total || Bytes > SIZE_MAX - sizeof(xredisinitwire) - Total)
+			return xredisClientReport(XERR_RANGE, XREDIS_CLIENT_ARGUMENT, "initialization READONLY wire exceeds configured limits");
+		Total += Bytes;
+	}
 	Client->InitNext = Init->Mode == XREDIS_INIT_RESP2 ? XREDIS_I_AUTH : XREDIS_I_HELLO;
 	Client->InitAwait = XREDIS_I_END;
 	if (Total == 0) return true;
@@ -414,8 +424,13 @@ static bool xredisClientInitBuild(xredisclient* Client, const xredisclientinitco
 		!xredisCommandWrite(Wire->Data + Client->InitOffset[Index], Client->InitLength[Index], Args[Index], Counts[Index], NULL)) {
 		xredisInitWireRelease(Wire); return false;
 	}
+	size_t Tail = Total;
+	if (Init->Flags & XREDIS_INIT_CLUSTER_READONLY) {
+		Tail -= sizeof(xredisReadonlyWire) - 1u;
+		memcpy(Wire->Data + Tail, xredisReadonlyWire, sizeof(xredisReadonlyWire) - 1u);
+	}
 #if defined(XREDIS_FEATURE_XREDIS_ROLE_CLIENT)
-    if (Init->Flags & XREDIS_INIT_ROLES) memcpy(Wire->Data + Total - (sizeof(xredisRoleWire) - 1u), xredisRoleWire, sizeof(xredisRoleWire) - 1u);
+	if (Init->Flags & XREDIS_INIT_ROLES) memcpy(Wire->Data + Tail - (sizeof(xredisRoleWire) - 1u), xredisRoleWire, sizeof(xredisRoleWire) - 1u);
 #endif
 	Wire->Client = Client; xredisClientRef(Client); Client->InitWire = Wire; Client->Info.InitBytes = Total;
 	return true;
@@ -794,17 +809,29 @@ static bool xredisClientInitArm(xredisclient* Client)
 static bool xredisClientInitSlice(xredisclient* Client, size_t* Index, size_t* Offset, size_t* Length)
 {
     while (Client->InitNext < XREDIS_I_END && Client->InitLength[Client->InitNext] == 0) ++Client->InitNext;
-    xredisinitstep Step;
+    bool Readonly = (Client->InitFlags & XREDIS_INIT_CLUSTER_READONLY) != 0;
+    if (Client->InitNext == XREDIS_I_END) {
 #if defined(XREDIS_FEATURE_XREDIS_ROLE_CLIENT)
-    if (Client->InitNext == XREDIS_I_END && (Client->InitFlags & XREDIS_INIT_ROLES)) Client->InitNext = XREDIS_I_ROLE;
-    if (Client->InitNext == XREDIS_I_ROLE) {
-        *Index = XREDIS_I_ROLE; *Length = sizeof(xredisRoleWire) - 1u; *Offset = Client->InitWire->Size - *Length; Step = XREDIS_INIT_ROLE;
-    } else
+        if (Client->InitFlags & XREDIS_INIT_ROLES) Client->InitNext = XREDIS_I_ROLE;
+        else
 #endif
-    {
-        if (Client->InitNext >= XREDIS_I_END) { xredisClientReadyFinish(Client, XREDIS_READY_OK, NULL); return false; }
+        if (Readonly) Client->InitNext = XREDIS_I_READONLY;
+    }
+    xredisinitstep Step;
+    *Index = Client->InitNext;
+    if (*Index < XREDIS_I_END) {
         const xredisinitstep Steps[] = {XREDIS_INIT_HELLO, XREDIS_INIT_AUTHENTICATE, XREDIS_INIT_NAME, XREDIS_INIT_DATABASE};
-        *Index = Client->InitNext; *Offset = Client->InitOffset[*Index]; *Length = Client->InitLength[*Index]; Step = Steps[*Index];
+        *Offset = Client->InitOffset[*Index]; *Length = Client->InitLength[*Index]; Step = Steps[*Index];
+#if defined(XREDIS_FEATURE_XREDIS_ROLE_CLIENT)
+    } else if (*Index == XREDIS_I_ROLE) {
+        *Length = sizeof(xredisRoleWire) - 1u;
+        *Offset = Client->InitWire->Size - *Length - (Readonly ? sizeof(xredisReadonlyWire) - 1u : 0u);
+        Step = XREDIS_INIT_ROLE;
+#endif
+    } else if (*Index == XREDIS_I_READONLY && Readonly) {
+        *Length = sizeof(xredisReadonlyWire) - 1u; *Offset = Client->InitWire->Size - *Length; Step = XREDIS_INIT_READONLY;
+    } else {
+        xredisClientReadyFinish(Client, XREDIS_READY_OK, NULL); return false;
     }
     xrtMutexLock(&Client->Gate); Client->Info.InitStep = Step; xrtMutexUnlock(&Client->Gate); return true;
 }
@@ -913,13 +940,14 @@ static void xredisClientInitFrame(xredisclient* Client, xredisreply* Reply, cons
 #if defined(XREDIS_FEATURE_XREDIS_TLS)
 	if (Client->InitSending) { xredisReplyRelease(Reply); xredisClientInitReject(Client, XREDIS_READY_PROTOCOL); return; }
 #endif
-	if (Index >= XREDIS_I_END
+	if (Index >= XREDIS_I_END && Index != XREDIS_I_READONLY
 #if defined(XREDIS_FEATURE_XREDIS_ROLE_CLIENT)
         && Index != XREDIS_I_ROLE
 #endif
     ) { xredisReplyRelease(Reply); xredisClientInitReject(Client, XREDIS_READY_PROTOCOL); return; }
 	if (Root->Type == XREDIS_REPLY_SIMPLE_ERROR || Root->Type == XREDIS_REPLY_BULK_ERROR) {
-		bool Unsupported = Index == XREDIS_I_HELLO && xredisClientInitUnsupported(Root->Data);
+		bool Unsupported = (Index == XREDIS_I_HELLO && xredisClientInitUnsupported(Root->Data)) ||
+			(Index == XREDIS_I_READONLY && xredisClientInitUnknown(Root->Data, "ERR unknown command 'READONLY'"));
 #if defined(XREDIS_FEATURE_XREDIS_ROLE_CLIENT)
         Unsupported = Unsupported || (Index == XREDIS_I_ROLE && xredisClientInitUnknown(Root->Data, "ERR unknown command 'ROLE'"));
 #endif
@@ -946,7 +974,7 @@ static void xredisClientInitFrame(xredisclient* Client, xredisreply* Reply, cons
         xredisrolekind Expected = (Client->InitFlags & XREDIS_INIT_REQUIRE_MASTER) ? XREDIS_ROLE_MASTER :
             (Client->InitFlags & XREDIS_INIT_REQUIRE_REPLICA) ? XREDIS_ROLE_REPLICA : XREDIS_ROLE_SENTINEL;
         if (Role.Kind != Expected) { xredisClientInitReject(Client, XREDIS_READY_ROLE_MISMATCH); return; }
-        Client->InitNext = XREDIS_I_ROLE_DONE; Client->InitAwait = XREDIS_I_END; xredisClientWake(Client); return;
+        Client->InitNext = XREDIS_I_READONLY; Client->InitAwait = XREDIS_I_END; xredisClientWake(Client); return;
     }
 #endif
 	bool Valid = Index == XREDIS_I_HELLO ? xredisClientInitHello(Reply, Root) :
@@ -974,29 +1002,42 @@ static void xredisClientAbandon(xredisrequest* Request, xredisrequeststatus Stat
 	}
 }
 
-#if defined(XREDIS_FEATURE_XREDIS_TRACKING)
-static void xredisCachingFinish(xredisrequest* R)
+#if defined(XREDIS_FEATURE_XREDIS_TRACKING) || defined(XREDIS_FEATURE_XREDIS_POOL_ASKING)
+/* Retire a paired command after both writes and both ordered replies. A timer
+ * or cancellation may already have completed the caller while the two wire
+ * obligations were still pending. */
+static void xredisPairFinish(xredisrequest* Request,bool Written,unsigned Seen,
+    xredisrequeststatus Status,xredisreply** Query)
 {
-    xrediscachingstate* S=xredisCachingState(R);xredisclient* C=R->Client;
-    if(!S->Written || S->Seen!=2)return;
-    if(R->Promise){
-        xredisrequeststatus Status=S->QueryStatus;
-        if(xrtAtomic32Load(&R->Cancelled,XMEMORY_ACQUIRE))Status=XREDIS_REQUEST_CANCELLED;
-        else if(xrtTimer()>=R->Deadline)Status=XREDIS_REQUEST_TIMEOUT;
-        xredisreply* Reply=S->Query;S->Query=NULL;
+    if(!Written || Seen!=2)return;
+    xredisclient* Client=Request->Client;
+    if(Request->Promise){
+        if(xrtAtomic32Load(&Request->Cancelled,XMEMORY_ACQUIRE))Status=XREDIS_REQUEST_CANCELLED;
+        else if(xrtTimer()>=Request->Deadline)Status=XREDIS_REQUEST_TIMEOUT;
+        xredisreply* Reply=*Query;
+        *Query=NULL;
         if(Status==XREDIS_REQUEST_CANCELLED || Status==XREDIS_REQUEST_TIMEOUT){
-            xredisReplyRelease(Reply);Reply=NULL;
-            xrtMutexLock(&C->Gate);++C->Info.DiscardedReplies;xrtMutexUnlock(&C->Gate);
+            xredisReplyRelease(Reply);
+            Reply=NULL;
+            xrtMutexLock(&Client->Gate);++Client->Info.DiscardedReplies;xrtMutexUnlock(&Client->Gate);
         }
-        xredisClientComplete(R,Status,XREDIS_REPLIED,Reply,NULL);
+        xredisClientComplete(Request,Status,XREDIS_REPLIED,Reply,NULL);
     }
-    xredisClientUnlink(R);R->Phase=XREDIS_R_DONE;
-    xredisClientCancelTimer(R);xredisRequestRelease(R);xredisClientWake(C);
+    xredisClientUnlink(Request);
+    Request->Phase=XREDIS_R_DONE;
+    xredisClientCancelTimer(Request);
+    xredisRequestRelease(Request);
+    xredisClientWake(Client);
 }
+#endif
+
+#if defined(XREDIS_FEATURE_XREDIS_TRACKING)
 static void xredisCachingWritten(xredisrequest* R)
 {
     if(!xredisCachingPair(R))return;
-    xredisCachingState(R)->Written=true;xredisCachingFinish(R);
+    xrediscachingstate* S=xredisCachingState(R);
+    S->Written=true;
+    xredisPairFinish(R,true,S->Seen,S->QueryStatus,&S->Query);
 }
 static void xredisCachingFrame(xredisrequest* R,xredisreply* Reply,const xredisreplyvalue* Root,uint64 Sequence)
 {
@@ -1015,27 +1056,18 @@ static void xredisCachingFrame(xredisrequest* R,xredisreply* Reply,const xredisr
         S->QueryStatus=Error?XREDIS_REQUEST_SERVER_ERROR:XREDIS_REQUEST_OK;
         if(R->Promise){S->Query=Reply;S->QuerySequence=Sequence;}
         else {xredisReplyRelease(Reply);xrtMutexLock(&C->Gate);++C->Info.DiscardedReplies;xrtMutexUnlock(&C->Gate);}
-        xredisCachingFinish(R);
+        xredisPairFinish(R,S->Written,S->Seen,S->QueryStatus,&S->Query);
     }
 }
 #endif
 
 #if defined(XREDIS_FEATURE_XREDIS_POOL_ASKING)
-static void xredisAskingFinish(xredisrequest* R)
-{
-    xredisaskingstate* S=xredisAskingState(R);xredisclient* C=R->Client;
-    if(!S->Written || S->Seen!=2)return;
-    if(R->Promise){xredisrequeststatus Status=S->QueryStatus;
-        if(xrtAtomic32Load(&R->Cancelled,XMEMORY_ACQUIRE))Status=XREDIS_REQUEST_CANCELLED;
-        else if(xrtTimer()>=R->Deadline)Status=XREDIS_REQUEST_TIMEOUT;
-        xredisreply* Reply=S->Query;S->Query=NULL;
-        if(Status==XREDIS_REQUEST_CANCELLED || Status==XREDIS_REQUEST_TIMEOUT){xredisReplyRelease(Reply);Reply=NULL;xrtMutexLock(&C->Gate);++C->Info.DiscardedReplies;xrtMutexUnlock(&C->Gate);}
-        xredisClientComplete(R,Status,XREDIS_REPLIED,Reply,NULL);
-    }
-    xredisClientUnlink(R);R->Phase=XREDIS_R_DONE;xredisClientCancelTimer(R);xredisRequestRelease(R);xredisClientWake(C);
-}
 static void xredisAskingWritten(xredisrequest* R)
-{xredisAskingState(R)->Written=true;xredisAskingFinish(R);}
+{
+    xredisaskingstate* S=xredisAskingState(R);
+    S->Written=true;
+    xredisPairFinish(R,true,S->Seen,S->QueryStatus,&S->Query);
+}
 static void xredisAskingFrame(xredisrequest* R,xredisreply* Reply,const xredisreplyvalue* Root)
 {
     xredisaskingstate* S=xredisAskingState(R);xredisclient* C=R->Client;
@@ -1050,7 +1082,7 @@ static void xredisAskingFrame(xredisrequest* R,xredisreply* Reply,const xredisre
     }else{
         S->QueryStatus=Error?XREDIS_REQUEST_SERVER_ERROR:XREDIS_REQUEST_OK;
         if(R->Promise)S->Query=Reply;else{xredisReplyRelease(Reply);xrtMutexLock(&C->Gate);++C->Info.DiscardedReplies;xrtMutexUnlock(&C->Gate);}
-        xredisAskingFinish(R);
+        xredisPairFinish(R,S->Written,S->Seen,S->QueryStatus,&S->Query);
     }
 }
 #endif
@@ -2251,7 +2283,9 @@ static xredisadmission xredisClientCallAdmit(xredisclient* Client,
         xredisClientReport(XERR_UNSUPPORTED, XREDIS_CLIENT_COMMAND_MODE, "exclusive payload changes connection/control mode"); return XREDIS_ADMISSION_ERROR;
     }
 #endif
-	if (!Control && Client->Managed && xredisClientManagedControl(Arguments, Count)) {
+	if (!Control && Client->Managed && (xredisClientManagedControl(Arguments, Count) ||
+		((Client->InitFlags & XREDIS_INIT_CLUSTER_READONLY) &&
+		 (xredisClientWord(Arguments[0], "READONLY") || xredisClientWord(Arguments[0], "READWRITE"))))) {
 		xredisClientReport(XERR_UNSUPPORTED, XREDIS_CLIENT_COMMAND_MODE, "managed initialization/transaction controls require their dedicated API");
 		return XREDIS_ADMISSION_ERROR;
 	}

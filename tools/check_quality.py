@@ -31,7 +31,7 @@ def main():
     tests_hash = test_inputs()
     commands = []
     for pattern in ['test_extensions.py','test_sync_xrt.py','test_xrt_sync.py',
-                    'test_build_provenance.py','test_compiler_paths.py']:
+                    'test_build_provenance.py','test_compiler_paths.py','test_sqlite_extensions.py']:
         commands.append(['-m','unittest','discover','-s','tools','-p',pattern])
     commands += [['tools/sync_xrt.py','--check'],
                  ['tools/check_xs_warnings.py','--cc',args.cc],

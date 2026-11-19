@@ -2345,25 +2345,10 @@
   "symbol_macro": "XS_XCRON_SYMBOL",
   "headers": {
    "xcron/calendar.h": "lib/xcron/include/xcron/calendar.h",
-   "xcron/checkpoint.h": "lib/xcron/include/xcron/checkpoint.h",
-   "xcron/checkpoint_group.h": "lib/xcron/include/xcron/checkpoint_group.h",
-   "xcron/checkpoint_store.h": "lib/xcron/include/xcron/checkpoint_store.h",
-   "xcron/delivery.h": "lib/xcron/include/xcron/delivery.h",
-   "xcron/executor.h": "lib/xcron/include/xcron/executor.h",
-   "xcron/executor_selected.h": "lib/xcron/include/xcron/executor_selected.h",
    "xcron/export.h": "lib/xcron/include/xcron/export.h",
    "xcron/expression.h": "lib/xcron/include/xcron/expression.h",
    "xcron/features.h": "lib/xcron/include/xcron/features.h",
-   "xcron/occurrence.h": "lib/xcron/include/xcron/occurrence.h",
    "xcron/scheduler.h": "lib/xcron/include/xcron/scheduler.h",
-   "xcron/scheduler_selected.h": "lib/xcron/include/xcron/scheduler_selected.h",
-   "xcron/service.h": "lib/xcron/include/xcron/service.h",
-   "xcron/service_checkpoint.h": "lib/xcron/include/xcron/service_checkpoint.h",
-   "xcron/service_selected.h": "lib/xcron/include/xcron/service_selected.h",
-   "xcron/timezone.h": "lib/xcron/include/xcron/timezone.h",
-   "xcron/tzdb.h": "lib/xcron/include/xcron/tzdb.h",
-   "xcron/tzdb_file.h": "lib/xcron/include/xcron/tzdb_file.h",
-   "xcron/zoned.h": "lib/xcron/include/xcron/zoned.h",
    "xcron.h": "lib/xcron/include/xcron.h"
   },
   "sources": [
@@ -2371,49 +2356,10 @@
     "path": "lib/xcron/src/calendar/calendar.c"
    },
    {
-    "path": "lib/xcron/src/checkpoint/checkpoint.c"
-   },
-   {
-    "path": "lib/xcron/src/checkpoint_group/checkpoint_group.c"
-   },
-   {
-    "path": "lib/xcron/src/checkpoint_store/checkpoint_store.c"
-   },
-   {
-    "path": "lib/xcron/src/delivery/delivery.c"
-   },
-   {
-    "path": "lib/xcron/src/delivery/delivery_cursor.c"
-   },
-   {
-    "path": "lib/xcron/src/executor/executor.c"
-   },
-   {
     "path": "lib/xcron/src/expression/expression.c"
    },
    {
-    "path": "lib/xcron/src/occurrence/occurrence.c"
-   },
-   {
     "path": "lib/xcron/src/scheduler/scheduler.c"
-   },
-   {
-    "path": "lib/xcron/src/service/service.c"
-   },
-   {
-    "path": "lib/xcron/src/timezone/timezone.c"
-   },
-   {
-    "path": "lib/xcron/src/timezone/tzif.c"
-   },
-   {
-    "path": "lib/xcron/src/tzdb/tzdb.c"
-   },
-   {
-    "path": "lib/xcron/src/tzdb_file/tzdb_file.c"
-   },
-   {
-    "path": "lib/xcron/src/zoned/zoned.c"
    }
   ],
   "feature_macro": [
@@ -2421,23 +2367,8 @@
    "XCRON_MODULE_ALL",
    "XCRON_FEATURE_XCRON",
    "XCRON_FEATURE_XCRON_CALENDAR",
-   "XCRON_FEATURE_XCRON_CHECKPOINT",
-   "XCRON_FEATURE_XCRON_CHECKPOINT_GROUP",
-   "XCRON_FEATURE_XCRON_CHECKPOINT_STORE",
-   "XCRON_FEATURE_XCRON_DELIVERY",
-   "XCRON_FEATURE_XCRON_EXECUTOR",
-   "XCRON_FEATURE_XCRON_EXECUTOR_SELECTED",
    "XCRON_FEATURE_XCRON_EXPRESSION",
-   "XCRON_FEATURE_XCRON_OCCURRENCE",
-   "XCRON_FEATURE_XCRON_SCHEDULER",
-   "XCRON_FEATURE_XCRON_SCHEDULER_SELECTED",
-   "XCRON_FEATURE_XCRON_SERVICE",
-   "XCRON_FEATURE_XCRON_SERVICE_CHECKPOINT",
-   "XCRON_FEATURE_XCRON_SERVICE_SELECTED",
-   "XCRON_FEATURE_XCRON_TIMEZONE",
-   "XCRON_FEATURE_XCRON_TZDB",
-   "XCRON_FEATURE_XCRON_TZDB_FILE",
-   "XCRON_FEATURE_XCRON_ZONED"
+   "XCRON_FEATURE_XCRON_SCHEDULER"
   ],
   "host_includes": [
    "lib/xcron/include",
@@ -2478,6 +2409,7 @@
    "xmqtt/reconnect.h": "lib/xmqtt/include/xmqtt/reconnect.h",
    "xmqtt/reconnect_store.h": "lib/xmqtt/include/xmqtt/reconnect_store.h",
    "xmqtt/reconnect_subscriptions.h": "lib/xmqtt/include/xmqtt/reconnect_subscriptions.h",
+   "xmqtt/server.h": "lib/xmqtt/include/xmqtt/server.h",
    "xmqtt/session.h": "lib/xmqtt/include/xmqtt/session.h",
    "xmqtt/session_image.h": "lib/xmqtt/include/xmqtt/session_image.h",
    "xmqtt/store_compact.h": "lib/xmqtt/include/xmqtt/store_compact.h",
@@ -2526,6 +2458,9 @@
    },
    {
     "path": "lib/xmqtt/src/properties/properties.c"
+   },
+   {
+    "path": "lib/xmqtt/src/server/server.c"
    },
    {
     "path": "lib/xmqtt/src/session/journal.c"
@@ -2590,6 +2525,7 @@
    "XMQTT_FEATURE_XMQTT_RECONNECT",
    "XMQTT_FEATURE_XMQTT_RECONNECT_STORE",
    "XMQTT_FEATURE_XMQTT_RECONNECT_SUBSCRIPTIONS",
+   "XMQTT_FEATURE_XMQTT_SERVER",
    "XMQTT_FEATURE_XMQTT_SESSION",
    "XMQTT_FEATURE_XMQTT_SESSION_IMAGE",
    "XMQTT_FEATURE_XMQTT_STORE_COMPACT",
@@ -2616,6 +2552,7 @@
    "xredis/cluster_client.h": "lib/xredis/include/xredis/cluster_client.h",
    "xredis/cluster_client_sync.h": "lib/xredis/include/xredis/cluster_client_sync.h",
    "xredis/cluster_command.h": "lib/xredis/include/xredis/cluster_command.h",
+   "xredis/cluster_command_cache.h": "lib/xredis/include/xredis/cluster_command_cache.h",
    "xredis/cluster_command_sync.h": "lib/xredis/include/xredis/cluster_command_sync.h",
    "xredis/cluster_nodes.h": "lib/xredis/include/xredis/cluster_nodes.h",
    "xredis/cluster_refresh.h": "lib/xredis/include/xredis/cluster_refresh.h",
@@ -2756,6 +2693,7 @@
    "XREDIS_FEATURE_XREDIS_CLUSTER_CLIENT",
    "XREDIS_FEATURE_XREDIS_CLUSTER_CLIENT_SYNC",
    "XREDIS_FEATURE_XREDIS_CLUSTER_COMMAND",
+   "XREDIS_FEATURE_XREDIS_CLUSTER_COMMAND_CACHE",
    "XREDIS_FEATURE_XREDIS_CLUSTER_COMMAND_SYNC",
    "XREDIS_FEATURE_XREDIS_CLUSTER_NODES",
    "XREDIS_FEATURE_XREDIS_CLUSTER_REFRESH",
@@ -2807,28 +2745,12 @@
    "xrpc/encode.h": "lib/xrpc/include/xrpc/encode.h",
    "xrpc/export.h": "lib/xrpc/include/xrpc/export.h",
    "xrpc/features.h": "lib/xrpc/include/xrpc/features.h",
-   "xrpc/frame.h": "lib/xrpc/include/xrpc/frame.h",
-   "xrpc/http_client.h": "lib/xrpc/include/xrpc/http_client.h",
-   "xrpc/http_dial.h": "lib/xrpc/include/xrpc/http_dial.h",
-   "xrpc/http_server.h": "lib/xrpc/include/xrpc/http_server.h",
-   "xrpc/http_server_tls.h": "lib/xrpc/include/xrpc/http_server_tls.h",
-   "xrpc/http_tls.h": "lib/xrpc/include/xrpc/http_tls.h",
    "xrpc/id.h": "lib/xrpc/include/xrpc/id.h",
    "xrpc/methods.h": "lib/xrpc/include/xrpc/methods.h",
    "xrpc/pending.h": "lib/xrpc/include/xrpc/pending.h",
    "xrpc/receive.h": "lib/xrpc/include/xrpc/receive.h",
    "xrpc/response.h": "lib/xrpc/include/xrpc/response.h",
-   "xrpc/server.h": "lib/xrpc/include/xrpc/server.h",
-   "xrpc/tcp.h": "lib/xrpc/include/xrpc/tcp.h",
-   "xrpc/tcp_dial.h": "lib/xrpc/include/xrpc/tcp_dial.h",
-   "xrpc/tls.h": "lib/xrpc/include/xrpc/tls.h",
-   "xrpc/tls_dial.h": "lib/xrpc/include/xrpc/tls_dial.h",
    "xrpc/types.h": "lib/xrpc/include/xrpc/types.h",
-   "xrpc/ws.h": "lib/xrpc/include/xrpc/ws.h",
-   "xrpc/ws_deflate.h": "lib/xrpc/include/xrpc/ws_deflate.h",
-   "xrpc/ws_dial.h": "lib/xrpc/include/xrpc/ws_dial.h",
-   "xrpc/ws_http.h": "lib/xrpc/include/xrpc/ws_http.h",
-   "xrpc/ws_uri.h": "lib/xrpc/include/xrpc/ws_uri.h",
    "xrpc.h": "lib/xrpc/include/xrpc.h"
   },
   "sources": [
@@ -2848,24 +2770,6 @@
     "path": "lib/xrpc/src/encode/encode.c"
    },
    {
-    "path": "lib/xrpc/src/frame/frame.c"
-   },
-   {
-    "path": "lib/xrpc/src/http_client/http_client.c"
-   },
-   {
-    "path": "lib/xrpc/src/http_dial/http_dial.c"
-   },
-   {
-    "path": "lib/xrpc/src/http_server/http_server.c"
-   },
-   {
-    "path": "lib/xrpc/src/http_server_tls/http_server_tls.c"
-   },
-   {
-    "path": "lib/xrpc/src/http_tls/http_tls.c"
-   },
-   {
     "path": "lib/xrpc/src/id/id.c"
    },
    {
@@ -2882,27 +2786,6 @@
    },
    {
     "path": "lib/xrpc/src/result_quota/result_quota.c"
-   },
-   {
-    "path": "lib/xrpc/src/server/server.c"
-   },
-   {
-    "path": "lib/xrpc/src/tcp/tcp.c"
-   },
-   {
-    "path": "lib/xrpc/src/tcp_dial/tcp_dial.c"
-   },
-   {
-    "path": "lib/xrpc/src/tls/tls.c"
-   },
-   {
-    "path": "lib/xrpc/src/tls_dial/tls_dial.c"
-   },
-   {
-    "path": "lib/xrpc/src/ws/ws.c"
-   },
-   {
-    "path": "lib/xrpc/src/ws_uri/uri.c"
    }
   ],
   "feature_macro": [
@@ -2914,38 +2797,673 @@
    "XRPC_FEATURE_XRPC_DISPATCH",
    "XRPC_FEATURE_XRPC_DUPLEX",
    "XRPC_FEATURE_XRPC_ENCODE",
-   "XRPC_FEATURE_XRPC_FRAME",
-   "XRPC_FEATURE_XRPC_HTTP_CLIENT",
-   "XRPC_FEATURE_XRPC_HTTP_DIAL",
-   "XRPC_FEATURE_XRPC_HTTP_SERVER",
-   "XRPC_FEATURE_XRPC_HTTP_SERVER_TLS",
-   "XRPC_FEATURE_XRPC_HTTP_TLS",
    "XRPC_FEATURE_XRPC_ID",
    "XRPC_FEATURE_XRPC_METHODS",
    "XRPC_FEATURE_XRPC_PENDING",
    "XRPC_FEATURE_XRPC_RECEIVE",
    "XRPC_FEATURE_XRPC_RESPONSE",
-   "XRPC_FEATURE_XRPC_RESULT_QUOTA",
-   "XRPC_FEATURE_XRPC_SERVER",
-   "XRPC_FEATURE_XRPC_TCP",
-   "XRPC_FEATURE_XRPC_TCP_DIAL",
-   "XRPC_FEATURE_XRPC_TLS",
-   "XRPC_FEATURE_XRPC_TLS_DIAL",
-   "XRPC_FEATURE_XRPC_WS",
-   "XRPC_FEATURE_XRPC_WS_DEFLATE",
-   "XRPC_FEATURE_XRPC_WS_DIAL",
-   "XRPC_FEATURE_XRPC_WS_DIAL_TLS",
-   "XRPC_FEATURE_XRPC_WS_HTTP",
-   "XRPC_FEATURE_XRPC_WS_HTTP_DEFLATE",
-   "XRPC_FEATURE_XRPC_WS_HTTP_TLS",
-   "XRPC_FEATURE_XRPC_WS_TLS",
-   "XRPC_FEATURE_XRPC_WS_URI",
-   "XRPC_FEATURE_XRPC_WS_URI_PARSE",
-   "XRPC_FEATURE_XRPC_WS_URI_TLS"
+   "XRPC_FEATURE_XRPC_RESULT_QUOTA"
   ],
   "host_includes": [
    "lib/xrpc/include",
    "lib/xrtshim"
   ]
+ },
+ "graphqlite": {
+  "macro": "XS_USE_GRAPHQLITE",
+  "headers": {
+   "graphqlite.h": "src/sdk/graphqlite.h"
+  },
+  "requires": [
+   "sqlite"
+  ],
+  "sources": [
+   {
+    "path": "lib/graphqlite/src/extension.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/parser/cypher_keywords.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/parser/cypher_scanner_api.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/parser/cypher_ast.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/parser/cypher_parser.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/cypher_transform.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_match.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_create.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_set.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_delete.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_remove.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_foreach.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_load_csv.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_return.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_func_string.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_func_math.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_func_entity.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_func_path.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_func_list.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_func_temporal.c",
+    "defines": [
+     "SQLITE_CORE"
+    ],
+    "flags": [
+     "-include",
+     "lib/graphqlite/compat/xs_graphqlite_port.h"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_func_geo.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_func_json.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_func_typeconv.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_func_graph.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_func_aggregate.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_func_dispatch.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_helpers.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_variables.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_expr_predicate.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_with.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_unwind.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_expr_ops.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/transform_validate.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/transform/sql_builder.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/cypher_schema.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/cypher_executor.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/executor_variable_map.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/executor_foreach_ctx.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/executor_result.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/executor_helpers.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/executor_delete.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/executor_set.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/executor_remove.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/executor_create.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/executor_foreach.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/executor_merge.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/executor_match.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/query_dispatch.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/executor_call_subquery.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/executor_merge_pipeline.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/executor_schema_objects.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/executor_result_project.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/agtype.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/json_builder.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/graph_algorithms.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/graph_algo_pagerank.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/graph_algo_community.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/graph_algo_paths.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/graph_algo_centrality.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/graph_algo_components.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/graph_algo_betweenness.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/graph_algo_closeness.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/graph_algo_louvain.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/graph_algo_triangle.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/graph_algo_astar.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/graph_algo_traversal.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/graph_algo_similarity.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/graph_algo_knn.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/graph_algo_eigenvector.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/executor/graph_algo_apsp.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/runtime/udf_helpers.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/runtime/udf_register.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/runtime/cypher_rows_vtab.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/runtime/gql_tz.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/runtime/gql_tzdata.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/src/backend/runtime/storage_check.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/generated/cypher_scanner.c",
+    "defines": [
+     "SQLITE_CORE"
+    ]
+   },
+   {
+    "path": "lib/graphqlite/generated/cypher_gram.tab.c",
+    "defines": [
+     "SQLITE_CORE"
+    ],
+    "flags": [
+     "-include",
+     "lib/graphqlite/compat/xs_graphqlite_port.h"
+    ]
+   },
+   {
+    "path": "lib/tre/lib/tre-ast.c",
+    "defines": [
+     "USE_LOCAL_TRE_H"
+    ],
+    "flags": [
+     "-include",
+     "lib/tre/compat/config.h"
+    ],
+    "platforms": [
+     "windows"
+    ]
+   },
+   {
+    "path": "lib/tre/lib/tre-compile.c",
+    "defines": [
+     "USE_LOCAL_TRE_H"
+    ],
+    "flags": [
+     "-include",
+     "lib/tre/compat/config.h"
+    ],
+    "platforms": [
+     "windows"
+    ]
+   },
+   {
+    "path": "lib/tre/lib/tre-match-backtrack.c",
+    "defines": [
+     "USE_LOCAL_TRE_H"
+    ],
+    "flags": [
+     "-include",
+     "lib/tre/compat/config.h"
+    ],
+    "platforms": [
+     "windows"
+    ]
+   },
+   {
+    "path": "lib/tre/lib/tre-match-parallel.c",
+    "defines": [
+     "USE_LOCAL_TRE_H"
+    ],
+    "flags": [
+     "-include",
+     "lib/tre/compat/config.h"
+    ],
+    "platforms": [
+     "windows"
+    ]
+   },
+   {
+    "path": "lib/tre/lib/tre-match-approx.c",
+    "defines": [
+     "USE_LOCAL_TRE_H"
+    ],
+    "flags": [
+     "-include",
+     "lib/tre/compat/config.h"
+    ],
+    "platforms": [
+     "windows"
+    ]
+   },
+   {
+    "path": "lib/tre/lib/tre-mem.c",
+    "defines": [
+     "USE_LOCAL_TRE_H"
+    ],
+    "flags": [
+     "-include",
+     "lib/tre/compat/config.h"
+    ],
+    "platforms": [
+     "windows"
+    ]
+   },
+   {
+    "path": "lib/tre/lib/tre-parse.c",
+    "defines": [
+     "USE_LOCAL_TRE_H"
+    ],
+    "flags": [
+     "-include",
+     "lib/tre/compat/config.h"
+    ],
+    "platforms": [
+     "windows"
+    ]
+   },
+   {
+    "path": "lib/tre/lib/tre-stack.c",
+    "defines": [
+     "USE_LOCAL_TRE_H"
+    ],
+    "flags": [
+     "-include",
+     "lib/tre/compat/config.h"
+    ],
+    "platforms": [
+     "windows"
+    ]
+   },
+   {
+    "path": "lib/tre/lib/regcomp.c",
+    "defines": [
+     "USE_LOCAL_TRE_H"
+    ],
+    "flags": [
+     "-include",
+     "lib/tre/compat/config.h"
+    ],
+    "platforms": [
+     "windows"
+    ]
+   },
+   {
+    "path": "lib/tre/lib/regexec.c",
+    "defines": [
+     "USE_LOCAL_TRE_H"
+    ],
+    "flags": [
+     "-include",
+     "lib/tre/compat/config.h"
+    ],
+    "platforms": [
+     "windows"
+    ]
+   },
+   {
+    "path": "lib/tre/lib/regerror.c",
+    "defines": [
+     "USE_LOCAL_TRE_H"
+    ],
+    "flags": [
+     "-include",
+     "lib/tre/compat/config.h"
+    ],
+    "platforms": [
+     "windows"
+    ]
+   }
+  ],
+  "symbols": "src/script/import_graphqlite.inc",
+  "symbol_macro": "XS_GRAPHQLITE_SYMBOL",
+  "host_includes": [
+   "lib/graphqlite/src/include",
+   "lib/graphqlite/generated",
+   "lib/graphqlite/compat"
+  ]
+ },
+ "sqlite-vec": {
+  "macro": "XS_USE_SQLITE_VEC",
+  "headers": {
+   "sqlite-vec.h": "src/sdk/sqlite-vec.h"
+  },
+  "requires": [
+   "sqlite"
+  ],
+  "sources": [
+   {
+    "path": "lib/sqlite-vec/sqlite-vec.c",
+    "defines": [
+     "SQLITE_CORE",
+     "SQLITE_VEC_STATIC"
+    ]
+   }
+  ],
+  "symbols": "src/script/import_sqlite_vec.inc",
+  "symbol_macro": "XS_SQLITE_VEC_SYMBOL"
  }
 }

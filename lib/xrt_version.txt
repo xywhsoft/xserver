@@ -1,3 +1,3 @@
-f0958579699937cdc5cbcf795a2aa86ca0ea2fc3
-Byte-for-byte upstream snapshot; file hashes in xrt_sources.lock.json.
-No local upstream patches; refresh with python tools/sync_xrt.py --source ../xrt.
+f575188765c7f98ac945e2eb7035054df157b816
+Upstream snapshot with the private Pipeline pipe type renamed by xrt_compat/process-pipe-pipeline.patch.
+Original and patched SHA256 hashes are recorded in xrt_sources.lock.json.

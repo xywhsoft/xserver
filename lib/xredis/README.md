@@ -265,7 +265,10 @@ are caller-driven; full automatic MOVED wiring and the managed facade remain wor
 [Asynchronous Cluster clients](docs/cluster_client.md) drive explicit-seed bootstrap,
 coalesced MOVED refresh and native routes on an existing worker. Admission bounds
 requests and bytes; parent cancellation and close preserve independent physical
-duties. Replica policy and synchronous Cluster calls remain work.
+duties. CallReplica uses topology-based selection with managed READONLY pools
+for explicitly stale-tolerant reads and can fall back to the primary before
+native acceptance. Applications can also use managed READONLY on a direct
+connection to an explicitly selected replica. [Connection setup](docs/client-init.md)
 
 Cluster refresh automatically retains bounded discovered masters, query origin
 and explicit bootstrap fallbacks; failed cohorts rotate start candidates.

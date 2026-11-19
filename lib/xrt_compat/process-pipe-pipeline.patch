@@ -1,0 +1,85 @@
+diff --git a/lib/xrt.h b/lib/xrt.h
+--- a/lib/xrt.h
++++ b/lib/xrt.h
+@@ -65602,20 +65602,20 @@
+ #if defined(XRT_FEATURE_PROCESS_PIPELINE)
+ 
+ /* 平台连接管道只由 Pipeline 编排层持有，并在全部 Spawn 后关闭。 */
+-typedef struct xprocesspipe {
++typedef struct xprocesspipelinepipe {
+ 	intptr_t Read;
+ 	intptr_t Write;
+-} xprocesspipe;
++} xprocesspipelinepipe;
+ 
+ 
+ 
+ /* 创建一条不可被无关子进程继承的真实 OS pipe。 */
+-bool __xrtProcessPipeCreate(xprocesspipe* pPipe);
++bool __xrtProcessPipeCreate(xprocesspipelinepipe* pPipe);
+ 
+ 
+ 
+ /* 幂等关闭管道两端。 */
+-void __xrtProcessPipeClose(xprocesspipe* pPipe);
++void __xrtProcessPipeClose(xprocesspipelinepipe* pPipe);
+ 
+ #endif
+ 
+@@ -332576,7 +332576,7 @@
+ 	xprocesspipelinepump* pPumps = NULL;
+ 	xprocessstageresult* pStageResults = NULL;
+ 	xprocess** pProcesses = NULL;
+-	xprocesspipe* pPipes = NULL;
++	xprocesspipelinepipe* pPipes = NULL;
+ 	xwaitresult Wait = XWAIT_OK;
+ 	double iStart = 0, Limit;
+ 	size_t iPumpCount = 0;
+@@ -332657,9 +332657,9 @@
+ 	pProcesses = (xprocess**)xrtCalloc(iStageCount, sizeof(xprocess*));
+ 	if ( pProcesses == NULL ) goto cleanup;
+ 	if ( iStageCount > 1u ) {
+-		pPipes = (xprocesspipe*)xrtCalloc(
++		pPipes = (xprocesspipelinepipe*)xrtCalloc(
+ 			iStageCount - 1u,
+-			sizeof(xprocesspipe)
++			sizeof(xprocesspipelinepipe)
+ 		);
+ 		if ( pPipes == NULL ) goto cleanup;
+ 		/* calloc's zero is a live POSIX descriptor, not an empty slot. Make
+@@ -332905,7 +332905,7 @@
+ 	(defined(_WIN32) || defined(_WIN64))
+ 
+ /* 创建只由父进程持有、交给 Spawn 精确复制的匿名管道。 */
+-bool __xrtProcessPipeCreate(xprocesspipe* pPipe)
++bool __xrtProcessPipeCreate(xprocesspipelinepipe* pPipe)
+ {
+ 	HANDLE hRead = INVALID_HANDLE_VALUE;
+ 	HANDLE hWrite = INVALID_HANDLE_VALUE;
+@@ -332932,7 +332932,7 @@
+ 
+ 
+ /* 关闭 Windows 管道两端并恢复无效槽值。 */
+-void __xrtProcessPipeClose(xprocesspipe* pPipe)
++void __xrtProcessPipeClose(xprocesspipelinepipe* pPipe)
+ {
+ 	if ( pPipe->Read != -1 ) {
+ 		(void)CloseHandle((HANDLE)pPipe->Read);
+@@ -332977,7 +332977,7 @@
+ 
+ 
+ /* 创建带 close-on-exec 的 POSIX 匿名管道。 */
+-bool __xrtProcessPipeCreate(xprocesspipe* pPipe)
++bool __xrtProcessPipeCreate(xprocesspipelinepipe* pPipe)
+ {
+ 	int pFds[2] = { -1, -1 };
+ 	int iError;
+@@ -333011,7 +333011,7 @@
+ 
+ 
+ /* 关闭 POSIX 管道两端并恢复无效槽值。 */
+-void __xrtProcessPipeClose(xprocesspipe* pPipe)
++void __xrtProcessPipeClose(xprocesspipelinepipe* pPipe)
+ {
+ 	if ( pPipe->Read != -1 ) {
+ 		(void)close((int)pPipe->Read);

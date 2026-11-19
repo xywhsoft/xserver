@@ -75,6 +75,9 @@ def build(args: argparse.Namespace, selected: dict) -> Path:
     if (ROOT / "lib/xrt_sources.lock.json").is_file():
         from sync_xrt import check_lock
         check_lock()
+    if {'graphqlite', 'sqlite-vec'} & selected.keys():
+        from vendor_sqlite_extensions import check_lock
+        check_lock()
     platform = "windows" if os.name == "nt" else "linux"
     suffix = ".exe" if platform == "windows" else ""
     variant = "+".join(selected) or "default"

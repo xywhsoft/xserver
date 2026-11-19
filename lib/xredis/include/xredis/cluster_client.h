@@ -65,11 +65,25 @@ XREDIS_API void xredisClusterClientRelease(xredisclusterclient* Client);
  * publication and stays caller-owned. Do not wait on this Engine's worker. */
 XREDIS_API xredisadmission xredisClusterClientCall(xredisclusterclient* Client,
     uint16 Slot,const xbytesview* Arguments,size_t Count,int64 Timeout,xfuture** Future);
+/* Stale-tolerant, explicitly slotted read. Caller classifies the command and
+ * all its keys. Selects an eligible replica from the shard with a rotated
+ * starting index. A missing, refused or unavailable replica can fall back to
+ * the eligible primary before native acceptance. Every endpoint goes through
+ * Nodes authorization, and replica pools require managed READONLY. After
+ * native acceptance only validated MOVED/ASK can route to another endpoint.
+ * Shares Call's ownership, cost bounds, output and original deadline. */
+XREDIS_API xredisadmission xredisClusterClientCallReplica(xredisclusterclient* Client,
+    uint16 Slot,const xbytesview* Arguments,size_t Count,int64 Timeout,xfuture** Future);
 /* Ready resolves on the first valid map, or typed stop; metadata failures are
  * visible in Info while bootstrap retries. Acquired views are retained Maps.
  * MOVED from the current generation invalidates once per generation and starts
- * coalesced full-map refresh; ASK never changes the shared map. Old valid maps
- * remain usable during failed refresh. */
+ * coalesced full-map refresh. A terminal disconnected native attempt also
+ * requests refresh while preserving its outcome. An initial primary pool
+ * without dispatchable members after a transport failure, or a primary
+ * identified as failed by topology, can wait for recovery before the first
+ * native attempt. Up to 1 + Route.MaxWaits map refresh waits share the original
+ * deadline. Other missing routes keep their single refresh. ASK never changes the shared map.
+ * Old valid maps remain usable during failed refresh. */
 XREDIS_API xfuture* xredisClusterClientReady(xredisclusterclient* Client);
 XREDIS_API xredisclusterstatus xredisClusterClientSnapshot(xredisclusterclient* Client,
     xredisclustermap** Map,bool* Stale);

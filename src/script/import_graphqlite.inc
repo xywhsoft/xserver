@@ -1,0 +1,1 @@
+XS_GRAPHQLITE_SYMBOL(sqlite3_graphqlite_init)

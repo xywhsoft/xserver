@@ -1,0 +1,756 @@
+{
+  "schema": 1,
+  "pins": {
+    "graphqlite": {
+      "url": "https://github.com/colliery-io/graphqlite",
+      "version": "v1.0.0",
+      "commit": "6210368cf4b0d02f595b2bbd7d12421a68113c26"
+    },
+    "sqlite-vec": {
+      "url": "https://github.com/asg017/sqlite-vec",
+      "version": "v0.1.9",
+      "commit": "e9f598abfa0c06b328d8fe5da9c3760cce74be10"
+    },
+    "tre": {
+      "url": "https://github.com/laurikari/tre",
+      "version": "v0.9.0",
+      "commit": "d0e0c997336b3210f05b3e1daa7bb5cb9900d274"
+    }
+  },
+  "files": {
+    "lib/graphqlite/LICENSE": {
+      "sha256": "cc5d99097934129f7a06cc2cdd8092843a5d27aed63b82d917e06f51a7a6634d",
+      "source": "graphqlite/LICENSE"
+    },
+    "lib/graphqlite/Makefile": {
+      "sha256": "dfd6466e39d2e75eaf28969bfef63c872a7a33959db6f771fc4032727919f623",
+      "source": "graphqlite/Makefile"
+    },
+    "lib/graphqlite/README.md": {
+      "sha256": "cdf88f65bba7fe19b386a4a5f6869fb0fa6d8e5e93ace9e9aff08c2d6998dcd9",
+      "source": "graphqlite/README.md"
+    },
+    "lib/graphqlite/src/.gitignore": {
+      "sha256": "9a2586132c2e9229fd93c3bdc3cffe7bd19b821675d2aa45d7e94412ce5663d2",
+      "source": "graphqlite/src/.gitignore"
+    },
+    "lib/graphqlite/src/backend/executor/agtype.c": {
+      "sha256": "15d61e9479b850f0d6639f9e467807f4dc28024de2fd121d8f0d2f270d315bec",
+      "source": "graphqlite/src/backend/executor/agtype.c"
+    },
+    "lib/graphqlite/src/backend/executor/cypher_executor.c": {
+      "sha256": "9233d9032b7c44c4210682f6a602bdb2091f98312f53d5a281a808f15c5e5780",
+      "source": "graphqlite/src/backend/executor/cypher_executor.c"
+    },
+    "lib/graphqlite/src/backend/executor/cypher_schema.c": {
+      "sha256": "91a7ade81c9d7f7bdfa92ed96a7dd8d5abf8bc755aeadb6e39770eac7f32466d",
+      "source": "graphqlite/src/backend/executor/cypher_schema.c"
+    },
+    "lib/graphqlite/src/backend/executor/executor_call_subquery.c": {
+      "sha256": "cf3213fb1769131b3f5be06cc9115b440240777c921b7fdc7995d36887e30b3a",
+      "source": "graphqlite/src/backend/executor/executor_call_subquery.c"
+    },
+    "lib/graphqlite/src/backend/executor/executor_create.c": {
+      "sha256": "619eb7a16fcb29858c23847e2117088189a027b7780ddc1aa6d763ae158bfbc1",
+      "source": "graphqlite/src/backend/executor/executor_create.c"
+    },
+    "lib/graphqlite/src/backend/executor/executor_delete.c": {
+      "sha256": "5e47fef7de189f7a48540320c146e84b0197e9eba05f3ecf22dffc44940ee4fc",
+      "source": "graphqlite/src/backend/executor/executor_delete.c"
+    },
+    "lib/graphqlite/src/backend/executor/executor_foreach.c": {
+      "sha256": "5d5b1c0bbd6835f6835967e1ce0967d4c2f0498f364c51a58c873b3de4126646",
+      "source": "graphqlite/src/backend/executor/executor_foreach.c"
+    },
+    "lib/graphqlite/src/backend/executor/executor_foreach_ctx.c": {
+      "sha256": "0a71fd351fbf4f66a64c44611959b57e12ddb7cb175b5dbc17773dcd2ad3435b",
+      "source": "graphqlite/src/backend/executor/executor_foreach_ctx.c"
+    },
+    "lib/graphqlite/src/backend/executor/executor_helpers.c": {
+      "sha256": "311f75fe8679331715c7c7e00e8fa4e47e754102d00892bd93b16fbe190ef2d1",
+      "source": "graphqlite/src/backend/executor/executor_helpers.c"
+    },
+    "lib/graphqlite/src/backend/executor/executor_match.c": {
+      "sha256": "317e75c099036e869e1030ce06a8ffef255ca3b09f13c61aa7520fce6ca9d744",
+      "source": "graphqlite/src/backend/executor/executor_match.c"
+    },
+    "lib/graphqlite/src/backend/executor/executor_merge.c": {
+      "sha256": "08a8235015affbf602fc036077e1899c15a31c9f8bfdb871c500e72cfe071551",
+      "source": "graphqlite/src/backend/executor/executor_merge.c"
+    },
+    "lib/graphqlite/src/backend/executor/executor_merge_pipeline.c": {
+      "sha256": "b10ad924639e1e409c37f6b7f4448220f2dec5c5eb600169c1b5b19205933686",
+      "source": "graphqlite/src/backend/executor/executor_merge_pipeline.c"
+    },
+    "lib/graphqlite/src/backend/executor/executor_remove.c": {
+      "sha256": "e604272db74ec0eaf02b22620d319c42bc96576c7a1b54fb2b12089405258c6f",
+      "source": "graphqlite/src/backend/executor/executor_remove.c"
+    },
+    "lib/graphqlite/src/backend/executor/executor_result.c": {
+      "sha256": "d21ab29a0e3c963bd2383f8178574d15b780a1430ab8e47ebaf41ae454fca582",
+      "source": "graphqlite/src/backend/executor/executor_result.c"
+    },
+    "lib/graphqlite/src/backend/executor/executor_result_project.c": {
+      "sha256": "963fa198e46381537ebe256f7d7e3ead765fa5c141783b8744629b3448504b9c",
+      "source": "graphqlite/src/backend/executor/executor_result_project.c"
+    },
+    "lib/graphqlite/src/backend/executor/executor_schema_objects.c": {
+      "sha256": "2509e8d7829288186a6889a10771ac5fb36ded41eedcea52f4f57e82d484c383",
+      "source": "graphqlite/src/backend/executor/executor_schema_objects.c"
+    },
+    "lib/graphqlite/src/backend/executor/executor_set.c": {
+      "sha256": "17ee5a5cfc037d9333206cb3778c319441d18224dcad1c625acc340a186c1893",
+      "source": "graphqlite/src/backend/executor/executor_set.c"
+    },
+    "lib/graphqlite/src/backend/executor/executor_variable_map.c": {
+      "sha256": "b085e89ec14bf39f37d04c1a702b84ec90200cda96c8819a02c09cd1c313ba75",
+      "source": "graphqlite/src/backend/executor/executor_variable_map.c"
+    },
+    "lib/graphqlite/src/backend/executor/graph_algo_apsp.c": {
+      "sha256": "d1f07ecac70bbe0403542fce4994b2cfd7dfd9e8b62eb7e3d756e8db241c58e7",
+      "source": "graphqlite/src/backend/executor/graph_algo_apsp.c"
+    },
+    "lib/graphqlite/src/backend/executor/graph_algo_astar.c": {
+      "sha256": "8e5d847bd369b1f02bde1aa6f12066560f67ebab4d65d143145e8654b4de118f",
+      "source": "graphqlite/src/backend/executor/graph_algo_astar.c"
+    },
+    "lib/graphqlite/src/backend/executor/graph_algo_betweenness.c": {
+      "sha256": "56f7ec5b96d38c51815cc171159a24a7e698c06188e985db21007cda6c03185c",
+      "source": "graphqlite/src/backend/executor/graph_algo_betweenness.c"
+    },
+    "lib/graphqlite/src/backend/executor/graph_algo_centrality.c": {
+      "sha256": "f76c8298f961afe1a9db63eb2f0ebf98a01c6ae6cdb359c558d3a4618ea39b41",
+      "source": "graphqlite/src/backend/executor/graph_algo_centrality.c"
+    },
+    "lib/graphqlite/src/backend/executor/graph_algo_closeness.c": {
+      "sha256": "73efe2364e41d44ed395c576492bd121c4ef1030b66b7788dc70b33fb8c6dbf2",
+      "source": "graphqlite/src/backend/executor/graph_algo_closeness.c"
+    },
+    "lib/graphqlite/src/backend/executor/graph_algo_community.c": {
+      "sha256": "542f7d0f6301c173160578dc457cb7f14ff4de86833671ddfb04901385f83748",
+      "source": "graphqlite/src/backend/executor/graph_algo_community.c"
+    },
+    "lib/graphqlite/src/backend/executor/graph_algo_components.c": {
+      "sha256": "c54eae6a7e829673a19347cb7f84d38015416a5e5d4b41f8e5179b8357f1e009",
+      "source": "graphqlite/src/backend/executor/graph_algo_components.c"
+    },
+    "lib/graphqlite/src/backend/executor/graph_algo_eigenvector.c": {
+      "sha256": "1814aa226b84875717bf3c83f51320301482ba69e3a95f65dbfaecffc083d4fd",
+      "source": "graphqlite/src/backend/executor/graph_algo_eigenvector.c"
+    },
+    "lib/graphqlite/src/backend/executor/graph_algo_knn.c": {
+      "sha256": "62edb5458563aa336247d168678990944c29b6481cae1ad36d0cbb5fdcdd00f4",
+      "source": "graphqlite/src/backend/executor/graph_algo_knn.c"
+    },
+    "lib/graphqlite/src/backend/executor/graph_algo_louvain.c": {
+      "sha256": "a40476b4dbb8abe942e80e315936cba898b7271dcf798bfbb862df7d4389aad7",
+      "source": "graphqlite/src/backend/executor/graph_algo_louvain.c"
+    },
+    "lib/graphqlite/src/backend/executor/graph_algo_pagerank.c": {
+      "sha256": "3424ae89ef3448d364147fb5ddd54157d6fb1a40d50a29bef480b07e364b73e3",
+      "source": "graphqlite/src/backend/executor/graph_algo_pagerank.c"
+    },
+    "lib/graphqlite/src/backend/executor/graph_algo_paths.c": {
+      "sha256": "b9725384c40126725e7e6af22fd93b45aa3157147547cd8fab94a910b32136a4",
+      "source": "graphqlite/src/backend/executor/graph_algo_paths.c"
+    },
+    "lib/graphqlite/src/backend/executor/graph_algo_similarity.c": {
+      "sha256": "8ce26d60af9eb67925022e767e9d5b18e9a8822904712c7ab72d3773fa808928",
+      "source": "graphqlite/src/backend/executor/graph_algo_similarity.c"
+    },
+    "lib/graphqlite/src/backend/executor/graph_algo_traversal.c": {
+      "sha256": "027756f440bb3db5b58ccab6ee5d806c3232569bbdc57d95fc62b23100159b63",
+      "source": "graphqlite/src/backend/executor/graph_algo_traversal.c"
+    },
+    "lib/graphqlite/src/backend/executor/graph_algo_triangle.c": {
+      "sha256": "cb13e9e761a4ff519c19ffd9f89ff2926ebfa7e0c90e0035d7f5456f42d91d11",
+      "source": "graphqlite/src/backend/executor/graph_algo_triangle.c"
+    },
+    "lib/graphqlite/src/backend/executor/graph_algorithms.c": {
+      "sha256": "a7d7c05c91db68a33a562036f196cacb8d365bd214a4d5d5838de2ad82275362",
+      "source": "graphqlite/src/backend/executor/graph_algorithms.c"
+    },
+    "lib/graphqlite/src/backend/executor/json_builder.c": {
+      "sha256": "c82a952208c32b5829c96c25a6b026453ac0f54eb01d072511fbfb7315013726",
+      "source": "graphqlite/src/backend/executor/json_builder.c"
+    },
+    "lib/graphqlite/src/backend/executor/query_dispatch.c": {
+      "sha256": "09c97cc4f506a48fdfe96a65afc136e935db13bdea6da11e1680deac5bf8baf7",
+      "source": "graphqlite/src/backend/executor/query_dispatch.c"
+    },
+    "lib/graphqlite/src/backend/parser/cypher_ast.c": {
+      "sha256": "f5a15df29e47cca1dc2b9022e0f9bdd8d2f07d4c88b5ee651459865b025a6d65",
+      "source": "graphqlite/src/backend/parser/cypher_ast.c"
+    },
+    "lib/graphqlite/src/backend/parser/cypher_gram.y": {
+      "sha256": "7d80814cde5153f75de5105cf26a01ac42832fdb857b51fe9bbe0f1cdda67a13",
+      "source": "graphqlite/src/backend/parser/cypher_gram.y",
+      "patch": "lib/graphqlite/XS.patch",
+      "upstream_sha256": "f60037df48e281328693b44e332b6cb4e03399f4472e686494d51318a054ceb4"
+    },
+    "lib/graphqlite/src/backend/parser/cypher_keywords.c": {
+      "sha256": "45673e5b2ca836651a46d3b010686c647107a59d6aafadf02e2e04bfa36e6139",
+      "source": "graphqlite/src/backend/parser/cypher_keywords.c"
+    },
+    "lib/graphqlite/src/backend/parser/cypher_parser.c": {
+      "sha256": "4e66822e16de4abfcc02d0f055aecdc68cf08532f96e3d3e43b64aea13023985",
+      "source": "graphqlite/src/backend/parser/cypher_parser.c",
+      "patch": "lib/graphqlite/XS.patch",
+      "upstream_sha256": "078e036af3e44b30278ee8c028fb3784bdbcf92e4d0afe81cb68d351d2cc7742"
+    },
+    "lib/graphqlite/src/backend/parser/cypher_scanner.l": {
+      "sha256": "e15095d597d3de6442a2a8e8b5f6edbca1aaae6c36722d1e45acd16f9ab795d2",
+      "source": "graphqlite/src/backend/parser/cypher_scanner.l"
+    },
+    "lib/graphqlite/src/backend/parser/cypher_scanner_api.c": {
+      "sha256": "8d7135f26e24ed81a8d0e0ee1827559060fe43a6c3dff88395291adfa58ed57e",
+      "source": "graphqlite/src/backend/parser/cypher_scanner_api.c"
+    },
+    "lib/graphqlite/src/backend/runtime/cypher_rows_vtab.c": {
+      "sha256": "ed7ded98f34f06de13e23fe48aa148534e64fd75d330e7320a1bdfe3770ad71b",
+      "source": "graphqlite/src/backend/runtime/cypher_rows_vtab.c"
+    },
+    "lib/graphqlite/src/backend/runtime/gql_tz.c": {
+      "sha256": "d153cb7439e4a3ca0839e138ff2e71e9223d5a9dfa2a6926484f58adb1157f6a",
+      "source": "graphqlite/src/backend/runtime/gql_tz.c"
+    },
+    "lib/graphqlite/src/backend/runtime/gql_tzdata.c": {
+      "sha256": "923ce99f47f1b8a1d4f1db0955174ee3c266acc1973282ca21f320ff2f6aac84",
+      "source": "graphqlite/src/backend/runtime/gql_tzdata.c"
+    },
+    "lib/graphqlite/src/backend/runtime/storage_check.c": {
+      "sha256": "f926c73057a5428a688e4c320f8905f0e2726faec6a272e03eeef85167e50bc9",
+      "source": "graphqlite/src/backend/runtime/storage_check.c"
+    },
+    "lib/graphqlite/src/backend/runtime/udf_helpers.c": {
+      "sha256": "0a87c6978f10b7bace353c7bbdc7f9f07df49dea621e5d67ce96715eba04c687",
+      "source": "graphqlite/src/backend/runtime/udf_helpers.c"
+    },
+    "lib/graphqlite/src/backend/runtime/udf_register.c": {
+      "sha256": "9383e17a023bde8c77838296b060d402155110b14bd49c2bde5ebcc126bd9400",
+      "source": "graphqlite/src/backend/runtime/udf_register.c"
+    },
+    "lib/graphqlite/src/backend/transform/cypher_transform.c": {
+      "sha256": "9ff6f1ce0c8f9040e7c6b366fab5534a4806d08ad43a541265875897846bbeb7",
+      "source": "graphqlite/src/backend/transform/cypher_transform.c"
+    },
+    "lib/graphqlite/src/backend/transform/sql_builder.c": {
+      "sha256": "de59838158501f91b6cf47ee5e538b56fe51eed6312da175237521e41908b4df",
+      "source": "graphqlite/src/backend/transform/sql_builder.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_create.c": {
+      "sha256": "815a827d37b6337bfcc300da4ccc01227f083fa0f5b7c8636e160e7bb47d66ab",
+      "source": "graphqlite/src/backend/transform/transform_create.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_delete.c": {
+      "sha256": "c6f7ff5070ba8da5d631ae2f1422212f4584eb03de59188713147f88ccd85ef3",
+      "source": "graphqlite/src/backend/transform/transform_delete.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_expr_ops.c": {
+      "sha256": "aef9d0a33e4b3fa54df8f4e14c7f823677f7f9750676cf2e25a3b3052f19bb4c",
+      "source": "graphqlite/src/backend/transform/transform_expr_ops.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_expr_predicate.c": {
+      "sha256": "fd62fe6e487af94c2f610d87243b4032e370bb51f83dccd5bb3a697ce8f3a5bb",
+      "source": "graphqlite/src/backend/transform/transform_expr_predicate.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_foreach.c": {
+      "sha256": "63182ccb64e520376eff6e2afac59eb1675cf324282baee8a9a586e5ec2b7719",
+      "source": "graphqlite/src/backend/transform/transform_foreach.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_func_aggregate.c": {
+      "sha256": "b1602d0de8d606e77a277932301051d27b6beccd18df5f9c18c1c0932a0a5d49",
+      "source": "graphqlite/src/backend/transform/transform_func_aggregate.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_func_dispatch.c": {
+      "sha256": "acaecce696bb5a3815493b6cb20ddd004d1110d782f67db5a2a609c0f77f39bc",
+      "source": "graphqlite/src/backend/transform/transform_func_dispatch.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_func_entity.c": {
+      "sha256": "f306ba6864991cdf8065bff9f01fb827ed0195baef19380b306f9fdaf90112e7",
+      "source": "graphqlite/src/backend/transform/transform_func_entity.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_func_geo.c": {
+      "sha256": "8b83e4d84b27aac11824934cd83baad7a78894f6595091f252aad13f2583ffb7",
+      "source": "graphqlite/src/backend/transform/transform_func_geo.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_func_graph.c": {
+      "sha256": "f7fbb8425bea23a5790844a108b342abb7155cbadcc71a983638e5c4fe71e00e",
+      "source": "graphqlite/src/backend/transform/transform_func_graph.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_func_json.c": {
+      "sha256": "f11365f93439502b4b3681f0e2561059f0da0cfc88442103b146df0edebb18ea",
+      "source": "graphqlite/src/backend/transform/transform_func_json.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_func_list.c": {
+      "sha256": "c9e2dfe3a7e55cbc625bca9efc99d028368b1bf63e64b59eff7d7b0520809799",
+      "source": "graphqlite/src/backend/transform/transform_func_list.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_func_math.c": {
+      "sha256": "f0d80be86dc4accbb2bef06a0f849f6d2fd02aade07673b3acc7ec308d324b00",
+      "source": "graphqlite/src/backend/transform/transform_func_math.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_func_path.c": {
+      "sha256": "eec680672d864c528aba557c6a4ef0a8b46b2858e9f054739d03d39930a6b0fe",
+      "source": "graphqlite/src/backend/transform/transform_func_path.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_func_string.c": {
+      "sha256": "2589924fbb7201988de347bae34e4519b48c8aa69bcdeb587732982bb045d2c3",
+      "source": "graphqlite/src/backend/transform/transform_func_string.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_func_temporal.c": {
+      "sha256": "d41ed7b7826df1bb5bd06b20b3f16a7db61d5a09af39dc27828d9442c85e51c7",
+      "source": "graphqlite/src/backend/transform/transform_func_temporal.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_func_typeconv.c": {
+      "sha256": "3c881f023664cd6422005e66f459bf7fe08ca315dc91a2da26e3b473d84ca01d",
+      "source": "graphqlite/src/backend/transform/transform_func_typeconv.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_helpers.c": {
+      "sha256": "98af6a308b72d9e410d2221df420ea456210ebc497b5cabce988106895e0acc7",
+      "source": "graphqlite/src/backend/transform/transform_helpers.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_load_csv.c": {
+      "sha256": "b3899a329a41ae028ec5cb6cc44d2c4a65c38c2ffe2abd51440162f93cfb230f",
+      "source": "graphqlite/src/backend/transform/transform_load_csv.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_match.c": {
+      "sha256": "617e1621b3a573fb2721e90b52d300a354bdb52f286c5f570e679894ee4bf871",
+      "source": "graphqlite/src/backend/transform/transform_match.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_remove.c": {
+      "sha256": "f3acec8e75752efb9b6eaf9e1f2e8b35929f0c8b1ded5942f523ab961ee9230a",
+      "source": "graphqlite/src/backend/transform/transform_remove.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_return.c": {
+      "sha256": "20ea0c6bfdc3270c311a1c0f0e1044d455a925bc9502f9814311c0420e60ad94",
+      "source": "graphqlite/src/backend/transform/transform_return.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_set.c": {
+      "sha256": "68cca898bce7cd6130084b67b8e1f19198900705d24ff2b103fbae949dbdf35b",
+      "source": "graphqlite/src/backend/transform/transform_set.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_unwind.c": {
+      "sha256": "69beded58c65f0131478c562bd578c2dbf5bbe58fff29a9dda8797e1776aeec8",
+      "source": "graphqlite/src/backend/transform/transform_unwind.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_validate.c": {
+      "sha256": "4592d5b3ce2ba538aa358e0ea9197351b70840973df3600ac69e34637cc54436",
+      "source": "graphqlite/src/backend/transform/transform_validate.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_variables.c": {
+      "sha256": "db7fd42cf039689554f79af7e2aa635469a4d45355fb11f1e1ec9b9e5c59f239",
+      "source": "graphqlite/src/backend/transform/transform_variables.c"
+    },
+    "lib/graphqlite/src/backend/transform/transform_with.c": {
+      "sha256": "68098d6a58b3c5b2f4383076c89a1e552309673300cf0782a5106ebb2a79b1b1",
+      "source": "graphqlite/src/backend/transform/transform_with.c"
+    },
+    "lib/graphqlite/src/extension.c": {
+      "sha256": "2f03ff5de4e0229ad974bfd9803571198bb21d8965acc3aae193cc9aec8cfbf2",
+      "source": "graphqlite/src/extension.c",
+      "patch": "lib/graphqlite/XS.patch",
+      "upstream_sha256": "99fc28e0d2db73c9eeabd1fda4d5aba161e4a68d0a422a780d40f128a784406c"
+    },
+    "lib/graphqlite/src/include/entity_json_sql.h": {
+      "sha256": "01c8041865b6915c50507ce6f4ad07da8ba222ccd4019bb62cd288ec8e4d28b4",
+      "source": "graphqlite/src/include/entity_json_sql.h"
+    },
+    "lib/graphqlite/src/include/executor/agtype.h": {
+      "sha256": "9b0377d2b0713bd05ead9040cc4c74210b3c295821ba6d4b6f9d41a590d03e97",
+      "source": "graphqlite/src/include/executor/agtype.h"
+    },
+    "lib/graphqlite/src/include/executor/cypher_executor.h": {
+      "sha256": "830898628a637c3f585a938e50954f7ef2d9c6e1027b0f9f8dda625207173f15",
+      "source": "graphqlite/src/include/executor/cypher_executor.h"
+    },
+    "lib/graphqlite/src/include/executor/cypher_schema.h": {
+      "sha256": "1306792e76e5afa848135511281f5d5c269474d37598f911de0da6585d36fa19",
+      "source": "graphqlite/src/include/executor/cypher_schema.h"
+    },
+    "lib/graphqlite/src/include/executor/executor_internal.h": {
+      "sha256": "1ddc2dcff13a8902722dda064b740e77756180f89e16db7cf9797b8a063bab3f",
+      "source": "graphqlite/src/include/executor/executor_internal.h"
+    },
+    "lib/graphqlite/src/include/executor/graph_algo_internal.h": {
+      "sha256": "7e7e9124c2f5f5231a04543f3e1fd82f6ef193a2d466eb23c11f8c5eed13257c",
+      "source": "graphqlite/src/include/executor/graph_algo_internal.h"
+    },
+    "lib/graphqlite/src/include/executor/graph_algorithms.h": {
+      "sha256": "da12fa209e78d71c3accee1487a5e336b69b0ad87e276971eb033d1c184d2ea5",
+      "source": "graphqlite/src/include/executor/graph_algorithms.h"
+    },
+    "lib/graphqlite/src/include/executor/json_builder.h": {
+      "sha256": "37def91b7539daf2231d40f79e3fec4a2ea46cef4b467dac996733b262d5a770",
+      "source": "graphqlite/src/include/executor/json_builder.h"
+    },
+    "lib/graphqlite/src/include/executor/query_patterns.h": {
+      "sha256": "7aecf9b10564f09beabe42940664dfe6f6cfbd7d206d2c6f5e6f3249bc7ce590",
+      "source": "graphqlite/src/include/executor/query_patterns.h"
+    },
+    "lib/graphqlite/src/include/gql_thread_local.h": {
+      "sha256": "6dc1c760c8020911bc9587844f89363a74c109507ce8aec186e68bf005b4c57e",
+      "source": "graphqlite/src/include/gql_thread_local.h"
+    },
+    "lib/graphqlite/src/include/graphqlite_sqlite.h": {
+      "sha256": "2ce1b85880c3304a2aff67ecd6e6548b62563c2fb175940775925be47a4f8661",
+      "source": "graphqlite/src/include/graphqlite_sqlite.h"
+    },
+    "lib/graphqlite/src/include/graphqlite_version.h": {
+      "sha256": "23d29e69377342c5a72cea75fc58481a594ecaa843d9cf9913b3964568f2fe68",
+      "source": "graphqlite/src/include/graphqlite_version.h"
+    },
+    "lib/graphqlite/src/include/parser/cypher_ast.h": {
+      "sha256": "65c738edde69445211346ce9a1816dd05b9e2536f21d4c0552fea5ec7a23b8b6",
+      "source": "graphqlite/src/include/parser/cypher_ast.h"
+    },
+    "lib/graphqlite/src/include/parser/cypher_debug.h": {
+      "sha256": "780e57f49ca4a08b59c4ff89c240e0312446d06f3e88f327daa8dbe6449f8192",
+      "source": "graphqlite/src/include/parser/cypher_debug.h"
+    },
+    "lib/graphqlite/src/include/parser/cypher_keywords.h": {
+      "sha256": "3292e034d8dcefcde3e3966ef9b42e8485741f6b90b90667116db3961f7e3b23",
+      "source": "graphqlite/src/include/parser/cypher_keywords.h"
+    },
+    "lib/graphqlite/src/include/parser/cypher_kwlist.h": {
+      "sha256": "3dc3d9b46e1c47c6816b1cffb9fad7566a5b957fe97054f44e47a138b4bb7e95",
+      "source": "graphqlite/src/include/parser/cypher_kwlist.h"
+    },
+    "lib/graphqlite/src/include/parser/cypher_parser.h": {
+      "sha256": "614345c8287281241baf3893f6a478ecf61651e941fb6fd141445130913bc7e6",
+      "source": "graphqlite/src/include/parser/cypher_parser.h"
+    },
+    "lib/graphqlite/src/include/parser/cypher_scanner.h": {
+      "sha256": "5175f3b3cd9271662209313319431dccb7f7a3482b32f8fecac64113bb9ff098",
+      "source": "graphqlite/src/include/parser/cypher_scanner.h"
+    },
+    "lib/graphqlite/src/include/parser/cypher_tokens.h": {
+      "sha256": "ed2f72f1b18cda5c40b0032d91e9f114a07f221185e392cb94b217ec4d8ac560",
+      "source": "graphqlite/src/include/parser/cypher_tokens.h"
+    },
+    "lib/graphqlite/src/include/runtime/cypher_rows_vtab.h": {
+      "sha256": "64c82047d2551f44ace0328850c8f349b4a05c26a16ac18ed73201f30f42cef8",
+      "source": "graphqlite/src/include/runtime/cypher_rows_vtab.h"
+    },
+    "lib/graphqlite/src/include/runtime/gql_error.h": {
+      "sha256": "7d73d670543a7e2cae7e14fb2095af3caa0702a136c65cf91e3d8ae06fdc586a",
+      "source": "graphqlite/src/include/runtime/gql_error.h"
+    },
+    "lib/graphqlite/src/include/runtime/gql_tz.h": {
+      "sha256": "2af576259c0bf9758f9a47cd26c70ea74e504ecdd088af410ca4e37dc1d16464",
+      "source": "graphqlite/src/include/runtime/gql_tz.h"
+    },
+    "lib/graphqlite/src/include/runtime/storage_check.h": {
+      "sha256": "73f0d1ebf328796a84b5048b07578ecda6216eb0b41af90312f02cffe231b468",
+      "source": "graphqlite/src/include/runtime/storage_check.h"
+    },
+    "lib/graphqlite/src/include/runtime/udf_helpers.h": {
+      "sha256": "da87b5e56726206dcb5c3bdef41a2762f3d90a442405f27893a7ff9e38599a40",
+      "source": "graphqlite/src/include/runtime/udf_helpers.h"
+    },
+    "lib/graphqlite/src/include/runtime/udf_register.h": {
+      "sha256": "6d6bae899c08508ba677d6c22605d0428447750bad7333874c935bf98a2502a9",
+      "source": "graphqlite/src/include/runtime/udf_register.h"
+    },
+    "lib/graphqlite/src/include/transform/cypher_transform.h": {
+      "sha256": "a4792fdb0d5a0135560453344a5c012a56c8e9ab7018d5a450ed571aa5ea5aca",
+      "source": "graphqlite/src/include/transform/cypher_transform.h"
+    },
+    "lib/graphqlite/src/include/transform/sql_builder.h": {
+      "sha256": "6235d2b24241d5c905e457e93105ddb362b9691431b16510190546f2a536b207",
+      "source": "graphqlite/src/include/transform/sql_builder.h"
+    },
+    "lib/graphqlite/src/include/transform/transform_expr_predicate.h": {
+      "sha256": "fb03799b09f233fff3b07f02e8348aac82bb6be59f9bed923ec88eed062b918d",
+      "source": "graphqlite/src/include/transform/transform_expr_predicate.h"
+    },
+    "lib/graphqlite/src/include/transform/transform_func_aggregate.h": {
+      "sha256": "5705de4c3c5b25ef5d6323172fee17280097d48d85d98bda9570cc40e85284c8",
+      "source": "graphqlite/src/include/transform/transform_func_aggregate.h"
+    },
+    "lib/graphqlite/src/include/transform/transform_func_dispatch.h": {
+      "sha256": "66f1a0d05f8a71bfb09007126f38c98c99b4831680ec8896f0da9e854ba572e3",
+      "source": "graphqlite/src/include/transform/transform_func_dispatch.h"
+    },
+    "lib/graphqlite/src/include/transform/transform_func_entity.h": {
+      "sha256": "ecb64474a1ad380b16bb70de055fb1414fc4146e3dcd38b94bef4d1fe5828c49",
+      "source": "graphqlite/src/include/transform/transform_func_entity.h"
+    },
+    "lib/graphqlite/src/include/transform/transform_func_geo.h": {
+      "sha256": "0c0f0df4d4b5e893e47c523fc1add66a2dd7aa414e2e286a8c65fff7a48b0a94",
+      "source": "graphqlite/src/include/transform/transform_func_geo.h"
+    },
+    "lib/graphqlite/src/include/transform/transform_func_graph.h": {
+      "sha256": "5947efb970906f58e1172d3d04f3cd59726ac90effc37ad4412c75e11d4ccc51",
+      "source": "graphqlite/src/include/transform/transform_func_graph.h"
+    },
+    "lib/graphqlite/src/include/transform/transform_func_json.h": {
+      "sha256": "b7fe292221cdf727575c8bc992addbab705d26a15f2e028be0fafbe557cd6099",
+      "source": "graphqlite/src/include/transform/transform_func_json.h"
+    },
+    "lib/graphqlite/src/include/transform/transform_func_list.h": {
+      "sha256": "d121a644c5f3d31bfd89752ce39641a6a5bf614135689f034a976d42e2b90e69",
+      "source": "graphqlite/src/include/transform/transform_func_list.h"
+    },
+    "lib/graphqlite/src/include/transform/transform_func_math.h": {
+      "sha256": "2e4c207f3704378b36162cd6c38e9215aaa6c7189ad8e1cdf2a43b5b4deb198e",
+      "source": "graphqlite/src/include/transform/transform_func_math.h"
+    },
+    "lib/graphqlite/src/include/transform/transform_func_path.h": {
+      "sha256": "491ac00a120c42dd92ea6d853ed16148f5fb0e4cd82cdd447c4af7ff26bc1506",
+      "source": "graphqlite/src/include/transform/transform_func_path.h"
+    },
+    "lib/graphqlite/src/include/transform/transform_func_string.h": {
+      "sha256": "73012c87b17fecc7bf04e87a6ce79e7e254c98e3ac49677f3f21da7d6686e584",
+      "source": "graphqlite/src/include/transform/transform_func_string.h"
+    },
+    "lib/graphqlite/src/include/transform/transform_func_temporal.h": {
+      "sha256": "c74bea33d3b754d9b7fb140ff882808c783912614d744bf3bf7b2acda5726c80",
+      "source": "graphqlite/src/include/transform/transform_func_temporal.h"
+    },
+    "lib/graphqlite/src/include/transform/transform_func_typeconv.h": {
+      "sha256": "af296d873842decaa41c3ee6e80a87208effd2bf994bb93be84d52375c38f775",
+      "source": "graphqlite/src/include/transform/transform_func_typeconv.h"
+    },
+    "lib/graphqlite/src/include/transform/transform_helpers.h": {
+      "sha256": "2257a6568afb07683519dffd729c276596cd4ebd44b25eb3ba34fa250f59e38c",
+      "source": "graphqlite/src/include/transform/transform_helpers.h"
+    },
+    "lib/graphqlite/src/include/transform/transform_validate.h": {
+      "sha256": "45afb6018bb01d2f108848d008180ea0e24febd9883d5817336db7de375f6e4b",
+      "source": "graphqlite/src/include/transform/transform_validate.h"
+    },
+    "lib/graphqlite/src/include/transform/transform_variables.h": {
+      "sha256": "8bb8bc9ae84e8911ada8e0dd5e80f8204bc1e8c6152ebf336a23937f48a59a94",
+      "source": "graphqlite/src/include/transform/transform_variables.h"
+    },
+    "lib/graphqlite/src/main.c": {
+      "sha256": "585689db5410a61fba6ff01d716c1409f8307826e0aa86097241df73d7752a47",
+      "source": "graphqlite/src/main.c"
+    },
+    "lib/sqlite-vec/LICENSE-APACHE": {
+      "sha256": "a38070a94d4afd9cd710e3ce67bd1de78097cfe1784c1f0109ac95d3c196bfdc",
+      "source": "sqlite-vec/LICENSE-APACHE"
+    },
+    "lib/sqlite-vec/LICENSE-MIT": {
+      "sha256": "6ce72bbe12d975bd5286e5ab0a064c069693300c47bccbc57bec18485f1621ea",
+      "source": "sqlite-vec/LICENSE-MIT"
+    },
+    "lib/sqlite-vec/README.md": {
+      "sha256": "9116ef6e0b78eb0caf5c6bb6419ccf4f8c6523967eef2045928c33dc66053d64",
+      "source": "sqlite-vec/README.md"
+    },
+    "lib/sqlite-vec/sqlite-vec.c": {
+      "sha256": "ba081a47fa02eadc3cf6b16c314b695b84081269349aac722b4efa338fe8fd85",
+      "source": "sqlite-vec/sqlite-vec.c"
+    },
+    "lib/sqlite-vec/sqlite-vec.h.tmpl": {
+      "sha256": "259d7a7f7f4b2ada97def925c4d249856a62f073514dbe4aef838ecb284a2a25",
+      "source": "sqlite-vec/sqlite-vec.h.tmpl"
+    },
+    "lib/sqlite-vec/VERSION": {
+      "sha256": "e358d84552808a5c0bd6679d690c283b938ebe15c2bd843c898681d093213107",
+      "source": "sqlite-vec/VERSION"
+    },
+    "lib/tre/lib/Makefile.am": {
+      "sha256": "18a696fadcde5e35e39c0b306b3655cb7eeb080ab83ce5066a42e405d1bd5a91",
+      "source": "tre/lib/Makefile.am"
+    },
+    "lib/tre/lib/README": {
+      "sha256": "df5f7b3010901542ac9dda5aa1e9f00c9e3caa4c7bacf08bc2d7cac160ed962c",
+      "source": "tre/lib/README"
+    },
+    "lib/tre/lib/regcomp.c": {
+      "sha256": "9cddeacffac6b5284ac5b78a57029171b23621e8757ed3c39ab0981ba1dc9044",
+      "source": "tre/lib/regcomp.c"
+    },
+    "lib/tre/lib/regerror.c": {
+      "sha256": "eab23b8e79ee90f78e8495de64519afb61b627e062804fd4a622784e052a85fa",
+      "source": "tre/lib/regerror.c"
+    },
+    "lib/tre/lib/regexec.c": {
+      "sha256": "3a2d40af27164719d068109450a4dcbd535db577ff9f70ab97a34a0cdc0d31ed",
+      "source": "tre/lib/regexec.c"
+    },
+    "lib/tre/lib/tre-ast.c": {
+      "sha256": "e98c7732fdbb35ec182edfe043743d7e6b4ad7bcf57b815ec9f37f0d1065a062",
+      "source": "tre/lib/tre-ast.c"
+    },
+    "lib/tre/lib/tre-ast.h": {
+      "sha256": "f5d0374597a42f4bf0e7a80001a68bae9ea2622b80f760d8005200fd20acaf0f",
+      "source": "tre/lib/tre-ast.h"
+    },
+    "lib/tre/lib/tre-compile.c": {
+      "sha256": "8475aba8486b01a4bdb9d27f2f475e3568104c4bcdf3d5603cebeba1a09a45c3",
+      "source": "tre/lib/tre-compile.c"
+    },
+    "lib/tre/lib/tre-compile.h": {
+      "sha256": "924c8b9aa6a261d8b86f1b0b3b575adc5274e135fefcd4193497445e5fc6245a",
+      "source": "tre/lib/tre-compile.h"
+    },
+    "lib/tre/lib/tre-filter.c": {
+      "sha256": "d463e509cdc7eda5154d29c75791ccd58eff5d6f4345344829517f62ddb606e1",
+      "source": "tre/lib/tre-filter.c"
+    },
+    "lib/tre/lib/tre-filter.h": {
+      "sha256": "aabcc5902193f76e457deffa1b3cf2c3b63d39489e6da5fc3f16bb26e83dc067",
+      "source": "tre/lib/tre-filter.h"
+    },
+    "lib/tre/lib/tre-internal.h": {
+      "sha256": "54f7b2ff38551a05085ad31bcb46a61f03fd14f5d8f84bc9efef4c05536bcc25",
+      "source": "tre/lib/tre-internal.h"
+    },
+    "lib/tre/lib/tre-match-approx.c": {
+      "sha256": "dc4158fb806988f4777044b8c556ef7143d45e2bb07dbbab6b857a553aa22c82",
+      "source": "tre/lib/tre-match-approx.c"
+    },
+    "lib/tre/lib/tre-match-backtrack.c": {
+      "sha256": "4be75975e19da2e43cafea4a88944159c2a1c9ca09211a5330964e9e464d32cc",
+      "source": "tre/lib/tre-match-backtrack.c"
+    },
+    "lib/tre/lib/tre-match-parallel.c": {
+      "sha256": "051bed9b8325592fcdad93a5028d3d897a558671a8c69da30e88981d919e9015",
+      "source": "tre/lib/tre-match-parallel.c"
+    },
+    "lib/tre/lib/tre-match-utils.h": {
+      "sha256": "7f6360f036125aa41081a69e7b6d70dde9648a7ad60115bad7101b541422033e",
+      "source": "tre/lib/tre-match-utils.h"
+    },
+    "lib/tre/lib/tre-mem.c": {
+      "sha256": "1645537ca85eefe543da3187b3d1a65bf796ae0a0576545457b56fb63fc13c67",
+      "source": "tre/lib/tre-mem.c"
+    },
+    "lib/tre/lib/tre-mem.h": {
+      "sha256": "6ae203e4ff329bbc15bd48004f0b5ac0804fe95b1557883d6840949e75f2018b",
+      "source": "tre/lib/tre-mem.h"
+    },
+    "lib/tre/lib/tre-parse.c": {
+      "sha256": "af4988ef73ed1832c575c5900254e064478dc7be2c1a01a1b2fff6c0de266d80",
+      "source": "tre/lib/tre-parse.c"
+    },
+    "lib/tre/lib/tre-parse.h": {
+      "sha256": "dc397e304cba9512e1ad06044f98792d4aa7355fbf4f4da4f094ebcd1ee19b7b",
+      "source": "tre/lib/tre-parse.h"
+    },
+    "lib/tre/lib/tre-stack.c": {
+      "sha256": "a0f09d26997fc325dac2c3b81a5baab57d1853f14b52e0e78426da5c21fe2ea2",
+      "source": "tre/lib/tre-stack.c"
+    },
+    "lib/tre/lib/tre-stack.h": {
+      "sha256": "d8635d555bfb7be9a85afc2601615cf500e731af35580d76a775a09a4b5268e2",
+      "source": "tre/lib/tre-stack.h"
+    },
+    "lib/tre/lib/xmalloc.c": {
+      "sha256": "9632e5eeb20e3d328f8def0efb2e8230f5b5cb7d9f2e5680ad89caf065f8b3a6",
+      "source": "tre/lib/xmalloc.c"
+    },
+    "lib/tre/lib/xmalloc.h": {
+      "sha256": "22aee25e6892e97719ec4a5fad91345cd2145722ebbd3ec31397aff68108e3e6",
+      "source": "tre/lib/xmalloc.h"
+    },
+    "lib/tre/LICENSE": {
+      "sha256": "6a50ab50d856b30c965cf2dd899e577ec108c938242fd3a2e7a7a25eed996200",
+      "source": "tre/LICENSE"
+    },
+    "lib/tre/local_includes/Makefile.am": {
+      "sha256": "a1a5c1df42900cd0d1891f77385866d5e2981f15c8312ebcb192d701fab66fd6",
+      "source": "tre/local_includes/Makefile.am"
+    },
+    "lib/tre/local_includes/regex.h": {
+      "sha256": "79866297b17daaeb8f2e5e08794eadbb0c07dab44bb2aa14c869cb2097352b6e",
+      "source": "tre/local_includes/regex.h"
+    },
+    "lib/tre/local_includes/tre-config.h.in": {
+      "sha256": "6d74ee42df48ab999cd61510003d8ffde3b6e09a5cdf9fbf74620e47340bd1b4",
+      "source": "tre/local_includes/tre-config.h.in"
+    },
+    "lib/tre/local_includes/tre.h": {
+      "sha256": "4082a45bf2bfac3421311286dd972dbb730669fedab843d02df3d0ad47228962",
+      "source": "tre/local_includes/tre.h"
+    },
+    "lib/tre/README.md": {
+      "sha256": "873fdbec4a0008d37d8391d437c60c2e8ec3dc3bd49d563e554f4789586167d8",
+      "source": "tre/README.md"
+    },
+    "lib/tre/win32/config.h": {
+      "sha256": "592b33421ba96dce108490aa3e627824ca8c624fe11cc2fcd45ba37ba60381e7",
+      "source": "tre/win32/config.h"
+    },
+    "lib/tre/win32/config.h.in": {
+      "sha256": "c5b075b05ab5d5ea2764060316c53a05b9c32d6f6788f9b4bf30587968b5a0be",
+      "source": "tre/win32/config.h.in"
+    },
+    "lib/tre/win32/retest.vcxproj": {
+      "sha256": "b2cf751088c369bb3d6ad497eb775da828b898678804d272dff99b1922cb01af",
+      "source": "tre/win32/retest.vcxproj"
+    },
+    "lib/tre/win32/test-str-source.vcxproj": {
+      "sha256": "aa7781f4ef42981e46aff83552bc1f0a45233e4bd5243869b426d7bcc53ea021",
+      "source": "tre/win32/test-str-source.vcxproj"
+    },
+    "lib/tre/win32/tre-config.h": {
+      "sha256": "2be5e29035298eb8f0665738fbdba8dc81dbcbf5f027a37a784b72cd72e979fc",
+      "source": "tre/win32/tre-config.h"
+    },
+    "lib/tre/win32/tre-config.h.in": {
+      "sha256": "ba30e3f6efddf4b18339a94210a825d124d105074062758ba31a8a2fe67a1781",
+      "source": "tre/win32/tre-config.h.in"
+    },
+    "lib/tre/win32/tre.def": {
+      "sha256": "2d5057cebdd44223170a2c0c58f5c8baac8c00e34b8727a80f361fa4be525b24",
+      "source": "tre/win32/tre.def"
+    },
+    "lib/tre/win32/tre.sln": {
+      "sha256": "6d4708c21c09fd0fb6e388869871dc3b15a76031cbf9a46b3f2b04cbac94f628",
+      "source": "tre/win32/tre.sln"
+    },
+    "lib/tre/win32/tre.vcxproj": {
+      "sha256": "fe8ace6218915c59ce50f584c2b7ada8e1056e80e5977aa12630dee1cc796d2f",
+      "source": "tre/win32/tre.vcxproj"
+    },
+    "lib/sqlite3ext.h": {
+      "sha256": "b184dd1586d935133d37ad76fa353faf0a1021ff2fdedeedcc3498fff74bbb94",
+      "source": "sqlite/version-3.49.1/src/sqlite3ext.h"
+    },
+    "lib/sqlite-vec/sqlite-vec.h": {
+      "sha256": "86eda29a7f69e272a555e46b92364d8e02666bb582d5e688a2067dd3bd0b529c",
+      "source": "generated: sqlite-vec.h.tmpl"
+    },
+    "lib/tre/local_includes/tre-config.h": {
+      "sha256": "2be5e29035298eb8f0665738fbdba8dc81dbcbf5f027a37a784b72cd72e979fc",
+      "source": "tre/win32/tre-config.h"
+    },
+    "lib/graphqlite/UPSTREAM.txt": {
+      "sha256": "04187cea86651583d2443d559b28efda75eddd889402bdb21c06da73f8a5fe1a",
+      "source": "generated: source identity"
+    },
+    "lib/sqlite-vec/UPSTREAM.txt": {
+      "sha256": "9abe2f67cdd6ca3320585f7c0932b5b0f97d855dd69cc6590941ffc7e8ba835c",
+      "source": "generated: source identity"
+    },
+    "lib/tre/UPSTREAM.txt": {
+      "sha256": "5ebd9b55c1807436c1cbed76702d8316f3e299f951f2dbe7e7ecca7689535cf7",
+      "source": "generated: source identity"
+    },
+    "lib/graphqlite/generated/cypher_flex.h": {
+      "sha256": "c2c869a55038fdcec7eeb8579e578021257e30eec70775e44613dbc98e4b108e",
+      "source": "generated: Bison 3.8.2 / Flex 2.6.4"
+    },
+    "lib/graphqlite/generated/cypher_gram.tab.c": {
+      "sha256": "c69981715c0b3854e04d14cc60f5447f5fa2a5503ba0df7d37d2354dfe6839d2",
+      "source": "generated: Bison 3.8.2 / Flex 2.6.4"
+    },
+    "lib/graphqlite/generated/cypher_gram.tab.h": {
+      "sha256": "849d04507f634e187234d6a490d677591a9046eecac79418e259702203e43330",
+      "source": "generated: Bison 3.8.2 / Flex 2.6.4"
+    },
+    "lib/graphqlite/generated/cypher_scanner.c": {
+      "sha256": "86d90523370abc40c2b33c47334722006ae6a7772de5b730d1a6b4de7f6158ab",
+      "source": "generated: Bison 3.8.2 / Flex 2.6.4"
+    },
+    "lib/graphqlite/XS.patch": {
+      "sha256": "abdf223f929d672ecec9b4f9e7d8caba0882643aebddd27eff6698d40875ed27",
+      "source": "XS integration patch"
+    }
+  }
+}

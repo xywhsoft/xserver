@@ -1,6 +1,10 @@
 # xmqtt (developing)
 
-Independent pure-C MQTT 5.0 / 3.1.1 client extension using public XRT APIs.
+Independent pure-C MQTT extension using public XRT APIs. MQTT 5.0 is the
+primary version with selectable 3.1.1 compatibility. The client is developing.
+The independently selectable [server](docs/server.md) implements TCP handshake,
+Client ID takeover and keep alive. Routing and persistent sessions are in development. See the
+[capability and load acceptance plan](../../docs/development/service-extensions-plan.md#mqtt-server-delivery).
 The developing [committed state recovery](docs/store_state.md) validates the
 whole typed journal prefix before publishing independent QoS/Inbox views.
 [Direct Session import](docs/store_session.md) now constructs a disconnected
@@ -222,7 +226,7 @@ and the still-pending transport, credit, alias-map and authentication state.
 
 ```sh
 python tools/build.py --compiler gcc --manifest extlibs/xmqtt/config/modules.json --suite xmqtt_tests --cflag=-O2
-python tools/build.py --compiler gcc --manifest extlibs/xmqtt/config/modules.json --suite xmqtt --no-single --cflag=-O2
+python tools/build.py --compiler gcc --manifest extlibs/xmqtt/config/modules.json --suite xmqtt_examples --no-single --cflag=-O2
 python tools/build.py --compiler gcc --manifest extlibs/xmqtt/config/modules.json --suite xmqtt --trim-only
 python tools/package.py --compiler gcc --manifest extlibs/xmqtt/config/modules.json --suite xmqtt --kind static --verify
 python tools/package.py --compiler gcc --manifest extlibs/xmqtt/config/modules.json --suite xmqtt --kind shared --verify

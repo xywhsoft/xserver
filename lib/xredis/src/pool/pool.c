@@ -811,7 +811,10 @@ struct xredispoolconnectstate {
     size_t HeapCount, Head, Tail;
     uint64 Random, Timer;
     double TimerDeadline;
-    bool Dropped;
+    bool Dropped, Readonly;
+#if defined(XREDIS_FEATURE_XREDIS_CLUSTER_CLIENT)
+    bool DisconnectedMember;
+#endif
 };
 #if defined(XREDIS_FEATURE_XREDIS_SENTINEL_POOL)
 enum { XREDIS_PC_DISCOVERING = 5 };
@@ -990,7 +993,15 @@ static void xredisPoolConnectFailed(xredispool* Pool, size_t Item, xredisrequest
 {
     xredispoolconnectstate* State = Pool->Connector; xredispoolconnectentry* Entry = &State->Entries[Item];
     if (Entry->Failures < 31) ++Entry->Failures;
-    xrtMutexLock(&Pool->Gate); xredisPoolConnectIncrement(&State->Info.Failures); State->Info.LastFailure = Status; xrtMutexUnlock(&Pool->Gate);
+    xrtMutexLock(&Pool->Gate);
+    xredisPoolConnectIncrement(&State->Info.Failures); State->Info.LastFailure = Status;
+#if defined(XREDIS_FEATURE_XREDIS_CLUSTER_CLIENT)
+    /* Retry construction can fail synchronously with INITIALIZATION even
+     * after an established member was disconnected. Keep the outage evidence
+     * until a replacement actually becomes ready. */
+    if (Entry->Phase == XREDIS_PC_ONLINE && Status == XREDIS_REQUEST_DISCONNECTED) State->DisconnectedMember = true;
+#endif
+    xrtMutexUnlock(&Pool->Gate);
 }
 static double xredisPoolConnectRetry(xredispool* Pool, size_t Item)
 {
@@ -1068,6 +1079,9 @@ static bool xredisPoolConnectProcess(xredispool* Pool, xredispoolslot* Slot)
                 if (!Pool->Config.LeaseTimeout && Pool->Info.State == XREDIS_POOL_OPEN)
                     xrtAtomic32Store(&Slot->Owner.State, XREDIS_OWNER_ACTIVE, XMEMORY_RELEASE);
 #endif
+#if defined(XREDIS_FEATURE_XREDIS_CLUSTER_CLIENT)
+                State->DisconnectedMember = false;
+#endif
                 --State->Info.Connecting; ++Pool->Info.Live; xredisPoolConnectIncrement(&State->Info.Connected); xrtMutexUnlock(&Pool->Gate);
 #if defined(XREDIS_FEATURE_XREDIS_SENTINEL_POOL)
                 if(xredisPoolSpMode(Pool))xredisPoolSpState(Pool)->Notify=true;
@@ -1103,7 +1117,8 @@ static void xredisPoolConnectAdopt(xredispool* Pool,size_t Item,xredisclient* Cl
     Slot->Closed = xredisClientClosed(Client); Entry->Ready = xredisClientReady(Client);
     bool ClosedWatch = xredisPoolConnectWatch(Pool, Slot, Slot->Closed, &Slot->Watch, &Slot->Registered);
     bool ReadyWatch = xredisPoolConnectWatch(Pool, Slot, Entry->Ready, &Entry->Watch, &Entry->Registered);
-    if (!Slot->Claimed || !ClosedWatch || !ReadyWatch) xredisPoolConnectDrain(Pool, Item, XREDIS_REQUEST_INITIALIZATION);
+    if (!Slot->Claimed || !ClosedWatch || !ReadyWatch || (State->Readonly && !__xredisClientInitReadonly(Client)))
+        xredisPoolConnectDrain(Pool, Item, XREDIS_REQUEST_INITIALIZATION);
     else xredisPoolConnectHeapPut(State, Item, Entry->Due);
     xredisPoolSlotNotify(Slot);
 }
@@ -1797,7 +1812,7 @@ static bool xredisPoolConnectDispose(xredispool* Pool)
     return true;
 }
 static xredisadmission xredisPoolConnectAdmit(xnetengine* Engine, uint64 Affinity, size_t Count,
-    const xredispoolconfig* Config, const xredispoolconnectconfig* Connect, xredispool** Result, bool Shared)
+    const xredispoolconfig* Config, const xredispoolconnectconfig* Connect, xredispool** Result, bool Shared, bool Readonly)
 {
     if (!Engine || !Count || Count > 65536 || !Result || !xrtMemRangeValid(Result, sizeof(*Result)) ||
         !Connect || !xrtMemRangeValid(Connect, sizeof(*Connect)) || xrtMemRangesOverlap(Connect, sizeof(*Connect), Result, sizeof(*Result)) ||
@@ -1816,7 +1831,8 @@ static xredisadmission xredisPoolConnectAdmit(xnetengine* Engine, uint64 Affinit
     size_t Bytes = sizeof(xredispoolconnectstate) + Count * (sizeof(xredispoolconnectentry) + sizeof(size_t));
     xredispoolconnectstate* State = Pool->Connector = xrtCalloc(1, Bytes);
     if (!State) { xrtNetEngineUnpin(Engine); xredisPoolRelease(Pool); return XREDIS_ADMISSION_ERROR; }
-    State->Config = Factory; if (State->Config.MaxConnecting > Count) State->Config.MaxConnecting = Count;
+    State->Config = Factory; State->Readonly = Readonly;
+    if (State->Config.MaxConnecting > Count) State->Config.MaxConnecting = Count;
     State->Entries = (xredispoolconnectentry*)(State + 1); State->Heap = (size_t*)(State->Entries + Count);
     State->Head = State->Tail = SIZE_MAX; State->HeapCount = Count;
     State->Random = ((uint64)(xrtTimer() * 1000000.0) ^ (uint64)(uintptr_t)Pool) | 1u;
@@ -1833,11 +1849,21 @@ static xredisadmission xredisPoolConnectAdmit(xnetengine* Engine, uint64 Affinit
 }
 xredisadmission __xredisPoolConnect(xnetengine* Engine, uint64 Affinity, size_t Count,
     const xredispoolconfig* Config, const xredispoolconnectconfig* Connect, xredispool** Result)
-{ return xredisPoolConnectAdmit(Engine, Affinity, Count, Config, Connect, Result, false); }
+{ return xredisPoolConnectAdmit(Engine, Affinity, Count, Config, Connect, Result, false, false); }
 #if defined(XREDIS_FEATURE_XREDIS_POOL_SHARED_CONNECT)
 xredisadmission __xredisSharedPoolConnect(xnetengine* Engine, uint64 Affinity, size_t Count,
-    const xredispoolconfig* Config, const xredispoolconnectconfig* Connect, xredispool** Result)
-{ return xredisPoolConnectAdmit(Engine, Affinity, Count, Config, Connect, Result, true); }
+    const xredispoolconfig* Config, const xredispoolconnectconfig* Connect, xredispool** Result, bool Readonly)
+{ return xredisPoolConnectAdmit(Engine, Affinity, Count, Config, Connect, Result, true, Readonly); }
+#if defined(XREDIS_FEATURE_XREDIS_CLUSTER_CLIENT)
+bool __xredisSharedPoolDisconnected(xredispool* Pool)
+{
+    xrtMutexLock(&Pool->Gate);
+    bool Disconnected = Pool->Connector && Pool->Info.State == XREDIS_POOL_OPEN && !Pool->Info.Idle &&
+        (Pool->Connector->DisconnectedMember || Pool->Connector->Info.LastFailure == XREDIS_REQUEST_DISCONNECTED);
+    xrtMutexUnlock(&Pool->Gate);
+    return Disconnected;
+}
+#endif
 #endif
 bool __xredisPoolConnectInfo(xredispool* Pool, xredispoolconnectinfo* Info)
 {

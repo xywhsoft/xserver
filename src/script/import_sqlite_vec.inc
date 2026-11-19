@@ -1,0 +1,1 @@
+XS_SQLITE_VEC_SYMBOL(sqlite3_vec_init)

@@ -1,5 +1,10 @@
 # Upstream snapshots are byte-for-byte copies. Preserve their source line endings.
 /lib/xrt.h -text
+/lib/xrt_compat/** -text
+/lib/graphqlite/** -text
+/lib/sqlite-vec/** -text
+/lib/tre/** -text
+/lib/sqlite3ext.h -text
 /lib/xrt_decl.h -text
 /lib/xjwt/** -text
 /lib/xoauth2/** -text

@@ -1,0 +1,4 @@
+Source: https://github.com/colliery-io/graphqlite
+Version: v1.0.0
+Commit: 6210368cf4b0d02f595b2bbd7d12421a68113c26
+SHA256: ../sqlite_extensions.lock.json

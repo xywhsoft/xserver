@@ -1,5 +1,5 @@
 Source: xrt extlibs/xsmtp
-Snapshot: f0958579699937cdc5cbcf795a2aa86ca0ea2fc3
+Snapshot: f575188765c7f98ac945e2eb7035054df157b816
 Upstream source bytes and SHA256 are recorded in ../xrt_sources.lock.json.
 Native sources, public headers and module configuration are vendored.
 Native module sources compile separately; single-header implementations are not used.
